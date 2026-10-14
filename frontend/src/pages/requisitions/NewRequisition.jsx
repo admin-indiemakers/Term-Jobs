@@ -19,6 +19,8 @@ import {
   Calendar,
   Layers,
   ChevronRight,
+  ChevronDown,
+  ClipboardCheck,
   Info,
   Check,
   BookOpen
@@ -26,6 +28,7 @@ import {
 
 const TABS = [
   { id: 'role', label: 'Role', icon: Briefcase },
+  { id: 'skills', label: 'Skills', icon: Sparkles },
   { id: 'engagement', label: 'Engagement', icon: Clock },
   { id: 'commercials', label: 'Commercials', icon: DollarSign },
   { id: 'work_setup', label: 'Work setup', icon: MapPin },
@@ -73,6 +76,7 @@ const WORKFLOW_STEPS = [
 export default function NewRequisition() {
   const { user, token } = useAuth();
   const navigate = useNavigate();
+  const templateSelectRef = useRef(null);
 
   const [activeTab, setActiveTab] = useState('role');
   const [roleTitle, setRoleTitle] = useState('');
@@ -151,7 +155,7 @@ export default function NewRequisition() {
               setTemplates(list);
             }
           })
-          .catch(() => {});
+          .catch(() => { });
       });
 
     // 2. Company Profiles
@@ -162,7 +166,7 @@ export default function NewRequisition() {
           setCompanyProfiles(list);
         }
       })
-      .catch(() => {});
+      .catch(() => { });
 
     return () => {
       isMounted = false;
@@ -336,7 +340,7 @@ export default function NewRequisition() {
         tab: 'role',
         label: 'Job Title',
         filled: Boolean(roleTitle.trim()),
-        detail: roleTitle.trim() ? `"${roleTitle.slice(0, 16)}..."` : 'Required to create role',
+        detail: roleTitle.trim() ? (roleTitle.length > 14 ? `${roleTitle.slice(0, 14)}...` : roleTitle) : 'Required to create role',
         required: true,
       },
       {
@@ -344,12 +348,12 @@ export default function NewRequisition() {
         tab: 'role',
         label: 'Job Family / Dept',
         filled: Boolean(prefill.job_family.trim() || department.trim()),
-        detail: prefill.job_family || department || 'Recommended for categorization',
+        detail: (prefill.job_family || department) ? (prefill.job_family || department) : 'Recommended for category',
         required: false,
       },
       {
         id: 'skills',
-        tab: 'role',
+        tab: 'skills',
         label: 'Must-have Skills',
         filled: prefill.must_have_skills.length > 0,
         detail: prefill.must_have_skills.length > 0 ? `${prefill.must_have_skills.length} skills added` : 'Add at least 1 key skill',
@@ -360,7 +364,7 @@ export default function NewRequisition() {
         tab: 'engagement',
         label: 'Engagement Duration',
         filled: Boolean(prefill.duration),
-        detail: prefill.duration || 'Contract length',
+        detail: prefill.duration ? prefill.duration : 'Contract length',
         required: true,
       },
       {
@@ -386,6 +390,14 @@ export default function NewRequisition() {
 
     return { items, filledCount, total: items.length, score };
   }, [roleTitle, department, prefill]);
+
+  const completedSteps = useMemo(() => {
+    let count = 0;
+    if (roleTitle.trim() && prefill.must_have_skills.length > 0) count++;
+    if (prefill.submission_deadline && (prefill.duration || prefill.ceiling_internal)) count++;
+    if (submitting) count++;
+    return count;
+  }, [roleTitle, prefill.must_have_skills, prefill.submission_deadline, prefill.duration, prefill.ceiling_internal, submitting]);
 
   const canSubmit = Boolean(roleTitle.trim() && prefill.submission_deadline);
 
@@ -415,7 +427,7 @@ export default function NewRequisition() {
           if (Array.isArray(profList) && profList.length > 0) {
             profileId = profList[0].id;
           }
-        } catch (e) {}
+        } catch (e) { }
       }
 
       const payload = {
@@ -458,136 +470,50 @@ export default function NewRequisition() {
       className="w-full min-w-0 pb-16 space-y-4 text-left"
       style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}
     >
-      {/* Top Header Card */}
-      <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-5 sm:p-6 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#0066FF] bg-blue-50/80 px-2.5 py-0.5 rounded-full border border-blue-100/60 shadow-2xs">
-              TERM JOBS • CREATE REQUISITION
-            </span>
-          </div>
-          <h1 className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight">
-            New Contract Requirement
-          </h1>
-          <p className="text-xs text-gray-500 font-medium mt-0.5 max-w-2xl">
-            Define role parameters, skills, and budget ceilings for your contract requirement
-          </p>
-
-          {/* Workflow Step Indicator */}
-          <div className="flex items-center gap-1.5 mt-3 flex-wrap">
-            {WORKFLOW_STEPS.map((st, i) => (
-              <div key={st.id} className="flex items-center gap-1.5">
-                <span
-                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold ${
-                    st.active
-                      ? 'bg-black text-white shadow-2xs'
-                      : 'bg-white/70 border border-white/90 text-gray-500'
-                  }`}
-                >
-                  <span className="text-[10px]">{st.num}.</span>
-                  <span>{st.label}</span>
-                </span>
-                {i < WORKFLOW_STEPS.length - 1 && (
-                  <ChevronRight size={12} className="text-gray-300 shrink-0" />
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            type="button"
-            onClick={() => navigate('/dashboard/requisitions')}
-            className="px-3.5 py-2 rounded-xl bg-white/70 hover:bg-white border border-white/90 text-gray-700 text-xs font-bold transition cursor-pointer shadow-2xs"
-          >
-            Back to list
-          </button>
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={submitting || !canSubmit}
-            className="px-4 py-2 rounded-xl bg-black hover:bg-gray-800 text-white text-xs font-bold shadow-xs transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"
-          >
-            <Sparkles size={13} />
-            <span>{submitting ? 'Creating...' : 'Create Requisition →'}</span>
-          </button>
-        </div>
-      </div>
-
-      {error && (
-        <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2">
-          <AlertCircle size={15} className="shrink-0 text-red-500" />
-          <span>{error}</span>
-        </div>
-      )}
-
       {/* Main Grid: Form (8 cols) + AI Guide & Assistant Copilot (4 cols) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        {/* Left Column: Form Sections (8 cols) */}
-        <div className="lg:col-span-8 space-y-4">
-          {/* Step 1: Select Role & Instant 100% Autofill Banner */}
-          <div className="bg-gradient-to-r from-gray-900 via-black to-gray-900 border border-gray-800 rounded-2xl p-5 shadow-md text-white space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-black text-xs border border-emerald-500/30">
-                  1
-                </div>
-                <div>
-                  <h3 className="text-sm font-extrabold text-white tracking-tight flex items-center gap-2">
-                    <span>Select Role to 100% Autofill</span>
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/30">
-                      ⚡ Instant Auto-populator
-                    </span>
-                  </h3>
-                  <p className="text-[11px] text-gray-400">
-                    Pick a role from the dropdown below. All 34 parameters across Role, Engagement, Budget, Work Setup & Compliance will be 100% autofilled automatically.
-                  </p>
-                </div>
-              </div>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+        {/* Left Column: Transparent Header + Form Sections (8 cols) */}
+        <div className="lg:col-span-8 space-y-3.5">
+          {/* Top Header Area (Transparent) */}
+          <div className="pt-1">
+            <div className="text-[10px] font-extrabold text-gray-400 tracking-wider uppercase mb-1">
+              TERM JOBS • CREATE REQUISITION
             </div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight leading-none">
+              New Contract Requirement
+            </h1>
+            <p className="text-xs sm:text-[13px] text-gray-500 font-normal mt-1 max-w-2xl">
+              Define role parameters, skills, and budget ceilings for your contract requirement
+            </p>
 
-            <div className="pt-1">
-              <select
-                value={selectedTemplateId}
-                onChange={(e) => handleTemplateSelect(e.target.value)}
-                className="w-full bg-gray-900 border border-gray-700 hover:border-gray-500 rounded-xl px-4 py-3 text-xs font-bold text-white focus:outline-none focus:border-emerald-400 transition-colors shadow-inner"
-              >
-                <option value="">
-                  {templates.length > 0
-                    ? "✨ Select an approved role to 100% autofill..."
-                    : "⚠️ No role templates assigned by Director yet"}
-                </option>
-                {templates.length > 0 ? (
-                  <optgroup label="🏢 Director-Approved Role Templates">
-                    {templates.map((tpl) => {
-                      const label = tpl.name || tpl.title || tpl.role_title || (tpl.structured_role && (tpl.structured_role.title || tpl.structured_role.role_title)) || `Template #${tpl.id.slice(0, 8)}`;
-                      const dept = tpl.department || (tpl.structured_role && (tpl.structured_role.department || tpl.structured_role.job_family));
-                      return (
-                        <option key={tpl.id} value={tpl.id}>
-                          {label} {dept ? `(${dept})` : ''}
-                        </option>
-                      );
-                    })}
-                  </optgroup>
-                ) : (
-                  <option disabled value="">
-                    Ask your Director to upload standardized templates in Director Console
-                  </option>
-                )}
-              </select>
+            {/* Workflow Step Indicator */}
+            <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
+              {WORKFLOW_STEPS.map((st, i) => (
+                <div key={st.id} className="flex items-center gap-1.5">
+                  <span
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold ${
+                      st.active
+                        ? 'bg-black text-white shadow-2xs'
+                        : 'bg-white/70 border border-white/90 text-gray-500'
+                    }`}
+                  >
+                    <span className="text-[10px]">{st.num}.</span>
+                    <span>{st.label}</span>
+                  </span>
+                  {i < WORKFLOW_STEPS.length - 1 && (
+                    <ChevronRight size={12} className="text-gray-300 shrink-0" />
+                  )}
+                </div>
+              ))}
             </div>
-            
-            {roleTitle && (
-              <div className="flex items-center justify-between text-[11px] text-emerald-400 font-semibold pt-1">
-                <span className="flex items-center gap-1.5">
-                  <CheckCircle2 size={13} className="text-emerald-400" />
-                  <span>Role selected: <strong>{roleTitle}</strong> ({prefill.job_family || department})</span>
-                </span>
-                <span className="text-gray-400 text-[10px]">All 34 requisition fields autofilled!</span>
-              </div>
-            )}
           </div>
+
+          {error && (
+            <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2">
+              <AlertCircle size={15} className="shrink-0 text-red-500" />
+              <span>{error}</span>
+            </div>
+          )}
 
           {/* Core Requisition Builder Card */}
           <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-5 sm:p-6 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] space-y-5">
@@ -687,7 +613,9 @@ export default function NewRequisition() {
                       className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
                     />
                   </div>
+                </div>
 
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                   <div className="space-y-1 min-w-0">
                     <label className="flex items-center gap-1.5 text-[10.5px] font-extrabold text-red-600 uppercase tracking-tight whitespace-nowrap h-5 select-none">
                       <span>Vendor Candidate Limit<span className="text-red-600 font-bold ml-0.5">*</span></span>
@@ -702,108 +630,134 @@ export default function NewRequisition() {
                       className="w-full bg-red-50/40 border border-red-300 rounded-xl px-3.5 py-2.5 text-xs font-extrabold text-red-900 focus:outline-none focus:border-red-600 focus:ring-1 focus:ring-red-500/20 transition-all font-mono"
                       placeholder="1"
                     />
+                    <p className="text-[10px] text-gray-400">
+                      Maximum number of candidate submissions allowed per vendor for this role.
+                    </p>
                   </div>
                 </div>
+              </div>
+            )}
 
-                {/* Must-have Skills Tag Input */}
-                <div className="space-y-1.5 pt-1">
-                  <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider">
-                    Must-Have Skills <span className="text-red-500">*</span>
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={skillInput}
-                      onChange={(e) => setSkillInput(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addMustHaveSkill())}
-                      placeholder="Type skill & press Enter (e.g. Python, FastApi, PostgreSQL)"
-                      className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black focus:bg-white transition-all"
-                    />
-                    <button
-                      type="button"
-                      onClick={addMustHaveSkill}
-                      className="px-3.5 py-2 rounded-xl bg-black text-white text-xs font-bold hover:bg-gray-800 transition-colors cursor-pointer"
-                    >
-                      + Add
-                    </button>
-                  </div>
-
-                  <div className="flex flex-wrap gap-1.5 pt-1">
-                    {prefill.must_have_skills.map((skill, idx) => (
-                      <span
-                        key={idx}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gray-100 border border-gray-200 text-gray-900 text-xs font-bold"
+            {/* TAB 2: SKILLS & JD */}
+            {activeTab === 'skills' && (
+              <div className="space-y-3 pt-0.5">
+                {/* 2-Column Grid: Must-Have Skills + Nice-To-Have Skills */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                  {/* Must-have Skills Tag Input */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                        Must-Have Skills <span className="text-red-500">*</span>
+                      </label>
+                      <span className="text-[10px] text-gray-400">Core required</span>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <input
+                        type="text"
+                        value={skillInput}
+                        onChange={(e) => setSkillInput(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addMustHaveSkill())}
+                        placeholder="Type skill & press Enter"
+                        className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black focus:bg-white transition-all"
+                      />
+                      <button
+                        type="button"
+                        onClick={addMustHaveSkill}
+                        className="px-3 py-2 rounded-xl bg-black text-white text-xs font-bold hover:bg-gray-800 transition-colors cursor-pointer shrink-0"
                       >
-                        {skill}
-                        <button
-                          type="button"
-                          onClick={() => removeMustHaveSkill(idx)}
-                          className="text-gray-400 hover:text-red-600 transition-colors"
+                        + Add
+                      </button>
+                    </div>
+
+                    <div className="flex flex-wrap gap-1 pt-0.5 min-h-[26px]">
+                      {prefill.must_have_skills.map((skill, idx) => (
+                        <span
+                          key={idx}
+                          className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-gray-100 border border-gray-200 text-gray-900 text-[11px] font-bold"
                         >
-                          <X size={12} />
-                        </button>
-                      </span>
-                    ))}
-                    {prefill.must_have_skills.length === 0 && (
-                      <span className="text-[11px] text-gray-400 italic">No skills added yet.</span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Nice-to-have skills */}
-                <div className="space-y-1.5 pt-1">
-                  <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider">
-                    Nice-to-Have Skills (Optional)
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={niceSkillInput}
-                      onChange={(e) => setNiceSkillInput(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addNiceSkill())}
-                      placeholder="e.g. Docker, Redis, Kubernetes"
-                      className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black focus:bg-white transition-all"
-                    />
-                    <button
-                      type="button"
-                      onClick={addNiceSkill}
-                      className="px-3.5 py-2 rounded-xl bg-gray-200 text-gray-800 text-xs font-bold hover:bg-gray-300 transition-colors cursor-pointer"
-                    >
-                      + Add
-                    </button>
+                          <span>{skill}</span>
+                          <button
+                            type="button"
+                            onClick={() => removeMustHaveSkill(idx)}
+                            className="text-gray-400 hover:text-red-600 transition-colors cursor-pointer"
+                          >
+                            <X size={11} />
+                          </button>
+                        </span>
+                      ))}
+                      {prefill.must_have_skills.length === 0 && (
+                        <span className="text-[10.5px] text-gray-400 italic py-0.5">No skills added yet.</span>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="flex flex-wrap gap-1.5 pt-1">
-                    {prefill.nice_to_have_skills.map((skill, idx) => (
-                      <span
-                        key={idx}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gray-50 border border-gray-200 text-gray-700 text-xs font-medium"
+                  {/* Nice-to-have skills */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                        Nice-to-Have Skills (Optional)
+                      </label>
+                      <span className="text-[10px] text-gray-400">Bonus</span>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <input
+                        type="text"
+                        value={niceSkillInput}
+                        onChange={(e) => setNiceSkillInput(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addNiceSkill())}
+                        placeholder="e.g. Docker, Redis, AWS"
+                        className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black focus:bg-white transition-all"
+                      />
+                      <button
+                        type="button"
+                        onClick={addNiceSkill}
+                        className="px-3 py-2 rounded-xl bg-gray-200 text-gray-800 text-xs font-bold hover:bg-gray-300 transition-colors cursor-pointer shrink-0"
                       >
-                        {skill}
-                        <button
-                          type="button"
-                          onClick={() => removeNiceSkill(idx)}
-                          className="text-gray-400 hover:text-red-600 transition-colors"
+                        + Add
+                      </button>
+                    </div>
+
+                    <div className="flex flex-wrap gap-1 pt-0.5 min-h-[26px]">
+                      {prefill.nice_to_have_skills.map((skill, idx) => (
+                        <span
+                          key={idx}
+                          className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-gray-50 border border-gray-200 text-gray-700 text-[11px] font-medium"
                         >
-                          <X size={12} />
-                        </button>
-                      </span>
-                    ))}
+                          <span>{skill}</span>
+                          <button
+                            type="button"
+                            onClick={() => removeNiceSkill(idx)}
+                            className="text-gray-400 hover:text-red-600 transition-colors cursor-pointer"
+                          >
+                            <X size={11} />
+                          </button>
+                        </span>
+                      ))}
+                      {prefill.nice_to_have_skills.length === 0 && (
+                        <span className="text-[10.5px] text-gray-400 italic py-0.5">Optional secondary skills.</span>
+                      )}
+                    </div>
                   </div>
                 </div>
 
                 {/* Job Description Raw Text (Optional) */}
-                <div className="space-y-1 pt-1">
-                  <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider">
-                    Raw Job Brief / Past JD (Optional)
-                  </label>
+                <div className="space-y-1 pt-2 border-t border-gray-100">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                      Raw Job Brief / Past JD (Optional)
+                    </label>
+                    <span className="text-[10px] text-gray-400">AI auto-extract ready</span>
+                  </div>
                   <textarea
                     rows="3"
                     value={rawJd}
                     onChange={(e) => setRawJd(e.target.value)}
                     placeholder="Paste rough notes, responsibilities, or an existing JD here. AI will extract and structure it automatically."
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs text-gray-900 focus:outline-none focus:border-black focus:bg-white transition-all"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-900 focus:outline-none focus:border-black focus:bg-white transition-all leading-relaxed"
                   />
+                  <p className="text-[10px] text-gray-400 font-normal">
+                    Rough notes, scope of work, or legacy JD text will be automatically parsed into candidate requirements.
+                  </p>
                 </div>
               </div>
             )}
@@ -1129,125 +1083,257 @@ export default function NewRequisition() {
         </div>
 
         {/* Right Column: Interactive Copilot & Live Assistant Side Tab (4 cols) */}
-        <div className="lg:col-span-4 space-y-3.5">
-          {/* Main Assistant Card */}
-          <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-5 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] space-y-3.5 sticky top-4">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-lg bg-black text-white flex items-center justify-center shrink-0">
-                  <Sparkles size={13} />
+        <div className="lg:col-span-4 space-y-2.5">
+          {/* Main Assistant Glassmorphic Card (Compact) */}
+          <div className="bg-white/70 backdrop-blur-2xl border border-white/80 rounded-2xl p-3.5 shadow-[0_12px_40px_0_rgba(0,0,0,0.04),inset_0_1px_1px_rgba(255,255,255,0.9)] space-y-2.5 sticky top-4">
+            {/* Role Template Autofill Dark Module */}
+            <div className="bg-[#12141a] border border-white/10 rounded-xl p-3 text-white shadow-sm space-y-2">
+              <div className="flex items-start gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-white/10 border border-white/10 flex items-center justify-center text-white shrink-0 mt-0.5">
+                  <FileText size={14} />
                 </div>
-                <div>
-                  <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
-                    Requisition Copilot
-                  </h3>
-                  <p className="text-[10px] text-gray-400">Live draft readiness guide</p>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-1 flex-wrap">
+                    <h4 className="font-bold text-xs text-white tracking-tight">
+                      Use Role Template
+                    </h4>
+                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-white/10 border border-white/15 text-[9px] font-semibold text-amber-300">
+                      ⚡ 100% Auto
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-gray-400 leading-snug mt-0.5">
+                    Pick a Director-approved role template to autofill all 34 requisition parameters.
+                  </p>
                 </div>
               </div>
-              <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-900 text-[10px] font-extrabold">
-                {checklist.score}% Ready
-              </span>
-            </div>
 
-            {/* Readiness Progress Bar */}
-            <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
-              <div
-                className="bg-black h-full rounded-full transition-all duration-300"
-                style={{ width: `${checklist.score}%` }}
-              />
-            </div>
-
-            {/* Step-by-Step Flow Instructions */}
-            <div className="space-y-2 text-xs">
-              <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                What to do next
+              <div className="relative pt-0.5">
+                <select
+                  ref={templateSelectRef}
+                  value={selectedTemplateId}
+                  onChange={(e) => handleTemplateSelect(e.target.value)}
+                  className="w-full bg-[#1c202a] hover:bg-[#232834] border border-white/15 text-gray-200 text-[11px] font-medium rounded-lg px-2.5 py-1.5 pr-7 appearance-none focus:outline-none focus:ring-1 focus:ring-white/30 cursor-pointer transition-colors shadow-inner"
+                >
+                  <option value="" className="bg-[#1c202a] text-gray-300">
+                    Select a template to auto-populate...
+                  </option>
+                  {templates.length > 0 ? (
+                    <optgroup label="🏢 Director-Approved Templates" className="bg-[#1c202a] text-gray-300">
+                      {templates.map((tpl) => {
+                        const label =
+                          tpl.name ||
+                          tpl.title ||
+                          tpl.role_title ||
+                          (tpl.structured_role && (tpl.structured_role.title || tpl.structured_role.role_title)) ||
+                          `Template #${tpl.id.slice(0, 8)}`;
+                        const dept =
+                          tpl.department ||
+                          (tpl.structured_role && (tpl.structured_role.department || tpl.structured_role.job_family));
+                        return (
+                          <option key={tpl.id} value={tpl.id} className="bg-[#1c202a] text-gray-200">
+                            {label} {dept ? `(${dept})` : ''}
+                          </option>
+                        );
+                      })}
+                    </optgroup>
+                  ) : (
+                    <option disabled value="" className="bg-[#1c202a] text-gray-400">
+                      No templates assigned by Director yet
+                    </option>
+                  )}
+                </select>
+                <ChevronDown
+                  size={12}
+                  className="text-gray-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none mt-0.5"
+                />
               </div>
 
-              <div className="space-y-2">
-                <div className="flex items-start gap-2 p-2 rounded-xl bg-gray-50/80 border border-gray-100">
-                  <span className="w-4 h-4 rounded-full bg-black text-white text-[9px] font-bold flex items-center justify-center shrink-0 mt-0.5">
+              {roleTitle && (
+                <div className="flex items-center justify-between p-1.5 rounded-lg bg-white/5 border border-white/10 text-[10px] text-gray-300">
+                  <span className="flex items-center gap-1.5 truncate">
+                    <CheckCircle2 size={11} className="text-emerald-400 shrink-0" />
+                    <span className="truncate">Active: <strong className="text-white">{roleTitle}</strong></span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleTemplateSelect('')}
+                    className="text-[9.5px] text-gray-400 hover:text-red-400 font-bold ml-1.5 underline cursor-pointer shrink-0"
+                    title="Clear template"
+                  >
+                    Clear
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* STEPS TO COMPLETE */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-extrabold text-gray-500 uppercase tracking-wider">
+                  Steps to complete
+                </span>
+                <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[9.5px] font-bold">
+                  {completedSteps} of 3 completed
+                </span>
+              </div>
+
+              <div className="relative pl-5 space-y-1.5">
+                {/* Connecting Stepper Line */}
+                <div className="absolute left-[9px] top-3 bottom-3 w-[1px] bg-gray-200" />
+
+                {/* Step 1 */}
+                <div className="relative">
+                  <span
+                    className={`absolute -left-5 top-2.5 w-4 h-4 rounded-full text-[9px] font-bold flex items-center justify-center z-10 transition-colors ${
+                      roleTitle && prefill.must_have_skills?.length > 0
+                        ? 'bg-black text-white shadow-xs'
+                        : 'bg-black text-white shadow-xs'
+                    }`}
+                  >
                     1
                   </span>
-                  <div>
-                    <div className="font-bold text-gray-900 text-[11.5px]">Provide Role & Core Skills</div>
-                    <div className="text-[10.5px] text-gray-500">
-                      Fill in Job Title and at least one must-have skill in the Role tab.
+                  <div
+                    onClick={() => setActiveTab(roleTitle ? 'skills' : 'role')}
+                    className="flex items-center justify-between p-2 rounded-xl bg-white/80 backdrop-blur-md border border-white/90 hover:border-gray-200 shadow-2xs hover:shadow-xs transition-all cursor-pointer group"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-7 h-7 rounded-lg bg-gray-50/90 border border-gray-100 flex items-center justify-center text-gray-700 shrink-0">
+                        <FileText size={13} />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-bold text-[11px] text-gray-900 group-hover:text-black leading-tight">
+                          Provide Role & Core Skills
+                        </div>
+                        <div className="text-[9.5px] text-gray-400 leading-tight mt-0.5">
+                          Fill in Job Title and at least 1 must-have skill.
+                        </div>
+                      </div>
                     </div>
+                    <ChevronRight size={12} className="text-gray-400 group-hover:text-gray-700 shrink-0 ml-1 transition-colors" />
                   </div>
                 </div>
 
-                <div className="flex items-start gap-2 p-2 rounded-xl bg-gray-50/80 border border-gray-100">
-                  <span className="w-4 h-4 rounded-full bg-black text-white text-[9px] font-bold flex items-center justify-center shrink-0 mt-0.5">
+                {/* Step 2 */}
+                <div className="relative">
+                  <span
+                    className={`absolute -left-5 top-2.5 w-4 h-4 rounded-full text-[9px] font-bold flex items-center justify-center z-10 transition-colors ${
+                      prefill.submission_deadline && (prefill.duration || prefill.ceiling_internal)
+                        ? 'bg-black text-white shadow-xs'
+                        : 'bg-gray-100 text-gray-600 border border-gray-200'
+                    }`}
+                  >
                     2
                   </span>
-                  <div>
-                    <div className="font-bold text-gray-900 text-[11.5px]">Set Budget & Submission Deadline</div>
-                    <div className="text-[10.5px] text-gray-500">
-                      Configure duration and target submission cutoff date.
+                  <div
+                    onClick={() => setActiveTab('commercials')}
+                    className="flex items-center justify-between p-2 rounded-xl bg-white/80 backdrop-blur-md border border-white/90 hover:border-gray-200 shadow-2xs hover:shadow-xs transition-all cursor-pointer group"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-7 h-7 rounded-lg bg-gray-50/90 border border-gray-100 flex items-center justify-center text-gray-700 shrink-0">
+                        <DollarSign size={13} />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-bold text-[11px] text-gray-900 group-hover:text-black leading-tight">
+                          Set Budget & Submission Deadline
+                        </div>
+                        <div className="text-[9.5px] text-gray-400 leading-tight mt-0.5">
+                          Configure duration and target cutoff date.
+                        </div>
+                      </div>
                     </div>
+                    <ChevronRight size={12} className="text-gray-400 group-hover:text-gray-700 shrink-0 ml-1 transition-colors" />
                   </div>
                 </div>
 
-                <div className="flex items-start gap-2 p-2 rounded-xl bg-gray-50/80 border border-gray-100">
-                  <span className="w-4 h-4 rounded-full bg-black text-white text-[9px] font-bold flex items-center justify-center shrink-0 mt-0.5">
+                {/* Step 3 */}
+                <div className="relative">
+                  <span
+                    className={`absolute -left-5 top-2.5 w-4 h-4 rounded-full text-[9px] font-bold flex items-center justify-center z-10 transition-colors ${
+                      canSubmit
+                        ? 'bg-black text-white shadow-xs'
+                        : 'bg-gray-100 text-gray-600 border border-gray-200'
+                    }`}
+                  >
                     3
                   </span>
-                  <div>
-                    <div className="font-bold text-gray-900 text-[11.5px]">Create & Review</div>
-                    <div className="text-[10.5px] text-gray-500">
-                      Click below to create this requisition draft and review it for approval.
+                  <div
+                    onClick={handleSubmit}
+                    className="flex items-center justify-between p-2 rounded-xl bg-white/80 backdrop-blur-md border border-white/90 hover:border-gray-200 shadow-2xs hover:shadow-xs transition-all cursor-pointer group"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-7 h-7 rounded-lg bg-gray-50/90 border border-gray-100 flex items-center justify-center text-gray-700 shrink-0">
+                        <ClipboardCheck size={13} />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-bold text-[11px] text-gray-900 group-hover:text-black leading-tight">
+                          Create & Review
+                        </div>
+                        <div className="text-[9.5px] text-gray-400 leading-tight mt-0.5">
+                          Create draft and submit for approval.
+                        </div>
+                      </div>
                     </div>
+                    <ChevronRight size={12} className="text-gray-400 group-hover:text-gray-700 shrink-0 ml-1 transition-colors" />
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Live Missing Fields Interactive Checklist */}
-            <div className="space-y-2 pt-1 border-t border-gray-100">
-              <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                Field Checklist & Jump
+            {/* REQUIRED FIELDS CHECKLIST */}
+            <div className="space-y-1.5 pt-0.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-extrabold text-gray-500 uppercase tracking-wider">
+                  Required Fields Checklist
+                </span>
+                <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[9.5px] font-bold">
+                  {checklist.filledCount} of 6 completed
+                </span>
               </div>
 
-              <div className="space-y-1.5">
+              <div className="bg-white/70 backdrop-blur-md border border-white/90 rounded-xl px-2.5 py-0.5 divide-y divide-gray-100 shadow-2xs">
                 {checklist.items.map((item) => (
                   <div
                     key={item.id}
                     onClick={() => setActiveTab(item.tab)}
-                    className="flex items-center justify-between p-2 rounded-xl hover:bg-gray-50 border border-transparent hover:border-gray-200 transition-all cursor-pointer text-xs"
+                    className="flex items-center justify-between py-1.5 px-0.5 hover:bg-gray-50/60 transition-colors cursor-pointer group"
                   >
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      {item.filled ? (
+                        <div className="w-3.5 h-3.5 rounded-full bg-black text-white shrink-0 flex items-center justify-center text-[8px] font-bold">
+                          <Check size={9} strokeWidth={3} />
+                        </div>
+                      ) : (
+                        <div className="w-3.5 h-3.5 rounded-full border border-gray-300 shrink-0" />
+                      )}
                       <span
-                        className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold ${
-                          item.filled
-                            ? 'bg-black text-white'
-                            : item.required
-                            ? 'bg-gray-200 text-gray-600'
-                            : 'bg-gray-100 text-gray-400'
+                        className={`text-[11px] ${
+                          item.filled ? 'font-bold text-gray-900' : 'font-medium text-gray-700'
                         }`}
                       >
-                        {item.filled ? '✓' : '•'}
-                      </span>
-                      <span className={item.filled ? 'font-bold text-gray-900' : 'text-gray-600'}>
                         {item.label}
                       </span>
                     </div>
-                    <span className="text-[10px] text-gray-400 max-w-[120px] truncate text-right">
-                      {item.detail}
-                    </span>
+
+                    <div className="flex items-center gap-1 shrink-0 ml-1.5">
+                      <span className="text-[10px] text-gray-400 max-w-[120px] truncate text-right">
+                        {item.detail}
+                      </span>
+                      <ChevronRight size={11} className="text-gray-400 group-hover:text-gray-700 transition-colors shrink-0" />
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
 
             {/* Action CTA inside Side Tab */}
-            <div className="pt-2">
+            <div className="pt-0.5">
               <button
                 type="button"
                 onClick={handleSubmit}
                 disabled={submitting || !canSubmit}
-                className="w-full py-2.5 px-3.5 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 cursor-pointer"
+                className="w-full py-2.5 px-3 rounded-xl bg-black hover:bg-neutral-900 text-white text-xs font-bold shadow-md hover:shadow-lg transition-all active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 cursor-pointer"
               >
-                <Sparkles size={13} />
+                <Sparkles size={14} />
                 <span>{submitting ? 'Creating...' : 'Create Requisition →'}</span>
               </button>
             </div>

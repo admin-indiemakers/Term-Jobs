@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { livekitService } from '../services/livekitService';
 
 export function useInterviewMedia() {
@@ -9,9 +9,21 @@ export function useInterviewMedia() {
   const [screenStream, setScreenStream] = useState(null);
   const [permissionError, setPermissionError] = useState(null);
 
+  const localStreamRef = useRef(null);
+  const screenStreamRef = useRef(null);
+
+  useEffect(() => {
+    localStreamRef.current = localStream;
+  }, [localStream]);
+
+  useEffect(() => {
+    screenStreamRef.current = screenStream;
+  }, [screenStream]);
+
   useEffect(() => {
     const handleLocalTrack = ({ stream, hasVideo, hasAudio }) => {
       setLocalStream(stream);
+      localStreamRef.current = stream;
       setIsCameraOn(hasVideo);
       setIsMicOn(hasAudio);
     };
@@ -21,13 +33,55 @@ export function useInterviewMedia() {
     const handleScreenShareEnded = () => {
       setIsScreenSharing(false);
       setScreenStream(null);
+      screenStreamRef.current = null;
     };
     livekitService.on('screenShareEnded', handleScreenShareEnded);
 
     return () => {
       livekitService.off('localTrackChanged', handleLocalTrack);
       livekitService.off('screenShareEnded', handleScreenShareEnded);
+
+      // Cleanly stop all tracks when hook unmounts so camera hardware shuts off
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach((track) => {
+          try {
+            track.stop();
+          } catch (_) {}
+        });
+      }
+      if (screenStreamRef.current) {
+        screenStreamRef.current.getTracks().forEach((track) => {
+          try {
+            track.stop();
+          } catch (_) {}
+        });
+      }
     };
+  }, []);
+
+  const stopMediaTracks = useCallback(() => {
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((track) => {
+        try {
+          track.stop();
+        } catch (_) {}
+      });
+      localStreamRef.current = null;
+    }
+    if (screenStreamRef.current) {
+      screenStreamRef.current.getTracks().forEach((track) => {
+        try {
+          track.stop();
+        } catch (_) {}
+      });
+      screenStreamRef.current = null;
+    }
+    setLocalStream(null);
+    setScreenStream(null);
+    setIsCameraOn(false);
+    setIsMicOn(false);
+    setIsScreenSharing(false);
+    livekitService.disconnect();
   }, []);
 
   const toggleCamera = useCallback(async () => {
@@ -57,14 +111,17 @@ export function useInterviewMedia() {
       if (isScreenSharing) {
         await livekitService.toggleScreenShare(false);
         setScreenStream(null);
+        screenStreamRef.current = null;
         setIsScreenSharing(false);
       } else {
         const resStream = await livekitService.toggleScreenShare(true);
         if (resStream) {
           setScreenStream(resStream);
+          screenStreamRef.current = resStream;
           setIsScreenSharing(true);
         } else {
           setScreenStream(null);
+          screenStreamRef.current = null;
           setIsScreenSharing(false);
         }
       }
@@ -80,6 +137,7 @@ export function useInterviewMedia() {
     localStream,
     screenStream,
     permissionError,
+    stopMediaTracks,
     toggleCamera,
     toggleMicrophone,
     toggleScreenShare,

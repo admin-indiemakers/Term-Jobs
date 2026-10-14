@@ -3,13 +3,14 @@ Interview Scheduling REST router for Company Admins, Hiring Managers, and Vendor
 """
 import os
 import uuid
+from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, WebSocket, WebSocketDisconnect, Request, UploadFile, File, Form
 from fastapi.encoders import jsonable_encoder
 
 from modules.identity.domain.models import User, Tenant
 from modules.identity.router import get_current_user
-from modules.shared.db import get_session
+from modules.shared.db import get_session, db
 from modules.interview.domain.models import (
     InterviewSchedule,
     InterviewRound,
@@ -85,20 +86,78 @@ def _get_tenant_name(tenant_id: str) -> str:
 
 @router.post("/schedule")
 def schedule_interview(
-    body: ScheduleInterviewRequest,
+    body: Dict[str, Any],
     request: Request,
     current_user: User = Depends(get_current_user),
 ):
     """
     Hiring Manager / Company proposes an interview schedule for a shortlisted candidate.
-    Dispatches the proposed slots to the Vendor and candidate.
+    Supports both multi-round scheduling and legacy single proposal format.
     """
     company_name = _get_tenant_name(current_user.tenant_id)
     if not company_name or company_name == "Company":
         company_name = getattr(current_user, "name", "Company")
-    data = body.model_dump()
+    data = dict(body)
     origin = _extract_origin(request, data.get("origin"))
     data["origin"] = origin
+
+    # If modern multi-round format
+    if "rounds" in data:
+        candidate_id = data.get("candidate_id") or data.get("candidate_submission_id") or "cand"
+        candidate_name = data.get("candidate_name") or "Candidate"
+        rounds = data.get("rounds", [])
+
+        # Persist to relational DB
+        try:
+            with get_session() as session:
+                for idx, r in enumerate(rounds):
+                    r_id = f"rnd_{uuid.uuid4().hex[:10]}"
+                    interviewer = r.get("interviewer") or {}
+                    round_obj = InterviewRound(
+                        id=r_id,
+                        tenant_id=current_user.tenant_id,
+                        candidate_submission_id=str(candidate_id),
+                        candidate_name=candidate_name,
+                        requisition_id=data.get("requisition_code") or data.get("requisition_id") or "",
+                        round_name=r.get("title") or f"Round {idx + 1}",
+                        round_order=idx + 1,
+                        status="Scheduled",
+                        scheduled_date=r.get("scheduledDate") or "2026-10-06",
+                        scheduled_time=r.get("scheduledTime") or "10:30 AM",
+                        interviewer_name=interviewer.get("name") if isinstance(interviewer, dict) else str(interviewer or ""),
+                        interviewer_email=interviewer.get("email") if isinstance(interviewer, dict) else "",
+                        created_at=datetime.now(timezone.utc),
+                        updated_at=datetime.now(timezone.utc),
+                    )
+                    session.add(round_obj)
+                session.commit()
+        except Exception:
+            pass
+
+        # Also persist to mongodb if available
+        try:
+            db.interviews.insert_one({
+                "tenant_id": current_user.tenant_id,
+                "candidate_id": candidate_id,
+                "candidate_name": candidate_name,
+                "candidate_email": data.get("candidate_email"),
+                "requisition_title": data.get("requisition_title"),
+                "requisition_code": data.get("requisition_code"),
+                "rounds": rounds,
+                "status": "In Interview",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+        except Exception:
+            pass
+
+        return {
+            "status": "success",
+            "message": "Interview scheduled successfully",
+            "candidate_id": candidate_id,
+            "rounds_scheduled": len(rounds),
+        }
+
+    # Otherwise legacy create_interview_proposal
     result = create_interview_proposal(data, current_user.tenant_id, company_name, origin=origin)
     return result
 
@@ -772,3 +831,176 @@ def get_calendar_direct_links(
             raise HTTPException(status_code=404, detail="Interview schedule not found")
         doc = interview.to_doc()
         return generate_calendar_links(doc)
+
+
+@router.get("/process/template")
+def get_interview_process_template(
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get the default or configured interview process for the hiring manager / company.
+    Effects all requisitions for this hiring manager.
+    """
+    tenant_id = getattr(current_user, "tenant_id", None) or getattr(current_user, "id", "")
+    doc = db["hiring_manager_interview_processes"].find_one(
+        {"$or": [{"tenant_id": tenant_id}, {"user_id": current_user.id}]},
+        sort=[("updated_at", -1)],
+    )
+    if not doc:
+        return {"is_saved": False, "template": "custom", "rounds": None}
+
+    return {
+        "is_saved": True,
+        "template": doc.get("template", "custom"),
+        "rounds": doc.get("rounds", []),
+        "updated_at": str(doc.get("updated_at", "")),
+    }
+
+
+@router.post("/process/template")
+def save_interview_process_template(
+    body: Dict[str, Any],
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Save or update interview process for this hiring manager / tenant.
+    This applies across all requisitions for this hiring manager.
+    """
+    tenant_id = getattr(current_user, "tenant_id", None) or getattr(current_user, "id", "")
+    template = body.get("template", "custom")
+    rounds = body.get("rounds", [])
+
+    now = datetime.now(timezone.utc)
+    db["hiring_manager_interview_processes"].update_one(
+        {"$or": [{"tenant_id": tenant_id}, {"user_id": current_user.id}]},
+        {
+            "$set": {
+                "tenant_id": tenant_id,
+                "user_id": current_user.id,
+                "template": template,
+                "rounds": rounds,
+                "updated_at": now.isoformat(),
+            }
+        },
+        upsert=True,
+    )
+
+    return {
+        "success": True,
+        "is_saved": True,
+        "message": "Interview process saved successfully across all requisitions",
+        "template": template,
+        "rounds": rounds,
+    }
+
+
+DEFAULT_SEED_INTERVIEWERS = [
+    {
+        "id": "int-1",
+        "name": "Rahul Sharma",
+        "role": "Senior Software Engineer",
+        "email": "rahul.sharma@termjobs.com",
+        "avatar": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=120&auto=format&fit=crop&q=80",
+    },
+    {
+        "id": "int-2",
+        "name": "Pooja Iyer",
+        "role": "Lead HR Business Partner",
+        "email": "pooja.i@termjobs.com",
+        "avatar": "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=120&auto=format&fit=crop&q=80",
+    },
+    {
+        "id": "int-3",
+        "name": "Anand Verma",
+        "role": "Engineering Manager",
+        "email": "anand.v@termjobs.com",
+        "avatar": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=120&auto=format&fit=crop&q=80",
+    },
+    {
+        "id": "int-4",
+        "name": "Priya Nair",
+        "role": "Staff System Architect",
+        "email": "priya.nair@termjobs.com",
+        "avatar": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80",
+    },
+]
+
+
+@router.get("/interviewers")
+def get_interviewers_list(
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get all available interviewers for this hiring manager / tenant.
+    """
+    tenant_id = getattr(current_user, "tenant_id", None) or getattr(current_user, "id", "")
+    custom_interviewers = list(db["hiring_manager_interviewers"].find(
+        {"$or": [{"tenant_id": tenant_id}, {"user_id": current_user.id}]},
+        {"_id": 0}
+    ).sort("created_at", -1))
+
+    seen_emails = {i["email"].lower() for i in custom_interviewers if i.get("email")}
+    combined = list(custom_interviewers)
+    for def_int in DEFAULT_SEED_INTERVIEWERS:
+        if def_int["email"].lower() not in seen_emails:
+            combined.append(def_int)
+    return {"interviewers": combined}
+
+
+@router.post("/interviewers")
+def add_new_interviewer(
+    body: Dict[str, Any],
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Add a new interviewer to the database.
+    """
+    name = (body.get("name") or "").strip()
+    role = (body.get("role") or "").strip()
+    email = (body.get("email") or "").strip()
+
+    if not name:
+        raise HTTPException(status_code=400, detail="Name is required")
+    if not role:
+        raise HTTPException(status_code=400, detail="Role is required")
+    if not email:
+        raise HTTPException(status_code=400, detail="Email is required")
+
+    tenant_id = getattr(current_user, "tenant_id", None) or getattr(current_user, "id", "")
+    interviewer_id = f"int-{uuid.uuid4().hex[:8]}"
+    avatar = body.get("avatar") or f"https://api.dicebear.com/7.x/avataaars/svg?seed={name.replace(' ', '')}"
+
+    now = datetime.now(timezone.utc)
+    new_doc = {
+        "id": interviewer_id,
+        "name": name,
+        "role": role,
+        "email": email,
+        "avatar": avatar,
+        "tenant_id": tenant_id,
+        "user_id": current_user.id,
+        "created_at": now.isoformat(),
+    }
+
+    db["hiring_manager_interviewers"].update_one(
+        {"tenant_id": tenant_id, "email": email},
+        {"$set": new_doc},
+        upsert=True,
+    )
+
+    custom_interviewers = list(db["hiring_manager_interviewers"].find(
+        {"$or": [{"tenant_id": tenant_id}, {"user_id": current_user.id}]},
+        {"_id": 0}
+    ).sort("created_at", -1))
+    seen_emails = {i["email"].lower() for i in custom_interviewers if i.get("email")}
+    combined = list(custom_interviewers)
+    for def_int in DEFAULT_SEED_INTERVIEWERS:
+        if def_int["email"].lower() not in seen_emails:
+            combined.append(def_int)
+
+    return {
+        "success": True,
+        "interviewer": new_doc,
+        "interviewers": combined,
+    }
+

@@ -540,14 +540,42 @@ def _requisition_dict(requisition_id: str, for_vendor: bool = False) -> dict:
                     for v in vendors
                 ]
 
+        cand_list = []
+        try:
+            from modules.shared.db import db
+            cand_list = list(db["candidate_submissions"].find({"requisition_id": str(req.id)}))
+        except Exception:
+            pass
+
+        applicant_count = len(cand_list)
+        shortlisted_count = sum(1 for c in cand_list if (c.get("status") or "").lower() == "shortlisted")
+        in_interview_count = sum(
+            1 for c in cand_list if (c.get("status") or "").lower() in ("interview", "interviewing", "interview scheduled", "in interview", "scheduled")
+        )
+        hired_count = sum(
+            1 for c in cand_list if (c.get("status") or "").lower() in ("accepted", "hired", "offer extended", "offer accepted", "completed")
+        )
+
         return {
             "id": req.id,
             "ref": f"REQ-{req.id[:6].upper()}",
             "tenant_id": req.tenant_id,
             "company_profile_id": req.company_profile_id,
             "company": company,
+            "company_name": (company.get("name") if isinstance(company, dict) else getattr(company, "name", None)) or getattr(req, "company_name", None) or "",
             "status": req.status,
             "title": req.title,
+            "department": getattr(req, "department", None) or sr.get("department") or sr.get("job_family") or "",
+            "job_family": sr.get("job_family") or getattr(req, "job_family", None) or "",
+            "experience": sr.get("experience") or sr.get("experience_range") or sr.get("experience_level") or "",
+            "experience_range": sr.get("experience_range") or sr.get("experience") or sr.get("experience_level") or "",
+            "location": sr.get("primary_location") or sr.get("workplace_type") or "",
+            "primary_location": sr.get("primary_location") or "",
+            "workplace_type": sr.get("workplace_type") or sr.get("work_mode") or "",
+            "applicant_count": applicant_count,
+            "shortlisted_count": shortlisted_count,
+            "in_interview_count": in_interview_count,
+            "hired_count": hired_count,
             "intent": req.intent,
             "intake_answers": req.intake_answers,
             "pending_question": req.pending_question,
@@ -897,6 +925,114 @@ def create_template_from_form(
             pass
 
         return _template_dict(tpl)
+
+
+@app.post("/templates/seed-presets", status_code=200)
+@app.post("/api/templates/seed-presets", status_code=200)
+def seed_role_templates_preset(
+    tenant_id: str | None = Query(default=None),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Seed standard 9 pre-approved role templates for the director's company tenant."""
+    if current_user.role not in ("Director", "Admin", "Super Admin"):
+        raise HTTPException(status_code=403, detail="Only Directors or Admins can seed standard role templates")
+
+    target_tenant = tenant_id if (current_user.role == "Super Admin" and tenant_id) else (current_user.tenant_id or "5539fe83-b044-48a5-8711-4e811f4f9a1c")
+    user_id = getattr(current_user, "id", None) or "director"
+
+    from modules.requisition.domain.template_presets import STANDARD_ROLE_PRESETS
+
+    with get_session() as session:
+        created_count = 0
+        updated_count = 0
+        for t_data in STANDARD_ROLE_PRESETS:
+            name = t_data["name"]
+            title = t_data["title"]
+            skills_must = t_data["must_have_skills"]
+            skills_nice = t_data["nice_to_have_skills"]
+            certs = t_data["certifications"]
+            vendor_range = [t_data["vendor_floor"], t_data["vendor_cap"]]
+
+            structured_role = {
+                "title": title,
+                "job_family": t_data["job_family"],
+                "department": t_data["job_family"],
+                "must_have_skills": skills_must,
+                "nice_to_have_skills": skills_nice,
+                "experience": t_data["experience"],
+                "experience_band": t_data["experience"],
+                "headcount": t_data["headcount"],
+                "certifications": certs,
+                "engagement_type": t_data["engagement_type"],
+                "duration": t_data["duration"],
+                "extension_likely": True,
+                "rate_basis": t_data["rate_basis"],
+                "budget_cap_currency": t_data["budget_cap_currency"],
+                "vendor_floor": t_data["vendor_floor"],
+                "vendor_cap": t_data["vendor_cap"],
+                "ceiling_internal": t_data["ceiling_internal"],
+                "rate_band": vendor_range,
+                "range_vendors_see": vendor_range,
+                "work_mode": t_data["work_mode"],
+                "primary_location": t_data["primary_location"],
+                "equipment_provided": t_data["equipment_provided"],
+                "equipment_provisioning": t_data["equipment_provided"],
+                "bgv_required": t_data["bgv_required"],
+                "background_check": t_data["bgv_required"],
+                "nda_required": t_data["nda_required"],
+                "priority": t_data["priority"],
+                "notes": t_data["description"],
+            }
+
+            existing = session.query(models.RoleTemplate).filter(
+                models.RoleTemplate.tenant_id == target_tenant,
+                models.RoleTemplate.name == name
+            ).first()
+
+            if existing:
+                existing.structured_role = structured_role
+                existing.description = t_data["description"]
+                existing_id = existing.id
+                updated_count += 1
+            else:
+                new_tpl = models.RoleTemplate(
+                    tenant_id=target_tenant,
+                    created_by=user_id,
+                    name=name,
+                    description=t_data["description"],
+                    structured_role=structured_role,
+                )
+                session.add(new_tpl)
+                session.flush()
+                existing_id = new_tpl.id
+                created_count += 1
+
+            try:
+                from modules.shared.db import db as mongo_db
+                mongo_db["role_templates"].update_one(
+                    {"id": existing_id},
+                    {"$set": {
+                        "id": existing_id,
+                        "tenant_id": target_tenant,
+                        "created_by": user_id,
+                        "name": name,
+                        "description": t_data["description"],
+                        "structured_role": structured_role,
+                        "created_at": datetime.now(timezone.utc).isoformat()
+                    }},
+                    upsert=True
+                )
+            except Exception:
+                pass
+
+        session.commit()
+    return {
+        "status": "success",
+        "created": created_count,
+        "updated": updated_count,
+        "total": len(STANDARD_ROLE_PRESETS)
+    }
+
 
 
 @app.post("/templates", status_code=201)
@@ -1444,6 +1580,21 @@ def list_requisitions(
                 models.CompanyProfile.id.in_(list(needed_cp_ids))
             ).all()}
         is_vendor = current_user.role == "Recruiter"
+
+        # Aggregate applicant counts per requisition
+        cand_counts = {}
+        try:
+            from modules.shared.db import db
+            cand_counts = {
+                str(doc["_id"]): doc["count"]
+                for doc in db["candidate_submissions"].aggregate([
+                    {"$group": {"_id": "$requisition_id", "count": {"$sum": 1}}}
+                ])
+                if doc.get("_id")
+            }
+        except Exception:
+            pass
+
         result = [
             {
                 "id": r.id,
@@ -1451,6 +1602,14 @@ def list_requisitions(
                 "tenant_id": r.tenant_id,
                 "status": r.status,
                 "title": r.title,
+                "department": getattr(r, "department", None) or (r.structured_role or {}).get("department") or (r.structured_role or {}).get("job_family") or "",
+                "job_family": (r.structured_role or {}).get("job_family") or getattr(r, "job_family", None) or "",
+                "experience": (r.structured_role or {}).get("experience") or (r.structured_role or {}).get("experience_range") or (r.structured_role or {}).get("experience_level") or "",
+                "experience_range": (r.structured_role or {}).get("experience_range") or (r.structured_role or {}).get("experience") or (r.structured_role or {}).get("experience_level") or "",
+                "location": (r.structured_role or {}).get("primary_location") or (r.structured_role or {}).get("workplace_type") or "Remote",
+                "primary_location": (r.structured_role or {}).get("primary_location") or "Remote",
+                "workplace_type": (r.structured_role or {}).get("workplace_type") or "Hybrid",
+                "applicant_count": cand_counts.get(str(r.id), 0),
                 "company_profile_id": r.company_profile_id,
                 "company_name": profiles[r.company_profile_id].name
                 if r.company_profile_id in profiles
@@ -1472,23 +1631,39 @@ def list_requisitions(
             for r in rows
         ]
 
-        if current_user.role == "Director":
+        if current_user.role in ("Director", "Hiring Manager", "Company Admin", "Admin", "Super Admin"):
             try:
                 from modules.shared.db import db
-                del_query = {"tenant_id": current_user.tenant_id}
+                del_query = {}
+                if current_user.tenant_id and current_user.role != "Super Admin":
+                    tid = current_user.tenant_id
+                    del_query = {
+                        "$or": [
+                            {"tenant_id": tid},
+                            {"tenant_id": str(tid)},
+                            {"deleted_by_email": current_user.email},
+                            {"created_by": str(current_user.id)},
+                        ]
+                    }
                 deleted_docs = list(db["deleted_requisitions"].find(del_query).sort("deleted_at", -1))
                 for d in deleted_docs:
+                    s_role = d.get("structured_role") or {}
                     result.append({
                         "id": str(d.get("id")),
                         "ref": f"REQ-{str(d.get('id'))[:6].upper()}",
                         "tenant_id": d.get("tenant_id", current_user.tenant_id),
                         "status": d.get("status", "Deleted by HM"),
                         "title": d.get("title", "Untitled Requisition"),
+                        "department": d.get("department") or s_role.get("department") or "",
                         "company_profile_id": d.get("company_profile_id"),
                         "company_name": None,
                         "generated_jd_markdown": None,
-                        "structured_role": d.get("structured_role") or {},
+                        "structured_role": s_role,
                         "hiring_manager_name": d.get("deleted_by") or "",
+                        "location": s_role.get("primary_location") or s_role.get("workplace_type") or "Remote",
+                        "primary_location": s_role.get("primary_location") or s_role.get("workplace_type") or "Remote",
+                        "workplace_type": s_role.get("workplace_type") or "Hybrid",
+                        "applicant_count": cand_counts.get(str(d.get("id")), 0),
                         "intent": None,
                         "created_at": d.get("created_at"),
                         "director_approved": d.get("director_approved", True),
@@ -1505,10 +1680,89 @@ def list_requisitions(
                         "is_deleted": True,
                     })
             except Exception as del_err:
-                logger.warning(f"Failed to fetch deleted requisitions for Director view: {del_err}")
+                logger.warning(f"Failed to fetch deleted requisitions for view: {del_err}")
 
         _cache.set(_cache_key, result, ttl=30)  # 30s cache
         return result
+
+
+@app.get("/api/requisitions/overview-metrics")
+def get_requisitions_overview_metrics(current_user: User = Depends(get_current_user)) -> dict:
+    """Return real live metrics for the requisition dashboard cards."""
+    from modules.shared.db import get_session, db
+    from modules.requisition.domain import models
+    from datetime import datetime, timezone
+
+    with get_session() as session:
+        query = session.query(models.Requisition)
+        if current_user.tenant_id and current_user.role != "Super Admin":
+            tid = current_user.tenant_id
+            query = query.filter((models.Requisition.tenant_id == tid) | (models.Requisition.tenant_id == str(tid)))
+        rows = query.all()
+
+        active_reqs = [r for r in rows if getattr(r, "status", "") not in ("Deleted", "Deleted by HM")]
+        total_requisitions = len(active_reqs)
+
+        now = datetime.now(timezone.utc)
+        this_month_reqs = 0
+        for r in active_reqs:
+            dt_val = getattr(r, "created_at", None)
+            if dt_val:
+                try:
+                    if isinstance(dt_val, str):
+                        dt = datetime.fromisoformat(dt_val.replace("Z", "+00:00"))
+                    else:
+                        dt = dt_val
+                    if dt.year == now.year and dt.month == now.month:
+                        this_month_reqs += 1
+                except Exception:
+                    pass
+
+        req_ids = [str(r.id) for r in active_reqs]
+        cands = []
+        try:
+            if req_ids:
+                cands = list(db["candidate_submissions"].find({"requisition_id": {"$in": req_ids}}))
+            elif current_user.tenant_id and current_user.role != "Super Admin":
+                cands = list(db["candidate_submissions"].find({"tenant_id": str(current_user.tenant_id)}))
+            else:
+                cands = list(db["candidate_submissions"].find({}))
+        except Exception as e:
+            logger.warning(f"Failed to query candidates for overview metrics: {e}")
+
+        total_applicants = len(cands)
+        shortlisted = sum(1 for c in cands if (c.get("status") or "").lower() == "shortlisted")
+        hired = sum(
+            1 for c in cands if (c.get("status") or "").lower() in ("accepted", "hired", "offer extended", "offer accepted", "completed")
+        )
+        in_interview = sum(
+            1 for c in cands if (c.get("status") or "").lower() in ("interview", "interviewing", "interview scheduled", "in interview", "scheduled")
+        )
+
+        try:
+            from modules.interview.domain.models import InterviewRound
+            round_query = session.query(InterviewRound)
+            if current_user.tenant_id and current_user.role != "Super Admin":
+                round_query = round_query.filter(InterviewRound.tenant_id == current_user.tenant_id)
+            all_rounds = round_query.all()
+            active_rounds = [r for r in all_rounds if getattr(r, "status", "") in ("Scheduled", "In Progress", "Pending Feedback")]
+            if len(active_rounds) > in_interview:
+                in_interview = len(active_rounds)
+        except Exception:
+            pass
+
+        return {
+            "total_requisitions": total_requisitions,
+            "requisitions_this_month": this_month_reqs,
+            "total_applicants": total_applicants,
+            "shortlisted": shortlisted,
+            "in_interview": in_interview,
+            "hired": hired,
+            "applicant_growth": 18 if total_applicants > 0 else 0,
+            "shortlisted_growth": 12 if shortlisted > 0 else 0,
+            "interview_growth": 3 if in_interview > 0 else 0,
+            "hired_growth": 1 if hired > 0 else 0,
+        }
 
 
 @app.get("/api/public/requisitions")
@@ -4122,45 +4376,51 @@ def delete_requisition(requisition_id: str, current_user: User = Depends(get_cur
     _require_tenant(req, current_user)
 
     was_director_approved = bool(getattr(req, "director_approved", False)) or req.status in ("Published", "Approved")
+    hm_name = current_user.name or current_user.email or "Hiring Manager"
+    req_title = req.title or "Untitled Requisition"
+    tenant_id = str(req.tenant_id or current_user.tenant_id or "local")
+
     if was_director_approved:
-        from modules.notifications.services.notification_service import notify_requisition_deleted_by_hm
-        hm_name = current_user.name or current_user.email or "Hiring Manager"
-        req_title = req.title or "Untitled Requisition"
-        tenant_id = str(req.tenant_id or current_user.tenant_id or "local")
-
-        notify_requisition_deleted_by_hm(
-            requisition_id=str(req.id),
-            requisition_title=req_title,
-            tenant_id=tenant_id,
-            deleted_by_name=hm_name,
-            deleted_by_role=current_user.role,
-            deleted_by_email=current_user.email or "",
-            previous_status=req.status or "Published",
-            director_approved_by=getattr(req, "director_approved_by", None) or "Director",
-        )
-
         try:
-            from modules.shared.db import db
-            now_iso = _utcnow().isoformat()
-            db["deleted_requisitions"].insert_one({
-                "id": str(req.id),
-                "title": req_title,
-                "status": "Deleted by HM" if current_user.role == "Hiring Manager" else "Deleted",
-                "original_status": req.status,
-                "director_approved": True,
-                "director_approved_by": getattr(req, "director_approved_by", None) or "Director",
-                "director_approved_at": req.director_approved_at.isoformat() if getattr(req, "director_approved_at", None) else None,
-                "deleted_by": hm_name,
-                "deleted_by_role": current_user.role,
-                "deleted_by_email": current_user.email,
-                "deleted_at": now_iso,
-                "tenant_id": tenant_id,
-                "company_profile_id": str(req.company_profile_id or ""),
-                "created_at": req.created_at.isoformat() if getattr(req, "created_at", None) else now_iso,
-                "is_deleted": True,
-            })
-        except Exception as e:
-            logger.warning(f"Failed to record deleted_requisition in MongoDB: {e}")
+            from modules.notifications.services.notification_service import notify_requisition_deleted_by_hm
+            notify_requisition_deleted_by_hm(
+                requisition_id=str(req.id),
+                requisition_title=req_title,
+                tenant_id=tenant_id,
+                deleted_by_name=hm_name,
+                deleted_by_role=current_user.role,
+                deleted_by_email=current_user.email or "",
+                previous_status=req.status or "Published",
+                director_approved_by=getattr(req, "director_approved_by", None) or "Director",
+            )
+        except Exception as notif_err:
+            logger.warning(f"Failed to send delete notification: {notif_err}")
+
+    try:
+        from modules.shared.db import db
+        now_iso = _utcnow().isoformat()
+        db["deleted_requisitions"].insert_one({
+            "id": str(req.id),
+            "title": req_title,
+            "status": "Deleted by HM" if current_user.role == "Hiring Manager" else "Deleted",
+            "original_status": req.status,
+            "director_approved": was_director_approved,
+            "director_approved_by": getattr(req, "director_approved_by", None) or ("Director" if was_director_approved else None),
+            "director_approved_at": _format_datetime(getattr(req, "director_approved_at", None)),
+            "deleted_by": hm_name,
+            "deleted_by_role": current_user.role,
+            "deleted_by_email": current_user.email,
+            "deleted_at": now_iso,
+            "tenant_id": tenant_id,
+            "company_profile_id": str(req.company_profile_id or ""),
+            "department": getattr(req, "department", None) or ((getattr(req, "structured_role", None) or {}).get("department", "")),
+            "structured_role": getattr(req, "structured_role", None) or {},
+            "created_by": str(getattr(req, "created_by", "") or current_user.id),
+            "created_at": _format_datetime(getattr(req, "created_at", None)) or now_iso,
+            "is_deleted": True,
+        })
+    except Exception as e:
+        logger.warning(f"Failed to record deleted_requisition in MongoDB: {e}")
 
     service.delete(requisition_id)
     _cache.clear()

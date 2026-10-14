@@ -86,9 +86,15 @@ export function useInterviewRoom({ roundId, participantName, role, livekitToken,
       livekitService.off('participantConnected', handleParticipantConnected);
       livekitService.off('participantDisconnected', handleParticipantDisconnected);
       livekitService.off('activeSpeakersChanged', handleActiveSpeakers);
-      livekitService.disconnect();
     };
   }, [connectRoom]);
+
+  // Guaranteed unmount cleanup
+  useEffect(() => {
+    return () => {
+      livekitService.disconnect();
+    };
+  }, []);
 
   const disconnect = useCallback(() => {
     livekitService.disconnect();

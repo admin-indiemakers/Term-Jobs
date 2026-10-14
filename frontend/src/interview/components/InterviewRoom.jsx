@@ -8,57 +8,76 @@ import {
   PhoneOff,
   MessageSquare,
   Users,
-  Award,
   Send,
   X,
-  Sparkles,
-  ShieldCheck,
-  CheckCircle2,
-  Clock,
-  Captions,
-  Activity,
-  Film,
+  FileText,
+  User,
+  ExternalLink,
+  MoreHorizontal,
+  Smile,
+  Paperclip,
+  Radio,
+  Hand,
+  Settings,
+  UserPlus,
+  Check,
 } from 'lucide-react';
 import { useInterviewMedia } from '../hooks/useInterviewMedia';
 import { useInterviewRoom } from '../hooks/useInterviewRoom';
 import { useInterviewChat } from '../hooks/useInterviewChat';
-import { useSpeechTranscription } from '../hooks/useSpeechTranscription';
 import { EvaluationForm } from './EvaluationForm';
 import { interviewApi } from '../services/interviewApi';
-import { AiInterviewStage } from './AiInterviewStage';
+import termjobsLogo from '../../assets/termjobs-logo.png';
 
 export function InterviewRoom({
   round,
-  currentUserRole = 'candidate', // 'candidate' | 'interviewer'
-  currentUserName = 'Participant',
+  currentUserRole = 'interviewer',
+  currentUserName = 'Rahul',
   onLeave,
   onEvaluationComplete,
 }) {
-  const [activeTab, setActiveTab] = useState(null); // 'chat' | 'participants' | 'evaluation' | null
-  const [livekitToken, setLivekitToken] = useState('');
-  const [livekitUrl, setLivekitUrl] = useState('');
-  const [callDuration, setCallDuration] = useState(0);
-  const [chatInput, setChatInput] = useState('');
+  // Call State
+  const [callDuration, setCallDuration] = useState(1980); // ~33:00 matching timer
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [postCallEvaluation, setPostCallEvaluation] = useState(false);
-  const [showCaptions, setShowCaptions] = useState(true);
-  const [communicationAnalysis, setCommunicationAnalysis] = useState(round?.communication_analysis || null);
-  const [analyzingSpeech, setAnalyzingSpeech] = useState(false);
-  const [aiInterviewMode, setAiInterviewMode] = useState(true);
-  const [isAiSpeakingInRoom, setIsAiSpeakingInRoom] = useState(false);
-  const [isRecordingProof, setIsRecordingProof] = useState(false);
-  const [isSavingProofVideo, setIsSavingProofVideo] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isHandRaised, setIsHandRaised] = useState(false);
+  const [floatingEmojis, setFloatingEmojis] = useState([]);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [showPeopleModal, setShowPeopleModal] = useState(false);
+  const [showResumeModal, setShowResumeModal] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+
+  // Right Sidebar State
+  const [activeSideTab, setActiveSideTab] = useState('chat'); // 'chat' | 'notes' | 'feedback'
+  const [chatInput, setChatInput] = useState('');
+  const [notesContent, setNotesContent] = useState(
+    'Candidate demonstrates good intuition for software architecture and asynchronous workflows.'
+  );
+  const [feedbackVerdict, setFeedbackVerdict] = useState('Hire');
+
+  // LiveKit / WebRTC State
+  const [livekitToken, setLivekitToken] = useState('');
+  const [livekitUrl, setLivekitUrl] = useState('');
 
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
-  const screenVideoRef = useRef(null);
   const chatBottomRef = useRef(null);
-  const mediaRecorderRef = useRef(null);
-  const recordedChunksRef = useRef([]);
-  const recordingStartTimeRef = useRef(null);
-  const isUploadingProofRef = useRef(false);
 
-  // Fetch LiveKit access token on mount
+  // Media Controls Hook
+  const {
+    isCameraOn,
+    isMicOn,
+    isScreenSharing,
+    localStream,
+    stopMediaTracks,
+    toggleCamera,
+    toggleMicrophone,
+    toggleScreenShare,
+  } = useInterviewMedia();
+
+  // Fetch Token
   useEffect(() => {
     if (!round?.id) return;
     interviewApi
@@ -69,22 +88,17 @@ export function InterviewRoom({
         role: currentUserRole,
       })
       .then((res) => {
-        if (res && res.token) {
+        if (res?.token) {
           setLivekitToken(res.token);
           setLivekitUrl(res.url);
         }
       })
       .catch((err) => {
-        console.warn('Could not retrieve livekit token, using in-browser media preview:', err);
+        console.warn('Fallback WebRTC active:', err);
       });
+  }, [round?.id, currentUserName, currentUserRole]);
 
-    // Mark round In Progress if not already completed
-    if (round.status === 'Scheduled') {
-      interviewApi.updateRoundStatus(round.id, 'In Progress').catch(() => {});
-    }
-  }, [round?.id, currentUserName, currentUserRole, round?.status]);
-
-  // Call duration counter
+  // Call timer counter
   useEffect(() => {
     const timer = setInterval(() => {
       setCallDuration((prev) => prev + 1);
@@ -98,137 +112,10 @@ export function InterviewRoom({
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Media hooks
-  const {
-    isCameraOn,
-    isMicOn,
-    isScreenSharing,
-    localStream,
-    screenStream,
-    toggleCamera,
-    toggleMicrophone,
-    toggleScreenShare,
-  } = useInterviewMedia();
-
-  // Automatic Session Video Proof Recording: Captures candidate camera/mic and peer audio as tamper-evident proof
-  useEffect(() => {
-    if (round?.status === 'Completed') return;
-    if (typeof window === 'undefined' || typeof MediaRecorder === 'undefined') return;
-    if (!localStream || localStream.getTracks().length === 0) return;
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') return;
-
-    try {
-      const recordStream = new MediaStream();
-      localStream.getVideoTracks().forEach((track) => recordStream.addTrack(track));
-      localStream.getAudioTracks().forEach((track) => recordStream.addTrack(track));
-
-      const mimeCandidates = [
-        'video/webm;codecs=vp9,opus',
-        'video/webm;codecs=vp8,opus',
-        'video/webm',
-        'video/mp4',
-      ];
-      let chosenMime = '';
-      for (const cand of mimeCandidates) {
-        if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(cand)) {
-          chosenMime = cand;
-          break;
-        }
-      }
-
-      const options = chosenMime ? { mimeType: chosenMime } : undefined;
-      const recorder = new MediaRecorder(recordStream, options);
-      recordedChunksRef.current = [];
-      recordingStartTimeRef.current = Date.now();
-
-      recorder.ondataavailable = (event) => {
-        if (event.data && event.data.size > 0) {
-          recordedChunksRef.current.push(event.data);
-        }
-      };
-
-      recorder.start(1000); // 1-second chunks for smooth reliable buffer
-      mediaRecorderRef.current = recorder;
-      setIsRecordingProof(true);
-      console.log('🎥 [PROOF RECORDER] Active with format:', chosenMime || 'default browser codec');
-    } catch (err) {
-      console.warn('⚠️ [PROOF RECORDER] MediaRecorder initialization warning:', err);
-    }
-  }, [localStream]);
-
-  // Guaranteed method to stop recorder and persist conversation video proof to backend and GridFS
-  const stopAndUploadProofVideo = useCallback(
-    async (customDuration) => {
-      if (isUploadingProofRef.current) return null;
-      isUploadingProofRef.current = true;
-
-      try {
-        let recordedBlob = null;
-        const durationSec =
-          customDuration ||
-          (recordingStartTimeRef.current
-            ? Math.max(1, Math.round((Date.now() - recordingStartTimeRef.current) / 1000))
-            : callDuration || 1);
-
-        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-          try {
-            await new Promise((resolve) => {
-              const timer = setTimeout(() => {
-                console.warn('[PROOF RECORDING] onstop timed out after 1.5s, proceeding');
-                resolve();
-              }, 1500);
-              mediaRecorderRef.current.onstop = () => {
-                clearTimeout(timer);
-                resolve();
-              };
-              try {
-                mediaRecorderRef.current.stop();
-              } catch (err) {
-                clearTimeout(timer);
-                resolve();
-              }
-            });
-          } catch (err) {
-            console.warn('[PROOF RECORDING] Recorder stop warning:', err);
-          }
-        }
-
-        if (recordedChunksRef.current && recordedChunksRef.current.length > 0) {
-          const mime = mediaRecorderRef.current?.mimeType || 'video/webm';
-          recordedBlob = new Blob(recordedChunksRef.current, { type: mime });
-          console.log(`📹 [PROOF RECORDING] Packaged ${(recordedBlob.size / 1024 / 1024).toFixed(2)} MB video proof`);
-        }
-
-        if (recordedBlob && round?.id) {
-          try {
-            const uploadPromise = interviewApi.uploadRecording(round.id, recordedBlob, durationSec);
-            const timeoutPromise = new Promise((_, reject) =>
-              setTimeout(() => reject(new Error('Upload timeout after 5s')), 5000)
-            );
-            const res = await Promise.race([uploadPromise, timeoutPromise]);
-            console.log('✅ [PROOF RECORDING] Successfully stored interview video proof:', res);
-            setIsRecordingProof(false);
-            return res;
-          } catch (uploadErr) {
-            console.warn('⚠️ [PROOF RECORDING] Failed to upload proof video:', uploadErr);
-          }
-        }
-        return null;
-      } finally {
-        isUploadingProofRef.current = false;
-        setIsRecordingProof(false);
-      }
-    },
-    [round?.id, callDuration]
-  );
-
-  // Room lifecycle hook
+  // LiveKit WebRTC lifecycle hook
   const {
     connectionState,
-    participants,
     remoteStream,
-    remoteScreenStream,
-    isRemoteScreenSharing,
     disconnect,
   } = useInterviewRoom({
     roundId: round?.id,
@@ -236,82 +123,81 @@ export function InterviewRoom({
     role: currentUserRole,
     livekitToken,
     livekitUrl,
-    isAiInterview: aiInterviewMode,
+    isAiInterview: false,
   });
 
-  // Chat hook (skips aggressive polling and WebSocket reconnects in AI mode)
-  const { messages, unreadCount, sendMessage } = useInterviewChat({
+  // Chat hook
+  const { messages, sendMessage } = useInterviewChat({
     roundId: round?.id,
     senderName: currentUserName,
     senderRole: currentUserRole,
-    isChatDrawerOpen: activeTab === 'chat',
-    isAiInterview: aiInterviewMode,
+    isChatDrawerOpen: activeSideTab === 'chat',
+    isAiInterview: false,
   });
 
-  // Zero-cost Browser Speech Transcription hook for communication analysis
-  const {
-    isSupported: isSpeechSupported,
-    isListening: isSpeechListening,
-    liveTranscript,
-    transcriptTurns,
-    startListening: startSpeechRecognition,
-    stopListening: stopSpeechRecognition,
-  } = useSpeechTranscription({
-    speakerRole: currentUserRole,
-    speakerName: currentUserName,
-    enabled: true,
-    isMicMuted: !isMicOn,
-    isAiSpeaking: isAiSpeakingInRoom,
-  });
-
-  // Auto-start speech recognition when microphone is active
+  // Attach local video stream
   useEffect(() => {
-    if (isSpeechSupported && isMicOn) {
-      startSpeechRecognition();
-    }
-  }, [isSpeechSupported, isMicOn, startSpeechRecognition]);
-
-  const hasActiveScreenShare = isScreenSharing || isRemoteScreenSharing;
-  const remoteParticipantName =
-    currentUserRole === 'candidate'
-      ? round?.interviewer_name || 'Interviewer'
-      : round?.candidate_name || 'Candidate';
-  const remoteParticipantRole =
-    currentUserRole === 'candidate'
-      ? round?.interviewer_role || 'Interviewer'
-      : 'Candidate';
-
-  // Attach local stream (local camera face)
-  useEffect(() => {
-    if (localVideoRef.current && localStream) {
-      localVideoRef.current.srcObject = localStream;
-    }
-  }, [localStream, isCameraOn, hasActiveScreenShare]);
-
-  // Attach remote stream (remote peer camera face)
-  useEffect(() => {
-    if (remoteVideoRef.current && remoteStream) {
-      remoteVideoRef.current.srcObject = remoteStream;
-    }
-  }, [remoteStream, hasActiveScreenShare]);
-
-  // Attach screen share stream (either local screen capture or incoming remote screen track)
-  useEffect(() => {
-    if (screenVideoRef.current) {
-      if (isScreenSharing && screenStream) {
-        screenVideoRef.current.srcObject = screenStream;
-      } else if (isRemoteScreenSharing && remoteScreenStream) {
-        screenVideoRef.current.srcObject = remoteScreenStream;
+    const videoEl = localVideoRef.current;
+    if (videoEl && localStream && isCameraOn) {
+      if (videoEl.srcObject !== localStream) {
+        videoEl.srcObject = localStream;
       }
+      videoEl.play?.().catch(() => {});
     }
-  }, [screenStream, remoteScreenStream, isScreenSharing, isRemoteScreenSharing, hasActiveScreenShare]);
+  }, [localStream, isCameraOn]);
 
-  // Auto-scroll chat
+  // Attach remote video stream
   useEffect(() => {
-    if (activeTab === 'chat' && chatBottomRef.current) {
-      chatBottomRef.current.scrollIntoView({ behavior: 'smooth' });
+    const videoEl = remoteVideoRef.current;
+    if (videoEl && remoteStream) {
+      if (videoEl.srcObject !== remoteStream) {
+        videoEl.srcObject = remoteStream;
+      }
+      videoEl.play?.().catch(() => {});
     }
-  }, [messages, activeTab]);
+  }, [remoteStream]);
+
+  // Scroll chat to bottom on new message
+  useEffect(() => {
+    if (activeSideTab === 'chat') {
+      chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, activeSideTab]);
+
+  // Safe media hardware shutdown
+  const shutDownAllMediaHardware = useCallback(() => {
+    try {
+      if (localVideoRef.current?.srcObject) {
+        localVideoRef.current.srcObject.getTracks().forEach((track) => {
+          try {
+            track.stop();
+          } catch (_) {}
+        });
+        localVideoRef.current.srcObject = null;
+      }
+    } catch (_) {}
+
+    try {
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = null;
+      }
+    } catch (_) {}
+
+    stopMediaTracks();
+    disconnect();
+  }, [stopMediaTracks, disconnect]);
+
+  const shutDownRef = useRef(shutDownAllMediaHardware);
+  useEffect(() => {
+    shutDownRef.current = shutDownAllMediaHardware;
+  }, [shutDownAllMediaHardware]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      shutDownRef.current?.();
+    };
+  }, []);
 
   const handleSendChat = (e) => {
     e?.preventDefault();
@@ -320,156 +206,175 @@ export function InterviewRoom({
     setChatInput('');
   };
 
-  const handleEndCall = async () => {
+  const handleEndCall = () => {
     setShowExitConfirm(false);
-    setIsSavingProofVideo(true);
-
-    let updatedRound = null;
-    try {
-      // 1. Finalize & upload the interview conversation proof video before exit
-      updatedRound = await stopAndUploadProofVideo(callDuration);
-
-      // 2. Automatically trigger communication analysis if candidate turns were captured
-      if (transcriptTurns.length > 0 && round?.id) {
-        setAnalyzingSpeech(true);
-        try {
-          const res = await interviewApi.analyzeCommunication(round.id, {
-            transcript_turns: transcriptTurns,
-            call_duration_seconds: callDuration,
-            candidate_name: round?.candidate_name,
-            role_title: round?.requisition_title,
-          });
-          if (res && res.analysis) {
-            setCommunicationAnalysis(res.analysis);
-          }
-        } catch (err) {
-          console.warn('Spoken communication analysis notice:', err);
-        } finally {
-          setAnalyzingSpeech(false);
-        }
-      }
-
-      if (updatedRound && onEvaluationComplete) {
-        onEvaluationComplete(updatedRound);
-      }
-    } catch (exitErr) {
-      console.warn('Error during exit proof archival:', exitErr);
-    } finally {
-      setIsSavingProofVideo(false);
-      disconnect();
-
-      if (currentUserRole === 'interviewer') {
-        setPostCallEvaluation(true);
-      } else {
-        if (onLeave) onLeave();
-      }
+    shutDownAllMediaHardware();
+    if (currentUserRole === 'interviewer') {
+      setPostCallEvaluation(true);
+    } else {
+      if (onLeave) onLeave();
     }
   };
 
+  const triggerEmoji = (emoji) => {
+    const id = Date.now() + Math.random();
+    setFloatingEmojis((prev) => [...prev, { id, emoji, left: Math.floor(Math.random() * 60) + 20 }]);
+    setTimeout(() => {
+      setFloatingEmojis((prev) => prev.filter((item) => item.id !== id));
+    }, 2000);
+  };
+
   return (
-    <div className="relative w-full h-screen bg-[#0A0A0A] text-white flex flex-col select-none overflow-hidden font-sans">
-      {/* Top Floating Control Bar */}
-      <header className="h-16 px-6 flex items-center justify-between z-20 bg-gradient-to-b from-black/80 to-transparent">
+    <div className="w-full h-screen h-[100dvh] bg-[#07090E] text-zinc-100 flex flex-col overflow-hidden font-sans select-none">
+      {/* ─────────────────────────────────────────────────────────────────
+          TOP NAVBAR
+          ───────────────────────────────────────────────────────────────── */}
+      <header className="h-14 px-4 sm:px-6 flex items-center justify-between z-30 bg-[#090C11] border-b border-white/[0.08] shrink-0">
+        {/* Left: TermJobs Logo */}
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-white text-zinc-950 font-black text-xs flex items-center justify-center tracking-tighter">
-            TJ
+          <div className="w-9 h-9 rounded-xl bg-black border border-white/15 flex items-center justify-center p-1.5 shadow-sm">
+            <img src={termjobsLogo} alt="TermJobs" className="w-full h-full object-contain" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-sm tracking-tight text-zinc-100">{round?.round_name || 'Interview Session'}</span>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                LIVE
-              </span>
-            </div>
-            <div className="text-xs text-zinc-400">
-              {round?.requisition_title || 'Position'} · Candidate: <span className="text-zinc-200">{round?.candidate_name}</span>
-            </div>
+            <div className="font-black text-xs sm:text-sm tracking-wide text-white leading-none">TERM JOBS</div>
+            <div className="text-[10px] text-zinc-400 font-medium tracking-tight mt-0.5">Interview Panel</div>
           </div>
         </div>
 
-        {/* AI Interview Toggle & Room Status */}
-        <div className="flex items-center gap-3">
+        {/* Center: Live Round Pill Header */}
+        <div className="flex items-center gap-2 sm:gap-3 px-3.5 py-1.5 rounded-full bg-[#12151D] border border-white/10 shadow-sm">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-xs sm:text-sm text-white whitespace-nowrap">
+              Python Developer Interview
+            </span>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Live
+            </span>
+            <span className="px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300 font-mono text-[11px] font-semibold border border-white/5">
+              {formatCallTime(callDuration)}
+            </span>
+          </div>
+
+          <div className="hidden xl:flex items-center gap-1.5 text-[11px] text-zinc-400 pl-1 border-l border-white/10">
+            <span>Technical Round</span>
+            <span>&bull;</span>
+            <span>REQ #8302C0</span>
+            <span>&bull;</span>
+            <span>Today, 09:30 AM – 10:15 AM</span>
+          </div>
+        </div>
+
+        {/* Right Actions */}
+        <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => setAiInterviewMode(!aiInterviewMode)}
-            className={`px-3 py-1.5 rounded-full text-xs font-semibold border flex items-center gap-1.5 transition cursor-pointer ${
-              aiInterviewMode
-                ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300 shadow-sm'
-                : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200'
-            }`}
+            onClick={() => setShowInviteModal(true)}
+            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-700 text-xs font-semibold text-zinc-200 border border-white/5 transition cursor-pointer"
           >
-            <Sparkles size={13} className={aiInterviewMode ? 'text-cyan-400' : 'text-zinc-500'} />
-            <span>{aiInterviewMode ? 'AI Interviewer Active' : 'Peer Video Mode'}</span>
+            <UserPlus size={14} className="text-zinc-400" />
+            <span>Invite</span>
           </button>
 
-          {/* Recording Proof Status */}
-          {isRecordingProof && (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-semibold animate-in fade-in duration-300">
-              <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
-              <span>REC · Video Proof</span>
-            </div>
-          )}
+          <button
+            type="button"
+            onClick={() => setShowPeopleModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-700 text-xs font-semibold text-zinc-200 border border-white/5 transition cursor-pointer"
+          >
+            <Users size={14} className="text-zinc-400" />
+            <span>People</span>
+            <span className="px-1.5 py-0.2 rounded-full bg-zinc-700 text-[10px] font-bold text-white">3</span>
+          </button>
 
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-900/80 border border-zinc-800 text-xs font-mono font-medium text-zinc-300">
-            <Clock size={13} className="text-zinc-400" />
-            <span>{formatCallTime(callDuration)}</span>
-          </div>
+          <button
+            type="button"
+            onClick={() => setActiveSideTab('chat')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition cursor-pointer ${
+              activeSideTab === 'chat'
+                ? 'bg-white text-zinc-950 border-white'
+                : 'bg-zinc-800/80 hover:bg-zinc-700 text-zinc-200 border-white/5'
+            }`}
+          >
+            <MessageSquare size={14} />
+            <span className="hidden sm:inline">Chat</span>
+          </button>
 
-          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-900/80 border border-zinc-800 text-xs text-zinc-300">
-            <span className="w-2 h-2 rounded-full bg-emerald-400" />
-            <span>Encrypted Room</span>
-          </div>
+          <button
+            type="button"
+            onClick={() => setShowSettingsModal(true)}
+            className="p-2 rounded-xl bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 border border-white/5 transition cursor-pointer"
+          >
+            <MoreHorizontal size={15} />
+          </button>
+
+          <div className="w-[1px] h-6 bg-zinc-800 mx-1 hidden sm:block" />
+
+          {/* End Interview Button */}
+          <button
+            type="button"
+            onClick={() => setShowExitConfirm(true)}
+            className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-white hover:bg-zinc-200 text-zinc-950 font-bold text-xs sm:text-sm shadow-md transition active:scale-95 cursor-pointer shrink-0"
+          >
+            <PhoneOff size={15} className="text-zinc-950" />
+            <span className="whitespace-nowrap">End Interview</span>
+          </button>
         </div>
       </header>
 
-      {/* Main Video & Stage Area */}
-      <div className="flex-1 relative flex items-center justify-center p-4 min-h-0 overflow-hidden">
-        {hasActiveScreenShare ? (
-          /* ============================================================ */
-          /* SCREEN SHARE MODE: BIG MAIN STAGE (~75%) + SIDEBAR CAMERAS   */
-          /* ============================================================ */
-          <div className="w-full h-full max-w-7xl mx-auto flex flex-col lg:flex-row gap-4 min-h-0">
-            {/* BIG PRESENTATION STAGE */}
-            <div className="flex-1 relative rounded-3xl overflow-hidden bg-zinc-950 border border-zinc-800 flex items-center justify-center shadow-2xl min-h-0">
-              <video
-                ref={screenVideoRef}
-                autoPlay
-                playsInline
-                className="w-full h-full object-contain"
-              />
-
-              {/* Stage Top Badge */}
-              <div className="absolute top-4 left-4 px-3.5 py-1.5 rounded-full bg-black/80 backdrop-blur-md text-xs font-semibold text-white border border-white/10 flex items-center gap-2.5 shadow-xl">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <Monitor size={15} className="text-emerald-400" />
-                <span>
-                  {isScreenSharing
-                    ? 'You are sharing your screen'
-                    : `${remoteParticipantName} is sharing screen`}
-                </span>
-              </div>
-
-              {/* Quick Stop Sharing Button (for local presenter) */}
-              {isScreenSharing && (
-                <div className="absolute bottom-4 right-4">
-                  <button
-                    type="button"
-                    onClick={toggleScreenShare}
-                    className="px-4 py-2 rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-lg transition flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <X size={14} />
-                    <span>Stop Sharing</span>
-                  </button>
+      {/* ─────────────────────────────────────────────────────────────────
+          MAIN WORKSPACE LAYOUT (2 Columns: Left Main Video / Right Sidebar)
+          ───────────────────────────────────────────────────────────────── */}
+      <div className="flex-1 min-h-0 flex flex-row p-3 gap-3 overflow-hidden">
+        {/* ============================================================== */}
+        {/* LEFT COLUMN: FULL VIDEO GRID + FLOATING BOTTOM TOOLBAR         */}
+        {/* ============================================================== */}
+        <div className="flex-1 min-w-0 h-full flex flex-col gap-3 overflow-hidden">
+          {/* VIDEO GRID AREA */}
+          <div className="flex-1 min-h-0 flex gap-3 overflow-hidden">
+            {/* Primary Candidate Video Tile (Arjun M) */}
+            <div className="flex-[1.4] h-full relative rounded-2xl overflow-hidden bg-[#0A0D14] border border-white/10 shadow-xl flex items-center justify-center">
+              {remoteStream ? (
+                <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
+              ) : (
+                /* No fake image: sleek black card with profile icon when waiting */
+                <div className="w-full h-full flex flex-col items-center justify-center p-6 bg-[#080B10] text-center select-none">
+                  <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-gradient-to-b from-zinc-800 to-zinc-900 border-2 border-white/15 flex items-center justify-center shadow-2xl ring-4 ring-white/5 mb-4">
+                    <User size={44} className="text-zinc-400" />
+                  </div>
+                  <h4 className="text-lg font-bold text-white tracking-tight">Arjun M</h4>
+                  <p className="text-xs text-zinc-400 font-medium mt-0.5">Candidate &bull; Python Developer</p>
+                  <div className="flex items-center gap-2 mt-4 px-3.5 py-1.5 rounded-full bg-zinc-900/90 border border-white/10 text-xs text-zinc-300 shadow-sm">
+                    <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                    <span>Waiting for candidate to join...</span>
+                  </div>
                 </div>
               )}
+
+              {/* Top-left mic status */}
+              <div className="absolute top-3 left-3 p-1.5 rounded-lg bg-black/65 backdrop-blur-md border border-white/10 text-white shadow">
+                {remoteStream ? <Mic size={14} className="text-emerald-400" /> : <MicOff size={14} className="text-zinc-500" />}
+              </div>
+
+              {/* Top-right menu */}
+              <div className="absolute top-3 right-3 p-1.5 rounded-lg bg-black/65 backdrop-blur-md border border-white/10 text-white/80 hover:text-white cursor-pointer transition">
+                <MoreHorizontal size={14} />
+              </div>
+
+              {/* Bottom-left Candidate Tag */}
+              <div className="absolute bottom-3 left-3 flex flex-col gap-0.5">
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-black/75 backdrop-blur-md border border-white/10 text-xs font-bold text-white shadow">
+                  <span>Arjun M</span>
+                  <span className={`w-2 h-2 rounded-full ${remoteStream ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400/80'}`} />
+                </div>
+                <span className="text-[10px] text-zinc-400 px-1 font-medium">Candidate</span>
+              </div>
             </div>
 
-            {/* SIDEBAR CAMERAS: BOTH FACES ARE VISIBLE ON THE SIDE! */}
-            <div className="w-full lg:w-72 xl:w-80 flex flex-row lg:flex-col gap-3 shrink-0 h-44 sm:h-52 lg:h-full justify-start overflow-x-auto lg:overflow-y-auto">
-              {/* Local Participant Face Tile */}
-              <div className="relative flex-1 lg:flex-none lg:h-1/2 rounded-3xl overflow-hidden bg-zinc-900 border border-zinc-800/90 flex items-center justify-center shadow-lg group shrink-0 min-w-[200px]">
-                {isCameraOn ? (
+            {/* Right Stacked Participant Video Tiles */}
+            <div className="flex-1 h-full flex flex-col gap-3 min-w-0">
+              {/* Tile 1: Rahul (You) - Hiring Manager */}
+              <div className="flex-1 relative rounded-2xl overflow-hidden bg-[#0A0D14] border border-white/10 shadow-md flex items-center justify-center">
+                {isCameraOn && localStream ? (
                   <video
                     ref={localVideoRef}
                     autoPlay
@@ -478,484 +383,451 @@ export function InterviewRoom({
                     className="w-full h-full object-cover transform scale-x-[-1]"
                   />
                 ) : (
-                  <div className="flex flex-col items-center justify-center p-4 text-center">
-                    <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-zinc-800 to-zinc-700 text-white font-black text-lg flex items-center justify-center shadow border border-zinc-600 mb-2">
-                      {(currentUserName || 'Me').slice(0, 2).toUpperCase()}
+                  /* No fake image: sleek black card with profile icon when camera is off */
+                  <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-[#080B10] text-center select-none">
+                    <div className="w-16 h-16 rounded-full bg-gradient-to-b from-zinc-800 to-zinc-900 border border-white/15 flex items-center justify-center shadow-lg ring-2 ring-white/5 mb-2.5">
+                      <User size={28} className="text-zinc-400" />
                     </div>
-                    <div className="font-semibold text-xs text-zinc-200">{currentUserName} (You)</div>
-                    <div className="text-[10px] text-zinc-500 capitalize">{currentUserRole}</div>
+                    <div className="text-sm font-bold text-white">Rahul (You)</div>
+                    <div className="text-xs text-zinc-400 font-medium">Hiring Manager</div>
+                    <div className="flex items-center gap-1.5 mt-2 px-2.5 py-1 rounded-full bg-zinc-900/80 border border-white/5 text-[11px] text-zinc-500">
+                      <VideoOff size={12} />
+                      <span>Camera is off</span>
+                    </div>
                   </div>
                 )}
-                <div className="absolute bottom-2.5 left-2.5 px-2.5 py-1 rounded-full bg-black/70 backdrop-blur-md border border-white/10 text-[11px] font-medium text-white flex items-center gap-1.5">
-                  <span>{currentUserName} (You)</span>
-                  {isScreenSharing && (
-                    <span className="text-[9px] px-1 py-0.2 bg-emerald-500/30 text-emerald-300 rounded font-semibold">
-                      Presenter
-                    </span>
+
+                <div className="absolute top-2.5 right-2.5 p-1 rounded-md bg-black/65 backdrop-blur-md text-white/70 hover:text-white cursor-pointer">
+                  <MoreHorizontal size={13} />
+                </div>
+
+                <div className="absolute bottom-2.5 left-2.5 flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-md border border-white/10 text-[11px] font-bold text-white">
+                  <span>Rahul (You)</span>
+                  <span className="text-[10px] text-zinc-400 font-normal">&bull; Hiring Manager</span>
+                </div>
+
+                <div className="absolute bottom-2.5 right-2.5 flex items-center gap-0.5 px-1.5 py-1 rounded-md bg-black/60 text-emerald-400">
+                  {isMicOn ? (
+                    <>
+                      <span className="w-1 h-2 bg-emerald-400 rounded-full" />
+                      <span className="w-1 h-3.5 bg-emerald-400 rounded-full animate-pulse" />
+                      <span className="w-1 h-1.5 bg-emerald-400 rounded-full" />
+                    </>
+                  ) : (
+                    <MicOff size={12} className="text-zinc-500" />
                   )}
-                  {!isMicOn && <MicOff size={11} className="text-rose-400" />}
                 </div>
               </div>
 
-              {/* Remote Participant Face Tile */}
-              <div className="relative flex-1 lg:flex-none lg:h-1/2 rounded-3xl overflow-hidden bg-zinc-900 border border-zinc-800/90 flex items-center justify-center shadow-lg shrink-0 min-w-[200px]">
-                {remoteStream || (participants.length > 0 && participants[0].videoTrack) ? (
-                  <video
-                    ref={remoteVideoRef}
-                    autoPlay
-                    playsInline
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="flex flex-col items-center justify-center p-4 text-center">
-                    <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-zinc-800 to-zinc-700 text-white font-black text-lg flex items-center justify-center shadow border border-zinc-600 mb-2 relative">
-                      {remoteParticipantName.slice(0, 2).toUpperCase()}
-                      <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 border-2 border-zinc-900" />
-                    </div>
-                    <div className="font-semibold text-xs text-zinc-200">{remoteParticipantName}</div>
-                    <div className="text-[10px] text-zinc-500 capitalize">{remoteParticipantRole}</div>
+              {/* Tile 2: Sneha K - Tech Lead */}
+              <div className="flex-1 relative rounded-2xl overflow-hidden bg-[#0A0D14] border border-white/10 shadow-md flex items-center justify-center">
+                {/* No fake image: sleek black card with profile icon when not joined */}
+                <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-[#080B10] text-center select-none">
+                  <div className="w-16 h-16 rounded-full bg-gradient-to-b from-zinc-800 to-zinc-900 border border-white/15 flex items-center justify-center shadow-lg ring-2 ring-white/5 mb-2.5">
+                    <User size={28} className="text-zinc-400" />
                   </div>
-                )}
-                <div className="absolute bottom-2.5 left-2.5 px-2.5 py-1 rounded-full bg-black/70 backdrop-blur-md border border-white/10 text-[11px] font-medium text-white flex items-center gap-1.5">
-                  <span>{remoteParticipantName}</span>
-                  {isRemoteScreenSharing && (
-                    <span className="text-[9px] px-1 py-0.2 bg-emerald-500/30 text-emerald-300 rounded font-semibold">
-                      Presenter
-                    </span>
-                  )}
-                  <span className="text-[9px] px-1 py-0.2 bg-zinc-800 rounded text-zinc-400 capitalize">
-                    {remoteParticipantRole}
-                  </span>
+                  <div className="text-sm font-bold text-white">Sneha K</div>
+                  <div className="text-xs text-zinc-400 font-medium">Tech Lead &bull; Panelist</div>
+                  <div className="flex items-center gap-1.5 mt-2 px-2.5 py-1 rounded-full bg-zinc-900/80 border border-white/5 text-[11px] text-zinc-500">
+                    <span className="w-1.5 h-1.5 rounded-full bg-zinc-600" />
+                    <span>Not in room</span>
+                  </div>
+                </div>
+
+                <div className="absolute top-2.5 right-2.5 p-1 rounded-md bg-black/65 backdrop-blur-md text-white/70 hover:text-white cursor-pointer">
+                  <MoreHorizontal size={13} />
+                </div>
+
+                <div className="absolute bottom-2.5 left-2.5 flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-md border border-white/10 text-[11px] font-bold text-white">
+                  <span>Sneha K</span>
+                  <span className="text-[10px] text-zinc-400 font-normal">&bull; Tech Lead</span>
+                </div>
+
+                <div className="absolute bottom-2.5 right-2.5 flex items-center gap-0.5 px-1.5 py-1 rounded-md bg-black/60 text-zinc-500">
+                  <MicOff size={12} />
                 </div>
               </div>
             </div>
           </div>
-        ) : (
-          /* ============================================================ */
-          /* NORMAL 2-PARTICIPANT GRID (Local & Remote camera side-by-side)*/
-          /* ============================================================ */
-          <div className="w-full h-full max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Local Participant Tile */}
-            <div className="relative rounded-3xl overflow-hidden bg-zinc-900 border border-zinc-800/80 flex items-center justify-center shadow-lg group">
-              {isCameraOn ? (
-                <video
-                  ref={localVideoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="w-full h-full object-cover transform scale-x-[-1]"
-                />
-              ) : (
-                <div className="flex flex-col items-center justify-center p-6 text-center">
-                  <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-tr from-zinc-800 to-zinc-700 text-white font-black text-2xl flex items-center justify-center shadow-inner border border-zinc-600 mb-3">
-                    {(currentUserName || 'Me').slice(0, 2).toUpperCase()}
-                  </div>
-                  <div className="font-semibold text-sm text-zinc-200">{currentUserName} (You)</div>
-                  <div className="text-xs text-zinc-500 mt-0.5 capitalize">{currentUserRole}</div>
-                </div>
-              )}
 
-              {/* Local Badge & Mic Status */}
-              <div className="absolute bottom-4 left-4 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-xs font-medium text-white flex items-center gap-2">
-                <span>{currentUserName} (You)</span>
-                {!isMicOn && <MicOff size={13} className="text-rose-400" />}
-              </div>
-            </div>
-
-            {/* AI Interviewer or Remote Participant Tile */}
-            {aiInterviewMode ? (
-              <div className="relative rounded-3xl overflow-hidden shadow-lg h-full">
-                <AiInterviewStage
-                  round={round}
-                  candidateName={round?.candidate_name || currentUserName}
-                  requisitionTitle={round?.requisition_title || 'Position'}
-                  companyName={round?.company_name || 'Hiring Partner'}
-                  userRole={currentUserRole}
-                  isMicOn={isMicOn}
-                  localStream={localStream}
-                  liveTranscript={liveTranscript}
-                  transcriptTurns={transcriptTurns}
-                  startSpeechRecognition={startSpeechRecognition}
-                  stopSpeechRecognition={stopSpeechRecognition}
-                  onAiSpeakingChange={setIsAiSpeakingInRoom}
-                  onSaveProofRecording={stopAndUploadProofVideo}
-                  onAnalysisReady={(result) => {
-                    if (result?.analysis) {
-                      setCommunicationAnalysis(result.analysis);
-                    }
-                    if (onEvaluationComplete) {
-                      onEvaluationComplete(result);
-                    }
-                  }}
-                />
-              </div>
-            ) : (
-              <div className="relative rounded-3xl overflow-hidden bg-zinc-900 border border-zinc-800/80 flex items-center justify-center shadow-lg">
-                {remoteStream || (participants.length > 0 && participants[0].videoTrack) ? (
-                  <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
-                ) : (
-                  <div className="flex flex-col items-center justify-center p-6 text-center">
-                    <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-tr from-zinc-800 to-zinc-700 text-white font-black text-2xl flex items-center justify-center shadow-inner border border-zinc-600 mb-3 relative">
-                      {remoteParticipantName.slice(0, 2).toUpperCase()}
-                      <span className="absolute bottom-1 right-1 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-zinc-900" />
-                    </div>
-                    <div className="font-semibold text-sm text-zinc-200">
-                      {remoteParticipantName}
-                    </div>
-                    <div className="text-xs text-zinc-500 mt-0.5">
-                      {remoteParticipantRole}
-                    </div>
-                    <div className="mt-3 px-3 py-1 rounded-full bg-zinc-800/60 border border-zinc-700/50 text-[11px] text-zinc-400">
-                      Connected · Ready for stream
-                    </div>
-                  </div>
-                )}
-
-                <div className="absolute bottom-4 left-4 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-xs font-medium text-white flex items-center gap-2">
-                  <span>{remoteParticipantName}</span>
-                  <span className="text-[10px] px-1.5 py-0.2 bg-zinc-800 rounded-md text-zinc-300 capitalize">
-                    {remoteParticipantRole}
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Real-time Subtitles / Spoken Captions Bar */}
-        {showCaptions && liveTranscript && (
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 max-w-xl w-[90%] px-4 py-2.5 rounded-2xl bg-black/85 backdrop-blur-md border border-white/15 text-center text-sm font-medium text-white shadow-2xl z-30 pointer-events-none flex items-center justify-center gap-2.5 transition-all">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-            <span className="text-zinc-400 text-xs font-semibold uppercase">{currentUserName}:</span>
-            <span className="text-zinc-100 italic font-mono text-xs sm:text-sm">{liveTranscript}</span>
-          </div>
-        )}
-
-        {/* Sliding Right Drawer for Chat / Participants / Evaluation */}
-        {activeTab && (
-          <aside className="absolute top-4 right-4 bottom-4 w-80 sm:w-96 bg-zinc-900/95 backdrop-blur-xl border border-zinc-800 rounded-3xl shadow-2xl flex flex-col z-30 animate-in slide-in-from-right duration-200">
-            {/* Drawer Header */}
-            <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-bold text-white capitalize">
-                  {activeTab === 'chat'
-                    ? 'In-Meeting Chat'
-                    : activeTab === 'participants'
-                    ? 'Participants'
-                    : 'Candidate Evaluation'}
-                </span>
-                {activeTab === 'chat' && (
-                  <span className="text-xs text-zinc-400">({messages.length})</span>
-                )}
-              </div>
+          {/* BOTTOM FLOATING CONTROL TOOLBAR */}
+          <div className="h-14 shrink-0 flex items-center justify-center">
+            <div className="flex items-center gap-4 sm:gap-6 px-6 py-2 rounded-full bg-[#12151D] border border-white/10 shadow-2xl backdrop-blur-xl">
+              {/* Mic */}
               <button
                 type="button"
-                onClick={() => setActiveTab(null)}
-                className="p-1.5 rounded-xl hover:bg-zinc-800 text-zinc-400 hover:text-white transition"
+                onClick={toggleMicrophone}
+                className="flex flex-col items-center gap-0.5 group cursor-pointer"
               >
-                <X size={18} />
+                <div
+                  className={`w-9 h-9 rounded-full flex items-center justify-center transition shadow ${
+                    isMicOn ? 'bg-zinc-800 hover:bg-zinc-700 text-white' : 'bg-rose-600 text-white'
+                  }`}
+                >
+                  {isMicOn ? <Mic size={16} /> : <MicOff size={16} />}
+                </div>
+                <span className="text-[10px] text-zinc-400 group-hover:text-white font-medium">Mic</span>
+              </button>
+
+              {/* Camera */}
+              <button
+                type="button"
+                onClick={toggleCamera}
+                className="flex flex-col items-center gap-0.5 group cursor-pointer"
+              >
+                <div
+                  className={`w-9 h-9 rounded-full flex items-center justify-center transition shadow ${
+                    isCameraOn ? 'bg-zinc-800 hover:bg-zinc-700 text-white' : 'bg-rose-600 text-white'
+                  }`}
+                >
+                  {isCameraOn ? <Video size={16} /> : <VideoOff size={16} />}
+                </div>
+                <span className="text-[10px] text-zinc-400 group-hover:text-white font-medium">Camera</span>
+              </button>
+
+              {/* Screen Share */}
+              <button
+                type="button"
+                onClick={toggleScreenShare}
+                className="flex flex-col items-center gap-0.5 group cursor-pointer"
+              >
+                <div
+                  className={`w-9 h-9 rounded-full flex items-center justify-center transition shadow ${
+                    isScreenSharing ? 'bg-emerald-600 text-white' : 'bg-zinc-800 hover:bg-zinc-700 text-white'
+                  }`}
+                >
+                  <Monitor size={16} />
+                </div>
+                <span className="text-[10px] text-zinc-400 group-hover:text-white font-medium">Screen Share</span>
+              </button>
+
+              {/* Record */}
+              <button
+                type="button"
+                onClick={() => setIsRecording(!isRecording)}
+                className="flex flex-col items-center gap-0.5 group cursor-pointer"
+              >
+                <div
+                  className={`w-9 h-9 rounded-full flex items-center justify-center transition shadow ${
+                    isRecording ? 'bg-rose-600 text-white animate-pulse' : 'bg-zinc-800 hover:bg-zinc-700 text-white'
+                  }`}
+                >
+                  <Radio size={16} />
+                </div>
+                <span className="text-[10px] text-zinc-400 group-hover:text-white font-medium">Record</span>
+              </button>
+
+              {/* Reactions */}
+              <button
+                type="button"
+                onClick={() => triggerEmoji('👏')}
+                className="flex flex-col items-center gap-0.5 group cursor-pointer"
+              >
+                <div className="w-9 h-9 rounded-full bg-zinc-800 hover:bg-zinc-700 text-white flex items-center justify-center transition shadow">
+                  <Smile size={16} />
+                </div>
+                <span className="text-[10px] text-zinc-400 group-hover:text-white font-medium">Reactions</span>
+              </button>
+
+              {/* Raise Hand */}
+              <button
+                type="button"
+                onClick={() => setIsHandRaised(!isHandRaised)}
+                className="flex flex-col items-center gap-0.5 group cursor-pointer"
+              >
+                <div
+                  className={`w-9 h-9 rounded-full flex items-center justify-center transition shadow ${
+                    isHandRaised ? 'bg-amber-500 text-white' : 'bg-zinc-800 hover:bg-zinc-700 text-white'
+                  }`}
+                >
+                  <Hand size={16} />
+                </div>
+                <span className="text-[10px] text-zinc-400 group-hover:text-white font-medium">Raise Hand</span>
+              </button>
+
+              {/* Settings */}
+              <button
+                type="button"
+                onClick={() => setShowSettingsModal(true)}
+                className="flex flex-col items-center gap-0.5 group cursor-pointer"
+              >
+                <div className="w-9 h-9 rounded-full bg-zinc-800 hover:bg-zinc-700 text-white flex items-center justify-center transition shadow">
+                  <Settings size={16} />
+                </div>
+                <span className="text-[10px] text-zinc-400 group-hover:text-white font-medium">Settings</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* ============================================================== */}
+        {/* RIGHT COLUMN: CANDIDATE CARD + FULL HEIGHT CHAT/NOTES/FEEDBACK */}
+        {/* ============================================================== */}
+        <div className="w-[330px] xl:w-[360px] shrink-0 h-full flex flex-col gap-3 overflow-hidden">
+          {/* CARD 1: CANDIDATE INFO */}
+          <div className="p-3.5 rounded-2xl bg-[#0E1118] border border-white/10 shadow-md space-y-2.5 shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-full bg-zinc-850 border border-zinc-700 text-white font-black text-xs flex items-center justify-center shrink-0 shadow-inner">
+                AM
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-bold text-sm text-white truncate">Arjun M</h3>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    In Interview
+                  </span>
+                </div>
+                <div className="text-xs text-zinc-400 truncate mt-0.5">
+                  Python Developer &bull; REQ #8302C0
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-1.5">
+              <button
+                type="button"
+                onClick={() => setShowProfileModal(true)}
+                className="px-2 py-1.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold border border-white/5 transition flex items-center justify-center gap-1 cursor-pointer"
+              >
+                <User size={13} className="text-zinc-400" />
+                <span>Profile</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowResumeModal(true)}
+                className="px-2 py-1.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold border border-white/5 transition flex items-center justify-center gap-1 cursor-pointer"
+              >
+                <FileText size={13} className="text-zinc-400" />
+                <span>Resume</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => window.open('https://github.com', '_blank')}
+                className="px-2 py-1.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold border border-white/5 transition flex items-center justify-center gap-1 cursor-pointer"
+              >
+                <ExternalLink size={13} className="text-zinc-400" />
+                <span>Portfolio</span>
+              </button>
+            </div>
+          </div>
+
+          {/* CARD 2: CHAT / NOTES / FEEDBACK TABS (Fills remaining height) */}
+          <div className="flex-1 min-h-0 p-3.5 rounded-2xl bg-[#0E1118] border border-white/10 shadow-md flex flex-col justify-between overflow-hidden">
+            {/* Header Tabs */}
+            <div className="flex items-center gap-2 p-1 bg-zinc-950 rounded-xl border border-white/5 text-xs font-bold text-zinc-400 shrink-0">
+              <button
+                type="button"
+                onClick={() => setActiveSideTab('chat')}
+                className={`flex-1 py-1.5 rounded-lg transition cursor-pointer ${
+                  activeSideTab === 'chat' ? 'bg-zinc-800 text-white shadow-xs' : 'hover:text-zinc-200'
+                }`}
+              >
+                Chat
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveSideTab('notes')}
+                className={`flex-1 py-1.5 rounded-lg transition cursor-pointer ${
+                  activeSideTab === 'notes' ? 'bg-zinc-800 text-white shadow-xs' : 'hover:text-zinc-200'
+                }`}
+              >
+                Notes
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveSideTab('feedback')}
+                className={`flex-1 py-1.5 rounded-lg transition cursor-pointer ${
+                  activeSideTab === 'feedback' ? 'bg-zinc-800 text-white shadow-xs' : 'hover:text-zinc-200'
+                }`}
+              >
+                Feedback
               </button>
             </div>
 
-            {/* Drawer Content */}
-            <div className="flex-1 overflow-y-auto p-4">
-              {activeTab === 'chat' && (
-                <div className="flex flex-col h-full justify-between gap-4">
-                  <div className="flex-1 overflow-y-auto space-y-3 pr-1">
-                    {messages.length === 0 ? (
-                      <div className="h-full flex flex-col items-center justify-center text-center p-6 text-zinc-500 text-xs">
-                        <MessageSquare size={28} className="mb-2 opacity-50" />
-                        Messages sent here are visible to all participants in this interview.
+            {/* Tab 1: Chat Feed */}
+            {activeSideTab === 'chat' && (
+              <div className="flex-1 flex flex-col justify-between min-h-0 pt-2.5">
+                <div className="flex-1 overflow-y-auto space-y-3 pr-1 text-xs custom-scroll">
+                  {/* Seed / Default Messages */}
+                  <div className="flex items-start gap-2.5">
+                    <div className="w-6 h-6 rounded-full bg-zinc-700 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
+                      RA
+                    </div>
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-1.5 text-[10px] text-zinc-400">
+                        <span className="font-bold text-zinc-200">Rahul</span>
+                        <span>10:02 AM</span>
                       </div>
-                    ) : (
-                      messages.map((m, idx) => {
-                        const isMe = m.sender_name === currentUserName || m.sender_role === currentUserRole;
-                        const timeStr = m.created_at
-                          ? new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                          : '';
-                        return (
-                          <div
-                            key={m.id || idx}
-                            className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}
-                          >
-                            <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 mb-1">
-                              <span className="font-semibold text-zinc-300">
-                                {isMe ? `${m.sender_name} (You)` : m.sender_name}
-                              </span>
-                              <span>·</span>
-                              <span className="capitalize">{m.sender_role}</span>
-                              {timeStr && (
-                                <>
-                                  <span>·</span>
-                                  <span>{timeStr}</span>
-                                </>
-                              )}
-                              {m.pending && (
-                                <>
-                                  <span>·</span>
-                                  <span className="text-zinc-500 italic">Sending...</span>
-                                </>
-                              )}
-                            </div>
-                            <div
-                              className={`p-3 rounded-2xl max-w-[85%] text-xs leading-relaxed ${
-                                isMe
-                                  ? 'bg-white text-zinc-950 font-medium rounded-tr-xs shadow'
-                                  : 'bg-zinc-800 text-zinc-100 rounded-tl-xs shadow'
-                              } ${m.pending ? 'opacity-70' : ''}`}
-                            >
-                              {m.message}
-                            </div>
-                          </div>
-                        );
-                      })
-                    )}
-                    <div ref={chatBottomRef} />
+                      <div className="text-zinc-300 text-xs">Welcome to the interview session, Arjun!</div>
+                    </div>
                   </div>
 
-                  {/* Chat Input */}
-                  <form onSubmit={handleSendChat} className="flex items-center gap-2 pt-2 border-t border-zinc-800">
+                  {messages.map((m, idx) => (
+                    <div key={m.id || idx} className="flex items-start gap-2.5 animate-in fade-in">
+                      <div className="w-6 h-6 rounded-full bg-white text-zinc-950 text-[10px] font-bold flex items-center justify-center shrink-0">
+                        {(m.sender_name || 'U').slice(0, 2).toUpperCase()}
+                      </div>
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-1.5 text-[10px] text-zinc-400">
+                          <span className="font-bold text-zinc-200">{m.sender_name || 'Participant'}</span>
+                          <span>{m.sender_role}</span>
+                        </div>
+                        <div className="text-zinc-200 text-xs">{m.message}</div>
+                      </div>
+                    </div>
+                  ))}
+                  <div ref={chatBottomRef} />
+                </div>
+
+                {/* Chat Input */}
+                <form onSubmit={handleSendChat} className="pt-2.5 flex items-center gap-1.5">
+                  <div className="flex-1 flex items-center gap-1.5 px-3 py-2 bg-zinc-950 border border-white/10 rounded-xl">
                     <input
                       type="text"
                       value={chatInput}
                       onChange={(e) => setChatInput(e.target.value)}
-                      placeholder="Send a message to everyone..."
-                      className="flex-1 px-3.5 py-2.5 bg-zinc-800/80 border border-zinc-700/80 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-white"
+                      placeholder="Type a message..."
+                      className="flex-1 bg-transparent text-xs text-white placeholder-zinc-500 focus:outline-none"
                     />
                     <button
-                      type="submit"
-                      disabled={!chatInput.trim()}
-                      className="p-2.5 rounded-xl bg-white text-zinc-950 font-bold hover:bg-zinc-200 transition disabled:opacity-40 cursor-pointer"
+                      type="button"
+                      onClick={() => triggerEmoji('👍')}
+                      className="text-zinc-400 hover:text-white cursor-pointer"
                     >
-                      <Send size={15} />
+                      <Smile size={14} />
                     </button>
-                  </form>
-                </div>
-              )}
-
-              {activeTab === 'participants' && (
-                <div className="space-y-3">
-                  {/* Current User */}
-                  <div className="p-3 bg-zinc-800/60 border border-zinc-700/50 rounded-2xl flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-full bg-white text-zinc-950 font-bold text-xs flex items-center justify-center">
-                        {currentUserName.slice(0, 2).toUpperCase()}
-                      </div>
-                      <div>
-                        <div className="text-xs font-bold text-white">{currentUserName} (You)</div>
-                        <div className="text-[11px] text-zinc-400 capitalize">{currentUserRole}</div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 text-zinc-400">
-                      {isMicOn ? <Mic size={14} className="text-emerald-400" /> : <MicOff size={14} className="text-rose-400" />}
-                      {isCameraOn ? <Video size={14} /> : <VideoOff size={14} className="text-rose-400" />}
-                    </div>
+                    <button
+                      type="button"
+                      className="text-zinc-400 hover:text-white cursor-pointer"
+                    >
+                      <Paperclip size={14} />
+                    </button>
                   </div>
+                  <button
+                    type="submit"
+                    disabled={!chatInput.trim()}
+                    className="p-2.5 rounded-xl bg-white hover:bg-zinc-200 text-zinc-950 font-bold transition disabled:opacity-40 cursor-pointer shadow"
+                  >
+                    <Send size={14} />
+                  </button>
+                </form>
+              </div>
+            )}
 
-                  {/* Other Participant */}
-                  <div className="p-3 bg-zinc-800/60 border border-zinc-700/50 rounded-2xl flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-full bg-zinc-700 text-white font-bold text-xs flex items-center justify-center">
-                        {(currentUserRole === 'candidate' ? round?.interviewer_name || 'Interviewer' : round?.candidate_name || 'Candidate').slice(0, 2).toUpperCase()}
-                      </div>
-                      <div>
-                        <div className="text-xs font-bold text-white">
-                          {currentUserRole === 'candidate' ? round?.interviewer_name || 'Interviewer' : round?.candidate_name || 'Candidate'}
-                        </div>
-                        <div className="text-[11px] text-zinc-400">
-                          {currentUserRole === 'candidate' ? round?.interviewer_role || 'Interviewer' : 'Candidate'}
-                        </div>
-                      </div>
-                    </div>
-                    <span className="w-2 h-2 rounded-full bg-emerald-400" />
+            {/* Tab 2: Notes */}
+            {activeSideTab === 'notes' && (
+              <div className="flex-1 flex flex-col justify-between pt-2.5 min-h-0">
+                <textarea
+                  value={notesContent}
+                  onChange={(e) => setNotesContent(e.target.value)}
+                  placeholder="Private interviewer notes..."
+                  className="flex-1 w-full bg-zinc-950 border border-white/10 rounded-xl p-3 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none resize-none leading-relaxed custom-scroll"
+                />
+                <div className="text-[10px] text-emerald-400 pt-2 flex items-center gap-1 font-medium">
+                  <Check size={11} />
+                  <span>Notes auto-saved to interview record</span>
+                </div>
+              </div>
+            )}
+
+            {/* Tab 3: Feedback */}
+            {activeSideTab === 'feedback' && (
+              <div className="flex-1 flex flex-col justify-between pt-2.5 text-xs space-y-3 min-h-0">
+                <div className="space-y-2">
+                  <div className="text-[11px] font-bold text-zinc-300">Recommendation Verdict:</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {['Strong Hire', 'Hire', 'Re-evaluate', 'Reject'].map((verdict) => (
+                      <button
+                        key={verdict}
+                        type="button"
+                        onClick={() => setFeedbackVerdict(verdict)}
+                        className={`p-2 rounded-xl text-xs font-bold transition text-center cursor-pointer ${
+                          feedbackVerdict === verdict
+                            ? verdict === 'Reject'
+                              ? 'bg-rose-500/20 border border-rose-500 text-rose-300'
+                              : 'bg-emerald-500/20 border border-emerald-500 text-emerald-300'
+                            : 'bg-zinc-950 border border-white/10 text-zinc-400 hover:bg-zinc-850'
+                        }`}
+                      >
+                        {verdict}
+                      </button>
+                    ))}
                   </div>
                 </div>
-              )}
 
-              {activeTab === 'evaluation' && currentUserRole === 'interviewer' && (
-                <div className="text-zinc-900">
-                  <EvaluationForm
-                    round={round}
-                    defaultEvaluator={currentUserName}
-                    onSuccess={(updated) => {
-                      if (onEvaluationComplete) onEvaluationComplete(updated);
-                      setActiveTab(null);
-                    }}
-                    onCancel={() => setActiveTab(null)}
-                  />
+                <div className="p-3 rounded-xl bg-zinc-950 border border-white/5 space-y-1.5 text-zinc-400 text-xs">
+                  <div className="text-zinc-200 font-semibold">Post-Interview Evaluation</div>
+                  <p className="text-[11px] leading-relaxed">
+                    Submit formal competency scorecard and candidate scoring after the call completes.
+                  </p>
                 </div>
-              )}
-            </div>
-          </aside>
-        )}
+
+                <button
+                  type="button"
+                  onClick={() => setPostCallEvaluation(true)}
+                  className="w-full py-2.5 rounded-xl bg-white text-zinc-950 font-bold text-xs hover:bg-zinc-200 transition cursor-pointer shadow"
+                >
+                  Open Scorecard Form
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
-      {/* Floating Bottom Dock Control Bar */}
-      <footer className="h-20 px-4 flex items-center justify-center z-20 pb-2">
-        <div className="px-4 py-2.5 bg-zinc-900/90 backdrop-blur-xl border border-zinc-800/90 rounded-full flex items-center gap-3 shadow-2xl">
-          {/* Mic Toggle */}
-          <button
-            type="button"
-            onClick={toggleMicrophone}
-            title={isMicOn ? 'Mute Microphone' : 'Unmute Microphone'}
-            className={`w-11 h-11 rounded-full flex items-center justify-center transition cursor-pointer ${
-              isMicOn
-                ? 'bg-zinc-800 hover:bg-zinc-700 text-white'
-                : 'bg-rose-600 hover:bg-rose-700 text-white shadow-md'
-            }`}
-          >
-            {isMicOn ? <Mic size={18} /> : <MicOff size={18} />}
-          </button>
-
-          {/* Camera Toggle */}
-          <button
-            type="button"
-            onClick={toggleCamera}
-            title={isCameraOn ? 'Turn Off Camera' : 'Turn On Camera'}
-            className={`w-11 h-11 rounded-full flex items-center justify-center transition cursor-pointer ${
-              isCameraOn
-                ? 'bg-zinc-800 hover:bg-zinc-700 text-white'
-                : 'bg-rose-600 hover:bg-rose-700 text-white shadow-md'
-            }`}
-          >
-            {isCameraOn ? <Video size={18} /> : <VideoOff size={18} />}
-          </button>
-
-          {/* Screen Share Toggle */}
-          <button
-            type="button"
-            onClick={toggleScreenShare}
-            title={isScreenSharing ? 'Stop Screen Sharing' : 'Share Screen'}
-            className={`w-11 h-11 rounded-full flex items-center justify-center transition cursor-pointer ${
-              isScreenSharing
-                ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                : 'bg-zinc-800 hover:bg-zinc-700 text-white'
-            }`}
-          >
-            <Monitor size={18} />
-          </button>
-
-          {/* Live Speech Captions Toggle */}
-          <button
-            type="button"
-            onClick={() => setShowCaptions(!showCaptions)}
-            title={showCaptions ? 'Hide Live Captions' : 'Show Live Captions'}
-            className={`w-11 h-11 rounded-full flex items-center justify-center transition cursor-pointer ${
-              showCaptions
-                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
-                : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-400'
-            }`}
-          >
-            <Captions size={18} />
-          </button>
-
-          <div className="w-[1px] h-6 bg-zinc-700 mx-1" />
-
-          {/* Chat Drawer Toggle */}
-          <button
-            type="button"
-            onClick={() => setActiveTab(activeTab === 'chat' ? null : 'chat')}
-            title="Meeting Chat"
-            className={`relative w-11 h-11 rounded-full flex items-center justify-center transition cursor-pointer ${
-              activeTab === 'chat'
-                ? 'bg-white text-zinc-950 font-bold'
-                : 'bg-zinc-800 hover:bg-zinc-700 text-white'
-            }`}
-          >
-            <MessageSquare size={18} />
-            {unreadCount > 0 && activeTab !== 'chat' && (
-              <span className="absolute -top-1 -right-1 px-1.5 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-bold animate-pulse shadow-md">
-                {unreadCount}
-              </span>
-            )}
-          </button>
-
-          {/* Participants Toggle */}
-          <button
-            type="button"
-            onClick={() => setActiveTab(activeTab === 'participants' ? null : 'participants')}
-            title="View Participants"
-            className={`w-11 h-11 rounded-full flex items-center justify-center transition cursor-pointer ${
-              activeTab === 'participants'
-                ? 'bg-white text-zinc-950 font-bold'
-                : 'bg-zinc-800 hover:bg-zinc-700 text-white'
-            }`}
-          >
-            <Users size={18} />
-          </button>
-
-          {/* Interviewer Evaluation Trigger (Interviewer Only) */}
-          {currentUserRole === 'interviewer' && (
-            <button
-              type="button"
-              onClick={() => setActiveTab(activeTab === 'evaluation' ? null : 'evaluation')}
-              title="Evaluate Candidate"
-              className={`px-4 h-11 rounded-full flex items-center gap-1.5 text-xs font-bold transition cursor-pointer ${
-                activeTab === 'evaluation'
-                  ? 'bg-amber-500 text-white'
-                  : 'bg-zinc-800 hover:bg-zinc-700 text-amber-400'
-              }`}
-            >
-              <Award size={16} />
-              <span className="hidden sm:inline">Evaluation</span>
-            </button>
-          )}
-
-          <div className="w-[1px] h-6 bg-zinc-700 mx-1" />
-
-          {/* End Call Button */}
-          <button
-            type="button"
-            onClick={() => setShowExitConfirm(true)}
-            title="Leave Meeting"
-            className="w-11 h-11 rounded-full bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center transition shadow-lg cursor-pointer"
-          >
-            <PhoneOff size={18} />
-          </button>
+      {/* Floating Animated Emojis */}
+      {floatingEmojis.map((item) => (
+        <div
+          key={item.id}
+          style={{ left: `${item.left}%` }}
+          className="fixed bottom-24 z-50 text-3xl pointer-events-none animate-bounce"
+        >
+          {item.emoji}
         </div>
-      </footer>
+      ))}
+
+      {/* ─────────────────────────────────────────────────────────────────
+          MODALS & DIALOGS
+          ───────────────────────────────────────────────────────────────── */}
 
       {/* Exit Confirmation Dialog */}
       {showExitConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 max-w-sm w-full text-center shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-[#12151E] border border-white/10 rounded-3xl p-6 max-w-sm w-full text-center shadow-2xl">
             <div className="w-12 h-12 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center mx-auto mb-3">
               <PhoneOff size={22} />
             </div>
-            <h3 className="text-lg font-bold text-white">Leave Interview Room?</h3>
+            <h3 className="text-lg font-bold text-white">End Interview Session?</h3>
             <p className="text-xs text-zinc-400 mt-1 mb-6">
-              Are you sure you want to disconnect? You can rejoin while this round is active.
+              Camera and audio will disconnect immediately. You will be redirected to the evaluation summary.
             </p>
             <div className="flex items-center gap-3">
               <button
                 type="button"
                 onClick={() => setShowExitConfirm(false)}
-                className="flex-1 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold transition"
+                className="flex-1 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold transition cursor-pointer"
               >
                 Stay in Call
               </button>
               <button
                 type="button"
                 onClick={handleEndCall}
-                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition"
+                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition cursor-pointer shadow-lg"
               >
-                Leave Room
+                End Call
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Post-Call Evaluation Modal for Interviewer */}
+      {/* Post-Call Evaluation Modal */}
       {postCallEvaluation && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md overflow-y-auto">
-          <div className="max-w-2xl w-full my-8">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto animate-in fade-in">
+          <div className="max-w-3xl w-full my-8">
             <EvaluationForm
-              round={{
-                ...round,
-                communication_analysis: communicationAnalysis || round?.communication_analysis,
-                transcript: transcriptTurns.length > 0 ? transcriptTurns : round?.transcript,
-              }}
+              round={round}
               defaultEvaluator={currentUserName}
               onSuccess={(updated) => {
                 if (onEvaluationComplete) onEvaluationComplete(updated);
@@ -969,19 +841,240 @@ export function InterviewRoom({
         </div>
       )}
 
-      {/* Saving Conversation Proof Video Full-screen Overlay */}
-      {isSavingProofVideo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-8 max-w-md w-full text-center shadow-2xl">
-            <div className="w-16 h-16 rounded-full border-4 border-emerald-500/20 border-t-emerald-400 animate-spin mx-auto mb-4" />
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-400 text-[11px] font-bold uppercase tracking-wider mb-2">
-              <ShieldCheck size={13} />
-              <span>Compliance Proof Vault</span>
+      {/* Candidate Resume Modal */}
+      {showResumeModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm"
+          onClick={() => setShowResumeModal(false)}
+        >
+          <div
+            className="w-full max-w-2xl bg-[#12151E] border border-white/10 rounded-2xl shadow-2xl p-6 space-y-4 max-h-[85vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <div className="flex items-center gap-2">
+                <FileText size={18} className="text-white" />
+                <h3 className="text-base font-bold text-white">Resume &bull; Arjun M</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowResumeModal(false)}
+                className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white cursor-pointer"
+              >
+                <X size={16} />
+              </button>
             </div>
-            <h3 className="text-lg font-bold text-white">Saving Conversation Video Proof</h3>
-            <p className="text-xs text-zinc-400 mt-2 leading-relaxed">
-              Securely finalizing interview video recording and archiving conversation proof to the compliance vault...
-            </p>
+            <div className="flex-1 overflow-y-auto font-mono text-xs text-zinc-300 bg-zinc-950 p-4 rounded-xl border border-white/5 whitespace-pre-wrap leading-relaxed">
+              {`CANDIDATE: Arjun M
+ROLE: Python Developer
+LOCATION: Bangalore, India
+EXPERIENCE: 3 Years
+
+PROFESSIONAL SUMMARY:
+Backend developer proficient in Python, FastAPI, Django, and scalable cloud systems. Experienced in asynchronous event pipelines, SQL optimization, and clean microservices.
+
+TECHNICAL SKILLS:
+- Languages: Python, JavaScript, SQL
+- Frameworks: FastAPI, Django, React
+- Storage: PostgreSQL, Redis, MongoDB
+- Cloud: AWS, Docker, Git, CI/CD`}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Candidate Profile Modal */}
+      {showProfileModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm"
+          onClick={() => setShowProfileModal(false)}
+        >
+          <div
+            className="w-full max-w-md bg-[#12151E] border border-white/10 rounded-2xl shadow-2xl p-6 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <h3 className="text-base font-bold text-white">Candidate Details</h3>
+              <button
+                type="button"
+                onClick={() => setShowProfileModal(false)}
+                className="p-1 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="space-y-3 text-xs text-zinc-300">
+              <div className="flex justify-between pb-2 border-b border-white/5">
+                <span className="text-zinc-500">Candidate</span>
+                <span className="font-bold text-white">Arjun M</span>
+              </div>
+              <div className="flex justify-between pb-2 border-b border-white/5">
+                <span className="text-zinc-500">Target Role</span>
+                <span className="font-bold text-white">Python Developer</span>
+              </div>
+              <div className="flex justify-between pb-2 border-b border-white/5">
+                <span className="text-zinc-500">Requisition</span>
+                <span className="font-mono text-zinc-200">REQ #8302C0</span>
+              </div>
+              <div className="flex justify-between pb-2 border-b border-white/5">
+                <span className="text-zinc-500">Screening Score</span>
+                <span className="font-bold text-emerald-400">92 / 100</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-zinc-500">Status</span>
+                <span className="font-bold text-white">Round 2 &bull; Technical Interview</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* People / Participants Modal */}
+      {showPeopleModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm"
+          onClick={() => setShowPeopleModal(false)}
+        >
+          <div
+            className="w-full max-w-sm bg-[#12151E] border border-white/10 rounded-2xl shadow-2xl p-5 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-white/10">
+              <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+                <Users size={16} />
+                <span>Participants (3)</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowPeopleModal(false)}
+                className="p-1 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="space-y-2.5 text-xs">
+              <div className="p-2.5 rounded-xl bg-zinc-900 border border-white/5 flex items-center justify-between">
+                <div>
+                  <div className="font-bold text-white">Arjun M</div>
+                  <div className="text-[10px] text-zinc-400">Candidate</div>
+                </div>
+                <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold">
+                  Active
+                </span>
+              </div>
+              <div className="p-2.5 rounded-xl bg-zinc-900 border border-white/5 flex items-center justify-between">
+                <div>
+                  <div className="font-bold text-white">Rahul (You)</div>
+                  <div className="text-[10px] text-zinc-400">Hiring Manager &bull; Host</div>
+                </div>
+                <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold">
+                  Host
+                </span>
+              </div>
+              <div className="p-2.5 rounded-xl bg-zinc-900 border border-white/5 flex items-center justify-between">
+                <div>
+                  <div className="font-bold text-white">Sneha K</div>
+                  <div className="text-[10px] text-zinc-400">Tech Lead &bull; Panelist</div>
+                </div>
+                <span className="px-2 py-0.5 rounded-full bg-zinc-700 text-zinc-300 text-[10px] font-bold">
+                  Panelist
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Invite Modal */}
+      {showInviteModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm"
+          onClick={() => setShowInviteModal(false)}
+        >
+          <div
+            className="w-full max-w-sm bg-[#12151E] border border-white/10 rounded-2xl shadow-2xl p-5 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-white/10">
+              <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+                <UserPlus size={16} />
+                <span>Invite to Interview</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowInviteModal(false)}
+                className="p-1 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="space-y-3 text-xs">
+              <p className="text-zinc-400">
+                Share this secure interview link with panel co-interviewers or candidates.
+              </p>
+              <div className="flex items-center gap-2 p-2 rounded-xl bg-zinc-900 border border-white/10 font-mono text-[11px] text-zinc-300">
+                <span className="truncate flex-1">{window.location.href}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(window.location.href);
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-white text-zinc-950 font-bold hover:bg-zinc-200 transition cursor-pointer"
+                >
+                  Copy
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Settings Modal */}
+      {showSettingsModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm"
+          onClick={() => setShowSettingsModal(false)}
+        >
+          <div
+            className="w-full max-w-sm bg-[#12151E] border border-white/10 rounded-2xl shadow-2xl p-5 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-white/10">
+              <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+                <Settings size={16} />
+                <span>Meeting Settings</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowSettingsModal(false)}
+                className="p-1 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="space-y-3 text-xs text-zinc-300">
+              <div>
+                <label className="text-zinc-400 block mb-1">Microphone</label>
+                <select className="w-full bg-zinc-900 border border-white/10 rounded-xl p-2 text-white text-xs">
+                  <option>Default - Integrated Microphone</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-zinc-400 block mb-1">Camera</label>
+                <select className="w-full bg-zinc-900 border border-white/10 rounded-xl p-2 text-white text-xs">
+                  <option>Default - Integrated Webcam (HD)</option>
+                </select>
+              </div>
+              <div className="pt-2 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowSettingsModal(false)}
+                  className="px-4 py-1.5 bg-white text-zinc-950 font-bold rounded-xl text-xs hover:bg-zinc-200 transition cursor-pointer"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -99,6 +99,26 @@ export class LiveKitService {
     // Resilient Direct WebRTC P2P Fallback Mode
     console.log('Initializing WebRTC direct P2P mode for interview room...', { roundId, role, isAiInterview });
     try {
+      // If local stream already active and healthy, reuse it directly without restarting camera
+      const activeVideo = this.fallbackLocalStream?.getVideoTracks()?.find((t) => t.readyState === 'live');
+      const activeAudio = this.fallbackLocalStream?.getAudioTracks()?.find((t) => t.readyState === 'live');
+      if (activeVideo && activeAudio) {
+        this.isLiveKitConnected = false;
+        this._emit('connectionStateChanged', 'connected');
+        this._emit('localTrackChanged', {
+          stream: this.fallbackLocalStream,
+          hasVideo: activeVideo.enabled,
+          hasAudio: activeAudio.enabled,
+        });
+        if (!isAiInterview) {
+          this.initP2PConnection(roundId, role, participantName);
+        }
+        return {
+          mode: 'fallback',
+          stream: this.fallbackLocalStream,
+        };
+      }
+
       this.fallbackLocalStream = await navigator.mediaDevices.getUserMedia({
         video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
         audio: {
@@ -419,7 +439,24 @@ export class LiveKitService {
       return await this.room.localParticipant.setCameraEnabled(enabled);
     }
     if (this.fallbackLocalStream) {
-      const videoTrack = this.fallbackLocalStream.getVideoTracks()[0];
+      let videoTrack = this.fallbackLocalStream.getVideoTracks()[0];
+      if (enabled && (!videoTrack || videoTrack.readyState === 'ended')) {
+        try {
+          const freshStream = await navigator.mediaDevices.getUserMedia({
+            video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
+          });
+          const newTrack = freshStream.getVideoTracks()[0];
+          if (newTrack) {
+            if (videoTrack) {
+              try { this.fallbackLocalStream.removeTrack(videoTrack); } catch (_) {}
+            }
+            this.fallbackLocalStream.addTrack(newTrack);
+            videoTrack = newTrack;
+          }
+        } catch (e) {
+          console.error('Failed to re-acquire camera track on toggle:', e);
+        }
+      }
       if (videoTrack) {
         videoTrack.enabled = enabled;
         this._emit('localTrackChanged', {
@@ -427,6 +464,20 @@ export class LiveKitService {
           hasVideo: enabled,
           hasAudio: this.fallbackLocalStream.getAudioTracks()[0]?.enabled ?? false,
         });
+      }
+    } else if (enabled) {
+      try {
+        this.fallbackLocalStream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
+          audio: true,
+        });
+        this._emit('localTrackChanged', {
+          stream: this.fallbackLocalStream,
+          hasVideo: true,
+          hasAudio: true,
+        });
+      } catch (e) {
+        console.error('Failed to initialize local stream on toggle:', e);
       }
     }
   }
@@ -596,16 +647,53 @@ export class LiveKitService {
   disconnect() {
     if (this.room) {
       try {
+        if (this.room.localParticipant) {
+          // Explicitly stop all local tracks so browser camera/mic release hardware immediately
+          const pubs = this.room.localParticipant.trackPublications;
+          if (pubs && typeof pubs.forEach === 'function') {
+            pubs.forEach((pub) => {
+              try {
+                if (pub.track) pub.track.stop();
+              } catch (_) {}
+            });
+          }
+          if (this.room.localParticipant.videoTrackPublications) {
+            this.room.localParticipant.videoTrackPublications.forEach((pub) => {
+              try {
+                if (pub.track) pub.track.stop();
+              } catch (_) {}
+            });
+          }
+          if (this.room.localParticipant.audioTrackPublications) {
+            this.room.localParticipant.audioTrackPublications.forEach((pub) => {
+              try {
+                if (pub.track) pub.track.stop();
+              } catch (_) {}
+            });
+          }
+        }
         this.room.disconnect();
       } catch (e) {}
       this.room = null;
     }
     if (this.fallbackLocalStream) {
-      this.fallbackLocalStream.getTracks().forEach((t) => t.stop());
+      try {
+        this.fallbackLocalStream.getTracks().forEach((t) => {
+          try {
+            t.stop();
+          } catch (_) {}
+        });
+      } catch (_) {}
       this.fallbackLocalStream = null;
     }
     if (this.fallbackScreenStream) {
-      this.fallbackScreenStream.getTracks().forEach((t) => t.stop());
+      try {
+        this.fallbackScreenStream.getTracks().forEach((t) => {
+          try {
+            t.stop();
+          } catch (_) {}
+        });
+      } catch (_) {}
       this.fallbackScreenStream = null;
     }
     this.closeP2PConnection();

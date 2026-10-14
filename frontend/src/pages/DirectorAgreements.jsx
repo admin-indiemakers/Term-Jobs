@@ -258,246 +258,107 @@ export default function DirectorAgreements() {
   }, [agreements, statusFilter, searchQuery]);
 
   return (
-    <div className="page font-sans text-[#0A0A0A]" style={{ paddingBottom: 60 }}>
-      {/* Header Banner */}
-      <div
-        style={{
-          background: 'linear-gradient(135deg, #0A0A0A 0%, #1A1A1A 100%)',
-          color: '#FFFFFF',
-          borderRadius: 16,
-          padding: '28px 32px',
-          marginBottom: 24,
-          boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: 20
-        }}
-      >
+    <div
+      className="w-full min-w-0 pb-16 space-y-4 text-left"
+      style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}
+    >
+      {/* Top Header Area */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 shrink-0">
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-            <span
-              style={{
-                fontSize: '0.72rem',
-                fontWeight: 800,
-                letterSpacing: '0.08em',
-                background: 'rgba(255,255,255,0.15)',
-                padding: '4px 10px',
-                borderRadius: 6,
-                textTransform: 'uppercase'
-              }}
-            >
-              {user?.tenant_name || 'Client Company'} • Executive Governance
-            </span>
-            {pendingCount > 0 && (
-              <span
-                style={{
-                  background: '#F59E0B',
-                  color: '#000000',
-                  fontWeight: 800,
-                  fontSize: '0.72rem',
-                  padding: '3px 10px',
-                  borderRadius: 999,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 4
-                }}
-              >
-                <Clock size={12} /> {pendingCount} Pending Sign-Off
-              </span>
-            )}
+          <div className="text-[10px] font-extrabold text-gray-400 tracking-wider uppercase mb-1">
+            {user?.tenant_name || 'TERM JOBS'} • EXECUTIVE GOVERNANCE
           </div>
-          <h1 style={{ fontSize: '1.75rem', fontWeight: 800, margin: '0 0 6px 0', letterSpacing: '-0.02em' }}>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight leading-none">
             Vendor Agreements & Work Statements
           </h1>
-          <p style={{ margin: 0, fontSize: '0.9rem', color: '#A3A3A3', maxWidth: 680, lineHeight: 1.5 }}>
-            Authorized portal for Company Directors to inspect Master Service Agreements (MSAs), review commercial rate schedules, and grant formal executive approval or rejection for vendor engagements.
+          <p className="text-xs sm:text-[13px] text-gray-500 font-normal mt-1 max-w-2xl">
+            Authorized portal for Company Directors to inspect Master Service Agreements (MSAs), review commercial rate schedules, and grant formal executive approval.
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={loadAgreements}
-          disabled={loading}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 8,
-            background: 'rgba(255,255,255,0.1)',
-            border: '1px solid rgba(255,255,255,0.2)',
-            color: '#FFFFFF',
-            padding: '10px 18px',
-            borderRadius: 10,
-            fontSize: '0.85rem',
-            fontWeight: 600,
-            cursor: 'pointer',
-            transition: 'all 0.2s'
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.2)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; }}
-        >
-          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-          <span>{loading ? 'Refreshing...' : 'Refresh Agreements'}</span>
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          {pendingCount > 0 && (
+            <span className="px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-bold flex items-center gap-1.5 shadow-2xs">
+              <Clock size={12} className="text-amber-600" />
+              <span>{pendingCount} Pending Sign-Off</span>
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={loadAgreements}
+            disabled={loading}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/70 hover:bg-white text-gray-700 text-xs font-semibold border border-white/90 shadow-2xs transition active:scale-95 cursor-pointer disabled:opacity-50"
+          >
+            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+            <span>{loading ? 'Refreshing...' : 'Refresh'}</span>
+          </button>
+        </div>
       </div>
 
       {/* Metric Stat Cards */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-          gap: 16,
-          marginBottom: 24
-        }}
-      >
-        <div
-          style={{
-            background: '#FFFFFF',
-            border: '1px solid #E5E5E0',
-            borderRadius: 12,
-            padding: '18px 20px',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
-          }}
-        >
-          <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)]">
+          <div className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider">
             Total Agreements
           </div>
-          <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#0A0A0A', marginTop: 4 }}>
-            {totalCount}
-          </div>
-          <div style={{ fontSize: '0.76rem', color: '#94A3B8', marginTop: 2 }}>
-            Across all consultancies
-          </div>
+          <div className="text-2xl font-black text-gray-900 mt-1">{totalCount}</div>
+          <div className="text-[11px] text-gray-500 mt-0.5">Across all consultancies</div>
         </div>
 
-        <div
-          style={{
-            background: '#FFFBEB',
-            border: '1px solid #FDE68A',
-            borderRadius: 12,
-            padding: '18px 20px',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
-          }}
-        >
-          <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#B45309', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        <div className="bg-white/40 backdrop-blur-2xl border border-amber-300/80 rounded-2xl p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] ring-1 ring-amber-400/20">
+          <div className="text-[10px] font-extrabold text-amber-800 uppercase tracking-wider">
             Pending Sign-Off
           </div>
-          <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#D97706', marginTop: 4 }}>
-            {pendingCount}
-          </div>
-          <div style={{ fontSize: '0.76rem', color: '#B45309', marginTop: 2 }}>
-            Requires Director action
-          </div>
+          <div className="text-2xl font-black text-amber-900 mt-1">{pendingCount}</div>
+          <div className="text-[11px] text-amber-700 mt-0.5">Requires Director action</div>
         </div>
 
-        <div
-          style={{
-            background: '#ECFDF5',
-            border: '1px solid #A7F3D0',
-            borderRadius: 12,
-            padding: '18px 20px',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
-          }}
-        >
-          <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#047857', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)]">
+          <div className="text-[10px] font-extrabold text-emerald-800 uppercase tracking-wider">
             Approved Agreements
           </div>
-          <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#059669', marginTop: 4 }}>
-            {approvedCount}
-          </div>
-          <div style={{ fontSize: '0.76rem', color: '#047857', marginTop: 2 }}>
-            Live & locked in database
-          </div>
+          <div className="text-2xl font-black text-emerald-900 mt-1">{approvedCount}</div>
+          <div className="text-[11px] text-emerald-700 mt-0.5">Live & authorized in database</div>
         </div>
 
-        <div
-          style={{
-            background: '#FEF2F2',
-            border: '1px solid #FECACA',
-            borderRadius: 12,
-            padding: '18px 20px',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
-          }}
-        >
-          <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#B91C1C', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Rejected / Revisions
+        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)]">
+          <div className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider">
+            Revisions / Rejected
           </div>
-          <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#DC2626', marginTop: 4 }}>
-            {rejectedCount + revisionCount}
-          </div>
-          <div style={{ fontSize: '0.76rem', color: '#B91C1C', marginTop: 2 }}>
-            {rejectedCount} Rejected • {revisionCount} Revisions
-          </div>
+          <div className="text-2xl font-black text-gray-900 mt-1">{rejectedCount + revisionCount}</div>
+          <div className="text-[11px] text-gray-500 mt-0.5">{revisionCount} Revised · {rejectedCount} Rejected</div>
         </div>
       </div>
 
       {/* Notifications / Alerts */}
       {error && (
-        <div
-          style={{
-            background: '#FEF2F2',
-            border: '1px solid #F87171',
-            color: '#B91C1C',
-            padding: '12px 16px',
-            borderRadius: 10,
-            marginBottom: 20,
-            fontSize: '0.86rem',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between'
-          }}
-        >
-          <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <AlertCircle size={16} /> {error}
+        <div className="p-3.5 bg-red-50/90 border border-red-200/80 rounded-2xl text-xs text-red-700 flex items-center justify-between shadow-2xs shrink-0">
+          <span className="flex items-center gap-2 font-medium">
+            <AlertCircle size={15} className="shrink-0 text-red-500" />
+            <span>{error}</span>
           </span>
-          <button type="button" onClick={() => setError('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#B91C1C' }}>
-            <X size={15} />
+          <button type="button" onClick={() => setError('')} className="p-1 hover:bg-red-100 rounded-lg text-red-600 cursor-pointer">
+            <X size={14} />
           </button>
         </div>
       )}
 
       {successMsg && (
-        <div
-          style={{
-            background: '#ECFDF5',
-            border: '1px solid #6EE7B7',
-            color: '#065F46',
-            padding: '12px 16px',
-            borderRadius: 10,
-            marginBottom: 20,
-            fontSize: '0.86rem',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between'
-          }}
-        >
-          <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <CheckCircle2 size={16} /> {successMsg}
+        <div className="p-3.5 bg-emerald-50/90 border border-emerald-200/80 rounded-2xl text-xs text-emerald-800 font-semibold flex items-center justify-between shadow-2xs shrink-0">
+          <span className="flex items-center gap-2">
+            <CheckCircle2 size={16} className="shrink-0 text-emerald-600" />
+            <span>{successMsg}</span>
           </span>
-          <button type="button" onClick={() => setSuccessMsg('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#065F46' }}>
-            <X size={15} />
+          <button type="button" onClick={() => setSuccessMsg('')} className="p-1 hover:bg-emerald-100 rounded-lg text-emerald-700 cursor-pointer">
+            <X size={14} />
           </button>
         </div>
       )}
 
-      {/* Search & Filter Tabs */}
-      <div
-        style={{
-          background: '#FFFFFF',
-          border: '1px solid #E5E5E0',
-          borderRadius: 14,
-          padding: '16px 20px',
-          marginBottom: 20,
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: 16
-        }}
-      >
+      {/* Search & Filter Tabs Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-2 bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)]">
         {/* Status Pills */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+        <div className="flex items-center gap-1.5 flex-wrap">
           {[
             { id: 'ALL', label: 'All Agreements', count: totalCount },
             { id: 'PENDING', label: 'Pending Approval', count: pendingCount, highlight: true },
@@ -511,31 +372,17 @@ export default function DirectorAgreements() {
                 key={tab.id}
                 type="button"
                 onClick={() => setStatusFilter(tab.id)}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '7px 14px',
-                  borderRadius: 20,
-                  fontSize: '0.82rem',
-                  fontWeight: isActive ? 700 : 500,
-                  cursor: 'pointer',
-                  border: isActive ? '1px solid #0A0A0A' : '1px solid #E2E8F0',
-                  background: isActive ? '#0A0A0A' : '#F8FAFC',
-                  color: isActive ? '#FFFFFF' : '#475569',
-                  transition: 'all 0.15s ease'
-                }}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  isActive
+                    ? 'bg-black text-white shadow-xs'
+                    : 'text-gray-600 hover:text-black hover:bg-white/60'
+                }`}
               >
                 <span>{tab.label}</span>
                 <span
-                  style={{
-                    fontSize: '0.72rem',
-                    fontWeight: 700,
-                    padding: '1px 6px',
-                    borderRadius: 999,
-                    background: isActive ? 'rgba(255,255,255,0.2)' : '#E2E8F0',
-                    color: isActive ? '#FFFFFF' : '#64748B'
-                  }}
+                  className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full ${
+                    isActive ? 'bg-white/20 text-white' : 'bg-black/5 text-gray-700'
+                  }`}
                 >
                   {tab.count}
                 </span>
@@ -545,36 +392,20 @@ export default function DirectorAgreements() {
         </div>
 
         {/* Search Input */}
-        <div style={{ position: 'relative', minWidth: 260 }}>
-          <Search size={15} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
+        <div className="relative w-full sm:w-72">
+          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search candidate, role, vendor, or ID..."
-            style={{
-              width: '100%',
-              padding: '8px 12px 8px 34px',
-              fontSize: '0.84rem',
-              borderRadius: 8,
-              border: '1px solid #CBD5E1',
-              outline: 'none',
-              background: '#F8FAFC'
-            }}
+            placeholder="Search candidate, role, vendor..."
+            className="w-full pl-9 pr-3 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs placeholder:text-gray-400 transition-all"
           />
         </div>
       </div>
 
       {/* Agreements Table */}
-      <div
-        style={{
-          background: '#FFFFFF',
-          border: '1px solid #E5E5E0',
-          borderRadius: 14,
-          overflow: 'hidden',
-          boxShadow: '0 2px 6px rgba(0,0,0,0.03)'
-        }}
-      >
+      <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-3xl p-4 sm:p-5 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] overflow-hidden">
         {loading ? (
           <div style={{ padding: 48, textAlign: 'center', color: '#64748B' }}>
             <RefreshCw size={24} className="animate-spin" style={{ margin: '0 auto 12px auto' }} />

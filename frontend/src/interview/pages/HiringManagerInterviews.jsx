@@ -1648,8 +1648,8 @@ export function HiringManagerInterviews() {
 
       {/* Evaluation Modal */}
       {activeEvaluationRound && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
-          <div className="max-w-2xl w-full my-8">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md overflow-y-auto">
+          <div className="max-w-3xl w-full my-8">
             <EvaluationForm
               round={activeEvaluationRound}
               defaultEvaluator={user?.name || user?.email || 'Hiring Manager'}

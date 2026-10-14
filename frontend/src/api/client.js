@@ -163,7 +163,7 @@ export async function request(path, {
       response = await fetch(fullUrl, {
         method: upperMethod,
         headers,
-        body: payloadBody !== undefined ? (isFormData ? payloadBody : JSON.stringify(payloadBody)) : undefined,
+        body: payloadBody !== undefined ? (isFormData || typeof payloadBody === 'string' ? payloadBody : JSON.stringify(payloadBody)) : undefined,
         signal: controller.signal,
       });
     } catch (err) {

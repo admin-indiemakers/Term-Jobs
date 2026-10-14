@@ -3,6 +3,7 @@ import { useNavigate, useLocation, useParams, useSearchParams } from 'react-rout
 import { request, API_BASE_URL } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import StatusBadge from '../components/StatusBadge';
+import { PRESET_ROLE_TEMPLATES } from '../utils/presetRoleTemplates';
 import {
   ShieldCheck,
   CheckCircle2,
@@ -27,7 +28,9 @@ import {
   Eye,
   MapPin,
   Calendar,
-  DollarSign
+  DollarSign,
+  RefreshCw,
+  LayoutDashboard
 } from 'lucide-react';
 
 export function getRequisitionDisplayInfo(r) {
@@ -176,6 +179,8 @@ export default function DirectorDashboard({ view = 'overview' }) {
   const [showCreateTemplateModal, setShowCreateTemplateModal] = useState(false);
   const [templateSubmitting, setTemplateSubmitting] = useState(false);
   const [templateFormError, setTemplateFormError] = useState('');
+  const [selectedPresetIdx, setSelectedPresetIdx] = useState('');
+  const [seedingPresets, setSeedingPresets] = useState(false);
   const [templateForm, setTemplateForm] = useState({
     name: '',
     title: '',
@@ -349,6 +354,57 @@ export default function DirectorDashboard({ view = 'overview' }) {
     }
   };
 
+  const handleApplyPreset = (presetIndexStr) => {
+    const idx = parseInt(presetIndexStr, 10);
+    if (isNaN(idx) || !PRESET_ROLE_TEMPLATES[idx]) return;
+    const p = PRESET_ROLE_TEMPLATES[idx];
+    setSelectedPresetIdx(presetIndexStr);
+    setTemplateForm({
+      name: p.name || '',
+      title: p.title || '',
+      job_family: p.job_family || '',
+      priority: p.priority || 'Normal',
+      must_have_skills: p.must_have_skills || '',
+      nice_to_have_skills: p.nice_to_have_skills || '',
+      experience: p.experience || '3-5 years',
+      headcount: p.headcount || 1,
+      certifications: p.certifications || '',
+      engagement_type: p.engagement_type || 'Contract',
+      duration: p.duration || '6 Months',
+      rate_basis: p.rate_basis || 'Hourly',
+      budget_cap_currency: p.budget_cap_currency || 'INR',
+      vendor_floor: p.vendor_floor || '',
+      vendor_cap: p.vendor_cap || '',
+      ceiling_internal: p.ceiling_internal || '',
+      work_mode: p.work_mode || 'Remote',
+      primary_location: p.primary_location || '',
+      equipment_provided: p.equipment_provided || 'Company-provided',
+      bgv_required: p.bgv_required || 'Standard',
+      nda_required: p.nda_required || 'Yes',
+      description: p.description || '',
+    });
+    setTemplateFormError('');
+  };
+
+  const handleSeedAllPresets = async () => {
+    const targetTenant = (user?.role === 'Super Admin' ? selectedTenantId : user?.tenant_id) || '';
+    setSeedingPresets(true);
+    setError('');
+    setTemplateMsg('');
+    try {
+      const res = await request(`/templates/seed-presets${targetTenant ? `?tenant_id=${targetTenant}` : ''}`, {
+        method: 'POST',
+        token,
+      });
+      setTemplateMsg(`Standard pre-approved role templates (${res?.total || 9} roles) successfully populated for ${activeTenantName}!`);
+      loadTemplates(targetTenant);
+    } catch (err) {
+      setError(err?.message || 'Failed to seed preset templates');
+    } finally {
+      setSeedingPresets(false);
+    }
+  };
+
   const handleCreateTemplateSubmit = async (e) => {
     e.preventDefault();
     setTemplateFormError('');
@@ -403,6 +459,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
 
       setTemplateMsg(`Role template "${payload.name}" created successfully for ${activeTenantName}.`);
       setShowCreateTemplateModal(false);
+      setSelectedPresetIdx('');
       setTemplateForm({
         name: '',
         title: '',
@@ -659,97 +716,175 @@ export default function DirectorDashboard({ view = 'overview' }) {
 
   return (
     <div
-      className="w-full min-w-0 pb-16 space-y-6 text-left"
+      className="w-full min-w-0 pb-16 space-y-4 text-left"
       style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}
     >
-      {/* Top Banner */}
-      <div className="bg-gradient-to-r from-gray-950 via-gray-900 to-black text-white rounded-3xl p-6 sm:p-8 shadow-xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+      {/* Top Header Area */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 shrink-0">
+        <div>
+          <div className="text-[10px] font-extrabold text-gray-400 tracking-wider uppercase mb-1">
+            TERM JOBS • EXECUTIVE GOVERNANCE
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight leading-none">
+            Executive Governance & Approvals
+          </h1>
+          <p className="text-xs sm:text-[13px] text-gray-500 font-normal mt-1 max-w-2xl">
+            {activeTenantName} · Review requisitions, grant sign-offs, and curate director-approved role templates.
+          </p>
+        </div>
 
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
-          <div>
-            <div className="flex items-center gap-2 text-[11px] font-extrabold tracking-widest uppercase text-amber-400 mb-2">
-              <ShieldCheck size={14} className="text-amber-400" />
-              <span>{user?.tenant_name || 'SDC Limited'} • Executive Console</span>
+        {/* Top Right Actions */}
+        <div className="flex items-center gap-2 flex-wrap shrink-0">
+          {user?.role === 'Super Admin' && clientTenants.length > 0 && (
+            <div className="flex items-center gap-1.5 bg-white/70 backdrop-blur-md border border-white/90 px-3 py-1.5 rounded-xl shadow-2xs">
+              <Building size={13} className="text-gray-500" />
+              <span className="text-[10.5px] font-bold text-gray-500 uppercase">Target:</span>
+              <select
+                value={selectedTenantId}
+                onChange={(e) => handleTenantChange(e.target.value)}
+                className="text-xs font-extrabold bg-transparent text-gray-900 focus:outline-none cursor-pointer"
+              >
+                {clientTenants.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-              Executive Governance & Approvals
-            </h1>
-            <p className="text-xs text-gray-300 font-normal mt-1 max-w-2xl">
-              Authorized workspace for reviewing job requisitions, granting Director approval, and managing company role templates.
-            </p>
-          </div>
+          )}
 
-          <div className="flex items-center gap-2 flex-wrap shrink-0">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-amber-500/15 border border-amber-500/30 text-amber-300">
-              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-              <span>{pendingApprovalsList.length} Pending Approval</span>
+          <button
+            type="button"
+            onClick={() => loadAll(false)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/70 hover:bg-white text-gray-700 text-xs font-semibold border border-white/90 shadow-2xs transition active:scale-95 cursor-pointer"
+          >
+            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+            <span>Refresh</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setTemplateFormError('');
+              setShowCreateTemplateModal(true);
+            }}
+            className="px-3.5 py-2 rounded-xl bg-black hover:bg-gray-800 text-white text-xs font-bold shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+          >
+            <Plus size={13} />
+            <span>Create Template</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Glassmorphic Nav Tabs */}
+      <div className="flex items-center gap-1.5 p-1.5 bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl overflow-x-auto shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)]">
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTab('overview');
+            navigate('/dashboard/director');
+          }}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+            activeTab === 'overview'
+              ? 'bg-black text-white shadow-xs'
+              : 'text-gray-600 hover:text-black hover:bg-white/60'
+          }`}
+        >
+          <LayoutDashboard size={13.5} className={activeTab === 'overview' ? 'text-white' : 'text-gray-500'} />
+          <span>Executive Overview</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTab('approvals');
+            navigate('/dashboard/director/approvals');
+          }}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+            activeTab === 'approvals'
+              ? 'bg-black text-white shadow-xs'
+              : 'text-gray-600 hover:text-black hover:bg-white/60'
+          }`}
+        >
+          <ShieldCheck size={13.5} className={activeTab === 'approvals' ? 'text-white' : 'text-gray-500'} />
+          <span>Requisition Approvals</span>
+          {pendingApprovalsList.length > 0 ? (
+            <span
+              className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                activeTab === 'approvals' ? 'bg-white text-black' : 'bg-amber-400 text-black shadow-xs ring-1 ring-amber-500/20'
+              }`}
+            >
+              {pendingApprovalsList.length}
             </span>
-          </div>
-        </div>
+          ) : (
+            <span
+              className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                activeTab === 'approvals' ? 'bg-white/20 text-white' : 'bg-black/5 text-gray-500'
+              }`}
+            >
+              0
+            </span>
+          )}
+        </button>
 
-        {/* Dynamic Inner Tab Switcher */}
-        <div className="flex items-center gap-2 mt-6 pt-5 border-t border-white/10 flex-wrap relative z-10">
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab('overview');
-              navigate('/dashboard/director');
-            }}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              activeTab === 'overview'
-                ? 'bg-white text-black shadow-sm'
-                : 'bg-white/10 hover:bg-white/20 text-gray-200'
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTab('requisitions');
+            navigate('/dashboard/director/requisitions');
+          }}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+            activeTab === 'requisitions'
+              ? 'bg-black text-white shadow-xs'
+              : 'text-gray-600 hover:text-black hover:bg-white/60'
+          }`}
+        >
+          <Briefcase size={13.5} className={activeTab === 'requisitions' ? 'text-white' : 'text-gray-500'} />
+          <span>All Requisitions</span>
+          <span
+            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+              activeTab === 'requisitions' ? 'bg-white/20 text-white' : 'bg-black/5 text-gray-700'
             }`}
           >
-            📊 Executive Overview
-          </button>
+            {requisitions.length}
+          </span>
+        </button>
 
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab('approvals');
-              navigate('/dashboard/director/approvals');
-            }}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
-              activeTab === 'approvals'
-                ? 'bg-amber-400 text-black shadow-sm'
-                : 'bg-white/10 hover:bg-white/20 text-gray-200'
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTab('templates');
+          }}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+            activeTab === 'templates'
+              ? 'bg-black text-white shadow-xs'
+              : 'text-gray-600 hover:text-black hover:bg-white/60'
+          }`}
+        >
+          <FileText size={13.5} className={activeTab === 'templates' ? 'text-white' : 'text-gray-500'} />
+          <span>Role Templates</span>
+          <span
+            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+              activeTab === 'templates' ? 'bg-white/20 text-white' : 'bg-black/5 text-gray-700'
             }`}
           >
-            <ShieldCheck size={14} />
-            <span>Requisition Approvals</span>
-            {pendingApprovalsList.length > 0 && (
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-black text-amber-400">
-                {pendingApprovalsList.length}
-              </span>
-            )}
-          </button>
+            {templates.length}
+          </span>
+        </button>
 
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab('requisitions');
-              navigate('/dashboard/director/requisitions');
-            }}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              activeTab === 'requisitions'
-                ? 'bg-white text-black shadow-sm'
-                : 'bg-white/10 hover:bg-white/20 text-gray-200'
-            }`}
-          >
-            💼 All Requisitions ({requisitions.length})
-          </button>
-
-          <button
-            type="button"
-            onClick={() => navigate('/dashboard/director/work-orders')}
-            className="px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30"
-          >
-            <Receipt size={14} className="text-amber-400" />
-            <span>Work Orders (SOW)</span>
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => navigate('/dashboard/director/work-orders')}
+          className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap text-gray-600 hover:text-black hover:bg-white/60 cursor-pointer ml-auto"
+        >
+          <Receipt size={13.5} className="text-gray-500" />
+          <span>Work Orders (SOW)</span>
+          {pendingWorkOrders.length > 0 && (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300">
+              {pendingWorkOrders.length}
+            </span>
+          )}
+        </button>
       </div>
 
       {/* Alert Notifications */}
@@ -818,84 +953,21 @@ export default function DirectorDashboard({ view = 'overview' }) {
         </div>
       )}
 
-      {/* Metrics Row */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
-        <div
-          onClick={() => setStatusFilter('ALL')}
-          className="bg-white hover:border-gray-400 transition-all border border-gray-200/90 rounded-2xl p-4 shadow-xs cursor-pointer group"
-          title="View All Requisitions"
-        >
-          <div className="flex items-center justify-between text-gray-400 mb-2">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider text-gray-400 group-hover:text-black">Total Requisitions</span>
-            <Briefcase size={16} className="text-gray-700 group-hover:scale-110 transition-transform" />
-          </div>
-          <div className="text-2xl font-black text-gray-900">{requisitions.length}</div>
-          <div className="text-[11px] text-gray-500 mt-1 font-medium">Company wide created</div>
-        </div>
-
-        <div
-          onClick={() => setStatusFilter('PENDING')}
-          className={`border rounded-2xl p-4 shadow-xs transition-all cursor-pointer group hover:border-amber-400 ${
-            (pendingApprovalsList.length + pendingWorkOrders.length) > 0
-              ? 'bg-gradient-to-br from-amber-50 to-white border-amber-300 ring-2 ring-amber-400/20'
-              : 'bg-white border-gray-200/90'
-          }`}
-          title="Filter by Pending Sign-off"
-        >
-          <div className="flex items-center justify-between text-amber-700 mb-2">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-900">Pending Sign-off</span>
-            <Clock size={16} className="text-amber-600 group-hover:scale-110 transition-transform" />
-          </div>
-          <div className="text-2xl font-black text-amber-950">{pendingApprovalsList.length + pendingWorkOrders.length}</div>
-          <div className="text-[11px] text-amber-800 mt-1 font-medium">
-            {pendingApprovalsList.length} Req · {pendingWorkOrders.length} Work Orders
-          </div>
-        </div>
-
-        <div
-          onClick={() => setStatusFilter('APPROVED')}
-          className="bg-white hover:border-emerald-400 transition-all border border-gray-200/90 rounded-2xl p-4 shadow-xs cursor-pointer group"
-          title="Filter by Approved Requisitions"
-        >
-          <div className="flex items-center justify-between text-gray-400 mb-2">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-800 group-hover:text-emerald-950">Approved Requisitions</span>
-            <CheckCircle2 size={16} className="text-emerald-600 group-hover:scale-110 transition-transform" />
-          </div>
-          <div className="text-2xl font-black text-gray-900">{approvedList.length}</div>
-          <div className="text-[11px] text-gray-500 mt-1 font-medium">
-            {approvedList.length === 1 ? '1 role approved & live' : `${approvedList.length} roles approved & live`}
-          </div>
-        </div>
-
-        <div className="bg-white border border-gray-200/90 rounded-2xl p-4 shadow-xs">
-          <div className="flex items-center justify-between text-gray-400 mb-2">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider text-gray-400">Shortlisted</span>
-            <Users size={16} className="text-gray-700" />
-          </div>
-          <div className="text-2xl font-black text-gray-900">{candidates.length}</div>
-          <div className="text-[11px] text-gray-500 mt-1 font-medium">Candidate profiles</div>
-        </div>
-
-        <div className="bg-white border border-gray-200/90 rounded-2xl p-4 shadow-xs col-span-2 sm:col-span-1">
-          <div className="flex items-center justify-between text-gray-400 mb-2">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider text-gray-400">Partner Vendors</span>
-            <Layers size={16} className="text-gray-700" />
-          </div>
-          <div className="text-2xl font-black text-gray-900">{engagedVendors}</div>
-          <div className="text-[11px] text-gray-500 mt-1 font-medium">Engaged consultancies</div>
-        </div>
-      </div>
+      {/* Main Content Area: Left Active Section Card(s) + Right Vertical Stat Cards */}
+      <div className="flex-1 flex flex-col lg:flex-row gap-3.5 items-start pt-1">
+        {/* Left Column: Active Content Section */}
+        <div className="flex-1 min-w-0 w-full space-y-4">
 
       {/* SECTION 1: REQUISITION APPROVALS QUEUE */}
       {(activeTab === 'approvals' || activeTab === 'overview') && (
-        <div className="bg-white border border-amber-200/90 rounded-3xl p-6 shadow-xs space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-gray-100">
+        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-3xl p-5 sm:p-6 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3.5 border-b border-gray-100">
             <div>
-              <div className="flex items-center gap-2 text-amber-800 text-xs font-bold uppercase tracking-wider">
-                <ShieldCheck size={16} className="text-amber-600" />
+              <div className="flex items-center gap-2 text-gray-500 text-[11px] font-bold uppercase tracking-wider">
+                <ShieldCheck size={14} className="text-gray-800" />
                 <span>Requisition Approvals Queue</span>
               </div>
-              <h2 className="text-lg font-extrabold text-gray-900 mt-0.5">
+              <h2 className="text-base sm:text-lg font-extrabold text-gray-900 mt-0.5">
                 Requisitions Awaiting Director Sign-off ({pendingApprovalsList.length})
               </h2>
             </div>
@@ -915,16 +987,16 @@ export default function DirectorDashboard({ view = 'overview' }) {
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-1">
               {pendingApprovalsList.map((r) => {
                 const sr = r.structured_role || {};
                 return (
                   <div
                     key={r.id}
-                    className="bg-gradient-to-br from-amber-50/40 via-white to-white border border-amber-200/80 hover:border-amber-400 rounded-2xl p-5 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between space-y-4"
+                    className="bg-white/70 backdrop-blur-md border border-white/90 hover:border-gray-300 rounded-2xl p-4 sm:p-5 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between space-y-4"
                   >
                     <div className="space-y-2.5">
-                      <div className="flex items-center justify-between text-[11px] font-extrabold text-amber-900 uppercase tracking-wider">
+                      <div className="flex items-center justify-between text-[11px] font-extrabold text-gray-500 uppercase tracking-wider">
                         <span>REQ #{r.id.slice(0, 8)}</span>
                         <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 font-bold">
                           Pending Approval
@@ -943,17 +1015,17 @@ export default function DirectorDashboard({ view = 'overview' }) {
                       {/* Criteria Tags */}
                       <div className="flex flex-wrap items-center gap-1.5 pt-1">
                         {sr.work_mode && (
-                          <span className="px-2.5 py-1 rounded-lg bg-gray-100 text-gray-700 text-[11px] font-semibold">
+                          <span className="px-2.5 py-1 rounded-lg bg-gray-100/90 text-gray-700 text-[11px] font-semibold">
                             📍 {sr.work_mode}
                           </span>
                         )}
                         {sr.duration && (
-                          <span className="px-2.5 py-1 rounded-lg bg-gray-100 text-gray-700 text-[11px] font-semibold">
+                          <span className="px-2.5 py-1 rounded-lg bg-gray-100/90 text-gray-700 text-[11px] font-semibold">
                             ⏱️ {sr.duration}
                           </span>
                         )}
                         {sr.ceiling_internal && (
-                          <span className="px-2.5 py-1 rounded-lg bg-amber-100/70 text-amber-900 text-[11px] font-bold">
+                          <span className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-900 border border-amber-200/60 text-[11px] font-bold">
                             💰 Ceiling: ₹{sr.ceiling_internal}
                           </span>
                         )}
@@ -982,7 +1054,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
                           type="button"
                           onClick={(e) => handleApproveRequisition(r.id, e)}
                           disabled={approvingId === r.id}
-                          className="px-3.5 py-1.5 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                          className="px-3.5 py-1.5 rounded-xl bg-black hover:bg-gray-800 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
                         >
                           <Check size={13} />
                           <span>{approvingId === r.id ? 'Authorizing...' : 'Approve ✓'}</span>
@@ -999,27 +1071,27 @@ export default function DirectorDashboard({ view = 'overview' }) {
 
       {/* SECTION 1.5: PENDING WORK ORDERS / CANDIDATE PLACEMENTS */}
       {(activeTab === 'approvals' || activeTab === 'overview') && pendingWorkOrders.length > 0 && (
-        <div className="bg-white border border-indigo-200/80 rounded-3xl p-6 shadow-xs space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-gray-100">
+        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-3xl p-5 sm:p-6 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3.5 border-b border-gray-100">
             <div>
-              <div className="flex items-center gap-2 text-indigo-800 text-xs font-bold uppercase tracking-wider">
-                <FileCheck size={16} className="text-indigo-600" />
+              <div className="flex items-center gap-2 text-gray-500 text-[11px] font-bold uppercase tracking-wider">
+                <FileCheck size={14} className="text-gray-800" />
                 <span>Work Orders — Director Sign-Off</span>
               </div>
-              <h2 className="text-lg font-extrabold text-gray-900 mt-0.5">
+              <h2 className="text-base sm:text-lg font-extrabold text-gray-900 mt-0.5">
                 Candidate Placements Awaiting Approval ({pendingWorkOrders.length})
               </h2>
             </div>
             <button
               type="button"
               onClick={() => navigate('/dashboard/director/work-orders')}
-              className="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-3 py-1.5 rounded-xl hover:bg-indigo-100 transition-colors cursor-pointer"
+              className="text-xs font-bold text-gray-700 bg-white/70 border border-white/90 px-3 py-1.5 rounded-xl hover:bg-white transition-colors cursor-pointer shadow-2xs"
             >
               View All Work Orders →
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-1">
             {pendingWorkOrders.map((wo) => {
               const cid = wo.candidate_id || wo.workorder_id;
               const sow = wo.sow_data || {};
@@ -1033,10 +1105,10 @@ export default function DirectorDashboard({ view = 'overview' }) {
               return (
                 <div
                   key={cid}
-                  className="bg-gradient-to-br from-indigo-50/30 via-white to-white border border-indigo-200/60 hover:border-indigo-400 rounded-2xl p-5 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between space-y-4"
+                  className="bg-white/70 backdrop-blur-md border border-white/90 hover:border-gray-300 rounded-2xl p-4 sm:p-5 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between space-y-4"
                 >
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between text-[11px] font-extrabold text-indigo-900 uppercase tracking-wider">
+                    <div className="flex items-center justify-between text-[11px] font-extrabold text-gray-500 uppercase tracking-wider">
                       <span>WO #{(cid || '').slice(0, 12)}</span>
                       <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 font-bold flex items-center gap-1">
                         <Clock size={11} /> Pending Approval
@@ -1049,7 +1121,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
                     </div>
                     <div className="flex flex-wrap items-center gap-1.5 pt-1">
                       {rate && (
-                        <span className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-800 text-[11px] font-semibold">
+                        <span className="px-2.5 py-1 rounded-lg bg-gray-100 text-gray-800 text-[11px] font-semibold">
                           💰 {rate}
                         </span>
                       )}
@@ -1073,7 +1145,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
                       type="button"
                       onClick={() => handleApproveWorkOrder(cid)}
                       disabled={isProcessing}
-                      className="px-3.5 py-1.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                      className="px-3.5 py-1.5 rounded-xl bg-black hover:bg-gray-800 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
                     >
                       <Check size={13} />
                       <span>{isProcessing ? 'Approving...' : 'Approve ✓'}</span>
@@ -1087,14 +1159,14 @@ export default function DirectorDashboard({ view = 'overview' }) {
       )}
 
       {/* SECTION 2: ROLE TEMPLATES */}
-      {(activeTab === 'overview') && (
-        <div className="bg-white border border-gray-200/90 rounded-3xl p-6 shadow-xs space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-100">
+      {activeTab === 'templates' && (
+        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-3xl p-5 sm:p-6 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3.5 border-b border-gray-100">
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-base font-extrabold text-gray-900">Pre-Approved Role Templates</h2>
                 {user?.role === 'Super Admin' && clientTenants.length > 0 ? (
-                  <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 px-2 py-0.5 rounded-lg shadow-2xs">
+                  <div className="flex items-center gap-1.5 bg-white/70 backdrop-blur-md border border-white/90 px-2.5 py-0.5 rounded-lg shadow-2xs">
                     <Building size={13} className="text-gray-500" />
                     <span className="text-[10.5px] font-bold text-gray-500 uppercase">Target Buyer:</span>
                     <select
@@ -1110,7 +1182,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
                     </select>
                   </div>
                 ) : (
-                  <span className="px-2.5 py-0.5 rounded-md bg-gray-100 text-gray-700 text-[11px] font-bold border border-gray-200">
+                  <span className="px-2.5 py-0.5 rounded-md bg-white/70 border border-white/90 text-gray-700 text-[11px] font-bold shadow-3xs">
                     🏢 {activeTenantName}
                   </span>
                 )}
@@ -1131,11 +1203,23 @@ export default function DirectorDashboard({ view = 'overview' }) {
 
               <button
                 type="button"
+                onClick={handleSeedAllPresets}
+                disabled={seedingPresets}
+                title="Populate 9 comprehensive pre-approved role templates for your company"
+                className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <Sparkles size={14} className={seedingPresets ? 'animate-spin' : ''} />
+                <span>{seedingPresets ? 'Seeding Roles...' : '⚡ Seed 9 Standard Roles'}</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={() => {
                   setTemplateFormError('');
+                  setSelectedPresetIdx('');
                   setShowCreateTemplateModal(true);
                 }}
-                className="px-4 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-2 cursor-pointer"
+                className="px-3.5 py-2 rounded-xl bg-black hover:bg-gray-800 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
               >
                 <Plus size={14} />
                 <span>Create Role Template</span>
@@ -1146,7 +1230,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
                 onClick={() => templateFileRef.current?.click()}
                 disabled={uploading}
                 title="Alternative: Import existing JSON template file"
-                className="px-3 py-2 rounded-xl border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                className="px-3 py-2 rounded-xl bg-white/70 hover:bg-white border border-white/90 text-gray-700 text-xs font-semibold shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
                 <Upload size={13} className="text-gray-500" />
                 <span className="hidden sm:inline">{uploading ? 'Importing...' : 'Import JSON'}</span>
@@ -1163,7 +1247,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
           )}
 
           {templates.length === 0 ? (
-            <div className="py-8 text-center bg-gray-50/50 rounded-2xl border border-dashed border-gray-200">
+            <div className="py-8 text-center bg-white/50 backdrop-blur-md rounded-2xl border border-dashed border-gray-200">
               <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-2 text-gray-400">
                 <Briefcase size={20} />
               </div>
@@ -1171,29 +1255,41 @@ export default function DirectorDashboard({ view = 'overview' }) {
               <p className="text-[11px] text-gray-400 max-w-sm mx-auto mt-1 mb-3">
                 Create pre-approved role templates with standardized skills, rates, and compliance criteria for your Hiring Managers.
               </p>
-              <button
-                type="button"
-                onClick={() => {
-                  setTemplateFormError('');
-                  setShowCreateTemplateModal(true);
-                }}
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
-              >
-                <Plus size={13} />
-                <span>Create First Template</span>
-              </button>
+              <div className="flex items-center justify-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={handleSeedAllPresets}
+                  disabled={seedingPresets}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  <Sparkles size={13} className={seedingPresets ? 'animate-spin' : ''} />
+                  <span>{seedingPresets ? 'Seeding...' : '⚡ Seed 9 Standard Roles'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTemplateFormError('');
+                    setSelectedPresetIdx('');
+                    setShowCreateTemplateModal(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-black hover:bg-gray-800 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                >
+                  <Plus size={13} />
+                  <span>Create Custom Template</span>
+                </button>
+              </div>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-gray-100 text-[10px] font-extrabold text-gray-400 uppercase tracking-wider">
-                    <th className="pb-2">Template & Role</th>
-                    <th className="pb-2">Department / Skills</th>
-                    <th className="pb-2">Rates / Commercials</th>
-                    <th className="pb-2">Work Mode</th>
-                    <th className="pb-2">Created</th>
-                    <th className="pb-2 text-right">Action</th>
+                    <th className="pb-2.5">Template & Role</th>
+                    <th className="pb-2.5">Department / Skills</th>
+                    <th className="pb-2.5">Rates / Commercials</th>
+                    <th className="pb-2.5">Work Mode</th>
+                    <th className="pb-2.5">Created</th>
+                    <th className="pb-2.5 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -1206,7 +1302,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
                       : (sr.ceiling_internal ? `Max ${currency}${sr.ceiling_internal}` : '—');
 
                     return (
-                      <tr key={t.id} className="hover:bg-gray-50/50">
+                      <tr key={t.id} className="hover:bg-white/60 transition-colors">
                         <td className="py-3">
                           <div className="font-bold text-gray-900">{t.name || 'Untitled Template'}</div>
                           <div className="text-[11px] text-gray-500 font-medium">{sr.title || '—'}</div>
@@ -1228,7 +1324,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
                         </td>
                         <td className="py-3 text-gray-700 font-semibold">{rateStr}</td>
                         <td className="py-3">
-                          <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-bold border border-blue-200/60">
+                          <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-800 text-[10px] font-bold border border-gray-200/80">
                             {sr.work_mode || 'Remote'}
                           </span>
                         </td>
@@ -1237,7 +1333,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
                           <button
                             type="button"
                             onClick={() => handleTemplateDelete(t.id)}
-                            className="text-red-600 hover:text-red-800 text-xs font-bold cursor-pointer"
+                            className="text-gray-400 hover:text-red-600 text-xs font-bold transition-colors cursor-pointer"
                           >
                             Delete
                           </button>
@@ -1253,9 +1349,9 @@ export default function DirectorDashboard({ view = 'overview' }) {
       )}
 
       {/* SECTION 3: ALL REQUISITIONS DIRECTORY */}
-      {(activeTab === 'requisitions' || activeTab === 'overview') && (
-        <div className="bg-white border border-gray-200/90 rounded-3xl p-6 shadow-xs space-y-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-gray-100">
+      {activeTab === 'requisitions' && (
+        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-3xl p-5 sm:p-6 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3.5 border-b border-gray-100">
           <div>
             <h2 className="text-base font-extrabold text-gray-900">All Company Requisitions</h2>
             <p className="text-xs text-gray-500 mt-0.5">
@@ -1271,16 +1367,16 @@ export default function DirectorDashboard({ view = 'overview' }) {
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Search requisitions..."
-                className="pl-8 pr-3 py-1.5 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-black focus:bg-white"
+                className="pl-8 pr-3 py-1.5 text-xs bg-white/70 backdrop-blur-md border border-gray-200/80 rounded-xl focus:outline-none focus:border-black focus:bg-white transition-all shadow-2xs"
               />
             </div>
 
-            <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl text-[11px] font-bold">
+            <div className="flex items-center gap-1 bg-white/60 backdrop-blur-md border border-white/80 p-1 rounded-xl text-[11px] font-bold shadow-2xs">
               <button
                 type="button"
                 onClick={() => setStatusFilter('ALL')}
                 className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
-                  statusFilter === 'ALL' ? 'bg-white text-black shadow-2xs font-extrabold' : 'text-gray-500 hover:text-black'
+                  statusFilter === 'ALL' ? 'bg-black text-white shadow-2xs font-extrabold' : 'text-gray-600 hover:text-black'
                 }`}
               >
                 All {requisitions.length > 0 ? `(${requisitions.length})` : ''}
@@ -1289,7 +1385,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
                 type="button"
                 onClick={() => setStatusFilter('PENDING')}
                 className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
-                  statusFilter === 'PENDING' ? 'bg-white text-amber-900 shadow-2xs font-extrabold' : 'text-gray-500 hover:text-black'
+                  statusFilter === 'PENDING' ? 'bg-black text-white shadow-2xs font-extrabold' : 'text-gray-600 hover:text-black'
                 }`}
               >
                 Pending Approval {pendingApprovalsList.length > 0 ? `(${pendingApprovalsList.length})` : ''}
@@ -1298,7 +1394,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
                 type="button"
                 onClick={() => setStatusFilter('APPROVED')}
                 className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
-                  statusFilter === 'APPROVED' ? 'bg-white text-emerald-800 shadow-2xs font-extrabold' : 'text-gray-500 hover:text-black'
+                  statusFilter === 'APPROVED' ? 'bg-black text-white shadow-2xs font-extrabold' : 'text-gray-600 hover:text-black'
                 }`}
               >
                 Approved {approvedList.length > 0 ? `(${approvedList.length})` : ''}
@@ -1307,7 +1403,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
                 type="button"
                 onClick={() => setStatusFilter('REJECTED')}
                 className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
-                  statusFilter === 'REJECTED' ? 'bg-white text-orange-900 shadow-2xs font-extrabold' : 'text-gray-500 hover:text-black'
+                  statusFilter === 'REJECTED' ? 'bg-black text-white shadow-2xs font-extrabold' : 'text-gray-600 hover:text-black'
                 }`}
               >
                 Restructuring / Rejected {rejectedList.length > 0 ? `(${rejectedList.length})` : ''}
@@ -1317,7 +1413,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
                   type="button"
                   onClick={() => setStatusFilter('DELETED')}
                   className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 ${
-                    statusFilter === 'DELETED' ? 'bg-white text-rose-800 shadow-2xs font-extrabold' : 'text-gray-500 hover:text-rose-700'
+                    statusFilter === 'DELETED' ? 'bg-black text-white shadow-2xs font-extrabold' : 'text-gray-600 hover:text-rose-700'
                   }`}
                 >
                   <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
@@ -1506,8 +1602,138 @@ export default function DirectorDashboard({ view = 'overview' }) {
             </table>
           </div>
         )}
-      </div>
+        </div>
       )}
+        </div>
+
+        {/* Right Column: 4 Metric Stat Cards Stacked Vertically (Matches Company Admin ManageHiringManagers) */}
+        <div className="w-full lg:w-44 xl:w-48 shrink-0 flex flex-col gap-2.5 lg:sticky lg:top-4 self-start">
+          {/* Stat Card 1: Total Requisitions */}
+          <div
+            onClick={() => {
+              setActiveTab('requisitions');
+              setStatusFilter('ALL');
+            }}
+            className={`backdrop-blur-2xl border rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between h-[102px] cursor-pointer transition-all ${
+              activeTab === 'requisitions' && statusFilter === 'ALL'
+                ? 'bg-white/85 border-black/40 ring-1 ring-black/15 shadow-sm'
+                : 'bg-white/40 border-white/70 hover:bg-white/60'
+            }`}
+            title="View All Requisitions"
+          >
+            <div className="flex items-center justify-between">
+              <div className="w-7.5 h-7.5 rounded-xl bg-white/60 backdrop-blur-md border border-white/70 flex items-center justify-center text-gray-700 shadow-2xs shrink-0">
+                <Briefcase size={15} />
+              </div>
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-gray-100 text-gray-700 border border-gray-200/80">
+                Total
+              </span>
+            </div>
+            <div>
+              <div className="text-xl sm:text-[22px] font-black text-gray-900 tracking-tight leading-none">
+                {requisitions.length}
+              </div>
+              <div className="text-[10px] font-semibold text-gray-500 mt-0.5">
+                Total Requisitions
+              </div>
+            </div>
+          </div>
+
+          {/* Stat Card 2: Pending Sign-off */}
+          <div
+            onClick={() => {
+              setActiveTab('approvals');
+              setStatusFilter('PENDING');
+            }}
+            className={`backdrop-blur-2xl border rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between h-[102px] cursor-pointer transition-all ${
+              activeTab === 'approvals' || statusFilter === 'PENDING'
+                ? 'bg-white/85 border-amber-400/60 ring-1 ring-amber-400/30 shadow-sm'
+                : pendingApprovalsList.length + pendingWorkOrders.length > 0
+                ? 'bg-white/40 border-amber-300/80 ring-1 ring-amber-400/20 hover:bg-white/60'
+                : 'bg-white/40 border-white/70 hover:bg-white/60'
+            }`}
+            title="Filter by Pending Sign-off"
+          >
+            <div className="flex items-center justify-between">
+              <div className="w-7.5 h-7.5 rounded-xl bg-amber-50/80 border border-amber-200/60 flex items-center justify-center text-amber-700 shadow-2xs shrink-0">
+                <Clock size={15} />
+              </div>
+              {pendingApprovalsList.length + pendingWorkOrders.length > 0 ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                  Sign-off
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-gray-100 text-gray-500 border border-gray-200/80">
+                  Clear
+                </span>
+              )}
+            </div>
+            <div>
+              <div className="text-xl sm:text-[22px] font-black text-gray-900 tracking-tight leading-none">
+                {pendingApprovalsList.length + pendingWorkOrders.length}
+              </div>
+              <div className="text-[10px] font-semibold text-gray-500 mt-0.5">
+                Pending Sign-off
+              </div>
+            </div>
+          </div>
+
+          {/* Stat Card 3: Approved Requisitions */}
+          <div
+            onClick={() => {
+              setActiveTab('requisitions');
+              setStatusFilter('APPROVED');
+            }}
+            className={`backdrop-blur-2xl border rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between h-[102px] cursor-pointer transition-all ${
+              statusFilter === 'APPROVED'
+                ? 'bg-white/85 border-emerald-400/60 ring-1 ring-emerald-400/30 shadow-sm'
+                : 'bg-white/40 border-white/70 hover:bg-white/60'
+            }`}
+            title="Filter by Approved Requisitions"
+          >
+            <div className="flex items-center justify-between">
+              <div className="w-7.5 h-7.5 rounded-xl bg-emerald-50/80 border border-emerald-200/60 flex items-center justify-center text-emerald-700 shadow-2xs shrink-0">
+                <CheckCircle2 size={15} />
+              </div>
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/80">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                Live
+              </span>
+            </div>
+            <div>
+              <div className="text-xl sm:text-[22px] font-black text-gray-900 tracking-tight leading-none">
+                {approvedList.length}
+              </div>
+              <div className="text-[10px] font-semibold text-gray-500 mt-0.5">
+                Approved Requisitions
+              </div>
+            </div>
+          </div>
+
+          {/* Stat Card 4: Shortlisted Candidates */}
+          <div
+            className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between h-[102px]"
+          >
+            <div className="flex items-center justify-between">
+              <div className="w-7.5 h-7.5 rounded-xl bg-white/60 backdrop-blur-md border border-white/70 flex items-center justify-center text-gray-700 shadow-2xs shrink-0">
+                <Users size={15} />
+              </div>
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-blue-50 text-blue-700 border border-blue-200/80">
+                Profiles
+              </span>
+            </div>
+            <div>
+              <div className="text-xl sm:text-[22px] font-black text-gray-900 tracking-tight leading-none">
+                {candidates.length}
+              </div>
+              <div className="text-[10px] font-semibold text-gray-500 mt-0.5">
+                Shortlisted
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {viewModalLoading && (
         <div role="status" className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center">
@@ -1517,7 +1743,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
       {/* DEDICATED DIRECTOR REQUISITION DETAILS MODAL */}
       {selectedRequisitionForView && (
         <div
-          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 overflow-y-auto"
+          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 overflow-y-auto"
           onClick={handleCloseRequisitionView}
         >
           <div
@@ -1957,7 +2183,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
 
       {/* Rejection Reason Modal */}
       {rejectModalReq && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 border border-gray-100 text-left animate-in fade-in zoom-in duration-150">
             <div className="flex items-center justify-between pb-3 border-b border-gray-100">
               <div className="flex items-center gap-2 text-red-600 font-extrabold text-sm">
@@ -2020,7 +2246,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
 
       {/* MODAL: CREATE ROLE TEMPLATE FORM */}
       {showCreateTemplateModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <div className="bg-white rounded-3xl max-w-3xl w-full shadow-2xl border border-gray-200 overflow-hidden my-auto max-h-[92vh] flex flex-col animate-in fade-in zoom-in-95 duration-150">
             {/* Modal Header */}
             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/70 shrink-0">
@@ -2054,6 +2280,73 @@ export default function DirectorDashboard({ view = 'overview' }) {
                   <span className="font-semibold">{templateFormError}</span>
                 </div>
               )}
+
+              {/* ⚡ Quick Fill from Pre-Approved Preset */}
+              <div className="p-3.5 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-white border border-amber-200/90 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center font-extrabold text-xs shadow-xs shrink-0">
+                    ⚡
+                  </div>
+                  <div>
+                    <div className="text-xs font-black text-gray-900 flex items-center gap-1.5">
+                      <span>Quick-Fill from Pre-Approved Role Preset</span>
+                      <span className="px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[9.5px] font-bold">9 Standard Roles</span>
+                    </div>
+                    <div className="text-[11px] text-gray-500 font-medium">
+                      Select a standardized role to instantly auto-populate all 4 sections below
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <select
+                    value={selectedPresetIdx}
+                    onChange={(e) => handleApplyPreset(e.target.value)}
+                    className="bg-white border border-gray-300 rounded-xl px-3 py-1.5 text-xs font-bold text-gray-800 shadow-2xs focus:outline-none focus:border-black cursor-pointer"
+                  >
+                    <option value="" disabled>⚡ Choose a Role Preset (9 Available)...</option>
+                    {PRESET_ROLE_TEMPLATES.map((preset, idx) => (
+                      <option key={idx} value={idx}>
+                        {idx + 1}. {preset.name}
+                      </option>
+                    ))}
+                  </select>
+                  {selectedPresetIdx !== '' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedPresetIdx('');
+                        setTemplateForm({
+                          name: '',
+                          title: '',
+                          job_family: '',
+                          priority: 'Normal',
+                          must_have_skills: '',
+                          nice_to_have_skills: '',
+                          experience: '3-5 years',
+                          headcount: 1,
+                          certifications: '',
+                          engagement_type: 'Contract',
+                          duration: '6 Months',
+                          rate_basis: 'Hourly',
+                          budget_cap_currency: 'INR',
+                          vendor_floor: '',
+                          vendor_cap: '',
+                          ceiling_internal: '',
+                          work_mode: 'Remote',
+                          primary_location: '',
+                          equipment_provided: 'Company-provided',
+                          bgv_required: 'Standard',
+                          nda_required: 'Yes',
+                          description: '',
+                        });
+                      }}
+                      className="px-2 py-1.5 text-[11px] text-gray-500 hover:text-gray-900 font-semibold cursor-pointer"
+                    >
+                      Reset
+                    </button>
+                  )}
+                </div>
+              </div>
 
               {/* Group 1: Role Identification */}
               <div className="space-y-3 bg-gray-50/60 p-4 rounded-2xl border border-gray-100">

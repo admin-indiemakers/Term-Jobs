@@ -50,6 +50,7 @@ const RequisitionDetail = lazy(() => import('./pages/requisitions/RequisitionDet
 const ShortlistedCandidates = lazy(() => import('./pages/candidates/ShortlistedCandidates'));
 const RequisitionCandidates = lazy(() => import('./pages/candidates/RequisitionCandidates'));
 const CandidateSchedule = lazy(() => import('./pages/candidates/CandidateSchedule'));
+const CandidateInterviewPanel = lazy(() => import('./pages/candidates/CandidateInterviewPanel'));
 const AcceptedCandidates = lazy(() => import('./pages/candidates/AcceptedCandidates'));
 const CandidatePortal = lazy(() => import('./pages/candidates/CandidatePortal'));
 const CandidateOnboarding = lazy(() => import('./pages/candidates/CandidateOnboarding'));
@@ -263,6 +264,9 @@ export default function App() {
           <Route path="/interview/candidate" element={<CandidateInterviewPortal />} />
           <Route path="/interview/staff" element={<InterviewerStaffPortal />} />
           <Route path="/interview/room/:roundId" element={<InterviewMeetingRoomPage />} />
+          <Route path="/interview-panel/:candidateId" element={<RequireAuth><CandidateInterviewPanel /></RequireAuth>} />
+          <Route path="/interview-panel" element={<RequireAuth><CandidateInterviewPanel /></RequireAuth>} />
+          <Route path="/requisitions/:reqId/candidates/:candidateId/interview" element={<RequireAuth><CandidateInterviewPanel /></RequireAuth>} />
           <Route path="/admin/login" element={<SuperAdminLogin />} />
           <Route path="/director/login" element={<DirectorLogin />} />
           <Route path="/" element={<LandingPage />} />

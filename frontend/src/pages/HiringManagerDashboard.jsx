@@ -63,6 +63,7 @@ import { marked } from 'marked';
 import { interviewApi } from '../interview/services/interviewApi';
 import HiringPipelineResponseCard, { parseHiringPipelineData } from '../components/HiringPipelineResponseCard';
 import TeamChatDrawer from '../components/TeamChatDrawer';
+import CalendarModal from '../components/CalendarModal';
 
 marked.setOptions({
   breaks: true,
@@ -249,6 +250,7 @@ export default function HiringManagerDashboard() {
   const [showCliqModal, setShowCliqModal] = useState(false);
   const [showTeamsModal, setShowTeamsModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
   const [unreadChatCount, setUnreadChatCount] = useState(0);
   const [pwdForm, setPwdForm] = useState({ current_password: '', new_password: '' });
   const [changingPwd, setChangingPwd] = useState(false);
@@ -2283,6 +2285,16 @@ export default function HiringManagerDashboard() {
           </button>
           <button
             type="button"
+            onClick={() => setIsCalendarModalOpen(true)}
+            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
+              isCalendarModalOpen ? 'bg-black text-white' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+            }`}
+            title="Calendar"
+          >
+            <Calendar size={13} strokeWidth={2} />
+          </button>
+          <button
+            type="button"
             onClick={() => {
               setToolsSearchQuery('');
               setIsToolsDrawerOpen((prev) => !prev);
@@ -2396,11 +2408,12 @@ export default function HiringManagerDashboard() {
 
         <button
           type="button"
-          onClick={() => {
-            setToolsSearchQuery('interview');
-            setIsToolsDrawerOpen(true);
-          }}
-          className="w-7 h-7 sm:w-7.5 sm:h-7.5 rounded-lg bg-white hover:bg-[#F7F7F5] border border-[#E5E5E5] text-[#111111] shadow-2xs hover:shadow-xs flex items-center justify-center transition-all cursor-pointer active:scale-95"
+          onClick={() => setIsCalendarModalOpen(true)}
+          className={`w-7 h-7 sm:w-7.5 sm:h-7.5 rounded-lg border transition-all cursor-pointer active:scale-95 flex items-center justify-center ${
+            isCalendarModalOpen
+              ? 'bg-[#111111] text-white border-[#111111] shadow-xs'
+              : 'bg-white hover:bg-[#F7F7F5] border-[#E5E5E5] text-[#111111] shadow-2xs hover:shadow-xs'
+          }`}
           title="Interviews & Calendar"
         >
           <Calendar size={12.5} strokeWidth={2} />
@@ -4347,6 +4360,12 @@ export default function HiringManagerDashboard() {
         isOpen={isTeamChatDrawerOpen}
         onClose={() => setIsTeamChatDrawerOpen(false)}
         currentUserName={userName}
+      />
+
+      {/* Calendar Popup Modal */}
+      <CalendarModal
+        isOpen={isCalendarModalOpen}
+        onClose={() => setIsCalendarModalOpen(false)}
       />
 
 </div>

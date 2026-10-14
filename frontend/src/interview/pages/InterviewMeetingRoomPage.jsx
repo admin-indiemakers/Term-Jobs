@@ -15,6 +15,8 @@ export function InterviewMeetingRoomPage() {
 
   const queryRole = searchParams.get('role') || 'candidate';
   const queryName = searchParams.get('name') || (queryRole === 'candidate' ? 'Candidate' : 'Interviewer');
+  const queryMode = searchParams.get('mode'); // 'meet' | 'ai'
+  const isAiRequested = queryMode === 'ai';
 
   useEffect(() => {
     if (!roundId) {
@@ -28,7 +30,7 @@ export function InterviewMeetingRoomPage() {
       .then((res) => {
         if (res) {
           if (res.status !== 'Completed' && res.is_expired) {
-            setErrorMsg('This AI interview link has expired after 10 hours. Please request a new interview invitation.');
+            setErrorMsg('This interview link has expired after 10 hours. Please request a new interview invitation.');
           } else {
             setRound(res);
           }
@@ -85,7 +87,7 @@ export function InterviewMeetingRoomPage() {
             Interview Already Attended
           </h2>
           <p className="text-xs text-zinc-400 mb-6 leading-relaxed">
-            You have already completed and submitted your AI interview for this role. Under TermJobs verification security, <strong className="text-zinc-200">only one interview attempt is permitted</strong>.
+            You have already completed and submitted your interview for this role. Under TermJobs verification security, <strong className="text-zinc-200">only one interview attempt is permitted</strong>.
           </p>
 
           {/* Details Card */}
@@ -143,7 +145,7 @@ export function InterviewMeetingRoomPage() {
         </div>
         <h2 className="text-2xl font-black text-white mb-2 tracking-tight">Interview Link Expired</h2>
         <p className="text-xs text-zinc-400 mb-6 max-w-sm leading-relaxed">
-          AI interview links and passcodes are strictly valid for <strong>10 hours</strong> from delivery. This access window has ended.
+          Interview links and access passcodes are valid for <strong>10 hours</strong> from delivery. This access window has ended.
         </p>
         <div className="flex items-center gap-3">
           <button

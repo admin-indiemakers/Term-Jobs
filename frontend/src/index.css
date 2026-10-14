@@ -4025,56 +4025,8 @@ nav.hide {
   --console-h: 0;
   --console-s: 0%;
   --console-l: 0%;
-  background: #fafafa;
+  background: transparent;
   position: relative;
-}
-
-.app-shell.console-director .sidebar {
-  background: #ffffff;
-  border-radius: 28px;
-}
-
-.app-shell.console-director .brand-mark {
-  background: #0a0a0a;
-  border-radius: 8px;
-  color: #ffffff;
-  box-shadow: none;
-}
-
-.app-shell.console-director .brand-name {
-  color: #0a0a0a;
-}
-
-.app-shell.console-director .brand-sub,
-.app-shell.console-director .nav-section-label {
-  color: #a3a3a3;
-  letter-spacing: 0.08em;
-}
-
-.app-shell.console-director .nav-link {
-  color: #6b6b6b;
-  font-weight: 500;
-  border-radius: 4px;
-  line-height: 1.3;
-  padding-top: 7px;
-  padding-bottom: 7px;
-}
-
-.app-shell.console-director .nav-link:hover {
-  background: #f4f4f4;
-  color: #0a0a0a;
-}
-
-.app-shell.console-director .nav-link.active {
-  background: #0a0a0a !important;
-  color: #ffffff !important;
-  font-weight: 700 !important;
-  border-radius: 14px !important;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.14) !important;
-}
-
-.app-shell.console-director .sidebar-footer {
-  border-top: 1px solid #ededed;
 }
 
 .app-shell.console-director .user-avatar {

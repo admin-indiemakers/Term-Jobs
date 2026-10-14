@@ -320,34 +320,34 @@ export default function DirectorWorkOrders() {
       `}</style>
 
       {/* Main Container */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 space-y-6">
-        {/* Header Bar */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-[#E5E7EB]">
+      <div
+        className="w-full min-w-0 pb-16 space-y-4 text-left"
+        style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}
+      >
+        {/* Top Header Area */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 shrink-0">
           <div>
-            <div className="flex items-center gap-2.5">
-              <div className="w-10 h-10 rounded-xl bg-[#0A0A0A] text-white flex items-center justify-center font-bold shadow-xs">
-                <Crown className="w-5 h-5 text-amber-400" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h1 className="text-2xl font-bold tracking-tight text-[#0A0A0A]">
-                    Director Work Orders & SOW Approval
-                  </h1>
-                  <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
-                    Executive Governance
-                  </span>
-                </div>
-                <p className="text-xs text-[#6B7280] mt-0.5">
-                  Inspect commercial rate schedules, timesheet breakdowns, and grant final executive Director sign-off for Work Orders authorized by Procurement.
-                </p>
-              </div>
+            <div className="text-[10px] font-extrabold text-gray-400 tracking-wider uppercase mb-1">
+              {user?.tenant_name || 'TERM JOBS'} • EXECUTIVE GOVERNANCE
             </div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight leading-none">
+              Director Work Orders & SOW Sign-off
+            </h1>
+            <p className="text-xs sm:text-[13px] text-gray-500 font-normal mt-1 max-w-2xl">
+              Inspect commercial rate schedules, timesheet breakdowns, and grant final executive Director sign-off for Work Orders authorized by Procurement.
+            </p>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 shrink-0">
+            {kpiStats.pending > 0 && (
+              <span className="px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-bold flex items-center gap-1.5 shadow-2xs">
+                <Clock size={12} className="text-amber-600" />
+                <span>{kpiStats.pending} Pending Sign-Off</span>
+              </span>
+            )}
             <button
               onClick={loadWorkOrders}
-              className="px-3.5 py-2 bg-white hover:bg-gray-50 border border-gray-200 text-xs font-bold text-gray-800 rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+              className="px-3.5 py-2 bg-white/70 hover:bg-white border border-white/90 text-xs font-bold text-gray-800 rounded-xl transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer active:scale-95"
             >
               <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
               <span>Refresh Work Orders</span>
@@ -356,132 +356,121 @@ export default function DirectorWorkOrders() {
         </div>
 
         {/* Director Navigation Tabs */}
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-1.5 p-1.5 bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl overflow-x-auto shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)]">
           <button
             type="button"
             onClick={() => navigate('/dashboard/director')}
-            className="px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer bg-white hover:bg-gray-100 text-gray-700 border border-gray-200 shadow-2xs"
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap text-gray-600 hover:text-black hover:bg-white/60 cursor-pointer"
           >
-            📊 Executive Overview
+            <span>📊 Executive Overview</span>
           </button>
 
           <button
             type="button"
             onClick={() => navigate('/dashboard/director/approvals')}
-            className="px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 bg-white hover:bg-gray-100 text-gray-700 border border-gray-200 shadow-2xs"
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap text-gray-600 hover:text-black hover:bg-white/60 cursor-pointer"
           >
-            <ShieldCheck size={14} />
+            <ShieldCheck size={13.5} className="text-gray-500" />
             <span>Requisition Approvals</span>
           </button>
 
           <button
             type="button"
             onClick={() => navigate('/dashboard/director/requisitions')}
-            className="px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer bg-white hover:bg-gray-100 text-gray-700 border border-gray-200 shadow-2xs"
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap text-gray-600 hover:text-black hover:bg-white/60 cursor-pointer"
           >
-            💼 All Requisitions
+            <span>💼 All Requisitions</span>
           </button>
 
           <button
             type="button"
-            className="px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 bg-amber-400 text-black shadow-xs font-black"
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap bg-black text-white shadow-xs cursor-pointer ml-auto"
           >
-            <Receipt size={14} />
+            <Receipt size={13.5} className="text-white" />
             <span>Work Orders (SOW)</span>
           </button>
         </div>
 
         {/* Top KPI Stat Highlights */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white p-5 rounded-2xl border border-[#E5E7EB] shadow-xs flex items-center justify-between">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+          <div className="bg-white/40 backdrop-blur-2xl border border-amber-300/80 rounded-2xl p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] ring-1 ring-amber-400/20 flex items-center justify-between">
             <div>
-              <div className="text-[11px] font-bold uppercase tracking-wider text-amber-700">
+              <div className="text-[10px] font-extrabold uppercase tracking-wider text-amber-800">
                 Pending Director Sign-off
               </div>
-              <div className="text-2xl font-black text-[#0A0A0A] mt-1 flex items-center gap-2">
+              <div className="text-2xl font-black text-amber-900 mt-1 flex items-center gap-2">
                 <span>{kpiStats.pending}</span>
                 {kpiStats.pending > 0 && (
                   <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
                 )}
               </div>
-              <div className="text-xs text-amber-600 font-medium mt-1 flex items-center gap-1">
+              <div className="text-[11px] text-amber-700 font-medium mt-0.5 flex items-center gap-1">
                 <Clock className="w-3 h-3" /> Requires Director Action
               </div>
             </div>
-            <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center font-bold">
-              <Crown className="w-6 h-6" />
+            <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold">
+              <Crown className="w-5 h-5" />
             </div>
           </div>
 
-          <div className="bg-white p-5 rounded-2xl border border-[#E5E7EB] shadow-xs flex items-center justify-between">
+          <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex items-center justify-between">
             <div>
-              <div className="text-[11px] font-bold uppercase tracking-wider text-[#6B7280]">
+              <div className="text-[10px] font-extrabold uppercase tracking-wider text-gray-400">
                 Procurement Authorized
               </div>
-              <div className="text-2xl font-black text-[#0A0A0A] mt-1">
+              <div className="text-2xl font-black text-gray-900 mt-1">
                 {kpiStats.procurementCleared}
               </div>
-              <div className="text-xs text-indigo-600 font-medium mt-1 flex items-center gap-1">
-                <Check className="w-3 h-3" /> Verified by Procurement Lead
+              <div className="text-[11px] text-gray-500 font-medium mt-0.5 flex items-center gap-1">
+                <Check className="w-3 h-3" /> Verified by Procurement
               </div>
             </div>
-            <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center font-bold">
-              <FileCheck2 className="w-6 h-6" />
+            <div className="w-10 h-10 rounded-xl bg-gray-100 text-gray-700 flex items-center justify-center font-bold">
+              <FileCheck2 className="w-5 h-5" />
             </div>
           </div>
 
-          <div className="bg-white p-5 rounded-2xl border border-[#E5E7EB] shadow-xs flex items-center justify-between">
+          <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex items-center justify-between">
             <div>
-              <div className="text-[11px] font-bold uppercase tracking-wider text-[#6B7280]">
+              <div className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-800">
                 Fully Approved & Active
               </div>
-              <div className="text-2xl font-black text-[#0A0A0A] mt-1">
+              <div className="text-2xl font-black text-emerald-900 mt-1">
                 {kpiStats.approved}
               </div>
-              <div className="text-xs text-emerald-600 font-medium mt-1 flex items-center gap-1">
+              <div className="text-[11px] text-emerald-700 font-medium mt-0.5 flex items-center gap-1">
                 <CheckCircle2 className="w-3 h-3" /> Executed Work Orders
               </div>
             </div>
-            <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
-              <ShieldCheck className="w-6 h-6" />
+            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
+              <ShieldCheck className="w-5 h-5" />
             </div>
           </div>
 
-          <div className="bg-[#0A0A0A] text-white p-5 rounded-2xl shadow-xl flex items-center justify-between border border-white/10">
+          <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex items-center justify-between">
             <div>
-              <div className="text-[11px] font-bold uppercase tracking-wider text-[#9CA3AF]">
+              <div className="text-[10px] font-extrabold uppercase tracking-wider text-gray-400">
                 Monthly Committed Spend
               </div>
-              <div className="text-2xl font-black text-[#22C55E] mt-1">
+              <div className="text-2xl font-black text-gray-900 mt-1">
                 {formatCurrency(kpiStats.totalSpend)}
               </div>
-              <div className="text-xs text-gray-400 font-medium mt-1 flex items-center gap-1">
-                <TrendingUp className="w-3 h-3 text-[#22C55E]" /> Contract Billing Value
+              <div className="text-[11px] text-emerald-700 font-medium mt-0.5 flex items-center gap-1">
+                <TrendingUp className="w-3 h-3 text-emerald-600" /> Active Contract Billing
               </div>
             </div>
-            <div className="w-12 h-12 rounded-xl bg-white/10 text-white flex items-center justify-center font-bold">
-              <DollarSign className="w-6 h-6" />
+            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
+              <DollarSign className="w-5 h-5" />
             </div>
           </div>
         </div>
 
         {/* Filter and Search Bar */}
-        <div className="flex flex-col md:flex-row items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-[#E5E7EB] shadow-xs">
-          <div className="relative w-full md:w-96">
-            <Search className="w-4 h-4 text-[#9CA3AF] absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Search by worker name, role, work order #..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 text-sm bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl focus:outline-hidden focus:ring-2 focus:ring-black text-[#111827]"
-            />
-          </div>
-
-          <div className="flex items-center gap-2 overflow-x-auto w-full md:w-auto pb-1 md:pb-0">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-2 bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)]">
+          <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto">
             {[
               { id: 'ALL', label: 'All Work Orders' },
-              { id: 'PENDING', label: 'Pending Director Sign-off' },
+              { id: 'PENDING', label: 'Pending Sign-off' },
               { id: 'APPROVED', label: 'Approved by Director' },
               { id: 'REVISION', label: 'Revision Requested' },
               { id: 'REJECTED', label: 'Rejected' },
@@ -489,15 +478,26 @@ export default function DirectorWorkOrders() {
               <button
                 key={tab.id}
                 onClick={() => setStatusFilter(tab.id)}
-                className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap cursor-pointer ${
+                className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all whitespace-nowrap cursor-pointer ${
                   statusFilter === tab.id
-                    ? 'bg-[#0A0A0A] text-white shadow-xs'
-                    : 'bg-[#F3F4F6] text-[#4B5563] hover:bg-[#E5E7EB]'
+                    ? 'bg-black text-white shadow-xs'
+                    : 'text-gray-600 hover:text-black hover:bg-white/60'
                 }`}
               >
                 {tab.label}
               </button>
             ))}
+          </div>
+
+          <div className="relative w-full sm:w-72">
+            <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Search by worker name, role..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-3 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs placeholder:text-gray-400 transition-all"
+            />
           </div>
         </div>
 
