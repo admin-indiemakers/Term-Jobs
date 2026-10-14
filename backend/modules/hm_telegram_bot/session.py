@@ -11,6 +11,8 @@ MAX_HISTORY_TURNS = 20
 
 def _build_session_key(chat_id: int, tenant_id: Optional[str] = None) -> str:
     """Build composite key for tenant-scoped session cache."""
+    from modules.hiring_manager_agent.scope import current_hiring_scope
+    tenant_id = tenant_id or (current_hiring_scope() or {}).get('tenant_id')
     return f"{tenant_id}:{chat_id}" if tenant_id else str(chat_id)
 
 

@@ -339,7 +339,7 @@ async def _handle_message_inner(
         user_name = session.get("current_user", {}).get("name", "Hiring Manager")
 
         meetings = list_scheduled_interviews(
-            user_id=str(from_user.get("id", "")),
+            user_id=session["current_user"]["id"],
             user_name=user_name,
             tenant_id=tenant_id
         )
@@ -443,7 +443,7 @@ async def _handle_message_inner(
 
         plan = prepare_candidate_offboarding_proposal(
             candidate_identifier=c_target,
-            user_id=str(from_user.get("id", "")),
+            user_id=session["current_user"]["id"],
             user_name=from_user.get("first_name", "Hiring Manager"),
             tenant_id=tenant_id,
             company_name=company_name
@@ -812,7 +812,13 @@ async def handle_message(
         return
 
     try:
-        await _handle_message_inner(token, message, tenant_id=tenant_id)
+        from contextlib import nullcontext
+        from .auth import linked_user
+        from modules.hiring_manager_agent.scope import hiring_scope
+        actor = linked_user(chat_id, (message.get('from') or {}).get('id'), tenant_id)
+        scope = hiring_scope(db, {**actor, 'id': str(actor.get('id') or actor.get('_id'))}) if actor else nullcontext()
+        with scope:
+            await _handle_message_inner(token, message, tenant_id=actor.get('tenant_id') if actor else tenant_id)
     except Exception as e:
         print(f"[HM TELEGRAM BOT MESSAGE ERROR] {e}")
         import traceback
@@ -1177,7 +1183,7 @@ async def _handle_callback_query_inner(
 
         res = confirm_and_execute_candidate_offboarding(
             candidate_identifier=cand_name,
-            user_id=str(from_user.get("id", "")),
+            user_id=session["current_user"]["id"],
             user_name=from_user.get("first_name", "Hiring Manager"),
             tenant_id=tenant_id,
             company_name=company_name
@@ -1201,7 +1207,7 @@ async def _handle_callback_query_inner(
         company_name = session.get("current_user", {}).get("company_name", "TermJobs")
         user_name = session.get("current_user", {}).get("name", "Hiring Manager")
         meetings = list_scheduled_interviews(
-            user_id=str(from_user.get("id", "")),
+            user_id=session["current_user"]["id"],
             user_name=user_name,
             tenant_id=tenant_id
         )
@@ -1238,7 +1244,10 @@ async def handle_callback_query(
         await send_telegram_message(token, chat_id, 'Your Telegram session is disconnected. Send /login to sign in.')
         return
     try:
-        await _handle_callback_query_inner(token, callback_query, tenant_id=tenant_id)
+        from modules.hiring_manager_agent.scope import hiring_scope
+        actor = linked_user(chat_id, sender.get('id'), tenant_id)
+        with hiring_scope(db, {**actor, 'id': str(actor.get('id') or actor.get('_id'))}):
+            await _handle_callback_query_inner(token, callback_query, tenant_id=actor['tenant_id'])
     except Exception as e:
         print(f"[HM TELEGRAM BOT CALLBACK ERROR] {e}")
         import traceback

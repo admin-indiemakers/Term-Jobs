@@ -133,3 +133,53 @@ def test_complete_login_http_endpoint_connects_and_queues_confirmation(setup, mo
     assert response.json()['status'] == 'success'
     assert auth.linked_user(123)['id'] == actor.id
     assert len(sent) == 1
+
+
+def test_telegram_requisitions_use_linked_identity_company_and_send_one_reply(setup, monkeypatch):
+    from modules.hiring_manager_agent import agent
+    from modules.hiring_manager_agent.scope import ScopedDatabase
+    database, actor = setup
+    database.users.update_many({}, {'$set': {'telegram_chat_id': '123', 'telegram_user_id': '123', 'name': 'Arjun', 'email': 'hm@example.com'}})
+    database.tenants.insert_one({'id': 'company', 'name': 'Example Company'})
+    database.requisitions.insert_many([
+        {'id': 'owned', 'tenant_id': 'company', 'created_by': 'hm', 'title': 'DevOps Engineer', 'status': 'Published'},
+        {'id': 'other-manager', 'tenant_id': 'company', 'created_by': 'other', 'title': 'Private Other Role', 'status': 'Published'},
+        {'id': 'foreign', 'tenant_id': 'foreign', 'created_by': 'hm', 'title': 'Foreign Role', 'status': 'Published'},
+    ])
+    monkeypatch.setattr(agent, 'db', ScopedDatabase(database))
+    replies = []
+    async def send(*args): replies.append(args[2])
+    async def action(*args): pass
+    monkeypatch.setattr(handlers, 'send_telegram_message', send)
+    monkeypatch.setattr(handlers, 'send_chat_action', action)
+    message = {'chat': {'id': 123, 'type': 'private'}, 'from': {'id': 123}, 'text': 'hi'}
+    asyncio.run(handlers.handle_message('fake-token', message))
+    assert 'Example Company' in replies[-1]
+    replies.clear()
+    message['text'] = 'can u show me the active requisitions'
+    asyncio.run(handlers.handle_message('fake-token', message))
+    assert len(replies) == 1
+    assert 'DevOps Engineer' in replies[0]
+    assert 'Private Other Role' not in replies[0]
+    assert 'Foreign Role' not in replies[0]
+    assert 'issue processing' not in replies[0]
+    assert list(session._SESSIONS) == ['company:123']
+    assert len(session._SESSIONS['company:123']['history']) == 2
+
+
+def test_empty_requisition_list_has_no_followup_error(setup, monkeypatch):
+    from modules.hiring_manager_agent import agent
+    from modules.hiring_manager_agent.scope import ScopedDatabase
+    database, _ = setup
+    database.users.update_many({}, {'$set': {'telegram_chat_id': '123', 'telegram_user_id': '123', 'name': 'Manager'}})
+    database.tenants.insert_one({'id': 'company', 'name': 'Example Company'})
+    monkeypatch.setattr(agent, 'db', ScopedDatabase(database))
+    replies = []
+    async def send(*args): replies.append(args[2])
+    monkeypatch.setattr(handlers, 'send_telegram_message', send)
+    async def action(*args): pass
+    monkeypatch.setattr(handlers, 'send_chat_action', action)
+    asyncio.run(handlers.handle_message('fake-token', {'chat': {'id': 123}, 'from': {'id': 123}, 'text': 'show active requisitions'}))
+    assert len(replies) == 1
+    assert 'No active job requisitions' in replies[0]
+    assert 'Example Company' in replies[0]
