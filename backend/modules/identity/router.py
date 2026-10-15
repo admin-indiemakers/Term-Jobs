@@ -254,10 +254,9 @@ If you did not expect this message, please contact your administrator.
     msg["From"]        = f"TermJob <{sender}>"
     msg["To"]          = to_email
     msg["Reply-To"]    = sender
-    msg["Message-ID"]  = email.utils.make_msgid(domain="termjob.in")
+    msg["Message-ID"]  = email.utils.make_msgid(domain=sender.rsplit("@", 1)[-1])
     msg["Date"]        = email.utils.formatdate(localtime=True)
     msg["X-Mailer"]    = "TermJob Notification Service"
-    msg["Precedence"]  = "bulk"
     msg["X-Priority"]  = "3"
     # Attach plain-text FIRST — always before HTML. Spam filters prefer multipart.
     msg.attach(MIMEText(plain_text, "plain", "utf-8"))

@@ -1,6 +1,34 @@
 """Credential mail delivery with explicit outcomes and safe SMTP fallback."""
 import smtplib
 import ssl
+import re
+
+
+def _rejection(error, password):
+    """Retain the provider diagnosis without exposing credentials or addresses."""
+    detail = error.smtp_error
+    if isinstance(detail, bytes):
+        detail = detail.decode('utf-8', errors='replace')
+    detail = str(detail)
+    for secret in (password, ''.join(password.split())):
+        if secret:
+            detail = detail.replace(secret, '[redacted]')
+    detail = re.sub(r'[\w.+-]+@[\w.-]+', '[email]', detail)
+    detail = ' '.join(detail.split())[:1000]
+    lower = detail.lower()
+    if any(word in lower for word in ('limit', 'quota')):
+        code = 'sender_limit_exceeded'
+        guidance = 'The Gmail sending limit was reached. Wait for the limit to reset or configure another sender.'
+    elif any(word in lower for word in ('dkim', 'spf', 'dmarc', 'unauthenticated')):
+        code = 'sender_authentication_rejected'
+        guidance = 'Check SPF, DKIM and DMARC for the sender domain in Google Workspace.'
+    elif any(word in lower for word in ('unsolicited', 'spam', 'suspicious', 'reputation')):
+        code = 'message_blocked'
+        guidance = 'Gmail blocked the message under its spam policy. Review the sender account and email content before retrying.'
+    else:
+        code = 'message_rejected'
+        guidance = 'Review the Gmail sender account or Workspace mail policy before retrying.'
+    return {'status': 'failed', 'code': code, 'reason': f'Gmail rejected the email (SMTP {error.smtp_code}). {guidance} Gmail response: {detail}'}
 
 
 def _close(smtp):
@@ -43,7 +71,9 @@ def deliver_credentials_message(message, sender, password, recipient):
         except smtplib.SMTPRecipientsRefused:
             return {'status': 'failed', 'code': 'recipient_refused', 'reason': 'Gmail rejected the candidate email address.'}
         except smtplib.SMTPDataError as error:
-            return {'status': 'failed', 'code': 'message_rejected', 'reason': f'Gmail rejected the email (SMTP {error.smtp_code}). Check sender limits and account restrictions.'}
+            return _rejection(error, password)
+        except smtplib.SMTPSenderRefused as error:
+            return _rejection(error, password)
         except (OSError, smtplib.SMTPException):
             return {'status': 'failed', 'code': 'delivery_unconfirmed', 'reason': 'Connection ended during delivery. Delivery could not be confirmed; check the inbox before retrying.'}
         finally:

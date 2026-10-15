@@ -1,6 +1,35 @@
 import importlib
 from unittest.mock import MagicMock
 import smtplib
+import pytest
+
+
+@pytest.mark.parametrize('reply,code', [
+    (b'5.4.5 Daily user sending limit exceeded', 'sender_limit_exceeded'),
+    (b'5.7.26 Unauthenticated email: DKIM failed', 'sender_authentication_rejected'),
+    (b'5.7.1 Message is likely unsolicited mail', 'message_blocked'),
+    (b'5.7.0 Email sending denied', 'message_rejected'),
+])
+def test_rejection_preserves_diagnosis_without_retrying(monkeypatch, reply, code):
+    transport = importlib.import_module('modules.identity.mail_transport')
+    from email.mime.text import MIMEText
+    smtp = MagicMock()
+    smtp.sendmail.side_effect = smtplib.SMTPDataError(550, reply)
+    monkeypatch.setattr(transport.smtplib, 'SMTP_SSL', lambda *args, **kwargs: smtp)
+    fallback = MagicMock()
+    monkeypatch.setattr(transport.smtplib, 'SMTP', fallback)
+    result = transport.deliver_credentials_message(MIMEText('test'), 'sender@example.com', 'password', 'candidate@example.com')
+    assert result['code'] == code
+    assert reply.decode() in result['reason']
+    smtp.sendmail.assert_called_once()
+    fallback.assert_not_called()
+
+
+def test_rejection_redacts_secrets_and_email_addresses():
+    transport = importlib.import_module('modules.identity.mail_transport')
+    result = transport._rejection(smtplib.SMTPDataError(550, b'denied sender@example.com abcd efgh abcdefgh'), 'abcd efgh')
+    assert 'sender@example.com' not in result['reason']
+    assert 'abcd' not in result['reason']
 
 
 def test_gmail_grouped_app_password_is_normalized(monkeypatch):
