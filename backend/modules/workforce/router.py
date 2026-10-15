@@ -1827,18 +1827,19 @@ def get_finance_work_orders(current_user: User = Depends(get_current_user)):
         )
         d["requisition_title"] = req_title
 
-        # Resolve vendor name
+        # Business parties come from the engagement, not the person dispatching it.
+        from modules.billing.services.engagement_details import resolve_engagement
+        parties = resolve_engagement(db, wo_rec)
         vendor_name = (
-            d.get("vendor_name")
-            or d.get("recruiter_name")
-            or sow_p.get("supplier_name")
-            or sow_p.get("vendor_name")
-            or wo_rec.get("vendor_name")
-            or sub_rec.get("vendor_name")
-            or "TalentBridge Staffing"
+            parties['vendor_name']
+            or sow_p.get('supplier_name')
+            or sow_p.get('vendor_name')
+            or sub_rec.get('vendor_name')
+            or ''
         )
-        d["vendor_name"] = vendor_name
-        d["recruiter_name"] = vendor_name
+        d['vendor_name'] = vendor_name
+        d['recruiter_name'] = vendor_name
+        d['company_name'] = parties['company_name'] or sow_p.get('company_name') or ''
 
         # Resolve amounts
         tot_amount = float(

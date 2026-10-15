@@ -13,6 +13,7 @@ from typing import Optional, List, Dict, Any
 
 from modules.shared.db import db
 from modules.identity.domain.models import User
+from modules.billing.services.engagement_details import resolve_engagement
 
 
 def _parse_rate(rate_val: Any) -> float:
@@ -66,6 +67,7 @@ def get_accepted_contractors_for_vendor(current_user: User, month_filter: Option
     results = []
 
     for wo in unique_wos:
+        details = resolve_engagement(db, wo)
         cid = (wo.get("candidate_id") or wo.get("workorder_id") or wo.get("id") or "").strip()
         c_clean = cid.replace("SDC-", "").replace("SDC -", "").replace("BEAR-", "").replace("BEAR -", "").strip()
         cemail = (wo.get("candidate_email") or "").strip()
@@ -217,8 +219,8 @@ def get_accepted_contractors_for_vendor(current_user: User, month_filter: Option
             "candidate_name": cname,
             "candidate_email": cemail,
             "role": wo.get("job_title") or wo.get("requisition_title") or agreement_data.get("role") or "Specialist",
-            "company_name": wo.get("company_name") or agreement_data.get("companyName") or "SDC limited",
-            "vendor_name": wo.get("vendor_name") or agreement_data.get("supplierName") or "Vendorqueue",
+            "company_name": details["company_name"],
+            "vendor_name": details["vendor_name"],
             "start_date": wo.get("start_date") or agreement_data.get("commencement") or "",
             "end_date": wo.get("end_date") or agreement_data.get("expiry") or "",
             "hourly_rate": hourly_rate,
@@ -291,6 +293,7 @@ def get_candidate_billing_breakdown(workorder_id: str, month_str: Optional[str] 
         raise ValueError(f"Work Order for candidate ID '{workorder_id}' not found.")
 
     cid = wo.get("candidate_id") or wo.get("workorder_id") or clean_id
+    details = resolve_engagement(db, wo)
     cname = wo.get("candidate_name") or "Contractor"
     wo_number = wo.get("work_order_number") or f"WO-{cid[:8].upper()}"
     agreement_data = wo.get("agreement_data") or {}
@@ -484,9 +487,11 @@ def get_candidate_billing_breakdown(workorder_id: str, month_str: Optional[str] 
             "workorder_id": cid,
             "work_order_number": wo_number,
             "role": wo.get("job_title") or wo.get("requisition_title") or agreement_data.get("role") or "Specialist",
-            "company_name": wo.get("company_name") or agreement_data.get("companyName") or "SDC limited",
-            "vendor_name": wo.get("vendor_name") or agreement_data.get("supplierName") or "Vendorqueue",
-            "msa_ref": agreement_data.get("msaRef") or "MSA-SDC-2026-09",
+            "company_name": details["company_name"],
+            "vendor_name": details["vendor_name"],
+            "msa_ref": details["msa_ref"],
+            "reporting_to": details["reporting_to"],
+            "place_of_work": details["place_of_work"],
             "start_date": wo.get("start_date") or agreement_data.get("commencement") or "",
             "end_date": wo.get("end_date") or agreement_data.get("expiry") or "",
             "payment_terms": agreement_data.get("paymentTerms") or "Net 30 days from invoice release",
@@ -549,7 +554,7 @@ def dispatch_vendor_sow(workorder_id: str, user: User, period: Optional[str] = N
     # Find work order to resolve tenant_id
     wo = wo_coll.find_one({"$or": [{"candidate_id": cid}, {"workorder_id": cid}, {"id": cid}]}) or {}
     tenant_id = wo.get("tenant_id") or ""
-    company_name = cand["company_name"] or wo.get("company_name") or "Bearitt"
+    company_name = cand["company_name"]
 
     if not tenant_id and company_name:
         tenant_doc = db["tenants"].find_one({"name": {"$regex": f"^{company_name}$", "$options": "i"}})
@@ -565,11 +570,11 @@ def dispatch_vendor_sow(workorder_id: str, user: User, period: Optional[str] = N
         "ws_number": cand["work_order_number"] or f"WSOW-2026-{str(cid)[:4].upper()}",
         "msa_ref": cand["msa_ref"] or "MSA-TB-2024-11",
         "company_name": company_name,
-        "supplier_name": cand["vendor_name"] or getattr(user, "tenant_name", "") or "Vendor",
+        "supplier_name": cand["vendor_name"],
         "deployed_personnel": cand["name"],
         "role": cand["role"],
-        "reporting_to": wo.get("hiring_manager_name") or wo.get("reporting_manager") or "Arun Deshpande, Engineering",
-        "place_of_work": wo.get("work_location") or wo.get("location") or "Gurgaon",
+        "reporting_to": cand["reporting_to"],
+        "place_of_work": cand["place_of_work"],
         "commencement": cand["start_date"] or "2026-09-01",
         "start_date": cand["start_date"] or "2026-09-01",
         "expiry": cand["end_date"] or "2027-03-01",

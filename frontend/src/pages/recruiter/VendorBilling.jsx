@@ -31,6 +31,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 import WorkOrderProgressBar from '../../components/WorkOrderProgressBar';
+import { billingCycle, currentBillingMonth } from '../../utils/billingPeriod';
 
 export default function VendorBilling({ isEmbedded = false }) {
   const { user, token } = useAuth();
@@ -48,7 +49,8 @@ export default function VendorBilling({ isEmbedded = false }) {
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
-  const [selectedMonth, setSelectedMonth] = useState('2026-09');
+  const [selectedMonth, setSelectedMonth] = useState(() => currentBillingMonth());
+  const cycle = billingCycle(selectedMonth);
 
   // Selected Candidate Drawer / Detail View
   const [selectedCandidateId, setSelectedCandidateId] = useState(null);
@@ -68,9 +70,9 @@ export default function VendorBilling({ isEmbedded = false }) {
     deployed_personnel: '',
     role: '',
     company_name: '',
-    supplier_name: 'Asimovex / Term-Jobs Talent Solutions',
+    supplier_name: '',
     reporting_to: '',
-    place_of_work: 'Bangalore HQ (Hybrid)',
+    place_of_work: '',
     commencement: '2026-09-01',
     expiry: '2027-08-31',
     duration: '12 Months',
@@ -164,7 +166,7 @@ export default function VendorBilling({ isEmbedded = false }) {
       company_name: cand.company_name || prev.company_name,
       raw_charge_rate: cand.hourly_rate || prev.raw_charge_rate,
       charge_rate: cand.hourly_rate ? `₹${cand.hourly_rate}/hr` : prev.charge_rate,
-      regular_hours: cand.total_hours !== undefined ? cand.total_hours : prev.regular_hours,
+      regular_hours: cand.total_regular_hours !== undefined ? cand.total_regular_hours : prev.regular_hours,
       overtime_hours: cand.total_overtime_hours !== undefined ? cand.total_overtime_hours : prev.overtime_hours,
       status: cand.sow_status || prev.status
     }));
@@ -182,15 +184,15 @@ export default function VendorBilling({ isEmbedded = false }) {
           candidate_id: cid,
           workorder_id: cid,
           ws_number: sowInfo.ws_number || data.candidate?.work_order_number || `WO-${cid.slice(0, 8).toUpperCase()}`,
-          msa_ref: sowInfo.msa_ref || data.candidate?.msa_ref || 'MSA-2026-TERMS',
+          msa_ref: data.candidate?.msa_ref || sowInfo.msa_ref || '',
           deployed_personnel: sowInfo.deployed_personnel || data.candidate?.name || cand.candidate_name || '',
           role: sowInfo.role || data.candidate?.role || cand.role || '',
-          company_name: sowInfo.company_name || data.candidate?.company_name || cand.company_name || 'Enterprise Client',
-          supplier_name: sowInfo.supplier_name || 'Asimovex / Term-Jobs Talent Solutions',
-          reporting_to: sowInfo.reporting_to || 'Engineering Director',
-          place_of_work: sowInfo.place_of_work || 'Hybrid / Bangalore HQ',
-          commencement: sowInfo.commencement || '2026-09-01',
-          expiry: sowInfo.expiry || '2027-08-31',
+          company_name: data.candidate?.company_name || sowInfo.company_name || cand.company_name || '',
+          supplier_name: data.candidate?.vendor_name || sowInfo.supplier_name || '',
+          reporting_to: data.candidate?.reporting_to || sowInfo.reporting_to || '',
+          place_of_work: data.candidate?.place_of_work || sowInfo.place_of_work || '',
+          commencement: data.candidate?.start_date || sowInfo.commencement || '',
+          expiry: data.candidate?.end_date || sowInfo.expiry || '',
           duration: sowInfo.duration || '12 Months',
           raw_charge_rate: sowInfo.raw_charge_rate || data.rates?.hourly_rate || cand.hourly_rate || 2200,
           charge_rate: `₹${sowInfo.raw_charge_rate || data.rates?.hourly_rate || cand.hourly_rate || 2200}/hr`,
@@ -394,17 +396,19 @@ export default function VendorBilling({ isEmbedded = false }) {
 
           {/* Month Selector */}
           <div className="flex items-center gap-3">
+            <button type="button" onClick={() => loadOverview(selectedMonth)} disabled={loading}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-[#D1D5DB] bg-white text-sm font-semibold disabled:opacity-50">
+              <RefreshCw className="w-4 h-4" /> Refresh
+            </button>
             <div className="flex items-center bg-white border border-[#D1D5DB] rounded-xl px-3.5 py-2 shadow-xs">
               <Calendar className="w-4 h-4 text-[#6B7280] mr-2" />
-              <select
+              <input
+                type="month"
+                aria-label="Billing month"
                 value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
+                onChange={(e) => { if (e.target.value) setSelectedMonth(e.target.value); }}
                 className="text-sm font-semibold text-[#111827] bg-transparent focus:outline-hidden cursor-pointer"
-              >
-                <option value="2026-09">September 2026</option>
-                <option value="2026-08">August 2026</option>
-                <option value="2026-07">July 2026</option>
-              </select>
+              />
             </div>
           </div>
         </div>
@@ -490,9 +494,9 @@ export default function VendorBilling({ isEmbedded = false }) {
               </span>
             </div>
             <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight text-white flex items-center gap-3">
-              <span>Current Cycle: September 2026</span>
+              <span>Billing Cycle: {cycle.label}</span>
               <span className="text-xs font-bold px-2.5 py-0.5 rounded-md bg-white/10 text-[#A3A39E] border border-white/15 font-mono">
-                Monthly Cycle · 01 Sep - 30 Sep
+                Monthly Cycle · {cycle.range}
               </span>
             </h2>
             <p className="text-xs text-[#A3A39E]">
@@ -503,7 +507,7 @@ export default function VendorBilling({ isEmbedded = false }) {
           <div className="flex flex-wrap items-center gap-3 shrink-0">
             <div className="bg-white/10 px-3.5 py-2 rounded-xl border border-white/15 text-left">
               <div className="text-[10px] font-bold text-[#A3A39E] uppercase">Cycle Ends In</div>
-              <div className="text-base font-black text-white mt-0.5">20 Days (30 Sep 2026)</div>
+              <div className="text-base font-black text-white mt-0.5">{cycle.daysRemaining} Days ({cycle.endLabel})</div>
             </div>
 
             <a
@@ -955,7 +959,7 @@ export default function VendorBilling({ isEmbedded = false }) {
                           {docForm.status || 'Draft'}
                         </div>
                         <span className="text-[11px] text-gray-400 font-mono">
-                          Period: {breakdownData?.period_label || 'September 2026'}
+                          Period: {breakdownData?.period_label || cycle.label}
                         </span>
                       </div>
                     </div>
@@ -975,7 +979,7 @@ export default function VendorBilling({ isEmbedded = false }) {
                               type="text"
                               value={docForm.deployed_personnel}
                               onChange={(e) => handleDocFieldChange('deployed_personnel', e.target.value)}
-                              className="bg-amber-100 text-amber-950 font-bold px-2 py-1 rounded text-xs w-full border border-amber-300 focus:outline-none mt-1"
+                              className="bg-amber-100 !text-amber-950 font-bold px-2 py-1 rounded text-xs w-full border border-amber-300 focus:outline-none mt-1"
                             />
                           ) : (
                             <div className="text-sm font-bold text-black mt-0.5">{docForm.deployed_personnel || '—'}</div>
@@ -989,7 +993,7 @@ export default function VendorBilling({ isEmbedded = false }) {
                               type="text"
                               value={docForm.role}
                               onChange={(e) => handleDocFieldChange('role', e.target.value)}
-                              className="bg-amber-100 text-amber-950 font-bold px-2 py-1 rounded text-xs w-full border border-amber-300 focus:outline-none mt-1"
+                              className="bg-amber-100 !text-amber-950 font-bold px-2 py-1 rounded text-xs w-full border border-amber-300 focus:outline-none mt-1"
                             />
                           ) : (
                             <div className="text-sm font-bold text-black mt-0.5">{docForm.role || '—'}</div>
@@ -1003,7 +1007,7 @@ export default function VendorBilling({ isEmbedded = false }) {
                               type="text"
                               value={docForm.reporting_to}
                               onChange={(e) => handleDocFieldChange('reporting_to', e.target.value)}
-                              className="bg-amber-100 text-amber-950 font-bold px-2 py-1 rounded text-xs w-full border border-amber-300 focus:outline-none mt-1"
+                              className="bg-amber-100 !text-amber-950 font-bold px-2 py-1 rounded text-xs w-full border border-amber-300 focus:outline-none mt-1"
                             />
                           ) : (
                             <div className="text-sm font-bold text-black mt-0.5">{docForm.reporting_to || '—'}</div>
@@ -1017,7 +1021,7 @@ export default function VendorBilling({ isEmbedded = false }) {
                               type="text"
                               value={docForm.place_of_work}
                               onChange={(e) => handleDocFieldChange('place_of_work', e.target.value)}
-                              className="bg-amber-100 text-amber-950 font-bold px-2 py-1 rounded text-xs w-full border border-amber-300 focus:outline-none mt-1"
+                              className="bg-amber-100 !text-amber-950 font-bold px-2 py-1 rounded text-xs w-full border border-amber-300 focus:outline-none mt-1"
                             />
                           ) : (
                             <div className="text-sm font-bold text-black mt-0.5">{docForm.place_of_work || '—'}</div>
@@ -1031,7 +1035,7 @@ export default function VendorBilling({ isEmbedded = false }) {
                               type="date"
                               value={docForm.commencement}
                               onChange={(e) => handleDocFieldChange('commencement', e.target.value)}
-                              className="bg-amber-100 text-amber-950 font-bold px-2 py-1 rounded text-xs w-full border border-amber-300 focus:outline-none mt-1"
+                              className="bg-amber-100 !text-amber-950 font-bold px-2 py-1 rounded text-xs w-full border border-amber-300 focus:outline-none mt-1"
                             />
                           ) : (
                             <div className="text-sm font-bold text-black mt-0.5">{docForm.commencement || '2026-09-01'}</div>
@@ -1045,7 +1049,7 @@ export default function VendorBilling({ isEmbedded = false }) {
                               type="date"
                               value={docForm.expiry}
                               onChange={(e) => handleDocFieldChange('expiry', e.target.value)}
-                              className="bg-amber-100 text-amber-950 font-bold px-2 py-1 rounded text-xs w-full border border-amber-300 focus:outline-none mt-1"
+                              className="bg-amber-100 !text-amber-950 font-bold px-2 py-1 rounded text-xs w-full border border-amber-300 focus:outline-none mt-1"
                             />
                           ) : (
                             <div className="text-sm font-bold text-black mt-0.5">{docForm.expiry || '2027-08-31'}</div>
@@ -1059,7 +1063,7 @@ export default function VendorBilling({ isEmbedded = false }) {
                               type="text"
                               value={docForm.duration}
                               onChange={(e) => handleDocFieldChange('duration', e.target.value)}
-                              className="bg-amber-100 text-amber-950 font-bold px-2 py-1 rounded text-xs w-full border border-amber-300 focus:outline-none mt-1"
+                              className="bg-amber-100 !text-amber-950 font-bold px-2 py-1 rounded text-xs w-full border border-amber-300 focus:outline-none mt-1"
                             />
                           ) : (
                             <div className="text-sm font-bold text-black mt-0.5">{docForm.duration || '12 Months'}</div>
@@ -1068,7 +1072,7 @@ export default function VendorBilling({ isEmbedded = false }) {
 
                         <div>
                           <div className="text-[11px] font-semibold text-gray-500">Talent Vendor</div>
-                          <div className="text-sm font-bold text-black mt-0.5">{docForm.supplier_name || 'Asimovex / Term-Jobs'}</div>
+                          <div className="text-sm font-bold text-black mt-0.5">{docForm.supplier_name || 'Not provided'}</div>
                         </div>
                       </div>
                     </div>
@@ -1088,7 +1092,7 @@ export default function VendorBilling({ isEmbedded = false }) {
                               type="number"
                               value={docForm.raw_charge_rate}
                               onChange={(e) => handleDocFieldChange('raw_charge_rate', e.target.value)}
-                              className="bg-amber-100 text-amber-950 font-black px-2 py-1 rounded text-xs w-full border border-amber-300 focus:outline-none mt-1"
+                              className="bg-amber-100 !text-amber-950 font-black px-2 py-1 rounded text-xs w-full border border-amber-300 focus:outline-none mt-1"
                             />
                           ) : (
                             <div className="text-base font-black text-black mt-0.5">₹{calculatedBaseRate}/hr</div>
@@ -1112,7 +1116,7 @@ export default function VendorBilling({ isEmbedded = false }) {
                               type="text"
                               value={docForm.payment_terms}
                               onChange={(e) => handleDocFieldChange('payment_terms', e.target.value)}
-                              className="bg-amber-100 text-amber-950 font-bold px-2 py-1 rounded text-xs w-full border border-amber-300 focus:outline-none mt-1"
+                              className="bg-amber-100 !text-amber-950 font-bold px-2 py-1 rounded text-xs w-full border border-amber-300 focus:outline-none mt-1"
                             />
                           ) : (
                             <div className="text-sm font-bold text-black mt-0.5">{docForm.payment_terms || 'Net 30 days'}</div>
@@ -1147,7 +1151,7 @@ export default function VendorBilling({ isEmbedded = false }) {
                                     type="number"
                                     value={docForm.regular_hours}
                                     onChange={(e) => handleDocFieldChange('regular_hours', e.target.value)}
-                                    className="bg-amber-100 text-amber-950 font-bold px-2 py-0.5 rounded text-xs w-20 border border-amber-300 focus:outline-none"
+                                    className="bg-amber-100 !text-amber-950 font-bold px-2 py-0.5 rounded text-xs w-20 border border-amber-300 focus:outline-none"
                                   />
                                 ) : (
                                   <span>{calculatedRegHrs} hrs</span>
@@ -1167,7 +1171,7 @@ export default function VendorBilling({ isEmbedded = false }) {
                                     type="number"
                                     value={docForm.overtime_hours}
                                     onChange={(e) => handleDocFieldChange('overtime_hours', e.target.value)}
-                                    className="bg-amber-100 text-amber-950 font-bold px-2 py-0.5 rounded text-xs w-20 border border-amber-300 focus:outline-none"
+                                    className="bg-amber-100 !text-amber-950 font-bold px-2 py-0.5 rounded text-xs w-20 border border-amber-300 focus:outline-none"
                                   />
                                 ) : (
                                   <span className="text-emerald-800 font-bold">{calculatedOtHrs} hrs</span>
@@ -1265,13 +1269,13 @@ export default function VendorBilling({ isEmbedded = false }) {
                               type="text"
                               value={docForm.signatory_supplier}
                               onChange={(e) => handleDocFieldChange('signatory_supplier', e.target.value)}
-                              className="bg-amber-100 text-amber-950 font-bold px-2 py-1 rounded text-xs w-full border border-amber-300 focus:outline-none"
+                              className="bg-amber-100 !text-amber-950 font-bold px-2 py-1 rounded text-xs w-full border border-amber-300 focus:outline-none"
                             />
                           ) : (
                             <span className="font-bold text-black">{docForm.signatory_supplier || 'Authorised Talent Partner'}</span>
                           )}
                         </div>
-                        <div className="text-gray-600 mt-1 font-medium">For {docForm.supplier_name || 'Asimovex / Term-Jobs'}</div>
+                        <div className="text-gray-600 mt-1 font-medium">For {docForm.supplier_name || 'Not provided'}</div>
                       </div>
 
                       <div>
@@ -1281,7 +1285,7 @@ export default function VendorBilling({ isEmbedded = false }) {
                               type="text"
                               value={docForm.signatory_company}
                               onChange={(e) => handleDocFieldChange('signatory_company', e.target.value)}
-                              className="bg-amber-100 text-amber-950 font-bold px-2 py-1 rounded text-xs w-full border border-amber-300 focus:outline-none"
+                              className="bg-amber-100 !text-amber-950 font-bold px-2 py-1 rounded text-xs w-full border border-amber-300 focus:outline-none"
                             />
                           ) : (
                             <span className="font-bold text-black">{docForm.signatory_company || 'Procurement Director / Authorized Officer'}</span>

@@ -868,7 +868,7 @@ export default function FinanceDashboard() {
                 <select
                   value={paymentMethod}
                   onChange={(e) => setPaymentMethod(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-xs font-semibold focus:outline-none focus:bg-white focus:border-black cursor-pointer transition-all"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-gray-50 border border-gray-200 !text-gray-900 placeholder:!text-gray-400 text-xs font-semibold focus:outline-none focus:bg-white focus:border-black cursor-pointer transition-all"
                 >
                   <option value="NEFT/RTGS">NEFT / RTGS Corporate Bank Transfer</option>
                   <option value="Direct Wire">Direct Wire Transfer</option>
@@ -887,7 +887,7 @@ export default function FinanceDashboard() {
                   value={transactionRef}
                   onChange={(e) => setTransactionRef(e.target.value)}
                   placeholder="e.g. UTR-IND-2026-982312"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-gray-50 border border-gray-200 font-mono text-xs focus:outline-none focus:bg-white focus:border-black transition-all"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-gray-50 border border-gray-200 !text-gray-900 placeholder:!text-gray-400 font-mono text-xs focus:outline-none focus:bg-white focus:border-black transition-all"
                 />
               </div>
 
@@ -897,7 +897,7 @@ export default function FinanceDashboard() {
                   rows={2}
                   value={paymentNotes}
                   onChange={(e) => setPaymentNotes(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-xs focus:outline-none focus:bg-white focus:border-black font-medium transition-all"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-gray-50 border border-gray-200 !text-gray-900 placeholder:!text-gray-400 text-xs focus:outline-none focus:bg-white focus:border-black font-medium transition-all"
                 />
               </div>
             </div>
