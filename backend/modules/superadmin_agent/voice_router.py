@@ -10,7 +10,7 @@ import uuid
 import asyncio
 import logging
 import httpx
-from fastapi import APIRouter, File, UploadFile, Form, HTTPException, Request, Response, BackgroundTasks
+from fastapi import APIRouter, File, UploadFile, Form, HTTPException, Request, Response, BackgroundTasks, Depends
 from pydantic import BaseModel, Field
 
 try:
@@ -40,7 +40,17 @@ except (ImportError, Exception):
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/voice", tags=["voice"])
+async def require_voice_agent_access(request: Request):
+    if request.url.path.endswith(('/stt', '/tts')):
+        return
+    from .router import require_superadmin
+    from modules.identity.router import get_current_user
+    from modules.shared.db import get_session
+    with get_session() as session:
+        require_superadmin(get_current_user(request.headers.get('authorization'), session))
+
+
+router = APIRouter(prefix="/api/voice", tags=["voice"], dependencies=[Depends(require_voice_agent_access)])
 
 def get_sarvam_stt_key() -> str:
     """Retrieve dedicated Sarvam AI key for Speech-to-Text with fresh environment reload."""

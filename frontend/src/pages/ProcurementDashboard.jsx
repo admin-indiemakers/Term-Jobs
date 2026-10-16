@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { currentBillingMonth } from '../utils/billingPeriod';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -55,6 +56,8 @@ function formatCurrency(val) {
 }
 
 export default function ProcurementDashboard() {
+  const loadVersionRef = useRef(0);
+  const [selectedMonth, setSelectedMonth] = useState(() => currentBillingMonth());
   const { user, token } = useAuth();
   const [sowList, setSowList] = useState([]);
   const [selectedCandidateId, setSelectedCandidateId] = useState(null);
@@ -84,9 +87,11 @@ export default function ProcurementDashboard() {
   const [rejectNotes, setRejectNotes] = useState('');
 
   const loadSows = () => {
+    const version = ++loadVersionRef.current;
     setLoading(true);
-    request('/api/workforce/procurement/sow-agreements', { token })
+    request(`/api/workforce/procurement/sow-agreements?period=${selectedMonth}`, { token, noCache: true })
       .then((data) => {
+        if (version !== loadVersionRef.current) return;
         const list = Array.isArray(data?.sow_agreements) ? data.sow_agreements : [];
         setSowList(list);
         if (list.length > 0) {
@@ -99,14 +104,15 @@ export default function ProcurementDashboard() {
         setError('');
       })
       .catch((err) => {
+        if (version !== loadVersionRef.current) return;
         setError(err?.message || 'Failed to load SOW agreements.');
       })
-      .finally(() => setLoading(false));
+      .finally(() => { if (version === loadVersionRef.current) setLoading(false); });
   };
 
   useEffect(() => {
     loadSows();
-  }, [token]);
+  }, [token, selectedMonth]);
 
   // Active Selected SOW
   const activeSow = useMemo(() => {
@@ -175,7 +181,7 @@ export default function ProcurementDashboard() {
     setActionLoading(true);
     setError('');
     try {
-      await request(`/api/workforce/procurement/sow/${candidateId}/approve`, {
+      await request(`/api/workforce/procurement/sow/${candidateId}/approve?period=${selectedMonth}`, {
         method: 'POST',
         token,
       });
@@ -194,7 +200,7 @@ export default function ProcurementDashboard() {
     setActionLoading(true);
     setError('');
     try {
-      await request(`/api/workforce/procurement/sow/${candidateId}/director-approve`, {
+      await request(`/api/workforce/procurement/sow/${candidateId}/director-approve?period=${selectedMonth}`, {
         method: 'POST',
         token,
       });
@@ -213,7 +219,7 @@ export default function ProcurementDashboard() {
     setActionLoading(true);
     setError('');
     try {
-      await request(`/api/workforce/procurement/sow/${candidateId}/request-revision`, {
+      await request(`/api/workforce/procurement/sow/${candidateId}/request-revision?period=${selectedMonth}`, {
         method: 'POST',
         token,
         body: { revision_notes: revisionNotes.trim() },
@@ -235,7 +241,7 @@ export default function ProcurementDashboard() {
     setActionLoading(true);
     setError('');
     try {
-      await request(`/api/workforce/procurement/sow/${candidateId}/reject`, {
+      await request(`/api/workforce/procurement/sow/${candidateId}/reject?period=${selectedMonth}`, {
         method: 'POST',
         token,
         body: { rejection_notes: rejectNotes.trim() || 'Commercial terms rejected by Procurement.' },
@@ -306,7 +312,7 @@ Timestamp: ${new Date().toISOString()}
 
   const sowData = activeSow?.sow_data || {};
   const rawStatus = (activeSow?.status || sowData?.status || '').trim();
-  const isDirectorApproved = rawStatus === 'Approved by Director' || rawStatus === 'Approved' || rawStatus === 'ACTIVE';
+  const isDirectorApproved = rawStatus === 'Paid' || rawStatus === 'Approved by Director' || rawStatus === 'Approved' || rawStatus === 'ACTIVE';
   const isPendingDirector = !isDirectorApproved && (rawStatus === 'Pending Director Approval' || rawStatus.toLowerCase().includes('approved by procurement') || activeSow?.procurement_authorized === true);
   const isRevision = rawStatus.toLowerCase().includes('revision');
   const isRejected = rawStatus.toLowerCase().includes('reject');
@@ -326,6 +332,7 @@ Timestamp: ${new Date().toISOString()}
         <div className="bg-white border border-gray-200/90 rounded-2xl p-10 text-center shadow-xs space-y-3">
           <FileText size={40} className="mx-auto text-gray-400" />
           <h3 className="text-base font-extrabold text-gray-900">No Work Orders in Inbox</h3>
+          <label className="block text-sm text-gray-800">Billing month <input type="month" aria-label="Billing month" value={selectedMonth} onChange={(e) => { if (e.target.value) { setSelectedMonth(e.target.value); setSowList([]); setLoading(true); ++loadVersionRef.current; } }} className="border rounded-lg px-3 py-2 bg-white !text-gray-900" /></label>
           <p className="text-xs text-gray-500 max-w-md mx-auto">
             There are currently no Work Order billing documents submitted for verification.
           </p>
@@ -346,6 +353,13 @@ Timestamp: ${new Date().toISOString()}
       className="w-full min-w-0 pb-16 space-y-4 text-left font-sans"
       style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}
     >
+          <label className="inline-flex items-center gap-2 text-sm font-semibold text-gray-800 my-3">
+            Billing month
+            <input type="month" aria-label="Billing month" value={selectedMonth}
+              onChange={(e) => { if (e.target.value) { setSelectedMonth(e.target.value); setSelectedCandidateId(null); setSowList([]); setLoading(true); ++loadVersionRef.current; } }}
+              className="bg-white border border-gray-300 rounded-lg px-3 py-2 !text-gray-900" />
+          </label>
+
       {/* Top 6-Step Workflow Stage Bar */}
       <div className="bg-[#1C1D21] text-white rounded-2xl p-3.5 sm:px-6 shadow-sm flex items-center justify-between overflow-x-auto text-xs font-medium">
         <div className="flex items-center gap-6 sm:gap-10 shrink-0">
@@ -830,6 +844,7 @@ Timestamp: ${new Date().toISOString()}
                       <Check size={13} className="text-indigo-600" />
                       <span>Procurement Authorized</span>
                     </div>
+                    {['Director', 'Admin', 'Super Admin'].includes(user?.role) && (
                     <button
                       type="button"
                       onClick={handleDirectorApprove}
@@ -840,6 +855,7 @@ Timestamp: ${new Date().toISOString()}
                       {actionLoading ? <Loader2 size={13} className="animate-spin text-white" /> : <Crown size={14} />}
                       <span>Director Sign-Off</span>
                     </button>
+                    )}
                   </div>
                 )}
 

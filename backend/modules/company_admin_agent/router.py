@@ -27,49 +27,15 @@ def company_admin_agent_chat(
     authorization: str | None = Header(default=None)
 ):
     """Execute AI Agent for Company Admin strictly scoped to their company."""
-    user_data = {
-        "name": "Company Admin",
-        "role": "Admin",
-        "tenant_id": "local",
-        "tenant_name": "TCS",
-        "id": "admin-user"
-    }
-
-    if data.current_user:
-        if data.current_user.get("id"):
-            user_data["id"] = str(data.current_user["id"])
-        if data.current_user.get("name"):
-            user_data["name"] = data.current_user["name"]
-        if data.current_user.get("tenant_id"):
-            user_data["tenant_id"] = str(data.current_user["tenant_id"])
-        if data.current_user.get("role"):
-            user_data["role"] = data.current_user["role"]
-        if data.current_user.get("tenant_name"):
-            user_data["tenant_name"] = data.current_user["tenant_name"]
-    elif data.user_name:
-        user_data["name"] = data.user_name
-
-    if authorization and authorization.startswith("Bearer "):
-        try:
-            from modules.identity.services.auth_service import decode_access_token
-            from modules.shared.db import get_session
-            token = authorization.split(" ")[1]
-            payload = decode_access_token(token)
-            if payload:
-                session = get_session()
-                u = session.query(User).filter(User.id == payload.get("sub")).first()
-                if u:
-                    user_data["name"] = u.name or user_data["name"]
-                    user_data["role"] = u.role or user_data["role"]
-                    user_data["tenant_id"] = str(u.tenant_id or "local")
-                    user_data["id"] = str(u.id)
-                    if u.tenant_id:
-                        t = session.query(Tenant).filter(Tenant.id == u.tenant_id).first()
-                        if t and t.name:
-                            user_data["tenant_name"] = t.name
-
-        except Exception as e:
-            print("Token decode error in company admin chat router:", e)
+    from modules.shared.db import get_session
+    from modules.identity.router import get_current_user
+    with get_session() as session:
+        actor = get_current_user(authorization, session)
+        if actor.role not in ('Admin', 'HR', 'Director') or not actor.tenant_id:
+            raise HTTPException(status_code=403, detail='Company administrator access required')
+        tenant = session.get(Tenant, actor.tenant_id)
+        user_data = {'id': actor.id, 'name': actor.name, 'role': actor.role,
+                     'tenant_id': actor.tenant_id, 'tenant_name': tenant.name if tenant else ''}
 
     if not data.prompt.strip():
         raise HTTPException(status_code=400, detail="Prompt is required.")
@@ -92,26 +58,15 @@ def get_company_stats(
     authorization: str | None = Header(default=None)
 ):
     """Fetch live enterprise analytics strictly filtered for this company."""
-    tenant_id = "local"
-    company_name = "TCS"
-
-    if authorization and authorization.startswith("Bearer "):
-        try:
-            from modules.identity.services.auth_service import decode_access_token
-            from modules.shared.db import get_session
-            token = authorization.split(" ")[1]
-            payload = decode_access_token(token)
-            if payload:
-                session = get_session()
-                u = session.query(User).filter(User.id == payload.get("sub")).first()
-                if u and u.tenant_id:
-                    tenant_id = str(u.tenant_id)
-                    t = session.query(Tenant).filter(Tenant.id == u.tenant_id).first()
-                    if t and t.name:
-                        company_name = t.name
-
-        except Exception:
-            pass
+    from modules.shared.db import get_session
+    from modules.identity.router import get_current_user
+    with get_session() as session:
+        actor = get_current_user(authorization, session)
+        if actor.role not in ('Admin', 'HR', 'Director') or not actor.tenant_id:
+            raise HTTPException(status_code=403, detail='Company administrator access required')
+        tenant_id = actor.tenant_id
+        tenant = session.get(Tenant, tenant_id)
+        company_name = tenant.name if tenant else ''
 
     stats = get_company_admin_stats(tenant_id, company_name)
     return {

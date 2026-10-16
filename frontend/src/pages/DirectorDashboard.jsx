@@ -206,6 +206,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
     description: '',
   });
   const templateFileRef = useRef(null);
+  const dashboardLoadVersion = useRef(0);
 
   useEffect(() => {
     setActiveTab(currentTab);
@@ -267,11 +268,12 @@ export default function DirectorDashboard({ view = 'overview' }) {
   };
 
   const loadAll = (isSilent = false) => {
+    const loadVersion = ++dashboardLoadVersion.current;
     if (!isSilent) setLoading(true);
     const tid = (user?.role === 'Super Admin' ? selectedTenantId : user?.tenant_id);
     const tplUrl = tid ? `/templates?tenant_id=${tid}` : '/templates';
     Promise.all([
-      request('/requisitions', { token }).catch(() => []),
+      request('/requisitions?fresh=true', { token, noCache: true }),
       request('/candidates/shortlisted', { token }).catch(() => []),
       request('/api/auth/vendors', { token }).catch(() => []),
       request(tplUrl, { token }).catch(() => []),
@@ -279,6 +281,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
       request('/api/auth/tenants', { token }).catch(() => []),
     ])
       .then(([reqsRes, candsRes, vendorsRes, templatesRes, wosRes, tenantsRes]) => {
+        if (loadVersion !== dashboardLoadVersion.current) return;
         const reqList = Array.isArray(reqsRes) ? reqsRes : (reqsRes?.requisitions || []);
         const candList = Array.isArray(candsRes) ? candsRes : (candsRes?.shortlisted_candidates || candsRes?.candidates || []);
         const vendorList = Array.isArray(vendorsRes) ? vendorsRes : (vendorsRes?.vendors || []);
@@ -305,9 +308,11 @@ export default function DirectorDashboard({ view = 'overview' }) {
 
         setError('');
       })
-      .catch((err) => setError(err?.message || 'Failed to load dashboard data'))
+      .catch((err) => {
+        if (loadVersion === dashboardLoadVersion.current) setError(err?.message || 'Failed to load dashboard data');
+      })
       .finally(() => {
-        if (!isSilent) setLoading(false);
+        if (loadVersion === dashboardLoadVersion.current) setLoading(false);
       });
   };
 
@@ -494,6 +499,8 @@ export default function DirectorDashboard({ view = 'overview' }) {
 
   const handleApproveRequisition = async (reqId, e) => {
     if (e) e.stopPropagation();
+    // Discard dashboard reads started before this decision.
+    ++dashboardLoadVersion.current;
     setApprovingId(reqId);
     setError('');
     setTemplateMsg('');
@@ -628,8 +635,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
     const list = Array.isArray(workOrders) ? workOrders : [];
     return list.filter((w) => {
       const st = (w.status || w.sow_data?.status || '').toLowerCase();
-      const isApproved = st.includes('approved') || st === 'active' || w.director_approved === true || w.sow_data?.director_approved === true;
-      return !isApproved;
+      return st === 'pending director approval' || st === 'approved by procurement';
     });
   }, [workOrders]);
 

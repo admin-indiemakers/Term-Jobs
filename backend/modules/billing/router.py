@@ -98,6 +98,8 @@ def create_invoice_endpoint(
             "message": f"Invoice {inv.get('invoice_number')} generated successfully.",
             "invoice": inv
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -109,10 +111,23 @@ def update_invoice_status_endpoint(
     current_user: User = Depends(get_current_user)
 ) -> Dict[str, Any]:
     """Update invoice payment/billing status."""
+    if current_user.role not in ("Finance", "Finance Team", "Admin", "Super Admin"):
+        raise HTTPException(status_code=403, detail="Finance role required to change payment status.")
     inv_coll = db["vendor_invoices"]
     inv = inv_coll.find_one({"$or": [{"id": invoice_id}, {"invoice_number": invoice_id}]})
     if not inv:
         raise HTTPException(status_code=404, detail="Invoice not found.")
+
+    from modules.billing.services.billing_periods import require_editable
+    require_editable(inv)
+    if payload.status == "Paid":
+        from modules.workforce.router import process_finance_work_order_payment
+        process_finance_work_order_payment(
+            inv["workorder_id"], {}, period=inv["period"], current_user=current_user,
+        )
+        paid_invoice = inv_coll.find_one({"id": invoice_id}) or {}
+        paid_invoice.pop("_id", None)
+        return {"status": "success", "message": "Payment recorded for this billing period.", "invoice": paid_invoice}
 
     inv_coll.update_one(
         {"_id": inv["_id"]},
@@ -151,6 +166,8 @@ def dispatch_sow_endpoint(
     try:
         res = dispatch_vendor_sow(workorder_id, current_user, period=period)
         return res
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

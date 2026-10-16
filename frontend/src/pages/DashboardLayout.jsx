@@ -527,11 +527,14 @@ export default function DashboardLayout() {
         : isDirector
           ? [
             { to: '/dashboard/director', label: 'Executive Overview', end: true, section: 'WORKSPACE', icon: Icons.Dashboard },
+            { to: '/dashboard/director/finance-approvals', label: 'Finance Approvals', end: false, section: 'WORKSPACE', icon: Icons.Receipt },
+            { to: '/dashboard/director/work-orders', label: 'Work Order Approvals', end: false, section: 'WORKSPACE', icon: Icons.Agreements },
             { to: '/dashboard/director/templates', label: 'Role Templates', end: false, section: 'WORKSPACE', icon: Icons.Agreements },
             { to: '/dashboard/director/profile', label: 'Profile', end: false, section: 'ACCOUNT', icon: User },
           ]
           : (userRole === 'Procurement' || userRole === 'Procurement Team')
             ? [
+              { to: '/dashboard/procurement/finance-approvals', label: 'Finance Approvals', end: false, icon: Icons.Receipt },
               { to: '/dashboard/procurement', label: 'Work Orders', end: true, icon: Icons.Agreements, badge: procurementPendingSows },
               { to: '/dashboard/requisitions', label: 'Requisitions', end: false, icon: Icons.Requisitions },
               { to: '/dashboard/interviews', label: 'Interviews & AI Scores', end: false, icon: Icons.Interviews },
@@ -539,6 +542,7 @@ export default function DashboardLayout() {
             : isFinance
               ? [
                 { to: '/dashboard/finance', label: 'Work Orders & Payments', end: true, section: 'WORKSPACE', icon: Icons.Receipt, badge: financePendingPayments },
+                { to: '/dashboard/finance/approvals', label: 'Approval & Payment History', end: false, section: 'WORKSPACE', icon: Icons.Receipt },
                 { to: '/dashboard/finance/profile', label: 'Profile', end: false, section: 'ACCOUNT', icon: User },
               ]
               : (userRole === 'Super Admin' || userRole.toLowerCase() === 'super admin')

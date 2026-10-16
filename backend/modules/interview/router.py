@@ -6,7 +6,9 @@ import uuid
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, WebSocket, WebSocketDisconnect, Request, UploadFile, File, Form
+from starlette.requests import HTTPConnection
 from fastapi.encoders import jsonable_encoder
+from .access import authorize_round
 
 from modules.identity.domain.models import User, Tenant
 from modules.interview.domain.models import CompanyInterviewRequest
@@ -55,7 +57,49 @@ from modules.interview.services.interview_service import (
     process_candidate_hiring_decision,
 )
 
-router = APIRouter(prefix="/interviews", tags=["Interviews"])
+async def authorize_interview_request(connection: HTTPConnection):
+    round_id = connection.path_params.get('round_id')
+    schedule_id = connection.path_params.get('interview_id')
+    if not round_id and isinstance(connection, Request) and connection.url.path.endswith('/livekit/token'):
+        round_id = (await connection.json()).get('round_id')
+        if not round_id:
+            raise HTTPException(status_code=400, detail='Interview round required')
+    if not round_id and not schedule_id:
+        return
+    if isinstance(connection, Request) and connection.method == 'GET' and connection.url.path.endswith('/recording'):
+        from modules.identity.services.auth_service import decode_access_token
+        media = decode_access_token(connection.query_params.get('media_token', ''))
+        if media and media.get('purpose') == 'interview_recording' and media.get('round_id') == round_id:
+            return
+    authorization = connection.headers.get('authorization')
+    # Media elements and WebSockets cannot attach an Authorization header.
+    if not isinstance(connection, Request) and not authorization and connection.query_params.get('access_token'):
+        authorization = 'Bearer ' + connection.query_params['access_token']
+    with get_session() as session:
+        actor = get_current_user(authorization, session) if authorization else None
+    invitation = connection.query_params.get('token', '')
+    if round_id:
+        doc = db['interview_rounds'].find_one({'id': round_id})
+        role = authorize_round(db, doc, actor, invitation)
+        connection.state.interview_role = role
+        if isinstance(connection, Request) and connection.url.path.endswith('/livekit/token'):
+            body = await connection.json()
+            if body.get('role', 'candidate') != role:
+                raise HTTPException(status_code=403, detail='Participant role does not match invitation')
+    else:
+        doc = db['interview_schedules'].find_one({'id': schedule_id})
+        if not doc:
+            raise HTTPException(status_code=404, detail='Interview not found')
+        if not actor:
+            raise HTTPException(status_code=401, detail='Authentication required')
+        if actor.role == 'Super Admin':
+            return
+        if actor.role in ('Recruiter', 'Vendor') and actor.tenant_id and doc.get('vendor_id') == actor.tenant_id:
+            return
+        authorize_round(db, doc, actor)
+
+
+router = APIRouter(prefix="/interviews", tags=["Interviews"], dependencies=[Depends(authorize_interview_request)])
 
 
 def _extract_origin(request: Request, body_origin: Optional[str] = None) -> str:
@@ -298,7 +342,7 @@ def get_vendor_interviews(
             v_id = inv.vendor_id
             
             # Match vendor tenant
-            if (v_id and v_id == user_tenant_id) or (user_tenant_name and (user_tenant_name in v_name or v_name in user_tenant_name)) or (user_name and (user_name in v_name or v_name in user_name)) or not v_name or v_name == "vendor":
+            if user_tenant_id and v_id == user_tenant_id:
                 doc = inv.to_doc()
                 if doc.get("round_id") and (not doc.get("meeting_link") or "cal.com" in doc.get("meeting_link", "").lower()):
                     doc["meeting_link"] = f"{origin}/interview/room/{doc['round_id']}"
@@ -457,9 +501,9 @@ def candidate_portal_endpoint(
     email: Optional[str] = Query(default=None),
 ):
     """Candidate portal data: lists only the candidate's own interview rounds."""
-    ident = token or email
+    ident = token
     if not ident:
-        raise HTTPException(status_code=400, detail="Candidate token or email is required")
+        raise HTTPException(status_code=400, detail="Candidate invitation token is required")
     rounds = get_candidate_rounds_by_token(ident)
     return {"rounds": rounds}
 
@@ -470,9 +514,9 @@ def staff_portal_endpoint(
     email: Optional[str] = Query(default=None),
 ):
     """Staff portal data: lists only candidates & rounds assigned to this interviewer."""
-    ident = token or email
+    ident = token
     if not ident:
-        raise HTTPException(status_code=400, detail="Interviewer token or email is required")
+        raise HTTPException(status_code=400, detail="Interviewer invitation token is required")
     rounds = get_interviewer_rounds_by_token(ident)
     return {"rounds": rounds}
 
@@ -488,6 +532,8 @@ def get_round_detail_endpoint(round_id: str):
             status_code=410,
             detail="This AI interview link has expired after 10 hours. Please request a new interview link from the hiring team."
         )
+    for secret in ('candidate_token', 'interviewer_token', 'candidate_passcode'):
+        round_doc.pop(secret, None)
     return round_doc
 
 
@@ -680,6 +726,14 @@ async def upload_round_recording_endpoint(
         "recording_url": updated.get("recording_url"),
         "recording_metadata": updated.get("recording_metadata"),
     }
+
+
+@router.get('/rounds/{round_id}/recording-access')
+def recording_access_endpoint(round_id: str):
+    from datetime import timedelta
+    from modules.identity.services.auth_service import create_access_token
+    credential = create_access_token({'purpose': 'interview_recording', 'round_id': round_id}, expires_delta=timedelta(minutes=10))
+    return {'media_token': credential}
 
 
 @router.get("/rounds/{round_id}/recording")

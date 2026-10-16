@@ -1,5 +1,28 @@
-import { request } from '../../api/client';
+import { request as apiRequest, API_BASE_URL } from '../../api/client';
 import { uploadParts } from '../utils/uploadPool';
+
+export function interviewCredentialsQuery() {
+  const query = new URLSearchParams();
+  const invitation = new URLSearchParams(window.location.search).get('token');
+  if (invitation) query.set('token', invitation);
+  else {
+    const accountToken = localStorage.getItem('auth_token');
+    if (accountToken) query.set('access_token', accountToken);
+  }
+  return query.toString();
+}
+
+function request(path, options = {}) {
+  const query = new URLSearchParams(window.location.search);
+  const invitation = query.get('token');
+  if (invitation && path.includes('/interviews/') && !path.includes('token=')) {
+    path += `${path.includes('?') ? '&' : '?'}token=${encodeURIComponent(invitation)}`;
+  }
+  return apiRequest(path, {
+    ...options,
+    token: options.token || (invitation ? undefined : localStorage.getItem('auth_token')),
+  });
+}
 
 const commAnalysisCache = new Map();
 
@@ -132,16 +155,17 @@ export const interviewApi = {
 
   async getCommunicationAnalysis(roundId) {
     if (!roundId) return null;
-    if (commAnalysisCache.has(roundId)) {
-      return commAnalysisCache.get(roundId);
+    const cacheKey = `${localStorage.getItem('auth_token') || new URLSearchParams(window.location.search).get('token') || 'anonymous'}:${roundId}`;
+    if (commAnalysisCache.has(cacheKey)) {
+      return commAnalysisCache.get(cacheKey);
     }
     const p = request(`/api/interviews/rounds/${roundId}/communication-analysis`, {
       method: 'GET',
     }).catch((err) => {
-      commAnalysisCache.delete(roundId);
+      commAnalysisCache.delete(cacheKey);
       throw err;
     });
-    commAnalysisCache.set(roundId, p);
+    commAnalysisCache.set(cacheKey, p);
     return p;
   },
 
@@ -181,8 +205,12 @@ export const interviewApi = {
     });
   },
 
-  getRecordingStreamUrl(roundId, download = false) {
-    return `/api/interviews/rounds/${roundId}/recording${download ? '?download=true' : ''}`;
+  async getRecordingAccess(roundId) {
+    return request(`/api/interviews/rounds/${roundId}/recording-access`, { noCache: true });
+  },
+
+  getRecordingStreamUrl(roundId, download = false, mediaToken = '') {
+    return `${API_BASE_URL}/api/interviews/rounds/${roundId}/recording?media_token=${encodeURIComponent(mediaToken)}${download ? '&download=true' : ''}`;
   },
 
   // 48-Hour Shortlist Automation & Instant Send

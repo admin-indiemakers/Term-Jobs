@@ -56,7 +56,9 @@ def _tenant_requisition_ids(session, tenant_id: str, user_id: str | None = None,
     
     When user_role is 'Hiring Manager', strictly scopes to requisitions created by that user.
     """
-    if user_role == "Hiring Manager" and user_id:
+    if not tenant_id or (user_role == "Hiring Manager" and not user_id):
+        return set()
+    if user_role == "Hiring Manager":
         user_rows = session.query(Requisition).filter(Requisition.tenant_id == tenant_id, Requisition.created_by == user_id).all()
         return {r.id for r in user_rows}
     rows = session.query(Requisition).filter(Requisition.tenant_id == tenant_id).all()
@@ -127,34 +129,24 @@ def _candidate_dict(session, row: CandidateSubmission) -> dict:
     }
 
 
+def _submission_access_filter(current_user):
+    if current_user.role == 'Super Admin':
+        return {}
+    if not current_user.tenant_id:
+        return {'id': {'$in': []}}
+    if current_user.role in ('Recruiter', 'Vendor'):
+        return {'tenant_id': current_user.tenant_id}
+    if current_user.role not in ('Hiring Manager', 'Admin', 'HR', 'Director', 'Finance', 'Finance Team', 'Procurement'):
+        return {'id': {'$in': []}}
+    with get_session() as session:
+        req_ids = list(_tenant_requisition_ids(session, current_user.tenant_id, current_user.id, current_user.role))
+    return {'requisition_id': {'$in': req_ids}}
+
+
 def _fetch_candidate_submissions_mongo(query_filter: dict, current_user: User, include_details: bool = False) -> list[dict]:
     """Query candidate submissions directly from MongoDB with caching and permissions."""
     from modules.shared.db import db
-    if current_user.role != "Super Admin" and current_user.tenant_id:
-        from modules.identity.domain.models import Tenant
-        with get_session() as session:
-            tenant_reqs = list(_tenant_requisition_ids(session, current_user.tenant_id, user_id=current_user.id, user_role=current_user.role))
-            tenant = session.query(Tenant).filter(Tenant.id == current_user.tenant_id).first()
-            vendor_name = (tenant.name or "").lower().strip() if tenant else None
-
-        if current_user.role == "Hiring Manager":
-            if not tenant_reqs:
-                # Hiring Manager has no requisitions yet; return no submissions
-                return []
-            or_conditions = [{"requisition_id": {"$in": tenant_reqs}}]
-        else:
-            or_conditions = [
-                {"tenant_id": current_user.tenant_id},
-            ]
-            if tenant_reqs:
-                or_conditions.append({"requisition_id": {"$in": tenant_reqs}})
-            if vendor_name:
-                or_conditions.append({"vendor_name": {"$regex": f"^{vendor_name}$", "$options": "i"}})
-        
-        if "$or" in query_filter:
-            query_filter = {"$and": [query_filter, {"$or": or_conditions}]}
-        else:
-            query_filter["$or"] = or_conditions
+    query_filter = {'$and': [query_filter, _submission_access_filter(current_user)]}
 
     # Exclude heavy text and PDF fields for fast API responses unless detailed view requested
     projection = {"resume_pdf": 0}
@@ -200,27 +192,27 @@ def _fetch_candidate_submissions_mongo(query_filter: dict, current_user: User, i
     try:
         from modules.interview.domain.models import InterviewRound
         with get_session() as s_sess:
-            all_rounds = s_sess.query(InterviewRound).all()
+            all_rounds = s_sess.query(InterviewRound).filter(InterviewRound.requisition_id.in_(req_ids)).all()
             for rd in all_rounds:
                 if rd.candidate_submission_id:
-                    round_cache[rd.candidate_submission_id] = rd
+                    round_cache[(rd.candidate_submission_id, rd.requisition_id)] = rd
                 if rd.candidate_email:
-                    round_cache[rd.candidate_email.strip().lower()] = rd
+                    round_cache[(rd.candidate_email.strip().lower(), rd.requisition_id)] = rd
                 if rd.candidate_name and rd.requisition_id:
                     round_cache[f"{rd.candidate_name.strip().lower()}::{rd.requisition_id}"] = rd
     except Exception:
         pass
 
     try:
-        for m_rd in db["interview_rounds"].find({}):
+        for m_rd in db["interview_rounds"].find({"requisition_id": {"$in": list(req_ids)}}):
             m_sub_id = m_rd.get("candidate_submission_id")
             m_email = (m_rd.get("candidate_email") or "").strip().lower()
             m_cname = (m_rd.get("candidate_name") or "").strip().lower()
             m_req_id = m_rd.get("requisition_id")
-            if m_sub_id and m_sub_id not in round_cache:
-                round_cache[m_sub_id] = m_rd
-            if m_email and m_email not in round_cache:
-                round_cache[m_email] = m_rd
+            if m_sub_id and (m_sub_id, m_req_id) not in round_cache:
+                round_cache[(m_sub_id, m_req_id)] = m_rd
+            if m_email and (m_email, m_rd.get("requisition_id")) not in round_cache:
+                round_cache[(m_email, m_rd.get("requisition_id"))] = m_rd
             if m_cname and m_req_id and f"{m_cname}::{m_req_id}" not in round_cache:
                 round_cache[f"{m_cname}::{m_req_id}"] = m_rd
     except Exception:
@@ -249,9 +241,9 @@ def _fetch_candidate_submissions_mongo(query_filter: dict, current_user: User, i
         linked_cand_id = doc.get("candidate_id")
 
         matched_round = (
-            round_cache.get(doc_id)
-            or (round_cache.get(linked_cand_id) if linked_cand_id else None)
-            or (round_cache.get(cand_email_key) if cand_email_key else None)
+            round_cache.get((doc_id, req_id))
+            or (round_cache.get((linked_cand_id, req_id)) if linked_cand_id else None)
+            or (round_cache.get((cand_email_key, req_id)) if cand_email_key else None)
             or (round_cache.get(f"{cand_name_key}::{req_id}") if cand_name_key and req_id else None)
         )
 
@@ -400,8 +392,12 @@ def delete_candidate_submission(
     except Exception:
         pass
 
-    res_sub = db["candidate_submissions"].delete_many(q)
-    res_cand = db["candidates"].delete_many(q)
+    res_sub = db["candidate_submissions"].delete_many({'$and': [q, _submission_access_filter(current_user)]})
+    # Company staff may delete an application, never the vendor's shared profile.
+    bank_scope = {} if current_user.role == 'Super Admin' else {'tenant_id': current_user.tenant_id, 'id': {'$in': []}}
+    if current_user.role in ('Recruiter', 'Vendor') and current_user.tenant_id:
+        bank_scope = {'tenant_id': current_user.tenant_id}
+    res_cand = db["candidates"].delete_many({'$and': [q, bank_scope]})
     deleted_total = (res_sub.deleted_count or 0) + (res_cand.deleted_count or 0)
 
     if deleted_total == 0:
@@ -462,26 +458,27 @@ def list_shortlisted(current_user: User = Depends(get_current_user)) -> list[dic
     )
 
     # Collect all completed interview round emails and IDs from SQLite and MongoDB
+    req_ids = list({c.get("requisition_id") for c in candidates if c.get("requisition_id")})
     completed_emails = set()
     completed_ids = set()
     try:
         with get_session() as session:
-            sql_rounds = session.query(InterviewRound).filter(InterviewRound.status == "Completed").all()
+            sql_rounds = session.query(InterviewRound).filter(InterviewRound.status == "Completed", InterviewRound.requisition_id.in_(req_ids)).all()
             for r in sql_rounds:
                 if r.candidate_email:
-                    completed_emails.add(r.candidate_email.strip().lower())
+                    completed_emails.add((r.candidate_email.strip().lower(), r.requisition_id))
                 if r.candidate_submission_id:
-                    completed_ids.add(r.candidate_submission_id)
+                    completed_ids.add((r.candidate_submission_id, r.requisition_id))
     except Exception:
         pass
 
     try:
-        mongo_rounds = list(db["interview_rounds"].find({"status": "Completed"}, {"candidate_email": 1, "candidate_submission_id": 1}))
+        mongo_rounds = list(db["interview_rounds"].find({"status": "Completed", "requisition_id": {"$in": req_ids}}, {"candidate_email": 1, "candidate_submission_id": 1, "requisition_id": 1}))
         for mr in mongo_rounds:
             if mr.get("candidate_email"):
-                completed_emails.add(mr["candidate_email"].strip().lower())
+                completed_emails.add((mr["candidate_email"].strip().lower(), mr.get("requisition_id")))
             if mr.get("candidate_submission_id"):
-                completed_ids.add(mr["candidate_submission_id"])
+                completed_ids.add((mr["candidate_submission_id"], mr.get("requisition_id")))
     except Exception:
         pass
 
@@ -497,8 +494,8 @@ def list_shortlisted(current_user: User = Depends(get_current_user)) -> list[dic
         c_email = (c.get("candidate_email") or "").strip().lower()
         c_id = c.get("id") or c.get("submission_id")
         has_completed_interview = (
-            (c_id and c_id in completed_ids)
-            or (c_email and c_email in completed_emails)
+            (c_id and (c_id, c.get("requisition_id")) in completed_ids)
+            or (c_email and (c_email, c.get("requisition_id")) in completed_emails)
             or (c.get("interview_score") is not None)
             or (c.get("round_status") == "Completed")
         )
@@ -538,8 +535,17 @@ def list_bank_candidates(current_user: User = Depends(get_current_user)) -> list
     """Fetch all candidates stored in the candidates collection for this tenant/vendor."""
     from modules.shared.db import db
     query_filter = {}
-    if current_user.role != "Super Admin" and current_user.tenant_id:
-        query_filter = {"$or": [{"tenant_id": None}, {"tenant_id": current_user.tenant_id}, {"tenant_id": ""}]}
+    if current_user.role != "Super Admin":
+        if not current_user.tenant_id:
+            return []
+        if current_user.role == "Hiring Manager":
+            with get_session() as session:
+                req_ids = list(_tenant_requisition_ids(session, current_user.tenant_id, current_user.id, current_user.role))
+            linked_ids = [s['candidate_id'] for s in db['candidate_submissions'].find(
+                {'requisition_id': {'$in': req_ids}}, {'candidate_id': 1}) if s.get('candidate_id')]
+            query_filter = {'id': {'$in': linked_ids}}
+        else:
+            query_filter = {"tenant_id": current_user.tenant_id}
     
     projection = {"resume_pdf": 0, "extracted_text": 0}
     cursor = db["candidates"].find(query_filter, projection).sort("created_at", -1)
@@ -567,12 +573,12 @@ def list_bank_candidates(current_user: User = Depends(get_current_user)) -> list
 def get_manager_candidate_resume(candidate_id: str, current_user: User = Depends(get_current_user)):
     """Original resume only, authorized through the manager's own requisition application."""
     from modules.shared.db import db
-    if current_user.role != 'Hiring Manager' or not current_user.tenant_id:
+    if current_user.role not in ('Hiring Manager', 'Admin', 'HR', 'Director') or not current_user.tenant_id:
         raise HTTPException(status_code=403, detail='Hiring manager access required')
-    reqs = list(db['requisitions'].find({'tenant_id': current_user.tenant_id, 'created_by': str(current_user.id)}, {'id': 1}))
-    doc = db['candidate_submissions'].find_one({'requisition_id': {'$in': [req['id'] for req in reqs if req.get('id')]},
-        '$and': [{'$or': [{'id': candidate_id}, {'submission_id': candidate_id}, {'candidate_id': candidate_id}]},
-                 {'$or': [{'tenant_id': current_user.tenant_id}, {'tenant_id': {'$exists': False}}, {'tenant_id': None}]}]})
+    doc = db['candidate_submissions'].find_one({'$and': [
+        _submission_access_filter(current_user),
+        {'$or': [{'id': candidate_id}, {'submission_id': candidate_id}]}
+    ]})
     if not doc:
         raise HTTPException(status_code=404, detail='Candidate application not found in your requisitions')
     if not doc.get('resume_pdf') and not doc.get('resume_text') and not doc.get('extracted_text') and doc.get('candidate_id'):
@@ -602,24 +608,27 @@ def get_candidate_resume(candidate_id: str, current_user: User = Depends(get_cur
     from fastapi.responses import Response
     from modules.shared.db import db
     from bson import ObjectId
-    if current_user.role == 'Hiring Manager':
+    if current_user.role in ('Hiring Manager', 'Admin', 'HR', 'Director'):
         return get_manager_candidate_resume(candidate_id, current_user)
 
+    bank_scope = {} if current_user.role == 'Super Admin' else {'tenant_id': current_user.tenant_id, 'id': {'$in': []}}
+    if current_user.role in ('Recruiter', 'Vendor') and current_user.tenant_id:
+        bank_scope = {'tenant_id': current_user.tenant_id}
     doc = None
     # 1. Look in candidate_submissions by string ID
-    doc = db["candidate_submissions"].find_one({"id": candidate_id})
+    doc = db["candidate_submissions"].find_one({"$and": [{"id": candidate_id}, _submission_access_filter(current_user)]})
     if not doc:
         try:
-            doc = db["candidate_submissions"].find_one({"_id": ObjectId(candidate_id)})
+            doc = db["candidate_submissions"].find_one({"$and": [{"_id": ObjectId(candidate_id)}, _submission_access_filter(current_user)]})
         except Exception:
             pass
 
     # 2. Look in candidates (Candidate Bank)
     if not doc or not doc.get("resume_pdf"):
-        bank_doc = db["candidates"].find_one({"id": candidate_id})
+        bank_doc = db["candidates"].find_one({"$and": [{"id": candidate_id}, bank_scope]})
         if not bank_doc:
             try:
-                bank_doc = db["candidates"].find_one({"_id": ObjectId(candidate_id)})
+                bank_doc = db["candidates"].find_one({"$and": [{"_id": ObjectId(candidate_id)}, bank_scope]})
             except Exception:
                 pass
         if bank_doc:
@@ -636,9 +645,9 @@ def get_candidate_resume(candidate_id: str, current_user: User = Depends(get_cur
         if cand_name:
             match_q.append({"candidate_name": cand_name})
         if match_q:
-            alt_doc = db["candidates"].find_one({"$or": match_q, "resume_pdf": {"$exists": True, "$ne": None}})
+            alt_doc = db["candidates"].find_one({"$and": [{"$or": match_q, "resume_pdf": {"$exists": True, "$ne": None}}, bank_scope]})
             if not alt_doc:
-                alt_doc = db["candidate_submissions"].find_one({"$or": match_q, "resume_pdf": {"$exists": True, "$ne": None}})
+                alt_doc = db["candidate_submissions"].find_one({"$and": [{"$or": match_q, "resume_pdf": {"$exists": True, "$ne": None}}, _submission_access_filter(current_user)]})
             if alt_doc and alt_doc.get("resume_pdf"):
                 doc = alt_doc
 
@@ -814,6 +823,9 @@ def update_submission_status(
     current_user: User = Depends(get_current_user)
 ) -> dict:
     """Update candidate submission status (e.g. Shortlisted, Rejected)."""
+    from modules.shared.db import db as access_db
+    if not access_db['candidate_submissions'].find_one({'$and': [{'id': submission_id}, _submission_access_filter(current_user)]}):
+        raise HTTPException(status_code=403, detail='Candidate access denied')
     new_status = body.get("status")
     if not new_status:
         raise HTTPException(status_code=400, detail="status field is required")

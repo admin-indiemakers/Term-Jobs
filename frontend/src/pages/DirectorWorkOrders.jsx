@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { currentBillingMonth } from '../utils/billingPeriod';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
@@ -56,6 +57,8 @@ function formatCurrency(val) {
 }
 
 export default function DirectorWorkOrders() {
+  const loadVersionRef = useRef(0);
+  const [selectedMonth, setSelectedMonth] = useState(() => currentBillingMonth());
   const { token, user } = useAuth();
   const navigate = useNavigate();
   const [workOrders, setWorkOrders] = useState([]);
@@ -76,10 +79,12 @@ export default function DirectorWorkOrders() {
   const [rejectNotes, setRejectNotes] = useState('');
 
   const loadWorkOrders = async () => {
+    const version = ++loadVersionRef.current;
     setLoading(true);
     setError('');
     try {
-      const res = await request('/api/workforce/director/work-orders', { token });
+      const res = await request(`/api/workforce/director/work-orders?period=${selectedMonth}`, { token, noCache: true });
+      if (version !== loadVersionRef.current) return;
       const list = Array.isArray(res?.work_orders) ? res.work_orders : [];
       setWorkOrders(list);
       if (list.length > 0) {
@@ -94,9 +99,10 @@ export default function DirectorWorkOrders() {
       }
     } catch (err) {
       console.error('Failed to load director work orders:', err);
+      if (version !== loadVersionRef.current) return;
       setError(err?.message || 'Failed to load Work Orders.');
     } finally {
-      setLoading(false);
+      if (version === loadVersionRef.current) setLoading(false);
     }
   };
 
@@ -104,7 +110,7 @@ export default function DirectorWorkOrders() {
     if (token) {
       loadWorkOrders();
     }
-  }, [token]);
+  }, [token, selectedMonth]);
 
   // Active Selected Work Order
   const activeWo = useMemo(() => {
@@ -114,7 +120,7 @@ export default function DirectorWorkOrders() {
 
   const sowData = activeWo?.sow_data || {};
   const rawStatus = (activeWo?.status || sowData?.status || 'Pending Director Approval').trim();
-  const isDirectorApproved = rawStatus === 'Approved by Director' || rawStatus === 'Approved' || rawStatus === 'ACTIVE' || activeWo?.director_approved === true || sowData?.director_approved === true;
+  const isDirectorApproved = rawStatus === 'Paid' || rawStatus === 'Approved by Director' || rawStatus === 'Approved' || rawStatus === 'ACTIVE' || activeWo?.director_approved === true || sowData?.director_approved === true;
   const isPendingDirector = !isDirectorApproved && (rawStatus === 'Pending Director Approval' || rawStatus.toLowerCase().includes('approved by procurement') || activeWo?.procurement_authorized === true);
   const isRevision = rawStatus.toLowerCase().includes('revision');
   const isRejected = rawStatus.toLowerCase().includes('reject');
@@ -129,7 +135,7 @@ export default function DirectorWorkOrders() {
     workOrders.forEach((w) => {
       const st = (w.status || w.sow_data?.status || '').trim();
       const d = w.sow_data || {};
-      const isApp = st === 'Approved by Director' || st === 'Approved' || st === 'ACTIVE' || w.director_approved === true || d.director_approved === true;
+      const isApp = st === 'Paid' || st === 'Approved by Director' || st === 'Approved' || st === 'ACTIVE' || w.director_approved === true || d.director_approved === true;
       const isPend = !isApp && (st === 'Pending Director Approval' || st.toLowerCase().includes('approved by procurement') || w.procurement_authorized);
 
       if (isPend) pendingCount++;
@@ -153,7 +159,7 @@ export default function DirectorWorkOrders() {
     return workOrders.filter((w) => {
       const d = w.sow_data || {};
       const st = (w.status || d.status || '').trim();
-      const isApp = st === 'Approved by Director' || st === 'Approved' || st === 'ACTIVE' || w.director_approved === true || d.director_approved === true;
+      const isApp = st === 'Paid' || st === 'Approved by Director' || st === 'Approved' || st === 'ACTIVE' || w.director_approved === true || d.director_approved === true;
       const isPend = !isApp && (st === 'Pending Director Approval' || st.toLowerCase().includes('approved by procurement') || w.procurement_authorized);
       const isRev = st.toLowerCase().includes('revision');
       const isRej = st.toLowerCase().includes('reject');
@@ -185,7 +191,7 @@ export default function DirectorWorkOrders() {
     setActionLoading(true);
     setError('');
     try {
-      const res = await request(`/api/workforce/procurement/sow/${encodeURIComponent(candidateId)}/director-approve`, {
+      const res = await request(`/api/workforce/procurement/sow/${encodeURIComponent(candidateId)}/director-approve?period=${selectedMonth}`, {
         method: 'POST',
         token,
       });
@@ -230,7 +236,7 @@ export default function DirectorWorkOrders() {
     setActionLoading(true);
     setError('');
     try {
-      await request(`/api/workforce/procurement/sow/${encodeURIComponent(candidateId)}/request-revision`, {
+      await request(`/api/workforce/procurement/sow/${encodeURIComponent(candidateId)}/request-revision?period=${selectedMonth}`, {
         method: 'POST',
         token,
         body: { revision_notes: revisionNotes.trim() },
@@ -252,7 +258,7 @@ export default function DirectorWorkOrders() {
     setActionLoading(true);
     setError('');
     try {
-      await request(`/api/workforce/procurement/sow/${encodeURIComponent(candidateId)}/reject`, {
+      await request(`/api/workforce/procurement/sow/${encodeURIComponent(candidateId)}/reject?period=${selectedMonth}`, {
         method: 'POST',
         token,
         body: { rejection_notes: rejectNotes.trim() || 'Commercial terms rejected by Company Director.' },
@@ -333,6 +339,13 @@ export default function DirectorWorkOrders() {
             <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight leading-none">
               Director Work Orders & SOW Sign-off
             </h1>
+          <label className="inline-flex items-center gap-2 text-sm font-semibold text-gray-800 my-3">
+            Billing month
+            <input type="month" aria-label="Billing month" value={selectedMonth}
+              onChange={(e) => { if (e.target.value) { setSelectedMonth(e.target.value); setSelectedCandidateId(null); setWorkOrders([]); setLoading(true); ++loadVersionRef.current; } }}
+              className="bg-white border border-gray-300 rounded-lg px-3 py-2 !text-gray-900" />
+          </label>
+
             <p className="text-xs sm:text-[13px] text-gray-500 font-normal mt-1 max-w-2xl">
               Inspect commercial rate schedules, timesheet breakdowns, and grant final executive Director sign-off for Work Orders authorized by Procurement.
             </p>
@@ -544,7 +557,7 @@ export default function DirectorWorkOrders() {
                   const isCurrent = (item.candidate_id || item.workorder_id || item._id) === selectedCandidateId;
                   const d = item.sow_data || {};
                   const st = (item.status || d.status || 'Pending Director Approval').trim();
-                  const itemIsApproved = st === 'Approved by Director' || st === 'Approved' || st === 'ACTIVE';
+                  const itemIsApproved = st === 'Paid' || st === 'Approved by Director' || st === 'Approved' || st === 'ACTIVE';
                   const itemIsPending = !itemIsApproved && (st === 'Pending Director Approval' || st.toLowerCase().includes('approved by procurement') || item.procurement_authorized);
                   const itemIsRejected = st.toLowerCase().includes('reject');
                   const itemIsRevision = st.toLowerCase().includes('revision');

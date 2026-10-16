@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Header, status
+from fastapi import APIRouter, Depends, HTTPException, Header, status, Request
 from pydantic import BaseModel, Field
 
 from modules.identity.domain.models import User
@@ -13,7 +13,16 @@ from modules.shared.db import db, get_session
 
 logger = logging.getLogger("offboarding")
 
-router = APIRouter(prefix="/api/offboarding", tags=["Offboarding"])
+from .access import require_application
+
+
+def authorize_offboarding_request(request: Request, user: User = Depends(get_current_user)):
+    candidate_id = request.path_params.get('candidate_id')
+    if candidate_id:
+        require_application(db, {'id': user.id, 'role': user.role, 'tenant_id': user.tenant_id, 'email': user.email}, candidate_id)
+
+
+router = APIRouter(prefix="/api/offboarding", tags=["Offboarding"], dependencies=[Depends(authorize_offboarding_request)])
 
 
 class ChecklistItem(BaseModel):

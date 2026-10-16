@@ -3186,6 +3186,10 @@ export const getInitialWelcomeMessage = (userName, isCompanyAdmin = false, compa
 
 export default function AiChat() {
   const { user, token, logout } = useAuth();
+  const voiceFetch = (url, options = {}) => fetch(url, {
+    ...options,
+    headers: { ...options.headers, Authorization: `Bearer ${token}` },
+  });
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -3548,7 +3552,7 @@ export default function AiChat() {
       webrtcAudioRef.current = null;
     }
     if (webrtcSessionIdRef.current) {
-      fetch(`${API_BASE_URL}/api/voice/session/${webrtcSessionIdRef.current}`, { method: 'DELETE' }).catch(() => { });
+      voiceFetch(`${API_BASE_URL}/api/voice/session/${webrtcSessionIdRef.current}`, { method: 'DELETE' }).catch(() => { });
       webrtcSessionIdRef.current = null;
     }
     webrtcPcIdRef.current = null;
@@ -3719,7 +3723,7 @@ export default function AiChat() {
 
         showToast('⚡ Silero VAD: Speech captured! Transcribing with Sarvam STT...');
 
-        const response = await fetch(`${API_BASE_URL}/api/voice/stt`, {
+        const response = await voiceFetch(`${API_BASE_URL}/api/voice/stt`, {
           method: 'POST',
           body: formData
         });
@@ -3959,7 +3963,7 @@ export default function AiChat() {
           formData.append('model', 'saaras:v3');
           formData.append('language_code', 'en-IN');
 
-          const response = await fetch(`${API_BASE_URL}/api/voice/stt`, {
+          const response = await voiceFetch(`${API_BASE_URL}/api/voice/stt`, {
             method: 'POST',
             body: formData
           });
@@ -4256,7 +4260,7 @@ export default function AiChat() {
   const startWebRtcVoice = async () => {
     try {
       showToast('🚀 Connecting to Pipecat WebRTC Voice Stream...');
-      const startRes = await fetch(`${API_BASE_URL}/api/voice/start`, {
+      const startRes = await voiceFetch(`${API_BASE_URL}/api/voice/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_name: user?.name || 'Super Admin' })
@@ -4341,7 +4345,7 @@ export default function AiChat() {
       webrtcSyncIntervalRef.current = setInterval(async () => {
         if (!webrtcSessionIdRef.current) return;
         try {
-          const actRes = await fetch(`${API_BASE_URL}/api/voice/session/${webrtcSessionIdRef.current}/actions`);
+          const actRes = await voiceFetch(`${API_BASE_URL}/api/voice/session/${webrtcSessionIdRef.current}/actions`);
           if (actRes.ok) {
             const actData = await actRes.json();
             const actions = actData.executed_actions || [];
@@ -4363,7 +4367,7 @@ export default function AiChat() {
 
       pc.onicecandidate = (event) => {
         if (event.candidate && webrtcPcIdRef.current) {
-          fetch(`${API_BASE_URL}/api/voice/offer`, {
+          voiceFetch(`${API_BASE_URL}/api/voice/offer`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -4377,7 +4381,7 @@ export default function AiChat() {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
-      const offerRes = await fetch(`${API_BASE_URL}/api/voice/offer`, {
+      const offerRes = await voiceFetch(`${API_BASE_URL}/api/voice/offer`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

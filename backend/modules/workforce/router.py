@@ -20,6 +20,7 @@ from modules.identity.domain.models import User
 from modules.identity.router import get_current_user
 from modules.shared.db import db
 from modules.shared.cache import cache
+from modules.billing.services.billing_periods import billing_period, record_period, period_query, require_editable
 
 router = APIRouter(prefix="/workforce", tags=["Workforce"])
 
@@ -38,7 +39,7 @@ def _get_hm_team_candidate_ids(user: User, use_cache: bool = True) -> list[str]:
     Deduplicates by email: if the same person appears in both candidate_submissions
     and work_orders with different IDs, keeps the submission ID (canonical).
     """
-    cache_key = f"team_ids:{user.id}:{user.role}:{user.tenant_id}"
+    cache_key = f"team_ids:v2:{user.id}:{user.role}:{user.tenant_id}"
     if use_cache:
         cached = cache.get(cache_key)
         if cached is not None:
@@ -47,16 +48,19 @@ def _get_hm_team_candidate_ids(user: User, use_cache: bool = True) -> list[str]:
     sub_coll = db["candidate_submissions"]
     wo_coll = db["work_orders"]
 
-    # Determine tenant-scoped requisition IDs
-    # For team overview: HMs see ALL candidates in their tenant (not just their own reqs)
+    # Hiring Managers see only their own requisitions within their company.
     from modules.requisition.domain.models import Requisition
     tenant_req_ids: set[str] = set()
     if user.role == "Super Admin":
         tenant_req_ids = None  # no filter
+    elif not user.tenant_id or not user.id:
+        return []
     else:
         from modules.shared.db import get_session
         with get_session() as session:
             filters = [Requisition.tenant_id == user.tenant_id]
+            if user.role == "Hiring Manager":
+                filters.append(Requisition.created_by == user.id)
             tenant_req_ids = {r.id for r in session.query(Requisition).filter(*filters).all()}
 
     # Build email -> canonical candidate_id mapping
@@ -93,7 +97,7 @@ def _get_hm_team_candidate_ids(user: User, use_cache: bool = True) -> list[str]:
                 email_to_id[email] = cid
 
     # Fallback: if no candidates found via requisitions, show ALL active work orders for tenant
-    if not id_set and user.role != "Super Admin":
+    if not id_set and user.role in ("Admin", "HR", "Director"):
         for doc in wo_coll.find({"status": "ACTIVE", "tenant_id": user.tenant_id}):
             cid = doc.get("workorder_id") or doc.get("candidate_id")
             if cid:
@@ -732,8 +736,8 @@ def approve_timesheet(
     ts_tenant = ts.get("tenant_id")
     is_team_member = (
         (cand_id and cand_id in cand_ids) or
-        (ts_tenant and current_user.tenant_id and ts_tenant == current_user.tenant_id) or
-        current_user.role in ("Super Admin", "Admin")
+        (current_user.role in ("Admin", "HR") and ts_tenant and current_user.tenant_id and ts_tenant == current_user.tenant_id) or
+        current_user.role == "Super Admin"
     )
     if not is_team_member:
         raise HTTPException(status_code=403, detail="This timesheet does not belong to your team")
@@ -798,8 +802,8 @@ def reject_timesheet(
     ts_tenant = ts.get("tenant_id")
     is_team_member = (
         (cand_id and cand_id in cand_ids) or
-        (ts_tenant and current_user.tenant_id and ts_tenant == current_user.tenant_id) or
-        current_user.role in ("Super Admin", "Admin")
+        (current_user.role in ("Admin", "HR") and ts_tenant and current_user.tenant_id and ts_tenant == current_user.tenant_id) or
+        current_user.role == "Super Admin"
     )
     if not is_team_member:
         raise HTTPException(status_code=403, detail="This timesheet does not belong to your team")
@@ -927,9 +931,10 @@ def approve_expense(
     cand_id_clean = cand_id.replace("SDC-", "").replace("SDC -", "").replace("BEAR-", "").strip()
     cand_ids_clean = {c.replace("SDC-", "").replace("SDC -", "").replace("BEAR-", "").strip() for c in cand_ids}
 
-    if cand_ids and (cand_id not in cand_ids and cand_id_clean not in cand_ids_clean):
-        if current_user.role not in ("Super Admin", "Admin", "HR"):
-            raise HTTPException(status_code=403, detail="Expense not in your team")
+    is_team_member = bool(cand_id and (cand_id in cand_ids or cand_id_clean in cand_ids_clean))
+    company_reviewer = current_user.role in ("Admin", "HR") and bool(current_user.tenant_id) and exp.get("tenant_id") == current_user.tenant_id
+    if not (is_team_member or company_reviewer or current_user.role == "Super Admin"):
+        raise HTTPException(status_code=403, detail="Expense not in your team")
 
     exp_coll.update_one(
         {"id": expense_id},
@@ -982,9 +987,10 @@ def reject_expense(
     cand_id_clean = cand_id.replace("SDC-", "").replace("SDC -", "").replace("BEAR-", "").strip()
     cand_ids_clean = {c.replace("SDC-", "").replace("SDC -", "").replace("BEAR-", "").strip() for c in cand_ids}
 
-    if cand_ids and (cand_id not in cand_ids and cand_id_clean not in cand_ids_clean):
-        if current_user.role not in ("Super Admin", "Admin", "HR"):
-            raise HTTPException(status_code=403, detail="Expense not in your team")
+    is_team_member = bool(cand_id and (cand_id in cand_ids or cand_id_clean in cand_ids_clean))
+    company_reviewer = current_user.role in ("Admin", "HR") and bool(current_user.tenant_id) and exp.get("tenant_id") == current_user.tenant_id
+    if not (is_team_member or company_reviewer or current_user.role == "Super Admin"):
+        raise HTTPException(status_code=403, detail="Expense not in your team")
 
     exp_coll.update_one(
         {"id": expense_id},
@@ -1022,7 +1028,7 @@ def get_workforce_stats(current_user: User = Depends(get_current_user)):
     if current_user.role not in ("Hiring Manager", "Admin", "Super Admin", "HR"):
         raise HTTPException(status_code=403, detail="Hiring Manager role required")
 
-    cache_key = f"wf_stats:{current_user.id}:{current_user.role}:{current_user.tenant_id}"
+    cache_key = f"wf_stats:v2:{current_user.id}:{current_user.role}:{current_user.tenant_id}"
     cached = cache.get(cache_key)
     if cached is not None:
         return cached
@@ -1311,8 +1317,11 @@ def get_worker_sow(
     sub_coll = db["candidate_submissions"]
     sow_coll = db["sow_documents"]
 
-    # Existing SOW doc
-    saved_sow = sow_coll.find_one({"candidate_id": candidate_id})
+    from modules.billing.services.billing_service import get_candidate_billing_breakdown
+    period = billing_period(cycle_period if cycle_period and len(cycle_period) == 7 else None)
+    breakdown = get_candidate_billing_breakdown(candidate_id, period)
+    # Existing SOW doc for this period only.
+    saved_sow = sow_coll.find_one(period_query(sow_coll, candidate_id, period))
     if saved_sow:
         saved_sow.pop("_id", None)
 
@@ -1340,7 +1349,7 @@ def get_worker_sow(
     if isinstance(cycle_period, str) and cycle_period.strip():
         period_str = cycle_period.strip()
     else:
-        period_str = "Sep 1, 2026 - Sep 30, 2026"
+        period_str = breakdown["period_label"]
     
     # Resolve buyer charge rate and worker pay rate from work order / requisition / submission
     raw_buyer_rate = wo.get("bill_rate") or wo.get("billing_rate") or wo.get("charge_rate_buyer") or sr.get("max_rate") or sub.get("billing_rate") or 828
@@ -1359,9 +1368,9 @@ def get_worker_sow(
     # Fetch approved timesheets from DB
     ts_docs = list(ts_coll.find({"$or": [{"workorder_id": candidate_id}, {"candidate_id": candidate_id}], "status": "APPROVED"}))
     
-    total_hours = sum(t.get("total_hours", 0) for t in ts_docs)
-    regular_hours = min(160 if cycle == "Monthly" else 80 if cycle == "Fortnightly" else 40 if cycle == "Weekly" else 1920, total_hours)
-    overtime_hours = max(0, total_hours - regular_hours)
+    total_hours = breakdown["summary"]["total_submitted"]
+    regular_hours = breakdown['summary']['regular_hours']
+    overtime_hours = breakdown['summary']['overtime_hours']
 
     base_cost = regular_hours * charge_rate_buyer
     overtime_rate = charge_rate_buyer * 1.5
@@ -1370,6 +1379,7 @@ def get_worker_sow(
     # Fetch approved expenses from DB
     exp_docs = list(exp_coll.find({"$or": [{"workorder_id": candidate_id}, {"candidate_id": candidate_id}], "status": "Approved"}))
     expense_items = []
+    exp_docs = breakdown["expenses"]
     if exp_docs:
         for e in exp_docs:
             expense_items.append({
@@ -1384,6 +1394,7 @@ def get_worker_sow(
     grand_total = base_cost + overtime_cost + total_expenses
 
     sow_data = {
+        "period": period,
         "candidate_id": candidate_id,
         "ws_number": wo.get("work_order_number") or wo.get("workorder_id") or f"WSOW-2026-{str(candidate_id)[:4].upper()}",
         "msa_ref": wo.get("msa_ref") or f"MSA-TB-2024-11",
@@ -1439,15 +1450,23 @@ def get_worker_sow(
 def send_sow_to_procurement(
     candidate_id: str,
     body: dict,
+    period: Optional[str] = None,
     current_user: User = Depends(get_current_user)
 ):
     """Recruiter submits SOW & Billing Sheet package to Procurement."""
+    period = billing_period(period)
     sow_coll = db["sow_documents"]
     notif_coll = db["candidate_notifications"]
     wo_coll = db["work_orders"]
 
+    sow_query = period_query(sow_coll, candidate_id, period)
+    monthly_doc = sow_coll.find_one(sow_query)
+    require_editable(monthly_doc)
+    if monthly_doc and monthly_doc.get('tenant_id') != current_user.tenant_id and current_user.role != 'Super Admin' and monthly_doc.get('recruiter_id') != current_user.id:
+        raise HTTPException(403, 'This billing document belongs to another company')
     now_iso = datetime.now(timezone.utc).isoformat()
-    sow_payload = body.get("sow_data") or body
+    sow_payload = dict(body.get("sow_data") or body)
+    sow_payload["period"] = period
 
     # Resolve company tenant ID
     wo = wo_coll.find_one({"candidate_id": candidate_id}) or wo_coll.find_one({"id": candidate_id}) or {}
@@ -1460,6 +1479,7 @@ def send_sow_to_procurement(
             tenant_id = str(tenant_doc.get("_id") or tenant_doc.get("id"))
 
     doc_record = {
+        "period": period,
         "candidate_id": candidate_id,
         "workorder_id": candidate_id,
         "tenant_id": tenant_id or "50c9753b-ad12-4783-b519-9080358f5359",
@@ -1473,7 +1493,7 @@ def send_sow_to_procurement(
     }
 
     sow_coll.update_one(
-        {"candidate_id": candidate_id},
+        sow_query,
         {"$set": doc_record},
         upsert=True
     )
@@ -1505,17 +1525,29 @@ def send_sow_to_procurement(
 def save_sow_draft(
     candidate_id: str,
     body: dict,
+    period: Optional[str] = None,
     current_user: User = Depends(get_current_user)
 ):
     """Save SOW & Billing sheet draft."""
+    period = billing_period(period)
     sow_coll = db["sow_documents"]
+    sow_query = period_query(sow_coll, candidate_id, period)
+    monthly_doc = sow_coll.find_one(sow_query)
+    require_editable(monthly_doc)
+    if monthly_doc and monthly_doc.get('tenant_id') != current_user.tenant_id and current_user.role != 'Super Admin' and monthly_doc.get('recruiter_id') != current_user.id:
+        raise HTTPException(403, 'This billing document belongs to another company')
+    contract = db['work_orders'].find_one({'$or': [{'candidate_id': candidate_id}, {'workorder_id': candidate_id}, {'id': candidate_id}]}) or {}
     now_iso = datetime.now(timezone.utc).isoformat()
-    sow_payload = body.get("sow_data") or body
+    sow_payload = dict(body.get("sow_data") or body)
+    sow_payload["period"] = period
 
     sow_coll.update_one(
-        {"candidate_id": candidate_id},
+        sow_query,
         {"$set": {
             "candidate_id": candidate_id,
+            "period": period,
+            "tenant_id": (monthly_doc or {}).get("tenant_id") or contract.get("tenant_id") or current_user.tenant_id,
+            "company_name": (monthly_doc or {}).get("company_name") or contract.get("company_name") or "",
             "recruiter_id": current_user.id,
             "status": "Draft",
             "sow_data": sow_payload,
@@ -1532,13 +1564,16 @@ def save_sow_draft(
 # ---------------------------------------------------------------------------
 
 @router.get("/procurement/sow-agreements")
-def get_procurement_sow_agreements(current_user: User = Depends(get_current_user)):
+def get_procurement_sow_agreements(period: Optional[str] = None, current_user: User = Depends(get_current_user)):
     """Fetch all SOW billing sheets sent to Procurement for the current user's company."""
+    if current_user.role != 'Super Admin' and not current_user.tenant_id:
+        raise HTTPException(403, 'A company account is required to view billing records')
+    period = billing_period(period)
     sow_coll = db["sow_documents"]
     wo_coll = db["work_orders"]
 
     query = {}
-    if current_user.role not in ("Super Admin", "Recruiter"):
+    if current_user.role != "Super Admin":
         tenant_match = []
         if current_user.tenant_id:
             tenant_match.append({"tenant_id": current_user.tenant_id})
@@ -1553,41 +1588,9 @@ def get_procurement_sow_agreements(current_user: User = Depends(get_current_user
     # Find all SOW documents matching company
     docs = list(sow_coll.find(query).sort("submitted_at", -1))
 
-    # Also find all company work orders to ensure all candidates placed by recruiters are available for verification
-    wo_query = {}
-    if current_user.role not in ("Super Admin", "Recruiter"):
-        wo_match = []
-        if current_user.tenant_id:
-            wo_match.append({"tenant_id": current_user.tenant_id})
-        comp_name = getattr(current_user, "tenant_name", "") or ""
-        if comp_name:
-            wo_match.append({"company_name": {"$regex": f"^{comp_name}$", "$options": "i"}})
-        if wo_match:
-            wo_query["$or"] = wo_match
-
-    company_wos = list(wo_coll.find(wo_query).sort("created_at", -1))
-    existing_cand_ids = {d.get("candidate_id") for d in docs if d.get("candidate_id")}
-
-    for wo in company_wos:
-        cid = wo.get("candidate_id") or wo.get("workorder_id") or wo.get("id")
-        if cid and cid not in existing_cand_ids:
-            # Build full SOW data for this candidate
-            sow_res = get_worker_sow(cid, current_user=current_user)
-            sow_payload = sow_res.get("sow_data") or {}
-            
-            auto_doc = {
-                "candidate_id": cid,
-                "workorder_id": cid,
-                "tenant_id": current_user.tenant_id or wo.get("tenant_id") or "50c9753b-ad12-4783-b519-9080358f5359",
-                "company_name": wo.get("company_name") or getattr(current_user, "tenant_name", "") or "Bearitt",
-                "recruiter_id": wo.get("recruiter_id") or "recruiter_01",
-                "recruiter_name": wo.get("vendor_name") or "TalentBridge Staffing",
-                "status": "Sent to Procurement",
-                "submitted_at": wo.get("created_at") or datetime.now(timezone.utc).isoformat(),
-                "sow_data": sow_payload,
-            }
-            docs.append(auto_doc)
-            existing_cand_ids.add(cid)
+    docs = [d for d in docs if record_period(d) == period]
+    for d in docs:
+        d['period'] = period
 
     # Clean ObjectIds
     results = []
@@ -1603,11 +1606,14 @@ def get_procurement_sow_agreements(current_user: User = Depends(get_current_user
 # ---------------------------------------------------------------------------
 
 @router.get("/director/work-orders")
-def get_director_work_orders(current_user: User = Depends(get_current_user)):
+def get_director_work_orders(period: Optional[str] = None, current_user: User = Depends(get_current_user)):
     """Fetch all Work Orders / SOW documents for Company Director executive review & approval."""
     if current_user.role not in ("Director", "Super Admin", "Admin", "HR"):
         raise HTTPException(status_code=403, detail="Only Company Directors or Admins can access Director Work Orders.")
 
+    if current_user.role != 'Super Admin' and not current_user.tenant_id:
+        raise HTTPException(403, 'A company account is required to view billing records')
+    period = billing_period(period)
     sow_coll = db["sow_documents"]
     wo_coll = db["work_orders"]
 
@@ -1633,56 +1639,9 @@ def get_director_work_orders(current_user: User = Depends(get_current_user)):
 
     docs = list(sow_coll.find(query).sort("updated_at", -1))
     
-    # Also find all work orders for the company to ensure all active placed candidates appear
-    wo_query = {}
-    if current_user.role != "Super Admin":
-        wo_match = []
-        if current_user.tenant_id:
-            wo_match.append({"tenant_id": current_user.tenant_id})
-        if comp_name:
-            wo_match.append({"company_name": {"$regex": f"^{comp_name}$", "$options": "i"}})
-        if wo_match:
-            wo_query["$or"] = wo_match
-
-    company_wos = list(wo_coll.find(wo_query).sort("created_at", -1))
-    existing_cand_ids = {d.get("candidate_id") for d in docs if d.get("candidate_id")}
-
-    for wo in company_wos:
-        cid = wo.get("candidate_id") or wo.get("workorder_id") or wo.get("id")
-        if cid and cid not in existing_cand_ids:
-            sow_res = get_worker_sow(cid, current_user=current_user)
-            sow_payload = sow_res.get("sow_data") or {}
-            
-            is_approved = bool(wo.get("director_approved")) or (
-                wo.get("status") in ("Approved by Director", "Approved") or wo.get("agreement_status") == "Approved"
-            )
-            s_status = (
-                "Approved by Director" if is_approved
-                else (wo.get("sow_status") if wo.get("sow_status") and wo.get("sow_status") not in ("Draft", "ACTIVE")
-                else (wo.get("agreement_status") if wo.get("agreement_status") and wo.get("agreement_status") not in ("Draft", "ACTIVE")
-                else "Pending Director Approval"))
-            )
-            sow_payload["status"] = s_status
-            sow_payload["director_approved"] = is_approved
-            sow_payload["procurement_authorized"] = wo.get("procurement_authorized", True)
-            sow_payload["procurement_approved_by"] = wo.get("procurement_approved_by", "Aditi (Procurement)")
-
-            auto_doc = {
-                "candidate_id": cid,
-                "workorder_id": cid,
-                "tenant_id": current_user.tenant_id or wo.get("tenant_id") or "13742004-bccc-45ba-86f7-c3513e28df43",
-                "company_name": wo.get("company_name") or comp_name or "Client Company",
-                "recruiter_id": wo.get("recruiter_id") or "recruiter_01",
-                "recruiter_name": wo.get("vendor_name") or sow_payload.get("supplier_name") or "Direct Applicant",
-                "status": s_status,
-                "submitted_at": wo.get("created_at") or datetime.now(timezone.utc).isoformat(),
-                "procurement_authorized": wo.get("procurement_authorized", True),
-                "procurement_approved_by": wo.get("procurement_approved_by", "Aditi (Procurement)"),
-                "director_approved": is_approved,
-                "sow_data": sow_payload,
-            }
-            docs.append(auto_doc)
-            existing_cand_ids.add(cid)
+    docs = [d for d in docs if record_period(d) == period]
+    for d in docs:
+        d['period'] = period
 
     # Sort with Pending Director Approval first, then Approved by Director, etc.
     priority = {
@@ -1704,7 +1663,7 @@ def get_director_work_orders(current_user: User = Depends(get_current_user)):
     cleaned.sort(key=lambda x: priority.get(x.get("status", ""), 6))
 
     pending_count = sum(1 for d in cleaned if d.get("status") in ("Pending Director Approval", "Approved by Procurement"))
-    approved_count = sum(1 for d in cleaned if d.get("status") in ("Approved by Director", "Approved", "ACTIVE"))
+    approved_count = sum(1 for d in cleaned if d.get("status") in ("Approved by Director", "Approved", "ACTIVE", "Paid"))
 
     return {
         "status": "success",
@@ -1720,11 +1679,14 @@ def get_director_work_orders(current_user: User = Depends(get_current_user)):
 # ---------------------------------------------------------------------------
 
 @router.get("/finance/work-orders")
-def get_finance_work_orders(current_user: User = Depends(get_current_user)):
+def get_finance_work_orders(period: Optional[str] = None, current_user: User = Depends(get_current_user)):
     """Fetch all Work Orders & invoices for Financial Team payment processing and disbursement."""
-    if current_user.role not in ("Finance", "Finance Team", "Admin", "Super Admin", "Director", "HR"):
+    if current_user.role not in ("Finance", "Finance Team", "Admin", "Super Admin", "Director", "HR", "Procurement", "Procurement Team"):
         raise HTTPException(status_code=403, detail="Only Finance Team or Admins can access Financial Work Orders.")
 
+    if current_user.role != 'Super Admin' and not current_user.tenant_id:
+        raise HTTPException(403, 'A company account is required to view billing records')
+    period = billing_period(period)
     sow_coll = db["sow_documents"]
     wo_coll = db["work_orders"]
     inv_coll = db["vendor_invoices"]
@@ -1744,45 +1706,9 @@ def get_finance_work_orders(current_user: User = Depends(get_current_user)):
 
     docs = list(sow_coll.find(query).sort("updated_at", -1))
 
-    # Also pull company work orders to ensure all active worker records are included
-    wo_query = {}
-    if current_user.role not in ("Super Admin",):
-        wo_match = []
-        if current_user.tenant_id:
-            wo_match.append({"tenant_id": current_user.tenant_id})
-        comp_name = getattr(current_user, "tenant_name", "") or ""
-        if comp_name:
-            wo_match.append({"company_name": {"$regex": f"^{comp_name}$", "$options": "i"}})
-        if wo_match:
-            wo_query["$or"] = wo_match
-
-    company_wos = list(wo_coll.find(wo_query).sort("created_at", -1))
-    existing_cand_ids = {d.get("candidate_id") for d in docs if d.get("candidate_id")}
-
-    for wo in company_wos:
-        cid = wo.get("candidate_id") or wo.get("workorder_id") or wo.get("id")
-        if cid and cid not in existing_cand_ids:
-            sow_res = get_worker_sow(cid, current_user=current_user)
-            sow_payload = sow_res.get("sow_data") or {}
-
-            st = wo.get("sow_status") or wo.get("agreement_status") or "Approved by Director"
-            auto_doc = {
-                "candidate_id": cid,
-                "workorder_id": cid,
-                "tenant_id": current_user.tenant_id or wo.get("tenant_id") or "50c9753b-ad12-4783-b519-9080358f5359",
-                "company_name": wo.get("company_name") or getattr(current_user, "tenant_name", "") or "Bearitt",
-                "recruiter_id": wo.get("recruiter_id") or "recruiter_01",
-                "recruiter_name": wo.get("vendor_name") or "TalentBridge Staffing",
-                "status": st,
-                "procurement_authorized": wo.get("procurement_authorized", True),
-                "procurement_approved_by": wo.get("procurement_approved_by", "Aditi (Procurement Lead)"),
-                "director_approved": wo.get("director_approved", True),
-                "director_approved_by": wo.get("approved_by") or "Company Director",
-                "submitted_at": wo.get("created_at") or datetime.now(timezone.utc).isoformat(),
-                "sow_data": sow_payload,
-            }
-            docs.append(auto_doc)
-            existing_cand_ids.add(cid)
+    docs = [d for d in docs if record_period(d) == period]
+    for d in docs:
+        d['period'] = period
 
     # Clean ObjectIds and attach invoice info and top-level display fields
     cleaned = []
@@ -1793,7 +1719,7 @@ def get_finance_work_orders(current_user: User = Depends(get_current_user)):
         # Ensure sow_data is populated if missing
         sow_p = d.get("sow_data") or {}
         if not sow_p and cid:
-            sow_res = get_worker_sow(cid, current_user=current_user)
+            sow_res = get_worker_sow(cid, cycle_period=period, current_user=current_user)
             sow_p = sow_res.get("sow_data") or {}
             d["sow_data"] = sow_p
 
@@ -1846,8 +1772,7 @@ def get_finance_work_orders(current_user: User = Depends(get_current_user)):
             d.get("total_amount")
             or sow_p.get("grand_total")
             or sow_p.get("calculated_grand_total")
-            or wo_rec.get("total_amount")
-            or 9800.0
+            or 0.0
         )
         d["total_amount"] = tot_amount
 
@@ -1882,7 +1807,7 @@ def get_finance_work_orders(current_user: User = Depends(get_current_user)):
         d["status"] = st
         d["ready_for_payment"] = st in ("Approved by Director", "Approved", "ACTIVE") and d.get("payment_status") != "Paid"
 
-        inv = inv_coll.find_one({"$or": [{"candidate_id": cid}, {"workorder_id": cid}]})
+        inv = inv_coll.find_one({"$or": [{"candidate_id": cid}, {"workorder_id": cid}], "period": period})
         if inv:
             inv["_id"] = str(inv["_id"])
             d["invoice"] = inv
@@ -1934,30 +1859,41 @@ def get_finance_work_orders(current_user: User = Depends(get_current_user)):
 def process_finance_work_order_payment(
     candidate_id: str,
     body: dict,
+    period: Optional[str] = None,
     current_user: User = Depends(get_current_user)
 ):
     """Finance Team processes and marks payment disbursement for authorized Work Order."""
-    if current_user.role not in ("Finance", "Finance Team", "Admin", "Super Admin", "Director"):
+    if current_user.role not in ("Finance", "Finance Team", "Admin", "Super Admin"):
         raise HTTPException(status_code=403, detail="Only Finance Team or Admins can process payments.")
 
+    period = billing_period(period)
     sow_coll = db["sow_documents"]
     wo_coll = db["work_orders"]
     inv_coll = db["vendor_invoices"]
     notif_coll = db["candidate_notifications"]
+    sow_query = period_query(sow_coll, candidate_id, period)
+    monthly_doc = sow_coll.find_one(sow_query)
+    require_editable(monthly_doc)
+    if monthly_doc and monthly_doc.get('tenant_id') != current_user.tenant_id and current_user.role != 'Super Admin' and monthly_doc.get('recruiter_id') != current_user.id:
+        raise HTTPException(403, 'This billing document belongs to another company')
     now_iso = datetime.now(timezone.utc).isoformat()
     import uuid as _uuid
 
-    doc = sow_coll.find_one({"$or": [{"candidate_id": candidate_id}, {"workorder_id": candidate_id}]})
-    cid = doc.get("candidate_id") if doc else candidate_id
+    doc = monthly_doc
+    if not doc:
+        raise HTTPException(404, 'Billing document not found for this month')
+    if doc.get('status') not in ('Approved by Director', 'Approved'):
+        raise HTTPException(409, 'Director approval is required for this billing period')
+    cid = doc.get('candidate_id') or candidate_id
 
     payment_method = body.get("payment_method") or "Direct Bank Transfer (NEFT/RTGS)"
     txn_ref = body.get("transaction_ref") or f"TXN-{_uuid.uuid4().hex[:8].upper()}"
     notes = body.get("notes") or "Payment disbursed by Finance AP team."
-    amount = float(body.get("amount") or 0)
+    amount = float((doc.get("sow_data") or {}).get("grand_total") or (doc.get("sow_data") or {}).get("calculated_grand_total") or doc.get("total_amount") or 0)
 
     # 1. Update SOW Document
-    sow_coll.update_many(
-        {"$or": [{"candidate_id": cid}, {"workorder_id": cid}]},
+    payment_update = sow_coll.update_one(
+        {**sow_query, "status": {"$in": ["Approved by Director", "Approved"]}, "payment_status": {"$ne": "Paid"}},
         {"$set": {
             "status": "Paid",
             "payment_status": "Paid",
@@ -1975,21 +1911,12 @@ def process_finance_work_order_payment(
         }}
     )
 
-    # 2. Update Work Order
-    wo_coll.update_many(
-        {"$or": [{"candidate_id": cid}, {"workorder_id": cid}, {"id": cid}]},
-        {"$set": {
-            "payment_status": "Paid",
-            "transaction_ref": txn_ref,
-            "payment_processed_at": now_iso,
-            "payment_processed_by": f"{current_user.name} ({current_user.role})",
-            "updated_at": now_iso
-        }}
-    )
+    if payment_update.modified_count != 1:
+        raise HTTPException(409, "This billing period has already been processed or changed")
 
     # 3. Update Invoice
     inv_coll.update_many(
-        {"$or": [{"candidate_id": cid}, {"workorder_id": cid}]},
+        {"$or": [{"candidate_id": cid}, {"workorder_id": cid}], "period": period},
         {"$set": {
             "status": "Paid",
             "paid_at": now_iso,
@@ -2028,24 +1955,35 @@ def process_finance_work_order_payment(
 @router.post("/procurement/sow/{candidate_id}/approve")
 def approve_procurement_sow(
     candidate_id: str,
+    period: Optional[str] = None,
     current_user: User = Depends(get_current_user)
 ):
     """Procurement Team authorizes Work Order and forwards to Director for executive sign-off."""
+    if current_user.role not in ('Procurement', 'Procurement Team', 'Admin', 'Super Admin'):
+        raise HTTPException(403, 'Your role cannot perform this billing approval')
+    period = billing_period(period)
     sow_coll = db["sow_documents"]
     wo_coll = db["work_orders"]
     notif_coll = db["candidate_notifications"]
+    sow_query = period_query(sow_coll, candidate_id, period)
+    monthly_doc = sow_coll.find_one(sow_query)
+    require_editable(monthly_doc)
+    if monthly_doc and monthly_doc.get('tenant_id') != current_user.tenant_id and current_user.role != 'Super Admin' and monthly_doc.get('recruiter_id') != current_user.id:
+        raise HTTPException(403, 'This billing document belongs to another company')
     now_iso = datetime.now(timezone.utc).isoformat()
     import uuid as _uuid
 
-    doc = sow_coll.find_one({"$or": [{"candidate_id": candidate_id}, {"workorder_id": candidate_id}]})
+    doc = monthly_doc
     if not doc:
         raise HTTPException(status_code=404, detail="Work Order document not found")
 
+    if doc.get('status') not in ('Sent to Procurement', 'Submitted'):
+        raise HTTPException(409, 'This billing period is not awaiting Procurement approval')
     cid = doc.get("candidate_id") or candidate_id
     approver_info = f"{current_user.name} ({current_user.role})"
 
     sow_coll.update_one(
-        {"candidate_id": cid},
+        sow_query,
         {"$set": {
             "status": "Pending Director Approval",
             "procurement_authorized": True,
@@ -2057,20 +1995,6 @@ def approve_procurement_sow(
             "sow_data.status": "Pending Director Approval",
             "sow_data.procurement_approved_by": approver_info,
             "sow_data.procurement_approved_at": now_iso
-        }}
-    )
-
-    # Sync into work_orders so Director Portal sees it immediately
-    wo_coll.update_many(
-        {"$or": [{"candidate_id": cid}, {"workorder_id": cid}, {"id": cid}]},
-        {"$set": {
-            "status": "Pending Director Approval",
-            "agreement_status": "Pending Director Approval",
-            "sow_status": "Pending Director Approval",
-            "procurement_authorized": True,
-            "procurement_approved_by": approver_info,
-            "procurement_approved_at": now_iso,
-            "updated_at": now_iso
         }}
     )
 
@@ -2102,28 +2026,37 @@ def approve_procurement_sow(
 @router.post("/procurement/sow/{candidate_id}/director-approve")
 def director_approve_procurement_sow(
     candidate_id: str,
+    period: Optional[str] = None,
     current_user: User = Depends(get_current_user)
 ):
     """Company Director grants final executive approval for Work Order."""
+    if current_user.role not in ('Director', 'Admin', 'Super Admin'):
+        raise HTTPException(403, 'Your role cannot perform this billing approval')
+    period = billing_period(period)
     sow_coll = db["sow_documents"]
     wo_coll = db["work_orders"]
     notif_coll = db["candidate_notifications"]
+    sow_query = period_query(sow_coll, candidate_id, period)
+    monthly_doc = sow_coll.find_one(sow_query)
+    require_editable(monthly_doc)
+    if monthly_doc and monthly_doc.get('tenant_id') != current_user.tenant_id and current_user.role != 'Super Admin' and monthly_doc.get('recruiter_id') != current_user.id:
+        raise HTTPException(403, 'This billing document belongs to another company')
     now_iso = datetime.now(timezone.utc).isoformat()
     import uuid as _uuid
 
-    doc = sow_coll.find_one({"$or": [{"candidate_id": candidate_id}, {"workorder_id": candidate_id}]})
+    doc = monthly_doc
     if not doc:
-        doc = wo_coll.find_one({"$or": [{"candidate_id": candidate_id}, {"workorder_id": candidate_id}, {"id": candidate_id}]})
-        if not doc:
-            raise HTTPException(status_code=404, detail="Work Order document not found")
-
+        raise HTTPException(404, 'Billing document not found for this month')
+    if doc.get('status') not in ('Pending Director Approval', 'Approved by Procurement'):
+        raise HTTPException(409, 'Procurement must approve this billing period first')
     cid = doc.get("candidate_id") or doc.get("workorder_id") or candidate_id
     director_info = f"{current_user.name} (Director)"
 
     sow_coll.update_one(
-        {"$or": [{"candidate_id": cid}, {"workorder_id": cid}]},
+        sow_query,
         {"$set": {
             "candidate_id": cid,
+            "period": period,
             "workorder_id": cid,
             "status": "Approved by Director",
             "director_approved": True,
@@ -2187,18 +2120,30 @@ def director_approve_procurement_sow(
         "director_approved": True,
     }
 
+@router.post("/procurement/sow/{candidate_id}/reject")
 def reject_procurement_sow(
     candidate_id: str,
     body: dict,
+    period: Optional[str] = None,
     current_user: User = Depends(get_current_user)
 ):
     """Procurement rejects SOW with rejection notes."""
+    if current_user.role not in ('Director', 'Procurement', 'Procurement Team', 'Admin', 'Super Admin'):
+        raise HTTPException(403, 'Your role cannot perform this billing approval')
+    period = billing_period(period)
     sow_coll = db["sow_documents"]
+    sow_query = period_query(sow_coll, candidate_id, period)
+    monthly_doc = sow_coll.find_one(sow_query)
+    if not monthly_doc:
+        raise HTTPException(404, 'Billing document not found for this month')
+    require_editable(monthly_doc)
+    if monthly_doc and monthly_doc.get('tenant_id') != current_user.tenant_id and current_user.role != 'Super Admin' and monthly_doc.get('recruiter_id') != current_user.id:
+        raise HTTPException(403, 'This billing document belongs to another company')
     now_iso = datetime.now(timezone.utc).isoformat()
     notes = body.get("notes") or body.get("rejection_notes") or "Commercial terms rejected by Procurement."
 
     sow_coll.update_one(
-        {"candidate_id": candidate_id},
+        sow_query,
         {"$set": {
             "status": "Rejected by Procurement",
             "rejected_by": f"{current_user.name} ({current_user.role})",
@@ -2225,15 +2170,26 @@ def reject_procurement_sow(
 def request_procurement_sow_revision(
     candidate_id: str,
     body: dict,
+    period: Optional[str] = None,
     current_user: User = Depends(get_current_user)
 ):
     """Procurement sends SOW back to Recruiter for rate/hours revision."""
+    if current_user.role not in ('Director', 'Procurement', 'Procurement Team', 'Admin', 'Super Admin'):
+        raise HTTPException(403, 'Your role cannot perform this billing approval')
+    period = billing_period(period)
     sow_coll = db["sow_documents"]
+    sow_query = period_query(sow_coll, candidate_id, period)
+    monthly_doc = sow_coll.find_one(sow_query)
+    if not monthly_doc:
+        raise HTTPException(404, 'Billing document not found for this month')
+    require_editable(monthly_doc)
+    if monthly_doc and monthly_doc.get('tenant_id') != current_user.tenant_id and current_user.role != 'Super Admin' and monthly_doc.get('recruiter_id') != current_user.id:
+        raise HTTPException(403, 'This billing document belongs to another company')
     now_iso = datetime.now(timezone.utc).isoformat()
     notes = body.get("notes") or body.get("revision_notes") or "Please revise rates/hours as discussed."
 
     sow_coll.update_one(
-        {"candidate_id": candidate_id},
+        sow_query,
         {"$set": {
             "status": "Revision Requested",
             "revision_notes": notes,

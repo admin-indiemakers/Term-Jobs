@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { request } from '../../api/client';
 import {
@@ -31,7 +31,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 import WorkOrderProgressBar from '../../components/WorkOrderProgressBar';
-import { billingCycle, currentBillingMonth } from '../../utils/billingPeriod';
+import { billingCycle, currentBillingMonth, shiftBillingMonth } from '../../utils/billingPeriod';
 
 export default function VendorBilling({ isEmbedded = false }) {
   const { user, token } = useAuth();
@@ -51,6 +51,7 @@ export default function VendorBilling({ isEmbedded = false }) {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [selectedMonth, setSelectedMonth] = useState(() => currentBillingMonth());
   const cycle = billingCycle(selectedMonth);
+  const overviewVersion = useRef(0);
 
   // Selected Candidate Drawer / Detail View
   const [selectedCandidateId, setSelectedCandidateId] = useState(null);
@@ -90,6 +91,8 @@ export default function VendorBilling({ isEmbedded = false }) {
     status: 'Draft'
   });
 
+  const isPeriodPaid = breakdownData?.sow?.status === 'Paid' || breakdownData?.invoice?.status === 'Paid';
+
   // Invoice Actions
   const [isGeneratingInvoice, setIsGeneratingInvoice] = useState(false);
   const [isDispatchingSow, setIsDispatchingSow] = useState(false);
@@ -126,21 +129,37 @@ export default function VendorBilling({ isEmbedded = false }) {
   };
 
   const loadOverview = async (monthVal) => {
+    const version = ++overviewVersion.current;
     setLoading(true);
     setError('');
     try {
       const q = monthVal ? `?month=${monthVal}` : '';
-      const res = await request(`/api/vendor-billing/overview${q}`, { token });
+      const res = await request(`/api/vendor-billing/overview${q}`, { token, noCache: true });
+      if (version !== overviewVersion.current) return;
       if (res && res.status === 'success') {
         setCandidates(res.candidates || []);
         setKpiStats(res.kpi_stats || {});
       }
     } catch (err) {
+      if (version !== overviewVersion.current) return;
       console.error('Failed to load vendor billing:', err);
       setError(err.message || 'Unable to load billing overview.');
     } finally {
-      setLoading(false);
+      if (version === overviewVersion.current) setLoading(false);
     }
+  };
+
+  const changeBillingMonth = (month) => {
+    if (!month || month === selectedMonth) return;
+    ++overviewVersion.current;
+    setSelectedMonth(month);
+    setCandidates([]);
+    setKpiStats({});
+    setLoading(true);
+    setSelectedCandidateId(null);
+    setBreakdownData(null);
+    setIsEditingDoc(false);
+    setStatusFilter('ALL');
   };
 
   useEffect(() => {
@@ -173,7 +192,7 @@ export default function VendorBilling({ isEmbedded = false }) {
 
     try {
       const q = selectedMonth ? `?month=${selectedMonth}` : '';
-      const res = await request(`/api/vendor-billing/candidate/${encodeURIComponent(cid)}${q}`, { token });
+      const res = await request(`/api/vendor-billing/candidate/${encodeURIComponent(cid)}${q}`, { token, noCache: true });
       if (res && res.status === 'success') {
         const data = res.data;
         setBreakdownData(data);
@@ -252,10 +271,10 @@ export default function VendorBilling({ isEmbedded = false }) {
         calculated_expenses: calculatedDocExpenses,
         calculated_grand_total: calculatedDocGrandTotal
       };
-      const res = await request(`/api/workforce/workers/${encodeURIComponent(selectedCandidateId)}/sow/save-draft`, {
+      const res = await request(`/api/workforce/workers/${encodeURIComponent(selectedCandidateId)}/sow/save-draft?period=${selectedMonth}`, {
         method: 'POST',
         token,
-        body: { sow_data: payload }
+        body: { sow_data: { ...payload, period: selectedMonth } }
       });
       if (res && res.status === 'success') {
         showToast('💾 Work Order draft saved successfully!');
@@ -394,23 +413,7 @@ export default function VendorBilling({ isEmbedded = false }) {
             </p>
           </div>
 
-          {/* Month Selector */}
-          <div className="flex items-center gap-3">
-            <button type="button" onClick={() => loadOverview(selectedMonth)} disabled={loading}
-              className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-[#D1D5DB] bg-white text-sm font-semibold disabled:opacity-50">
-              <RefreshCw className="w-4 h-4" /> Refresh
-            </button>
-            <div className="flex items-center bg-white border border-[#D1D5DB] rounded-xl px-3.5 py-2 shadow-xs">
-              <Calendar className="w-4 h-4 text-[#6B7280] mr-2" />
-              <input
-                type="month"
-                aria-label="Billing month"
-                value={selectedMonth}
-                onChange={(e) => { if (e.target.value) setSelectedMonth(e.target.value); }}
-                className="text-sm font-semibold text-[#111827] bg-transparent focus:outline-hidden cursor-pointer"
-              />
-            </div>
-          </div>
+
         </div>
 
         {/* KPI Metrics */}
@@ -485,7 +488,7 @@ export default function VendorBilling({ isEmbedded = false }) {
         </div>
 
         {/* BILLING CYCLE TRACKER & WORK ORDER DISPATCH WINDOW SYSTEM */}
-        <div className="mt-6 bg-[#0A0A0A] text-white rounded-2xl p-5 sm:p-6 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-5 border border-white/10">
+        <div className="mt-6 bg-[#0A0A0A] text-white rounded-2xl p-5 sm:p-6 shadow-xl flex flex-col items-stretch gap-5 border border-white/10">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-[#22C55E] animate-pulse"></span>
@@ -493,7 +496,7 @@ export default function VendorBilling({ isEmbedded = false }) {
                 BILLING CYCLE & WORK ORDER DISPATCH SYSTEM
               </span>
             </div>
-            <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight text-white flex items-center gap-3">
+            <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight text-white flex flex-wrap items-center gap-3">
               <span>Billing Cycle: {cycle.label}</span>
               <span className="text-xs font-bold px-2.5 py-0.5 rounded-md bg-white/10 text-[#A3A39E] border border-white/15 font-mono">
                 Monthly Cycle · {cycle.range}
@@ -504,7 +507,26 @@ export default function VendorBilling({ isEmbedded = false }) {
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 shrink-0">
+          <div className="flex flex-wrap items-end gap-3 no-print">
+            <div className="bg-white rounded-xl border border-gray-200 px-3 py-2 text-gray-900 shadow-sm">
+              <label htmlFor="candidate-billing-month" className="block text-[11px] font-bold !text-gray-600 uppercase tracking-wide mb-1">Billing month</label>
+              <div className="flex items-center gap-2">
+                <button type="button" aria-label="Previous billing month" title="Previous month"
+                  onClick={() => changeBillingMonth(shiftBillingMonth(selectedMonth, -1))}
+                  className="rounded-lg bg-gray-100 hover:bg-gray-200 px-3 py-2 !text-gray-900 font-bold">←</button>
+                <input id="candidate-billing-month" type="month" aria-label="Billing month" value={selectedMonth}
+                  onChange={(e) => changeBillingMonth(e.target.value)}
+                  style={{ colorScheme: 'light' }}
+                  className="min-w-0 w-44 rounded-lg border border-gray-300 bg-white px-3 py-2 !text-gray-900 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                <button type="button" aria-label="Next billing month" title="Next month"
+                  onClick={() => changeBillingMonth(shiftBillingMonth(selectedMonth, 1))}
+                  className="rounded-lg bg-gray-100 hover:bg-gray-200 px-3 py-2 !text-gray-900 font-bold">→</button>
+              </div>
+            </div>
+            <button type="button" onClick={() => loadOverview(selectedMonth)} disabled={loading}
+              className="inline-flex items-center gap-2 px-4 py-3 rounded-xl border border-white/20 bg-white/10 !text-white text-sm font-semibold disabled:opacity-50">
+              <RefreshCw className="w-4 h-4" /> Refresh
+            </button>
             <div className="bg-white/10 px-3.5 py-2 rounded-xl border border-white/15 text-left">
               <div className="text-[10px] font-bold text-[#A3A39E] uppercase">Cycle Ends In</div>
               <div className="text-base font-black text-white mt-0.5">{cycle.daysRemaining} Days ({cycle.endLabel})</div>
@@ -658,7 +680,7 @@ export default function VendorBilling({ isEmbedded = false }) {
                       />
 
                       {/* Direct Work Order Dispatch Button */}
-                      {cand.sow_status !== 'Approved by Director' && cand.sow_status !== 'Approved' && (
+                      {cand.sow_status !== 'Paid' && cand.sow_status !== 'Approved by Director' && cand.sow_status !== 'Approved' && (
                         <div className="pt-1.5 border-t border-[#E5E7EB] flex items-center justify-between">
                           <button
                             type="button"
@@ -849,6 +871,8 @@ export default function VendorBilling({ isEmbedded = false }) {
                       <button
                         type="button"
                         onClick={() => setIsEditingDoc(!isEditingDoc)}
+                        disabled={isPeriodPaid}
+                        title={isPeriodPaid ? "Paid billing periods are locked" : "Edit document details"}
                         className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                           isEditingDoc
                             ? 'bg-amber-500 text-white shadow-xs'
@@ -886,7 +910,7 @@ export default function VendorBilling({ isEmbedded = false }) {
                       <button
                         type="button"
                         onClick={() => handleDispatchSow(selectedCandidateId)}
-                        disabled={isDispatchingSow}
+                        disabled={isDispatchingSow || isPeriodPaid}
                         className="px-4 py-1.5 bg-[#22C55E] hover:bg-[#16a34a] text-white rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs disabled:opacity-50"
                       >
                         <Send className="w-3.5 h-3.5" />
@@ -1251,7 +1275,7 @@ export default function VendorBilling({ isEmbedded = false }) {
                         <button
                           type="button"
                           onClick={() => handleDispatchSow(selectedCandidateId)}
-                          disabled={isDispatchingSow}
+                          disabled={isDispatchingSow || isPeriodPaid}
                           className="px-5 py-2.5 bg-[#22C55E] hover:bg-[#16a34a] text-white font-extrabold rounded-xl text-xs transition-all cursor-pointer shadow-md flex items-center gap-2 shrink-0 disabled:opacity-50"
                         >
                           {isDispatchingSow ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
@@ -1668,7 +1692,7 @@ export default function VendorBilling({ isEmbedded = false }) {
                         <button
                           type="button"
                           onClick={() => handleDispatchSow(breakdownData.candidate?.workorder_id)}
-                          disabled={isDispatchingSow}
+                          disabled={isDispatchingSow || isPeriodPaid}
                           className="px-4 py-2 bg-[#22C55E] hover:bg-[#16a34a] text-white font-extrabold text-xs rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                         >
                           <Send className="w-3.5 h-3.5" />
@@ -1880,12 +1904,12 @@ export default function VendorBilling({ isEmbedded = false }) {
                       <CheckCircle2 className="w-4 h-4" /> Invoice {breakdownData.invoice.invoice_number} ({breakdownData.invoice.status})
                     </span>
                   ) : (
-                    <span>Ready for billing generation & dispatch</span>
+                    <span>{isPeriodPaid ? 'Paid billing period · Select another month for the next bill' : 'Ready for billing generation & dispatch'}</span>
                   )}
                 </div>
 
                 <div className="flex items-center gap-3">
-                  {breakdownData.invoice && breakdownData.invoice.status !== 'Paid' && (
+                  {['Finance', 'Finance Team', 'Admin', 'Super Admin'].includes(user?.role) && breakdownData.invoice && breakdownData.invoice.status !== 'Paid' && (
                     <button
                       onClick={() => handleUpdateInvoiceStatus(breakdownData.invoice.id, 'Paid')}
                       className="px-4 py-2 rounded-xl border border-[#D1D5DB] text-xs font-bold text-[#374151] hover:bg-[#F3F4F6] transition-colors cursor-pointer"
@@ -1896,7 +1920,7 @@ export default function VendorBilling({ isEmbedded = false }) {
 
                   <button
                     onClick={handleGenerateInvoice}
-                    disabled={isGeneratingInvoice}
+                    disabled={isGeneratingInvoice || isPeriodPaid}
                     className="inline-flex items-center gap-2 bg-[#0A0A0A] text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-sm hover:bg-[#262626] transition-all cursor-pointer disabled:opacity-50"
                   >
                     {isGeneratingInvoice ? (

@@ -1,3 +1,4 @@
+import { loadHiringConversations, hiringConversationStorageKey } from '../utils/hiringConversations';
 import GoogleCalendarConnect from '../components/GoogleCalendarConnect';
 import CompanyInterviewScheduleCard from '../interview/components/CompanyInterviewScheduleCard';
 import { upcomingInterviewRounds } from '../interview/utils/upcomingInterviews';
@@ -162,6 +163,12 @@ const PRIORITY_OPTIONS = ['High', 'Normal', 'Low'];
 const PREDEFINED_ROLES = [];
 
 export default function HiringManagerDashboard() {
+  const { user } = useAuth();
+  if (!user?.id) return null;
+  return <HiringManagerDashboardContent key={JSON.stringify([user.tenant_id, user.id])} />;
+}
+
+function HiringManagerDashboardContent() {
   const { user, token, logout } = useAuth();
   const navigate = useNavigate();
   const [googleCalendar, setGoogleCalendar] = useState(null);
@@ -1669,190 +1676,9 @@ export default function HiringManagerDashboard() {
   const [activeConversationId, setActiveConversationId] = useState(null);
   const [isTeamChatDrawerOpen, setIsTeamChatDrawerOpen] = useState(false);
 
-  const [conversations, setConversations] = useState(() => {
-    try {
-      const storageKey = `termjobs_hm_conversations_${user?.id || 'default'}`;
-      const saved = localStorage.getItem(storageKey);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch (e) {
-      console.warn('Failed to parse saved conversations:', e);
-    }
-
-    // Default Seed Conversations matching user's exact reference screenshot
-    const now = Date.now();
-    return [
-      {
-        id: 'conv-seeded-1',
-        title: 'Create requisition for DevSecOps',
-        preview: 'Help me create a new requisition for a DevSecOps Engineer...',
-        categoryIcon: 'requisition',
-        updatedAt: now - 1000 * 60 * 25,
-        createdAt: now - 1000 * 60 * 25,
-        messages: [
-          {
-            id: 'seed-u1',
-            sender: 'user',
-            text: 'Help me create a new requisition for a DevSecOps Engineer',
-            timestamp: '10:24 AM',
-          },
-          {
-            id: 'seed-a1',
-            sender: 'ai',
-            text: 'I have prepared a comprehensive requisition draft for **DevSecOps Engineer**.',
-            requisitionDraft: {
-              id: 'draft-devsecops',
-              title: 'DevSecOps Engineer',
-              department: 'Cloud Security',
-              location: 'Bangalore, India (Hybrid)',
-              experience: 'Senior (5-8 yrs)',
-              employment_type: 'Contract',
-              hiring_model: 'Hybrid',
-              openings: 1,
-              target_start_date: 'Immediate',
-              skills: ['AWS', 'Kubernetes Security', 'CI/CD', 'Terraform', 'Docker'],
-              summary: 'We are seeking an experienced DevSecOps Engineer to lead cloud infrastructure security and automate CI/CD pipeline scans.',
-            },
-            timestamp: '10:25 AM',
-          },
-        ],
-      },
-      {
-        id: 'conv-seeded-2',
-        title: 'Find top candidates',
-        preview: 'Search best candidates for Senior Backend role...',
-        categoryIcon: 'candidates',
-        updatedAt: now - 1000 * 60 * 75,
-        createdAt: now - 1000 * 60 * 75,
-        messages: [
-          {
-            id: 'seed-u2',
-            sender: 'user',
-            text: 'Find top candidates for backend engineer',
-            timestamp: '09:40 AM',
-          },
-          {
-            id: 'seed-a2',
-            sender: 'ai',
-            text: 'Here are the top candidates matching your active requisitions with high match scores.',
-            timestamp: '09:41 AM',
-          },
-        ],
-      },
-      {
-        id: 'conv-seeded-3',
-        title: 'Compare candidates',
-        preview: 'Compare these 3 candidates based on AI interview scores...',
-        categoryIcon: 'candidates',
-        updatedAt: now - 1000 * 60 * 160,
-        createdAt: now - 1000 * 60 * 160,
-        messages: [
-          {
-            id: 'seed-u3',
-            sender: 'user',
-            text: 'Compare top shortlisted candidates and their match scores',
-            timestamp: '08:15 AM',
-          },
-          {
-            id: 'seed-a3',
-            sender: 'ai',
-            text: 'Candidate scorecard comparison complete with spoken fluency and verified skills.',
-            timestamp: '08:16 AM',
-          },
-        ],
-      },
-      {
-        id: 'conv-seeded-4',
-        title: 'Interview questions',
-        preview: 'Generate technical interview questions for cloud architect...',
-        categoryIcon: 'interview',
-        updatedAt: now - 1000 * 60 * 190,
-        createdAt: now - 1000 * 60 * 190,
-        messages: [
-          {
-            id: 'seed-u4',
-            sender: 'user',
-            text: 'Generate technical interview questions for cloud architect',
-            timestamp: '11:20 AM',
-          },
-          {
-            id: 'seed-a4',
-            sender: 'ai',
-            text: 'Here are 5 targeted scenario questions for Cloud Architect evaluation focusing on high-availability architectures and security compliance.',
-            timestamp: '11:21 AM',
-          },
-        ],
-      },
-      {
-        id: 'conv-seeded-5',
-        title: 'Market salary insights',
-        preview: "What's the current market rate for senior contractors...",
-        categoryIcon: 'requisition',
-        updatedAt: now - 1000 * 60 * 60 * 25,
-        createdAt: now - 1000 * 60 * 60 * 25,
-        messages: [
-          {
-            id: 'seed-u5',
-            sender: 'user',
-            text: 'What is the current market rate for senior contractors?',
-            timestamp: 'Sep 29',
-          },
-          {
-            id: 'seed-a5',
-            sender: 'ai',
-            text: 'Standard billing rates for Senior React and Python contractors currently range between ₹1,400 to ₹1,800/hr in Bangalore.',
-            timestamp: 'Sep 29',
-          },
-        ],
-      },
-      {
-        id: 'conv-seeded-6',
-        title: 'Hiring process guidance',
-        preview: 'Explain the approval workflow for new contract positions...',
-        categoryIcon: 'requisition',
-        updatedAt: now - 1000 * 60 * 60 * 28,
-        createdAt: now - 1000 * 60 * 60 * 28,
-        messages: [
-          {
-            id: 'seed-u6',
-            sender: 'user',
-            text: 'Explain the approval workflow for requisitions',
-            timestamp: 'Sep 29',
-          },
-          {
-            id: 'seed-a6',
-            sender: 'ai',
-            text: 'Contract requisitions require HM draft submission followed by Director budget approval before being broadcast to verified vendor partners.',
-            timestamp: 'Sep 29',
-          },
-        ],
-      },
-      {
-        id: 'conv-seeded-7',
-        title: 'Onboarding checklist',
-        preview: 'Create onboarding checklist for incoming contract engineers...',
-        categoryIcon: 'chat',
-        updatedAt: now - 1000 * 60 * 60 * 24 * 5,
-        createdAt: now - 1000 * 60 * 60 * 24 * 5,
-        messages: [
-          {
-            id: 'seed-u7',
-            sender: 'user',
-            text: 'Create onboarding checklist for incoming contract engineers',
-            timestamp: 'Sep 28',
-          },
-          {
-            id: 'seed-a7',
-            sender: 'ai',
-            text: 'Here is the onboarding checklist: NDA execution, Background check clearance, Hardware delivery confirmation, and AWS SSO access grant.',
-            timestamp: 'Sep 28',
-          },
-        ],
-      },
-    ];
-  });
+  const [conversations, setConversations] = useState(() =>
+    loadHiringConversations(localStorage, user.id)
+  );
 
   // Automatically save and sync messages to active conversation in localStorage
   useEffect(() => {
@@ -1883,7 +1709,7 @@ export default function HiringManagerDashboard() {
         };
         const updated = [newConv, ...prev];
         try {
-          const storageKey = `termjobs_hm_conversations_${user?.id || 'default'}`;
+          const storageKey = hiringConversationStorageKey(user.id);
           localStorage.setItem(storageKey, JSON.stringify(updated));
         } catch (e) {
           console.warn('Storage save error:', e);
@@ -1902,7 +1728,7 @@ export default function HiringManagerDashboard() {
           preview: lastMsg?.text?.slice(0, 60) || updated[existingIndex].preview,
         };
         try {
-          const storageKey = `termjobs_hm_conversations_${user?.id || 'default'}`;
+          const storageKey = hiringConversationStorageKey(user.id);
           localStorage.setItem(storageKey, JSON.stringify(updated));
         } catch (e) {
           console.warn('Storage save error:', e);

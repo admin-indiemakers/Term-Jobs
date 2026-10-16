@@ -201,6 +201,31 @@ def _persist_screened_candidates(results, requisition_id, jd_text, vendor_name, 
 # POST /api/screen-resumes
 # ---------------------------------------------------------------------------
 
+def _require_screening_requisition(req_id, user):
+    from modules.shared.db import get_session
+    from modules.requisition.domain.models import Requisition
+    from modules.identity.domain.models import VendorEngagement
+    with get_session() as session:
+        req = session.get(Requisition, req_id)
+        if not req:
+            raise HTTPException(status_code=404, detail='Requisition not found')
+        if user.role == 'Super Admin':
+            return
+        if not user.tenant_id:
+            raise HTTPException(status_code=403, detail='Company identity required')
+        own = req.tenant_id == user.tenant_id
+        if user.role == 'Hiring Manager':
+            own = own and req.created_by == user.id
+        engaged = False
+        if user.role in ('Recruiter', 'Vendor'):
+            engaged = bool(session.query(VendorEngagement).filter(
+                VendorEngagement.vendor_tenant_id == user.tenant_id,
+                VendorEngagement.tenant_id == req.tenant_id,
+            ).first())
+        if not own and not engaged:
+            raise HTTPException(status_code=403, detail='Requisition access denied')
+
+
 @router.post("/screen-resumes")
 async def screen_resumes(
     resumes: List[UploadFile] = File(...),
@@ -215,6 +240,7 @@ async def screen_resumes(
     Results are NOT saved to DB here — shortlisting happens separately via
     POST /candidates/shortlist when HR/Recruiter clicks the Shortlist button.
     """
+    _require_screening_requisition(requisition_id, current_user)
     if not resumes:
         raise HTTPException(status_code=400, detail="No resume files provided.")
 
@@ -332,6 +358,7 @@ def list_screening_requisitions(current_user: User = Depends(get_current_user)) 
 @router.get("/screening/requisitions/{req_id}")
 def get_screening_requisition(req_id: str, current_user: User = Depends(get_current_user)) -> dict:
     """Return a single requisition with JD text for the screening form."""
+    _require_screening_requisition(req_id, current_user)
     try:
         from modules.shared.db import get_session
         from modules.requisition.domain.models import Requisition

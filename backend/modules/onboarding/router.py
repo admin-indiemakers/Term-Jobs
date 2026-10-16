@@ -6,14 +6,45 @@ Status is auto-computed based on completion percentage.
 """
 import uuid
 
-from fastapi import APIRouter, HTTPException, Header
+from fastapi import APIRouter, HTTPException, Header, Depends, Request
 from pydantic import BaseModel
 
 from modules.identity.domain.models import User
 from modules.identity.services.auth_service import decode_access_token
 from modules.shared.db import db, get_session
 
-router = APIRouter(prefix="/api/onboarding", tags=["Onboarding"])
+from .access import application_scope, require_application
+
+
+async def authorize_onboarding_request(request: Request):
+    user = _get_current_user(request.headers.get('authorization'))
+    application_scope(db, user)
+    candidate_id = request.path_params.get('candidate_id')
+    issue_id = request.path_params.get('issue_id')
+    notification_id = request.path_params.get('notification_id')
+    if issue_id:
+        issue = _issues_coll().find_one({'id': issue_id})
+        if not issue:
+            raise HTTPException(status_code=404, detail='Issue not found')
+        candidate_id = issue.get('candidate_id')
+    if notification_id:
+        notification = db['notifications'].find_one({'id': notification_id, 'user_id': user['id']})
+        if not notification:
+            raise HTTPException(status_code=404, detail='Notification not found')
+    if request.url.path.endswith('/issues') and request.method == 'POST':
+        body = await request.json()
+        candidate_id = body.get('candidate_id')
+        if not candidate_id:
+            raise HTTPException(status_code=400, detail='Candidate application required')
+    if candidate_id:
+        require_application(db, user, candidate_id)
+    if user['role'] == 'Candidate' and request.method != 'GET':
+        allowed = request.url.path.endswith('/issues') or notification_id or (candidate_id and request.method == 'PUT')
+        if not allowed:
+            raise HTTPException(status_code=403, detail='Hiring staff permission required')
+
+
+router = APIRouter(prefix="/api/onboarding", tags=["Onboarding"], dependencies=[Depends(authorize_onboarding_request)])
 
 
 # ── Schemas ──────────────────────────────────────────────────────────────────
@@ -204,6 +235,7 @@ def raise_onboarding_issue(data: dict, authorization: str | None = Header(None))
 def list_onboarding_issues(authorization: str | None = Header(None)):
     """List raised onboarding issues. Scoped by tenant and hiring manager."""
     user = _get_current_user(authorization)
+    application_scope(db, user)
     from modules.shared.cache import cache as _cache
     user_id = user.get("id") if user else "anon"
     cache_key = f"ob_issues:{user_id}"
@@ -211,26 +243,7 @@ def list_onboarding_issues(authorization: str | None = Header(None)):
     if cached is not None:
         return cached
 
-    if user and user["role"] not in ("Super Admin", "Admin", "HR", "Director"):
-        # Hiring Manager: only see issues for candidates in their requisitions
-        from modules.requisition.domain.models import Requisition
-        from modules.shared.db import get_session as _gs
-        with _gs() as session:
-            filters = [Requisition.tenant_id == user["tenant_id"]]
-            if user["role"] == "Hiring Manager":
-                filters.append(Requisition.created_by == user["id"])
-            req_ids = {r.id for r in session.query(Requisition).filter(*filters).all()}
-        # Get candidate_ids from those requisitions
-        from modules.shared.db import db as _db
-        cand_ids = set()
-        for sd in _db["candidate_submissions"].find({"requisition_id": {"$in": list(req_ids)} if req_ids else {"$in": []}}, {"id": 1}):
-            cand_ids.add(sd.get("id"))
-        if cand_ids:
-            docs = list(_issues_coll().find({"candidate_id": {"$in": list(cand_ids)}}))
-        else:
-            docs = []
-    else:
-        docs = list(_issues_coll().find())
+    docs = list(_issues_coll().find(application_scope(db, user)))
     for d in docs:
         d.pop("_id", None)
     _cache.set(cache_key, docs, ttl=30)
@@ -333,35 +346,14 @@ def mark_notification_read(notification_id: str):
 def list_onboardings(authorization: str | None = Header(None)):
     """List onboarding checklists scoped by tenant and hiring manager."""
     user = _get_current_user(authorization)
+    application_scope(db, user)
     from modules.shared.cache import cache as _cache
     cache_key = f"onboardings_list:{user.get('id') if user else 'anon'}:{user.get('role') if user else 'anon'}:{user.get('tenant_id') if user else 'anon'}"
     cached = _cache.get(cache_key)
     if cached is not None:
         return cached
 
-    if user and user.get("role") == "Hiring Manager":
-        from modules.requisition.domain.models import Requisition
-        from modules.shared.db import get_session as _gs
-        with _gs() as session:
-            req_ids = {r.id for r in session.query(Requisition).filter(
-                Requisition.tenant_id == user["tenant_id"],
-                Requisition.created_by == user["id"],
-            ).all()}
-        if req_ids:
-            from modules.shared.db import db as _db
-            cand_ids = set()
-            for sd in _db["candidate_submissions"].find({"requisition_id": {"$in": list(req_ids)}}, {"id": 1}):
-                cand_ids.add(sd.get("id"))
-            if cand_ids:
-                docs = list(_coll().find({"candidate_id": {"$in": list(cand_ids)}}, {"activation_gates": 0, "completed_items": 0}))
-            else:
-                docs = []
-        else:
-            docs = []
-    elif user and user.get("tenant_id") and user.get("role") != "Super Admin":
-        docs = list(_coll().find({"$or": [{"tenant_id": user["tenant_id"]}, {"company_id": user["tenant_id"]}]}, {"activation_gates": 0, "completed_items": 0}))
-    else:
-        docs = list(_coll().find({}, {"activation_gates": 0, "completed_items": 0}))
+    docs = list(_coll().find(application_scope(db, user), {"activation_gates": 0, "completed_items": 0}))
 
     for d in docs:
         d.pop("_id", None)
@@ -922,17 +914,19 @@ Rules:
 
 @router.post("/assistant/chat")
 @router.post("/assistant")
-def ai_assistant_chat(data: dict):
+def ai_assistant_chat(data: dict, authorization: str | None = Header(None)):
     """AI Assistant for Hiring Managers and Super Admins powered by Groq API.
     Can summarize candidate onboarding issues, handle platform tool calls, and control features.
     """
-    user_role = data.get("user_role", "")
+    user = _get_current_user(authorization)
+    scope = application_scope(db, user)
+    user_role = user["role"]
     user_message = (data.get("prompt") or data.get("message") or "").strip()
     if not user_message:
         raise HTTPException(status_code=400, detail="Message or prompt is required")
 
     # Delegate Super Admin requests to Groq Super Admin Agent
-    if user_role == "Super Admin" or "super admin" in user_message.lower() or "tenant" in user_message.lower() or "company" in user_message.lower() or "audit" in user_message.lower():
+    if user_role == "Super Admin":
         try:
             from modules.superadmin_agent.agent import SuperAdminAgent
             agent = SuperAdminAgent()
@@ -947,11 +941,11 @@ def ai_assistant_chat(data: dict):
 
     from datetime import datetime, timezone
     # Fetch current onboarding issues & candidate checklists
-    issues_list = list(_issues_coll().find())
+    issues_list = list(_issues_coll().find(scope))
     for i in issues_list:
         i.pop("_id", None)
     
-    checklists = list(_coll().find())
+    checklists = list(_coll().find(scope))
     for c in checklists:
         c.pop("_id", None)
 
@@ -1014,3 +1008,6 @@ Instructions:
     }
 
 
+
+# Register literal assistant/generate paths before the generic candidate-ID paths.
+router.routes.sort(key=lambda route: len(getattr(route, 'param_convertors', {})))

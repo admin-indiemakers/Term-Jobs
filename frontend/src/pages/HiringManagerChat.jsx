@@ -106,6 +106,7 @@ export default function HiringManagerChat() {
 
   const loadDashboardData = async () => {
     setLoading(true);
+    setWfStats(null);
     setError('');
     setInterviewDataError('');
     try {
@@ -123,7 +124,7 @@ export default function HiringManagerChat() {
         request('/api/candidates/shortlisted', { token }).catch(() => []),
         request('/api/candidates?status=Accepted', { token }).catch(() => []),
         request('/api/onboarding/issues', { token }).catch(() => []),
-        request('/api/workforce/stats', { token }).catch(() => null),
+        request('/api/workforce/stats', { token, noCache: true }).catch(() => null),
         request('/api/workforce/timesheets', { token }).catch(() => []),
         interviewApi.listRounds({}, token).catch(() => { setInterviewDataError('Unable to load interview data'); return []; }),
         request('/api/notifications?compact=true&limit=12', { token }).catch(() => [])
@@ -142,7 +143,7 @@ export default function HiringManagerChat() {
       const iList = Array.isArray(issuesData) ? issuesData : issuesData?.issues || [];
       setOpenIssues(iList.filter((i) => (i.status || '').toLowerCase() === 'open'));
 
-      if (wfData) setWfStats(wfData);
+      setWfStats(wfData);
 
       const tsList = Array.isArray(timesheetsData) ? timesheetsData : timesheetsData?.timesheets || [];
       setPendingTimesheets(
@@ -486,7 +487,7 @@ export default function HiringManagerChat() {
                   Workforce Approvals
                 </div>
                 <div className="text-[9.5px] font-semibold text-gray-400 mt-0.5 truncate">
-                  {wfStats?.stats?.active_workers ?? 4} Active Workers
+                  {wfStats?.stats?.active ?? 0} Active Workers
                 </div>
               </div>
             </div>

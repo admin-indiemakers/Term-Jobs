@@ -435,6 +435,11 @@ def init_db() -> None:
     db["requisitions"].create_index("tenant_id")
     db["requisitions"].create_index("company_profile_id")
     db["requisitions"].create_index("status")
+    db["sow_documents"].create_index(
+        [("candidate_id", 1), ("period", 1)], unique=True,
+        partialFilterExpression={"period": {"$type": "string"}},
+        name="candidate_billing_period",
+    )
     db["role_templates"].create_index("tenant_id")
     db["decision_records"].create_index("requisition_id")
     db["candidate_submissions"].create_index("requisition_id")

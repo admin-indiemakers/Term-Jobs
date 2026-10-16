@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { interviewApi } from '../services/interviewApi';
+import { interviewApi, interviewCredentialsQuery } from '../services/interviewApi';
 import { livekitService } from '../services/livekitService';
 import { API_BASE_URL } from '../../api/client';
 
@@ -113,7 +113,7 @@ export function useInterviewChat({ roundId, senderName, senderRole, isChatDrawer
           : 'localhost:8000';
         wsBase = `${protocol}//${host}`;
       }
-      const wsUrl = `${wsBase}/api/interviews/rounds/${roundId}/ws`;
+      const wsUrl = `${wsBase}/api/interviews/rounds/${roundId}/ws?${interviewCredentialsQuery()}`;
 
       try {
         const socket = new WebSocket(wsUrl);

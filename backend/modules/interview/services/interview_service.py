@@ -959,6 +959,8 @@ def get_hiring_manager_rounds(
     user_role: Optional[str] = None,
 ) -> List[dict]:
     """Retrieve all interview rounds belonging to the Hiring Manager tenant, or all rounds for Super Admin."""
+    if user_role != 'Super Admin' and (not tenant_id or (user_role == 'Hiring Manager' and not user_id)):
+        return []
     with get_session() as session:
         from modules.requisition.domain.models import Requisition
         q = session.query(InterviewRound)
@@ -996,12 +998,14 @@ def get_candidate_rounds_by_token(token_or_email: str) -> List[dict]:
         for r in all_rounds:
             c_token = (r.candidate_token or "").strip().lower()
             c_email = (r.candidate_email or "").strip().lower()
-            if c_token == token_or_email_clean or c_email == token_or_email_clean:
+            if c_token and c_token == token_or_email_clean:
                 rdoc = r.to_doc()
                 exp_info = get_round_expiration_info(r)
                 rdoc["is_expired"] = exp_info["is_expired"]
                 rdoc["expires_at"] = exp_info["expires_at"]
                 rdoc["remaining_seconds"] = exp_info["remaining_seconds"]
+                rdoc.pop('interviewer_token', None)
+                rdoc.pop('candidate_passcode', None)
                 matched.append(rdoc)
         matched.sort(key=lambda x: x.get("round_number", 1))
         return matched
@@ -1016,8 +1020,11 @@ def get_interviewer_rounds_by_token(token_or_email: str) -> List[dict]:
         for r in all_rounds:
             i_token = (r.interviewer_token or "").strip().lower()
             i_email = (r.interviewer_email or "").strip().lower()
-            if i_token == val or (i_email and i_email == val):
-                matched.append(r.to_doc())
+            if i_token and i_token == val:
+                rdoc = r.to_doc()
+                rdoc.pop('candidate_token', None)
+                rdoc.pop('candidate_passcode', None)
+                matched.append(rdoc)
         matched.sort(key=lambda x: (x.get("scheduled_date", ""), x.get("scheduled_time", "")))
         return matched
 
@@ -1062,6 +1069,11 @@ def authenticate_candidate_login(
                 raise ValueError("Invalid interview passcode. Please check your invitation email.")
         else:
             raise ValueError("Passcode or invitation token is required to log in.")
+
+        if token and any((r.candidate_token or '').strip() == token.strip() for r in user_rounds):
+            user_rounds = [r for r in user_rounds if (r.candidate_token or '').strip() == token.strip()]
+        elif passcode:
+            user_rounds = [r for r in user_rounds if (r.candidate_passcode or '').strip().upper() == passcode.strip().upper()]
 
         # Check link expiration: if all candidate rounds are expired (and not Completed), block with informative error
         unexpired_or_completed = [r for r in user_rounds if not is_round_link_expired(r) or r.status == "Completed"]
@@ -1579,6 +1591,8 @@ def get_hiring_manager_summary(
     Groups rounds per candidate and computes pipeline readiness.
     Automatically includes shortlisted candidates ready for Round 1 scheduling.
     """
+    if user_role != 'Super Admin' and (not tenant_id or (user_role == 'Hiring Manager' and not user_id)):
+        return []
     with get_session() as session:
         from modules.candidate.domain.models import CandidateSubmission
         from modules.requisition.domain.models import Requisition

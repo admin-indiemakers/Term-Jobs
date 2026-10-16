@@ -41,6 +41,7 @@ const DirectorAgreements = lazy(() => import('./pages/DirectorAgreements'));
 const DirectorWorkOrders = lazy(() => import('./pages/DirectorWorkOrders'));
 const DirectorRoleTemplates = lazy(() => import('./pages/DirectorRoleTemplates'));
 const ProcurementDashboard = lazy(() => import('./pages/ProcurementDashboard'));
+const FinanceApprovals = lazy(() => import('./pages/FinanceApprovals'));
 const FinanceDashboard = lazy(() => import('./pages/FinanceDashboard'));
 const UserProfileSettings = lazy(() => import('./pages/UserProfileSettings'));
 const OnboardCompany = lazy(() => import('./pages/OnboardCompany'));
@@ -342,11 +343,14 @@ export default function App() {
             <Route path="director/role-templates" element={<DirectorRoleTemplates />} />
             <Route path="director/work-orders" element={<DirectorWorkOrders />} />
             <Route path="director/agreements" element={<DirectorAgreements />} />
+            <Route path="director/finance-approvals" element={<FinanceApprovals />} />
             <Route path="director/profile" element={<UserProfileSettings portalTitle="Executive Director Profile" />} />
             <Route path="procurement" element={<ProcurementDashboard />} />
+            <Route path="procurement/finance-approvals" element={<FinanceApprovals />} />
             <Route path="procurement/sow" element={<ProcurementDashboard />} />
             <Route path="finance" element={<FinanceDashboard />} />
             <Route path="finance/work-orders" element={<FinanceDashboard />} />
+            <Route path="finance/approvals" element={<FinanceApprovals />} />
             <Route path="finance/profile" element={<UserProfileSettings portalTitle="Finance Officer Profile" />} />
             <Route path="superadmin" element={<SuperAdminDashboard />} />
             <Route path="superadmin/chat" element={<AiChat />} />

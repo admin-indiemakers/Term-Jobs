@@ -1546,13 +1546,14 @@ def create_requisition(
 @app.get("/api/requisitions")
 def list_requisitions(
     dashboard: bool = False,
+    fresh: bool = False,
     current_user: User = Depends(get_current_user),
 ) -> list[dict]:
     from modules.identity.domain.models import VendorEngagement
 
     # Cache requisitions per user for 30s to avoid repeated DB scans
     _cache_key = f"reqs:{current_user.id}:{current_user.role}:{current_user.tenant_id}:{'dashboard' if dashboard else 'full'}"
-    _cached = _cache.get(_cache_key)
+    _cached = None if fresh else _cache.get(_cache_key)
     if _cached is not None:
         return _cached
 

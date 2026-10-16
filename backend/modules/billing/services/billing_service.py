@@ -12,6 +12,7 @@ import calendar
 from typing import Optional, List, Dict, Any
 
 from modules.shared.db import db
+from modules.billing.services.billing_periods import billing_period, period_query, require_editable
 from modules.identity.domain.models import User
 from modules.billing.services.engagement_details import resolve_engagement
 
@@ -36,7 +37,7 @@ def get_accepted_contractors_for_vendor(current_user: User, month_filter: Option
     Computes summary hours, billable amounts, and invoice statuses strictly from live records.
     """
     now = datetime.now(timezone.utc)
-    target_month = month_filter or now.strftime("%Y-%m")
+    target_month = billing_period(month_filter)
 
     wo_coll = db["work_orders"]
     ts_coll = db["timesheets"]
@@ -90,13 +91,14 @@ def get_accepted_contractors_for_vendor(current_user: User, month_filter: Option
                 {"candidate_id": {"$regex": reg, "$options": "i"}},
             ])
 
+        ts_query["status"] = {"$in": ["APPROVED", "Approved"]}
         candidate_timesheets = list(ts_coll.find(ts_query))
 
         # Filter timesheets strictly for the target month
         month_ts = [
             ts for ts in candidate_timesheets 
             if str(ts.get("week_start_date", "")).startswith(target_month) or 
-               str(ts.get("created_at", "")).startswith(target_month)
+               (not ts.get("week_start_date") and str(ts.get("created_at", "")).startswith(target_month))
         ]
 
         # Compute hours from real records
@@ -162,7 +164,7 @@ def get_accepted_contractors_for_vendor(current_user: User, month_filter: Option
             days_remaining = 0
 
         # Check SOW status in db["sow_documents"]
-        sow_doc = db["sow_documents"].find_one({"$or": [{"candidate_id": cid}, {"workorder_id": cid}]}) or {}
+        sow_doc = db["sow_documents"].find_one(period_query(db["sow_documents"], cid, target_month)) or {}
         sow_status = sow_doc.get("status") or "Draft"
         sow_submitted_at = sow_doc.get("submitted_at")
         sow_approved_by = sow_doc.get("approved_by")
@@ -209,7 +211,9 @@ def get_accepted_contractors_for_vendor(current_user: User, month_filter: Option
         })
 
         billing_status = "Ready to Invoice" if (has_real_timesheets or total_expenses_amt > 0) else "Awaiting Timesheet"
-        if inv:
+        if sow_status == "Paid":
+            billing_status = "Paid"
+        elif inv:
             billing_status = inv.get("status", "Invoiced")
 
         results.append({
@@ -267,7 +271,7 @@ def get_candidate_billing_breakdown(workorder_id: str, month_str: Optional[str] 
     cid_clean = clean_id.replace("SDC-", "").replace("SDC -", "").replace("BEAR-", "").replace("BEAR -", "").strip()
 
     now = datetime.now(timezone.utc)
-    target_month = month_str or now.strftime("%Y-%m")
+    target_month = billing_period(month_str)
 
     wo_coll = db["work_orders"]
     ts_coll = db["timesheets"]
@@ -322,7 +326,11 @@ def get_candidate_billing_breakdown(workorder_id: str, month_str: Optional[str] 
             {"candidate_id": {"$regex": reg, "$options": "i"}},
         ])
 
+    ts_query["status"] = {"$in": ["APPROVED", "Approved"]}
     all_timesheets = list(ts_coll.find(ts_query).sort("week_start_date", 1))
+    # Use the same weekly billing-month assignment as the overview. A week
+    # beginning in the previous month must not be billed in both periods.
+    all_timesheets = [ts for ts in all_timesheets if str(ts.get("week_start_date") or ts.get("created_at") or "").startswith(target_month)]
 
     # 3. Calendar weeks for target month
     try:
@@ -394,7 +402,7 @@ def get_candidate_billing_breakdown(workorder_id: str, month_str: Optional[str] 
         ts_id = str(ts.get("id") or ts.get("_id") or "")
         ts_start = str(ts.get("week_start_date", ""))
         ts_created = str(ts.get("created_at", ""))
-        if (ts_start.startswith(target_month) or ts_created.startswith(target_month)) and ts_id not in used_ids:
+        if (ts_start.startswith(target_month) or (not ts_start and ts_created.startswith(target_month))) and ts_id not in used_ids:
             tot_h = float(ts.get("total_hours", 0) or 0)
             reg_h = float(ts.get("total_regular_hours", 0) or 0)
             ot_h = float(ts.get("total_overtime_hours", 0) or 0)
@@ -456,28 +464,28 @@ def get_candidate_billing_breakdown(workorder_id: str, month_str: Optional[str] 
         inv.pop("_id", None)
 
     # Check existing SOW document
-    sow_doc = db["sow_documents"].find_one({"$or": [{"candidate_id": cid}, {"workorder_id": cid}]}) or {}
+    sow_doc = db["sow_documents"].find_one(period_query(db["sow_documents"], cid, target_month)) or {}
     sow_doc.pop("_id", None)
 
     # ── Approval chain & payment fields from the work order ──────────────────
     approval_trail = {
         # SOW / Procurement stage
-        "procurement_authorized": wo.get("procurement_authorized", False),
-        "procurement_approved_by": wo.get("procurement_approved_by") or "",
-        "procurement_approved_at": str(wo.get("procurement_approved_at") or ""),
+        "procurement_authorized": sow_doc.get("procurement_authorized", False),
+        "procurement_approved_by": sow_doc.get("procurement_approved_by") or "",
+        "procurement_approved_at": str(sow_doc.get("procurement_approved_at") or ""),
         # Director stage
-        "director_approved": wo.get("director_approved", False),
-        "director_approved_by": wo.get("approved_by") or wo.get("director_approved_by") or "",
-        "director_approved_at": str(wo.get("approved_at") or wo.get("director_approved_at") or ""),
+        "director_approved": sow_doc.get("director_approved", False),
+        "director_approved_by": sow_doc.get("director_approved_by") or "",
+        "director_approved_at": str(sow_doc.get("director_approved_at") or ""),
         # Finance / Payment stage
-        "payment_status": wo.get("payment_status") or "",
-        "payment_processed_by": wo.get("payment_processed_by") or "",
-        "payment_processed_at": str(wo.get("payment_processed_at") or ""),
-        "transaction_ref": wo.get("transaction_ref") or "",
+        "payment_status": sow_doc.get("payment_status") or "",
+        "payment_processed_by": sow_doc.get("payment_processed_by") or "",
+        "payment_processed_at": str(sow_doc.get("payment_processed_at") or ""),
+        "transaction_ref": sow_doc.get("transaction_ref") or "",
         # Rejection info (if any)
-        "rejected_by": wo.get("rejected_by") or "",
-        "rejected_at": str(wo.get("rejected_at") or ""),
-        "rejection_reason": wo.get("rejection_reason") or "",
+        "rejected_by": sow_doc.get("rejected_by") or "",
+        "rejected_at": str(sow_doc.get("rejected_at") or ""),
+        "rejection_reason": sow_doc.get("rejection_reason") or "",
     }
 
     return {
@@ -564,7 +572,11 @@ def dispatch_vendor_sow(workorder_id: str, user: User, period: Optional[str] = N
         tenant_id = "50c9753b-ad12-4783-b519-9080358f5359"
 
     # Compile structured SOW package
+    period = breakdown["period"]
+    sow_query = period_query(sow_coll, cid, period)
+    require_editable(sow_coll.find_one(sow_query))
     sow_payload = {
+        "period": period,
         "candidate_id": cid,
         "workorder_id": cid,
         "ws_number": cand["work_order_number"] or f"WSOW-2026-{str(cid)[:4].upper()}",
@@ -611,6 +623,13 @@ def dispatch_vendor_sow(workorder_id: str, user: User, period: Optional[str] = N
     }
 
     doc_record = {
+        "period": period,
+        "procurement_authorized": False,
+        "procurement_approved_by": None,
+        "procurement_approved_at": None,
+        "director_approved": False,
+        "director_approved_by": None,
+        "director_approved_at": None,
         "candidate_id": cid,
         "workorder_id": cid,
         "tenant_id": tenant_id,
@@ -624,7 +643,7 @@ def dispatch_vendor_sow(workorder_id: str, user: User, period: Optional[str] = N
     }
 
     sow_coll.update_one(
-        {"candidate_id": cid},
+        sow_query,
         {"$set": doc_record},
         upsert=True
     )
@@ -662,6 +681,8 @@ def generate_vendor_invoice(workorder_id: str, period: str, user: User) -> Dict[
     invoice_number = f"INV-{period[:4]}-{uuid.uuid4().hex[:6].upper()}"
 
     existing = inv_coll.find_one({"workorder_id": cid, "period": period})
+    require_editable(existing)
+    require_editable(breakdown.get("sow"))
     
     invoice_data = {
         "id": existing.get("id") if existing else f"inv_{uuid.uuid4().hex[:12]}",

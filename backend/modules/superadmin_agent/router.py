@@ -9,7 +9,13 @@ from modules.identity.domain.models import User
 from modules.identity.router import get_current_user
 from .agent import SuperAdminAgent
 
-router = APIRouter(prefix="/api/superadmin/agent", tags=["Super Admin Agent"])
+def require_superadmin(user: User = Depends(get_current_user)):
+    if user.role != 'Super Admin':
+        raise HTTPException(status_code=403, detail='Super Admin access required')
+    return user
+
+
+router = APIRouter(prefix="/api/superadmin/agent", tags=["Super Admin Agent"], dependencies=[Depends(require_superadmin)])
 
 agent_instance = SuperAdminAgent()
 

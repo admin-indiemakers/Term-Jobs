@@ -2,6 +2,11 @@ export function currentBillingMonth(now = new Date()) {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 }
 
+export function shiftBillingMonth(month, offset) {
+  const [year, monthNumber] = month.split('-').map(Number);
+  return currentBillingMonth(new Date(year, monthNumber - 1 + offset, 1));
+}
+
 export function billingCycle(month, now = new Date()) {
   const [year, monthNumber] = month.split('-').map(Number);
   const start = new Date(year, monthNumber - 1, 1);

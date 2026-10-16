@@ -6,6 +6,7 @@ import { assertReviewRound, isAuditableAssessment } from '../utils/reviewAssessm
 
 export function InterviewReviewPanel({ round, candidateName = 'Candidate' }) {
   const [report, setReport] = useState(null);
+  const [mediaToken, setMediaToken] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
@@ -25,6 +26,17 @@ export function InterviewReviewPanel({ round, candidateName = 'Candidate' }) {
       .catch(err => { if (!cancelled) setError(err.message || 'Unable to load interview review.'); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
+  }, [round.id, retry]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setMediaToken('');
+    const load = () => interviewApi.getRecordingAccess(round.id)
+      .then(data => { if (!cancelled) setMediaToken(data.media_token); })
+      .catch(() => { if (!cancelled) setMediaToken(''); });
+    load();
+    const refresh = setInterval(load, 8 * 60 * 1000);
+    return () => { cancelled = true; clearInterval(refresh); };
   }, [round.id, retry]);
 
   const analysis = report?.analysis || round.communication_analysis || {};
@@ -72,8 +84,8 @@ export function InterviewReviewPanel({ round, candidateName = 'Candidate' }) {
     <div className="grid gap-5 p-5 sm:p-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
       <div className="min-w-0 space-y-5">
         <section aria-label="Interview video" className="overflow-hidden rounded-2xl border border-zinc-200">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 p-4"><h3 className="flex items-center gap-2 font-semibold text-zinc-900"><Video size={17} /> Session video</h3>{recordingUrl && <a href={interviewApi.getRecordingStreamUrl(round.id, true)} className="flex items-center gap-1 text-xs font-semibold text-zinc-600"><Download size={14} /> Download video</a>}</div>
-          {recordingUrl && !videoError ? <video key={round.id} controls playsInline preload="metadata" onError={() => setVideoError(true)} className="aspect-video w-full bg-zinc-950" aria-label={`Interview recording for ${candidateName}`} src={interviewApi.getRecordingStreamUrl(round.id)} /> : <div className="flex aspect-video flex-col items-center justify-center gap-2 bg-zinc-950 p-6 text-center text-sm text-zinc-300"><Video size={28} /><p>{videoError ? 'The recording could not be played. Retry or download the video.' : loading ? 'Loading recording…' : 'No recording is available for this round.'}</p>{videoError && <button type="button" onClick={() => setVideoError(false)} className="underline">Retry playback</button>}</div>}
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 p-4"><h3 className="flex items-center gap-2 font-semibold text-zinc-900"><Video size={17} /> Session video</h3>{recordingUrl && mediaToken && <a href={interviewApi.getRecordingStreamUrl(round.id, true, mediaToken)} className="flex items-center gap-1 text-xs font-semibold text-zinc-600"><Download size={14} /> Download video</a>}</div>
+          {recordingUrl && mediaToken && !videoError ? <video key={round.id} controls playsInline preload="metadata" onError={() => setVideoError(true)} className="aspect-video w-full bg-zinc-950" aria-label={`Interview recording for ${candidateName}`} src={interviewApi.getRecordingStreamUrl(round.id, false, mediaToken)} /> : <div className="flex aspect-video flex-col items-center justify-center gap-2 bg-zinc-950 p-6 text-center text-sm text-zinc-300"><Video size={28} /><p>{videoError ? 'The recording could not be played. Retry or download the video.' : loading ? 'Loading recording…' : 'No recording is available for this round.'}</p>{videoError && <button type="button" onClick={() => setVideoError(false)} className="underline">Retry playback</button>}</div>}
           <p className="p-4 text-xs leading-relaxed text-zinc-500">Video, transcript, and assessment below belong to this selected round. Transcript timestamps are displayed as recorded; automatic video alignment is unavailable.</p>
         </section>
 

@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { currentBillingMonth } from '../utils/billingPeriod';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -59,6 +60,8 @@ function formatCurrency(val) {
 }
 
 export default function FinanceDashboard() {
+  const loadVersionRef = useRef(0);
+  const [selectedMonth, setSelectedMonth] = useState(() => currentBillingMonth());
   const { token, user } = useAuth();
   const [workOrders, setWorkOrders] = useState([]);
   const [summary, setSummary] = useState({
@@ -86,10 +89,12 @@ export default function FinanceDashboard() {
   const [paymentNotes, setPaymentNotes] = useState('');
 
   const loadFinanceWorkOrders = async () => {
+    const version = ++loadVersionRef.current;
     setLoading(true);
     setError('');
     try {
-      const res = await request('/api/workforce/finance/work-orders', { token });
+      const res = await request(`/api/workforce/finance/work-orders?period=${selectedMonth}`, { token, noCache: true });
+      if (version !== loadVersionRef.current) return;
       const list = Array.isArray(res?.work_orders) ? res.work_orders : [];
       setWorkOrders(list);
       setSummary({
@@ -113,9 +118,10 @@ export default function FinanceDashboard() {
       }
     } catch (err) {
       console.error('Failed to load finance work orders:', err);
+      if (version !== loadVersionRef.current) return;
       setError(err?.message || 'Failed to load Work Orders.');
     } finally {
-      setLoading(false);
+      if (version === loadVersionRef.current) setLoading(false);
     }
   };
 
@@ -123,7 +129,7 @@ export default function FinanceDashboard() {
     if (token) {
       loadFinanceWorkOrders();
     }
-  }, [token]);
+  }, [token, selectedMonth]);
 
   // Active Selected Work Order
   const activeWo = useMemo(() => {
@@ -136,7 +142,6 @@ export default function FinanceDashboard() {
   const isDirectorApproved =
     rawStatus === 'Approved by Director' ||
     rawStatus === 'Approved' ||
-    rawStatus.toLowerCase().includes('director') ||
     activeWo?.ready_for_payment === true;
   const isPaid =
     rawStatus === 'Paid' ||
@@ -183,7 +188,7 @@ export default function FinanceDashboard() {
     setError('');
     setSuccessMsg('');
     try {
-      const res = await request(`/api/workforce/finance/work-orders/${cid}/process-payment`, {
+      const res = await request(`/api/workforce/finance/work-orders/${cid}/process-payment?period=${selectedMonth}`, {
         method: 'POST',
         token,
         body: {
@@ -252,6 +257,13 @@ export default function FinanceDashboard() {
           <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight leading-none">
             Work Order Settlement & Payments
           </h1>
+          <label className="inline-flex items-center gap-2 text-sm font-semibold text-gray-800 my-3">
+            Billing month
+            <input type="month" aria-label="Billing month" value={selectedMonth}
+              onChange={(e) => { if (e.target.value) { setSelectedMonth(e.target.value); setSelectedCandidateId(null); setWorkOrders([]); setLoading(true); ++loadVersionRef.current; } }}
+              className="bg-white border border-gray-300 rounded-lg px-3 py-2 !text-gray-900" />
+          </label>
+
           <p className="text-xs sm:text-[13px] text-gray-500 font-normal mt-1 max-w-2xl">
             Review Director-approved Work Orders, verify commercial billing amounts, and disburse corporate payments with 3-stage governance warrants.
           </p>

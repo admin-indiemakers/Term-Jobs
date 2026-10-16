@@ -5,7 +5,7 @@ import re
 from datetime import datetime, timezone
 from typing import Any
 from pydantic import BaseModel
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Header
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Header, Request
 from modules.identity.domain.models import User
 from modules.identity.router import get_current_user
 from modules.requisition.domain.models import Requisition
@@ -16,7 +16,40 @@ from modules.workorder.domain.models import (
 )
 from modules.workorder.agent.workorder_agent import generate_autofill_workorder
 
-router = APIRouter(prefix="/api/work-orders", tags=["WorkOrders"])
+from .access import resource_scope
+
+
+async def authorize_workorder_request(request: Request, user: User = Depends(get_current_user)):
+    resource_scope(db, user)
+    identifier = request.path_params.get('work_order_id') or request.path_params.get('identifier')
+    if not identifier and request.method in ('POST', 'PUT') and 'application/json' in request.headers.get('content-type', ''):
+        body = await request.json()
+        identifier = body.get('workorder_id') or body.get('candidate_id')
+        req_id = body.get('requisition_id')
+        if req_id and user.role != 'Super Admin':
+            req_query = {'id': req_id, 'tenant_id': user.tenant_id}
+            if user.role == 'Hiring Manager':
+                req_query['created_by'] = user.id
+            # Recruiters operate on applications submitted by their own company.
+            if user.role not in ('Recruiter', 'Vendor') and not db['requisitions'].find_one(req_query):
+                raise HTTPException(status_code=403, detail='Requisition access denied')
+    if not identifier or user.role == 'Super Admin':
+        return
+    clean_id = str(identifier).strip()
+    pattern = '^' + re.sub(r'\s*-\s*', r'\\s*-\\s*', re.escape(clean_id)) + '$'
+    found = False
+    for collection in ('work_orders', 'candidate_submissions'):
+        lookup = {'$or': [{field: clean_id} for field in ('id', 'workorder_id', 'candidate_id', 'work_order_number')] + [{field: {'$regex': pattern, '$options': 'i'}} for field in ('id', 'workorder_id', 'candidate_id', 'work_order_number')]}
+        for document in db[collection].find(lookup):
+            found = True
+            allowed = resource_scope(db, user, submissions=collection == 'candidate_submissions')
+            if not db[collection].find_one({'$and': [{'_id': document['_id']}, allowed]}):
+                raise HTTPException(status_code=403, detail='Work-order identifier is outside your company scope')
+    if not found:
+        raise HTTPException(status_code=404, detail='Work order or candidate application not found')
+
+
+router = APIRouter(prefix="/api/work-orders", tags=["WorkOrders"], dependencies=[Depends(authorize_workorder_request)])
 
 if os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"):
     ESIGN_UPLOAD_DIR = "/tmp/uploads/work_orders"
@@ -227,13 +260,9 @@ def list_work_orders(
         if status:
             query = query.filter(WorkOrder.status == status)
 
-        # Tenant filtering for non-superadmin
-        if current_user.role != "Super Admin" and current_user.tenant_id:
-            query = query.filter(
-                (WorkOrder.tenant_id == current_user.tenant_id) | 
-                (WorkOrder.tenant_id == None) |
-                (WorkOrder.vendor_name.ilike(f"%{current_user.tenant_name or ''}%"))
-            )
+        allowed = resource_scope(db, current_user)
+        allowed_ids = [d['id'] for d in db['work_orders'].find(allowed, {'id': 1}) if d.get('id')]
+        query = query.filter(WorkOrder.id.in_(allowed_ids))
 
         rows = query.order_by(WorkOrder.updated_at.desc()).all()
         return [_work_order_dict(r) for r in rows]
@@ -482,7 +511,8 @@ def _extract_agreement_details_from_db(identifier: str) -> dict | None:
 @router.get("/available-workorders")
 def get_available_workorders(
     q: str | None = None,
-    authorization: str | None = Header(default=None)
+    authorization: str | None = Header(default=None),
+    current_user: User = Depends(get_current_user),
 ) -> list[dict]:
     """Return distinct active work orders and accepted submissions from the database for AI autofill."""
     seen = set()
@@ -500,7 +530,7 @@ def get_available_workorders(
             {"requisition_title": {"$regex": clean_q, "$options": "i"}},
             {"company_name": {"$regex": clean_q, "$options": "i"}},
         ]
-    docs = list(db["work_orders"].find(query).limit(25))
+    docs = list(db["work_orders"].find({"$and": [query, resource_scope(db, current_user)]}).limit(25))
     for d in docs:
         wid = d.get("workorder_id") or d.get("candidate_id") or d.get("work_order_number") or d.get("id")
         if wid and wid not in seen:
@@ -552,7 +582,7 @@ def get_available_workorders(
             {"candidate_name": {"$regex": clean_q, "$options": "i"}},
             {"requisition_title": {"$regex": clean_q, "$options": "i"}},
         ]
-    sub_docs = list(db["candidate_submissions"].find(sub_q).limit(25))
+    sub_docs = list(db["candidate_submissions"].find({"$and": [sub_q, resource_scope(db, current_user, submissions=True)]}).limit(25))
     for s in sub_docs:
         wid = s.get("workorder_id") or s.get("candidate_id") or s.get("id")
         if wid and wid not in seen:
@@ -612,21 +642,7 @@ def get_director_agreements(
     if current_user.role not in ["Director", "Super Admin", "Admin", "HR"]:
         raise HTTPException(status_code=403, detail="Only Company Directors or Admins can view director agreements.")
 
-    filter_q = {}
-    if current_user.role != "Super Admin":
-        tenant_id = current_user.tenant_id
-        t_doc = db["tenants"].find_one({"id": tenant_id}) if tenant_id else None
-        company_name = (t_doc.get("name") if t_doc else "") or getattr(current_user, "tenant_name", "") or ""
-
-        or_conditions = []
-        if tenant_id:
-            or_conditions.append({"tenant_id": tenant_id})
-        if company_name:
-            or_conditions.append({"company_name": {"$regex": f"^{re.escape(company_name)}$", "$options": "i"}})
-            or_conditions.append({"agreement_data.companyName": {"$regex": f"^{re.escape(company_name)}$", "$options": "i"}})
-
-        if or_conditions:
-            filter_q = {"$or": or_conditions}
+    filter_q = resource_scope(db, current_user)
 
     docs = list(db["work_orders"].find(filter_q).sort("updated_at", -1))
     results = []
