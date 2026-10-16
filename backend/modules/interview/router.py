@@ -608,10 +608,8 @@ async def analyze_communication_endpoint(
     Evaluates candidate spoken communication skills using zero-token linguistic heuristics
     and single-pass token-minimized LLM analysis on the recorded speech transcript.
     """
-    with get_session() as session:
-        interview = session.query(InterviewRound).filter(InterviewRound.id == round_id).first()
-        if not interview or not body.interview_token or body.interview_token not in (interview.candidate_token, interview.interviewer_token):
-            raise HTTPException(status_code=404, detail="Interview not found")
+    # The router dependency already verifies company ownership or the invitation.
+    # Round details intentionally omit credentials, so the body need not repeat one.
     try:
         analysis_result = await analyze_round_communication(
             round_id=round_id,

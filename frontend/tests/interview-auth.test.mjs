@@ -36,3 +36,12 @@ test('signed-in staff can prepare questions without an invitation query', async 
   assert.equal(calls[0].path, '/api/interviews/rounds/round-a/questions');
   assert.equal(calls[0].options.token, 'account-credential');
 });
+
+test('assessment submission uses invitation URL even when payload has no token', async () => {
+  const { api, calls } = client('?token=personal-invitation');
+  const payload = { transcript_turns: [{ speaker: 'candidate', text: 'My answer' }] };
+  await api.analyzeCommunication('round-a', payload);
+  assert.equal(calls[0].path, '/api/interviews/rounds/round-a/analyze-communication?token=personal-invitation');
+  assert.equal(calls[0].options.method, 'POST');
+  assert.equal(calls[0].options.body, payload);
+});

@@ -212,7 +212,7 @@ export async function request(path, {
         } else if (typeof resData.message === 'string') {
           detail = resData.message;
         } else if (typeof resData.error === 'string') {
-          detail = resData.error === 'Route Not Found' ? `Route Not Found (${upperMethod} ${path})` : resData.error;
+          detail = resData.error === 'Route Not Found' ? `Route Not Found (${upperMethod} ${String(path).split('?')[0]})` : resData.error;
         }
       } else if (response.status >= 500) {
         detail = 'Server temporarily unavailable. Please try again in a moment.';
