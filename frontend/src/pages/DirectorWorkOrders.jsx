@@ -16,21 +16,14 @@ import {
   Search,
   Building2,
   Calendar,
-  UserCheck,
   DollarSign,
   ShieldCheck,
-  Send,
-  Filter,
   ChevronRight,
-  Download,
   Printer,
   Crown,
   FileCheck2,
   Loader2,
-  TrendingUp,
-  Receipt,
-  Sparkles,
-  ArrowRight
+  Receipt
 } from 'lucide-react';
 
 function safeString(val, fallback = '') {
@@ -63,9 +56,25 @@ export default function DirectorWorkOrders() {
   const navigate = useNavigate();
   const [workOrders, setWorkOrders] = useState([]);
   const [selectedCandidateId, setSelectedCandidateId] = useState(null);
+  const [showSowModal, setShowSowModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+
+  // Auto-dismiss banners
+  useEffect(() => {
+    if (successMsg) {
+      const timer = setTimeout(() => setSuccessMsg(''), 2500);
+      return () => clearTimeout(timer);
+    }
+  }, [successMsg]);
+
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => setError(''), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
 
   // Search & Filter
   const [searchQuery, setSearchQuery] = useState('');
@@ -130,6 +139,8 @@ export default function DirectorWorkOrders() {
     let pendingCount = 0;
     let approvedCount = 0;
     let procurementClearedCount = 0;
+    let revisionCount = 0;
+    let rejectedCount = 0;
     let totalSpend = 0;
 
     workOrders.forEach((w) => {
@@ -137,12 +148,17 @@ export default function DirectorWorkOrders() {
       const d = w.sow_data || {};
       const isApp = st === 'Paid' || st === 'Approved by Director' || st === 'Approved' || st === 'ACTIVE' || w.director_approved === true || d.director_approved === true;
       const isPend = !isApp && (st === 'Pending Director Approval' || st.toLowerCase().includes('approved by procurement') || w.procurement_authorized);
+      const isRev = st.toLowerCase().includes('revision');
+      const isRej = st.toLowerCase().includes('reject');
 
       if (isPend) pendingCount++;
       if (isApp) approvedCount++;
       if (w.procurement_authorized || isApp || isPend) procurementClearedCount++;
+      if (isRev) revisionCount++;
+      if (isRej) rejectedCount++;
 
-      const spend = Number(d.calculated_grand_total || d.grand_total || (parseFloat(d.raw_charge_rate || 1450) * 173) || 0);
+      const buyerRate = d.raw_charge_rate || (typeof d.charge_rate === 'string' ? d.charge_rate.replace(/[^\d.]/g, '') : '') || 2200;
+      const spend = Number(d.calculated_grand_total || d.grand_total || (parseFloat(buyerRate) * (parseFloat(d.regular_hours || 4) || 173)) || 0);
       totalSpend += spend;
     });
 
@@ -150,6 +166,8 @@ export default function DirectorWorkOrders() {
       pending: pendingCount,
       approved: approvedCount,
       procurementCleared: procurementClearedCount,
+      revision: revisionCount,
+      rejected: rejectedCount,
       totalSpend
     };
   }, [workOrders]);
@@ -170,6 +188,11 @@ export default function DirectorWorkOrders() {
         (d.deployed_personnel && d.deployed_personnel.toLowerCase().includes(q)) ||
         (w.candidate_name && w.candidate_name.toLowerCase().includes(q)) ||
         (d.role && d.role.toLowerCase().includes(q)) ||
+        (w.role && w.role.toLowerCase().includes(q)) ||
+        (d.company_name && d.company_name.toLowerCase().includes(q)) ||
+        (w.company_name && w.company_name.toLowerCase().includes(q)) ||
+        (d.supplier_name && d.supplier_name.toLowerCase().includes(q)) ||
+        (w.vendor_name && w.vendor_name.toLowerCase().includes(q)) ||
         (d.ws_number && d.ws_number.toLowerCase().includes(q)) ||
         (w.candidate_id && w.candidate_id.toLowerCase().includes(q));
 
@@ -296,8 +319,13 @@ export default function DirectorWorkOrders() {
     window.print();
   };
 
+  const activeTenantName = user?.company_name || user?.tenant_name || 'TERM JOBS';
+
   return (
-    <div className="min-h-screen bg-transparent text-[#111827] pb-24 font-sans">
+    <div
+      className="w-full min-w-0 pb-16 space-y-4 text-left font-sans"
+      style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}
+    >
       {/* Embedded Print Styling for Clean A4 Single-Page Document Printing */}
       <style>{`
         @media print {
@@ -325,625 +353,808 @@ export default function DirectorWorkOrders() {
         }
       `}</style>
 
-      {/* Main Container */}
-      <div
-        className="w-full min-w-0 pb-16 space-y-4 text-left"
-        style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}
-      >
-        {/* Top Header Area */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 shrink-0">
-          <div>
-            <div className="text-[10px] font-extrabold text-gray-400 tracking-wider uppercase mb-1">
-              {user?.tenant_name || 'TERM JOBS'} • EXECUTIVE GOVERNANCE
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight leading-none">
-              Director Work Orders & SOW Sign-off
-            </h1>
-          <label className="inline-flex items-center gap-2 text-sm font-semibold text-gray-800 my-3">
-            Billing month
-            <input type="month" aria-label="Billing month" value={selectedMonth}
-              onChange={(e) => { if (e.target.value) { setSelectedMonth(e.target.value); setSelectedCandidateId(null); setWorkOrders([]); setLoading(true); ++loadVersionRef.current; } }}
-              className="bg-white border border-gray-300 rounded-lg px-3 py-2 !text-gray-900" />
-          </label>
-
-            <p className="text-xs sm:text-[13px] text-gray-500 font-normal mt-1 max-w-2xl">
-              Inspect commercial rate schedules, timesheet breakdowns, and grant final executive Director sign-off for Work Orders authorized by Procurement.
-            </p>
+      {/* Top Header Area */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 shrink-0">
+        <div>
+          <div className="text-[10px] font-extrabold text-gray-400 tracking-wider uppercase mb-1">
+            {activeTenantName} • EXECUTIVE GOVERNANCE
           </div>
-
-          <div className="flex items-center gap-2.5 shrink-0">
-            {kpiStats.pending > 0 && (
-              <span className="px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-bold flex items-center gap-1.5 shadow-2xs">
-                <Clock size={12} className="text-amber-600" />
-                <span>{kpiStats.pending} Pending Sign-Off</span>
-              </span>
-            )}
-            <button
-              onClick={loadWorkOrders}
-              className="px-3.5 py-2 bg-white/70 hover:bg-white border border-white/90 text-xs font-bold text-gray-800 rounded-xl transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer active:scale-95"
-            >
-              <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
-              <span>Refresh Work Orders</span>
-            </button>
-          </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight leading-none">
+            Director Work Orders & SOW Sign-off
+          </h1>
+          <p className="text-xs sm:text-[13px] text-gray-500 font-normal mt-1 max-w-2xl">
+            Inspect commercial rate schedules, timesheet breakdowns, and grant final executive Director sign-off for Work Orders authorized by Procurement.
+          </p>
         </div>
 
-        {/* Director Navigation Tabs */}
-        <div className="flex items-center gap-1.5 p-1.5 bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl overflow-x-auto shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)]">
-          <button
-            type="button"
-            onClick={() => navigate('/dashboard/director')}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap text-gray-600 hover:text-black hover:bg-white/60 cursor-pointer"
-          >
-            <span>📊 Executive Overview</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => navigate('/dashboard/director/approvals')}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap text-gray-600 hover:text-black hover:bg-white/60 cursor-pointer"
-          >
-            <ShieldCheck size={13.5} className="text-gray-500" />
-            <span>Requisition Approvals</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => navigate('/dashboard/director/requisitions')}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap text-gray-600 hover:text-black hover:bg-white/60 cursor-pointer"
-          >
-            <span>💼 All Requisitions</span>
-          </button>
-
-          <button
-            type="button"
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap bg-black text-white shadow-xs cursor-pointer ml-auto"
-          >
-            <Receipt size={13.5} className="text-white" />
-            <span>Work Orders (SOW)</span>
-          </button>
-        </div>
-
-        {/* Top KPI Stat Highlights */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-          <div className="bg-white/40 backdrop-blur-2xl border border-amber-300/80 rounded-2xl p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] ring-1 ring-amber-400/20 flex items-center justify-between">
-            <div>
-              <div className="text-[10px] font-extrabold uppercase tracking-wider text-amber-800">
-                Pending Director Sign-off
-              </div>
-              <div className="text-2xl font-black text-amber-900 mt-1 flex items-center gap-2">
-                <span>{kpiStats.pending}</span>
-                {kpiStats.pending > 0 && (
-                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
-                )}
-              </div>
-              <div className="text-[11px] text-amber-700 font-medium mt-0.5 flex items-center gap-1">
-                <Clock className="w-3 h-3" /> Requires Director Action
-              </div>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold">
-              <Crown className="w-5 h-5" />
-            </div>
-          </div>
-
-          <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex items-center justify-between">
-            <div>
-              <div className="text-[10px] font-extrabold uppercase tracking-wider text-gray-400">
-                Procurement Authorized
-              </div>
-              <div className="text-2xl font-black text-gray-900 mt-1">
-                {kpiStats.procurementCleared}
-              </div>
-              <div className="text-[11px] text-gray-500 font-medium mt-0.5 flex items-center gap-1">
-                <Check className="w-3 h-3" /> Verified by Procurement
-              </div>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-gray-100 text-gray-700 flex items-center justify-center font-bold">
-              <FileCheck2 className="w-5 h-5" />
-            </div>
-          </div>
-
-          <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex items-center justify-between">
-            <div>
-              <div className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-800">
-                Fully Approved & Active
-              </div>
-              <div className="text-2xl font-black text-emerald-900 mt-1">
-                {kpiStats.approved}
-              </div>
-              <div className="text-[11px] text-emerald-700 font-medium mt-0.5 flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3" /> Executed Work Orders
-              </div>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
-              <ShieldCheck className="w-5 h-5" />
-            </div>
-          </div>
-
-          <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex items-center justify-between">
-            <div>
-              <div className="text-[10px] font-extrabold uppercase tracking-wider text-gray-400">
-                Monthly Committed Spend
-              </div>
-              <div className="text-2xl font-black text-gray-900 mt-1">
-                {formatCurrency(kpiStats.totalSpend)}
-              </div>
-              <div className="text-[11px] text-emerald-700 font-medium mt-0.5 flex items-center gap-1">
-                <TrendingUp className="w-3 h-3 text-emerald-600" /> Active Contract Billing
-              </div>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
-              <DollarSign className="w-5 h-5" />
-            </div>
-          </div>
-        </div>
-
-        {/* Filter and Search Bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-2 bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)]">
-          <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto">
-            {[
-              { id: 'ALL', label: 'All Work Orders' },
-              { id: 'PENDING', label: 'Pending Sign-off' },
-              { id: 'APPROVED', label: 'Approved by Director' },
-              { id: 'REVISION', label: 'Revision Requested' },
-              { id: 'REJECTED', label: 'Rejected' },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setStatusFilter(tab.id)}
-                className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all whitespace-nowrap cursor-pointer ${
-                  statusFilter === tab.id
-                    ? 'bg-black text-white shadow-xs'
-                    : 'text-gray-600 hover:text-black hover:bg-white/60'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="relative w-full sm:w-72">
-            <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+        {/* Top Right Actions */}
+        <div className="flex items-center gap-2 flex-wrap shrink-0">
+          {/* Billing Month Selector Pill */}
+          <div className="flex items-center gap-1.5 bg-white/70 backdrop-blur-md border border-white/90 px-3 py-1.5 rounded-xl shadow-2xs">
+            <Calendar size={13} className="text-gray-500" />
+            <span className="text-[10.5px] font-bold text-gray-500 uppercase">Month:</span>
             <input
-              type="text"
-              placeholder="Search by worker name, role..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs placeholder:text-gray-400 transition-all"
+              type="month"
+              aria-label="Billing month"
+              value={selectedMonth}
+              onChange={(e) => {
+                if (e.target.value) {
+                  setSelectedMonth(e.target.value);
+                  setSelectedCandidateId(null);
+                  setWorkOrders([]);
+                  setLoading(true);
+                  ++loadVersionRef.current;
+                }
+              }}
+              className="text-xs font-extrabold bg-transparent text-gray-900 focus:outline-none cursor-pointer"
             />
           </div>
+
+          <button
+            type="button"
+            disabled={loading}
+            onClick={loadWorkOrders}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/70 hover:bg-white text-gray-800 text-xs font-bold border border-white/90 shadow-2xs transition active:scale-95 cursor-pointer disabled:opacity-50"
+          >
+            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+            <span>Refresh Work Orders</span>
+          </button>
         </div>
+      </div>
 
-        {/* Error / Success Notifications */}
-        {error && (
-          <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2">
-            <AlertCircle size={15} className="shrink-0 text-red-500" />
-            <span>{error}</span>
+      {/* Alert Notifications */}
+      {error && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-2xl text-xs text-red-900 flex items-center justify-between shadow-2xs animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <AlertCircle size={15} className="shrink-0 text-red-600" />
+            <span className="font-semibold">{error}</span>
           </div>
-        )}
+          <button
+            type="button"
+            onClick={() => setError('')}
+            className="p-1 rounded-lg text-red-600 hover:text-red-800 hover:bg-red-100/60 cursor-pointer"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
 
-        {successMsg && (
-          <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-700 font-semibold flex items-center gap-2.5 shadow-2xs">
-            <CheckCircle2 size={16} className="shrink-0 text-emerald-600" />
-            <span>{successMsg}</span>
+      {successMsg && (
+        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-900 flex items-center justify-between shadow-2xs animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 size={15} className="shrink-0 text-emerald-600" />
+            <span className="font-semibold">{successMsg}</span>
           </div>
-        )}
+          <button
+            type="button"
+            onClick={() => setSuccessMsg('')}
+            className="p-1 rounded-lg text-emerald-600 hover:text-emerald-800 hover:bg-emerald-100/60 cursor-pointer"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
 
-        {/* 2-Column Work Order Center: Left Roster List + Right Paper Document */}
-        {loading && workOrders.length === 0 ? (
-          <div className="py-24 flex flex-col items-center justify-center bg-white rounded-2xl border border-gray-200">
-            <Loader2 size={32} className="animate-spin text-black" />
-            <p className="text-sm text-gray-500 mt-3 font-medium">Loading Work Orders for Director governance...</p>
-          </div>
-        ) : filteredWorkOrders.length === 0 ? (
-          <div className="text-center py-16 bg-white rounded-2xl border border-gray-200 shadow-xs space-y-2">
-            <FileText className="w-12 h-12 text-gray-300 mx-auto" />
-            <h3 className="text-base font-bold text-gray-900">No matching Work Orders found</h3>
-            <p className="text-xs text-gray-500">
-              Work Orders dispatched by recruiters and authorized by Procurement will appear here for Director review.
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            {/* Left Column (5 Cols): Master Work Order Cards */}
-            <div className="lg:col-span-5 space-y-3.5">
-              <div className="flex items-center justify-between text-xs font-bold text-gray-500 px-1">
-                <span>WORK ORDERS QUEUE ({filteredWorkOrders.length})</span>
-                <span>SORTED BY URGENCY</span>
+      {/* Main Content Area: Left Directory Table Card + Right Vertical Stat Cards */}
+      <div className="flex-1 flex flex-col lg:flex-row gap-3.5 items-start pt-1">
+        {/* Left Column: Main Work Order Approvals Directory Card */}
+        <div className="flex-1 min-w-0 w-full space-y-4">
+          <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-3xl p-5 sm:p-6 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] space-y-4">
+            {/* Top Controls Row: Title & Subtitle on Left, Search Bar on Right */}
+            <div className="pb-3.5 border-b border-gray-100 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-base font-extrabold text-gray-900">Work Order Approvals</h2>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Review commercial terms, deployed personnel SOW, and grant executive Director sign-off.
+                  </p>
+                </div>
+
+                {/* Search Input Bar */}
+                <div className="relative w-full sm:w-64 lg:w-72 shrink-0">
+                  <Search
+                    size={14}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 z-10 pointer-events-none"
+                  />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search candidate, role, SOW..."
+                    className="w-full pl-9 pr-8 py-1.5 text-xs text-gray-900 placeholder:text-gray-400 bg-white/70 backdrop-blur-md border border-gray-200/80 rounded-xl focus:outline-none focus:border-black focus:bg-white transition-all shadow-2xs"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-black p-0.5 cursor-pointer z-10"
+                      title="Clear search"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
               </div>
 
-              <div className="space-y-3 max-h-[calc(100vh-16rem)] overflow-y-auto pr-1">
-                {filteredWorkOrders.map((item) => {
-                  const isCurrent = (item.candidate_id || item.workorder_id || item._id) === selectedCandidateId;
-                  const d = item.sow_data || {};
-                  const st = (item.status || d.status || 'Pending Director Approval').trim();
-                  const itemIsApproved = st === 'Paid' || st === 'Approved by Director' || st === 'Approved' || st === 'ACTIVE';
-                  const itemIsPending = !itemIsApproved && (st === 'Pending Director Approval' || st.toLowerCase().includes('approved by procurement') || item.procurement_authorized);
-                  const itemIsRejected = st.toLowerCase().includes('reject');
-                  const itemIsRevision = st.toLowerCase().includes('revision');
-                  const buyerRate = d.raw_charge_rate || (typeof d.charge_rate === 'string' ? d.charge_rate.replace(/[^\d.]/g, '') : '') || 2200;
-
-                  return (
-                    <div
-                      key={item.candidate_id || item.workorder_id || item._id}
-                      onClick={() => setSelectedCandidateId(item.candidate_id || item.workorder_id || item._id)}
-                      className={`bg-white rounded-2xl p-4.5 border transition-all cursor-pointer relative overflow-hidden group shadow-2xs hover:shadow-md ${
-                        isCurrent
-                          ? 'border-black ring-2 ring-black/10'
-                          : 'border-gray-200/90 hover:border-gray-400'
+              {/* Filter Pills Toolbar */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <div className="inline-flex items-center gap-1 bg-white/60 backdrop-blur-md border border-white/80 p-1 rounded-xl text-[11px] font-bold shadow-2xs overflow-x-auto max-w-full">
+                  <button
+                    type="button"
+                    onClick={() => setStatusFilter('ALL')}
+                    className={`px-3 py-1 rounded-lg transition-colors cursor-pointer ${
+                      statusFilter === 'ALL'
+                        ? 'bg-black text-white shadow-2xs font-extrabold'
+                        : 'text-gray-600 hover:text-black'
+                    }`}
+                  >
+                    All {workOrders.length > 0 ? `(${workOrders.length})` : ''}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStatusFilter('PENDING')}
+                    className={`px-3 py-1 rounded-lg transition-colors cursor-pointer ${
+                      statusFilter === 'PENDING'
+                        ? 'bg-black text-white shadow-2xs font-extrabold'
+                        : 'text-gray-600 hover:text-black'
+                    }`}
+                  >
+                    Pending Sign-off {kpiStats.pending > 0 ? `(${kpiStats.pending})` : ''}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStatusFilter('APPROVED')}
+                    className={`px-3 py-1 rounded-lg transition-colors cursor-pointer ${
+                      statusFilter === 'APPROVED'
+                        ? 'bg-black text-white shadow-2xs font-extrabold'
+                        : 'text-gray-600 hover:text-black'
+                    }`}
+                  >
+                    Approved by Director {kpiStats.approved > 0 ? `(${kpiStats.approved})` : ''}
+                  </button>
+                  {kpiStats.revision > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setStatusFilter('REVISION')}
+                      className={`px-3 py-1 rounded-lg transition-colors cursor-pointer ${
+                        statusFilter === 'REVISION'
+                          ? 'bg-black text-white shadow-2xs font-extrabold'
+                          : 'text-gray-600 hover:text-black'
                       }`}
                     >
-                      <div className="flex items-center justify-between mb-2.5">
-                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-gray-100 text-gray-700 font-mono">
-                          {d.ws_number || item.candidate_id || 'WO-2026'}
-                        </span>
-                        <span
-                          className={`text-[10.5px] font-extrabold px-2.5 py-0.5 rounded-full ${
-                            itemIsApproved
-                              ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
-                              : itemIsPending
-                              ? 'bg-amber-100 text-amber-900 border border-amber-300 animate-pulse'
-                              : itemIsRejected
-                              ? 'bg-red-100 text-red-900 border border-red-300'
-                              : itemIsRevision
-                              ? 'bg-red-50 text-red-700 border border-red-200'
-                              : 'bg-gray-100 text-gray-700'
-                          }`}
-                        >
-                          {itemIsApproved
-                            ? '✓ Director Approved'
-                            : itemIsPending
-                            ? '👑 Pending Director Sign-off'
-                            : itemIsRejected
-                            ? 'Rejected'
-                            : itemIsRevision
-                            ? 'Revision Requested'
-                            : 'Draft Work Order'}
-                        </span>
-                      </div>
-
-                      <div className="flex items-start gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-black text-white flex items-center justify-center font-bold text-xs shrink-0">
-                          {safeString(d.deployed_personnel || item.candidate_name, 'WO').slice(0, 2).toUpperCase()}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <h4 className="font-extrabold text-sm text-gray-900 truncate">
-                            {safeString(d.deployed_personnel || item.candidate_name, 'Contract Worker')}
-                          </h4>
-                          <p className="text-xs text-gray-500 font-medium truncate mt-0.5">
-                            {safeString(d.role || item.role, 'Specialist')} · {safeString(d.company_name || item.company_name, 'Client')}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-gray-100 text-xs">
-                        <div className="bg-gray-50 p-2 rounded-xl">
-                          <div className="text-[10.5px] text-gray-400 font-medium">Billing Rate</div>
-                          <div className="font-bold text-gray-900 mt-0.5">₹{buyerRate}/hr</div>
-                        </div>
-                        <div className="bg-gray-50 p-2 rounded-xl">
-                          <div className="text-[10.5px] text-gray-400 font-medium">Monthly Value</div>
-                          <div className="font-bold text-emerald-700 mt-0.5">
-                            {formatCurrency(d.calculated_grand_total || d.grand_total || (parseFloat(buyerRate) * 173))}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="mt-3 flex items-center justify-between text-xs pt-1">
-                        <div className="text-[11px] text-gray-500">
-                          {item.procurement_authorized || itemIsApproved || itemIsPending ? (
-                            <span className="text-indigo-700 font-semibold flex items-center gap-1">
-                              <CheckCircle2 size={12} /> Procurement Verified
-                            </span>
-                          ) : (
-                            <span className="text-gray-400">Awaiting Procurement</span>
-                          )}
-                        </div>
-                        <span className="font-bold text-black flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
-                          Inspect & Sign <ChevronRight size={14} />
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
+                      Revision Requested ({kpiStats.revision})
+                    </button>
+                  )}
+                  {kpiStats.rejected > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setStatusFilter('REJECTED')}
+                      className={`px-3 py-1 rounded-lg transition-colors cursor-pointer ${
+                        statusFilter === 'REJECTED'
+                          ? 'bg-black text-white shadow-2xs font-extrabold'
+                          : 'text-gray-600 hover:text-black'
+                      }`}
+                    >
+                      Rejected ({kpiStats.rejected})
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
-            {/* Right Column (7 Cols): Physical Work Order Document & Executive Action Center */}
-            <div className="lg:col-span-7 space-y-4">
-              {activeWo ? (
-                <>
-                  {/* Top Director Action Bar */}
-                  <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-xs flex flex-wrap items-center justify-between gap-3 no-print">
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={handlePrintPdf}
-                        className="px-3.5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border border-gray-200"
-                        title="Print or Save Signed PDF"
-                      >
-                        <Printer size={14} />
-                        <span>Print / Save PDF</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setShowRevisionModal(true)}
-                        disabled={actionLoading}
-                        className="px-3.5 py-2 bg-white hover:bg-gray-100 text-gray-800 rounded-xl text-xs font-bold transition-all cursor-pointer border border-gray-200 disabled:opacity-50"
-                      >
-                        Request Revision
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setShowRejectModal(true)}
-                        disabled={actionLoading}
-                        className="px-3 py-2 bg-red-50 hover:bg-red-100 text-red-700 rounded-xl text-xs font-bold transition-all cursor-pointer border border-red-200 disabled:opacity-50"
-                      >
-                        Reject
-                      </button>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {isDirectorApproved ? (
-                        <div className="px-5 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold shadow-xs flex items-center gap-1.5">
-                          <CheckCircle2 size={14} />
-                          <span>✓ Approved by Director</span>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={handleDirectorApprove}
-                          disabled={actionLoading}
-                          className="px-5 py-2.5 bg-black hover:bg-gray-800 text-white rounded-xl text-xs font-extrabold transition-all cursor-pointer shadow-md flex items-center gap-2 disabled:opacity-50"
-                        >
-                          {actionLoading ? <Loader2 size={14} className="animate-spin text-white" /> : <Crown size={14} className="text-amber-400" />}
-                          <span>Director Sign-Off & Approve</span>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Status Callout Banner */}
-                  {isPendingDirector && (
-                    <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-xs text-amber-950 flex items-center justify-between no-print shadow-xs">
-                      <div className="flex items-center gap-2.5">
-                        <Crown className="w-5 h-5 text-amber-600 shrink-0" />
-                        <div>
-                          <strong>Awaiting Final Company Director Sign-off:</strong> This Work Order was formally verified and released by Procurement Lead{' '}
-                          <span className="font-bold">{safeString(activeWo.procurement_approved_by || 'Aditi (Procurement)')}</span>. Granting Director approval unlocks full activation & timesheets.
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Physical PDF Paper Document */}
-                  <div
-                    id="director-work-order-print"
-                    className="bg-white rounded-2xl border border-gray-300 shadow-xl p-6 sm:p-9 text-gray-900 font-sans space-y-6 text-left"
+            {/* Table Content */}
+            {loading ? (
+              <div className="py-14 text-center text-xs text-gray-400 font-medium space-y-2">
+                <RefreshCw size={18} className="animate-spin mx-auto text-gray-400" />
+                <p>Loading Work Orders for Director governance...</p>
+              </div>
+            ) : filteredWorkOrders.length === 0 ? (
+              <div className="py-12 text-center space-y-2">
+                <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center mx-auto text-gray-400">
+                  <Receipt size={20} />
+                </div>
+                <p className="text-xs text-gray-500 font-medium">
+                  {searchQuery.trim()
+                    ? `No work orders found matching "${searchQuery.trim()}".`
+                    : `No work orders found for ${selectedMonth}.`}
+                </p>
+                {searchQuery.trim() && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="text-xs font-bold text-gray-900 hover:underline cursor-pointer"
                   >
-                    {/* Header */}
-                    <div className="border-b-2 border-gray-900 pb-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                      <div>
-                        <div className="text-[11px] font-extrabold tracking-widest text-gray-500 uppercase flex items-center gap-1.5">
-                          <span>STATEMENT OF WORK & WORK ORDER</span>
-                          <span>·</span>
-                          <span className="text-black font-black">EXECUTIVE SCHEDULE</span>
-                        </div>
-                        <h2 className="text-2xl font-black text-black tracking-tight mt-1 flex items-center gap-2">
-                          <span>WORK STATEMENT:</span>
-                          <span className="font-mono">{safeString(sowData.ws_number, 'WSOW-2026-0412')}</span>
-                        </h2>
-                        <p className="text-xs text-gray-600 mt-1">
-                          Issued under Master Service Agreement{' '}
-                          <span className="font-bold text-gray-900">{safeString(sowData.msa_ref, 'MSA-2026-TERMS')}</span> ·{' '}
-                          <span className="font-semibold text-gray-900">{safeString(sowData.company_name || user?.tenant_name, 'Bearitt')}</span>
-                        </p>
-                      </div>
+                    Clear search
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[880px] text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-gray-100 text-[10px] font-extrabold text-gray-400 uppercase tracking-wider">
+                      <th className="w-[23%] py-3 px-3.5 text-left">Candidate / Work Order</th>
+                      <th className="w-[18%] py-3 px-3 text-left">Company & Supplier</th>
+                      <th className="w-[14%] py-3 px-3 text-left">Rate & Value</th>
+                      <th className="w-[15%] py-3 px-3 text-left">Procurement</th>
+                      <th className="w-[15%] py-3 px-3 text-left">Director Sign-off</th>
+                      <th className="w-[15%] py-3 px-3.5 text-right">Statement of Work</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {filteredWorkOrders.map((item) => {
+                      const d = item.sow_data || {};
+                      const st = (item.status || d.status || 'Pending Director Approval').trim();
+                      const itemIsApproved = st === 'Paid' || st === 'Approved by Director' || st === 'Approved' || st === 'ACTIVE' || item.director_approved === true || d.director_approved === true;
+                      const itemIsPending = !itemIsApproved && (st === 'Pending Director Approval' || st.toLowerCase().includes('approved by procurement') || item.procurement_authorized);
+                      const itemIsRejected = st.toLowerCase().includes('reject');
+                      const itemIsRevision = st.toLowerCase().includes('revision');
+                      const buyerRate = d.raw_charge_rate || (typeof d.charge_rate === 'string' ? d.charge_rate.replace(/[^\d.]/g, '') : '') || 2200;
+                      const totalValue = d.calculated_grand_total || d.grand_total || (parseFloat(buyerRate) * (parseFloat(d.regular_hours || 4) || 173));
+                      const candidateId = item.candidate_id || item.workorder_id || item._id;
 
-                      <div className="flex flex-col items-end gap-1.5 shrink-0">
-                        <div className={`px-3 py-1 rounded-xl text-xs font-black uppercase tracking-wider border ${
-                          isDirectorApproved
-                            ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
-                            : isPendingDirector
-                            ? 'bg-amber-100 text-amber-900 border-amber-300'
-                            : 'bg-gray-100 text-gray-800 border-gray-300'
-                        }`}>
-                          {isDirectorApproved
-                            ? '✓ Director Approved'
-                            : isPendingDirector
-                            ? 'Pending Director Sign-off'
-                            : safeString(activeWo.status, 'Draft')}
-                        </div>
-                        <span className="text-[11px] text-gray-400 font-mono">
-                          Period: {safeString(sowData.billing_cycle, 'Monthly')}
-                        </span>
-                      </div>
-                    </div>
+                      return (
+                        <tr
+                          key={candidateId}
+                          onClick={() => {
+                            setSelectedCandidateId(candidateId);
+                            setShowSowModal(true);
+                          }}
+                          className="hover:bg-white/60 transition-colors cursor-pointer group"
+                        >
+                          {/* Candidate / Work Order */}
+                          <td className="w-[23%] py-3.5 px-3.5 align-middle">
+                            <div className="font-bold text-gray-900 text-[13px] truncate" title={safeString(d.deployed_personnel || item.candidate_name, 'Candidate')}>
+                              {safeString(d.deployed_personnel || item.candidate_name, 'Candidate')}
+                            </div>
+                            <div className="text-[10px] text-gray-400 font-mono font-normal mt-0.5 truncate">
+                              {d.ws_number || item.candidate_id || 'WO-PENDING'} • {safeString(d.role || item.role, 'Specialist')}
+                            </div>
+                          </td>
 
-                    {/* Section 1: Personnel and Scope */}
-                    <div>
-                      <h3 className="text-xs font-black text-gray-900 tracking-wider uppercase mb-3 flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-black"></span>
-                        1. Personnel and Engagement Scope
-                      </h3>
+                          {/* Company & Supplier */}
+                          <td className="w-[18%] py-3.5 px-3 align-middle">
+                            <div className="font-semibold text-gray-800 truncate" title={safeString(d.company_name || item.company_name, '—')}>
+                              {safeString(d.company_name || item.company_name || activeTenantName, '—')}
+                            </div>
+                            <div className="text-[11px] text-gray-500 font-medium mt-0.5 truncate" title={safeString(d.supplier_name || item.vendor_name, 'Direct Applicant')}>
+                              {safeString(d.supplier_name || item.vendor_name, 'Direct Applicant')}
+                            </div>
+                          </td>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 bg-gray-50 p-4 rounded-xl border border-gray-200 text-xs">
-                        <div>
-                          <div className="text-[11px] font-semibold text-gray-500">Deployed Personnel</div>
-                          <div className="text-sm font-bold text-black mt-0.5">{safeString(sowData.deployed_personnel || activeWo.candidate_name, '—')}</div>
-                        </div>
+                          {/* Rate & Value */}
+                          <td className="w-[14%] py-3.5 px-3 align-middle">
+                            <div className="font-black text-gray-900 text-[13px]">
+                              {formatCurrency(totalValue)}
+                            </div>
+                            <div className="text-[10px] font-semibold text-gray-400 mt-0.5">
+                              ₹{buyerRate}/hr · {safeString(d.billing_cycle, 'Monthly')}
+                            </div>
+                          </td>
 
-                        <div>
-                          <div className="text-[11px] font-semibold text-gray-500">Designation / Role</div>
-                          <div className="text-sm font-bold text-black mt-0.5">{safeString(sowData.role || activeWo.role, '—')}</div>
-                        </div>
+                          {/* Procurement */}
+                          <td className="w-[15%] py-3.5 px-3 align-middle">
+                            {item.procurement_authorized || itemIsApproved || itemIsPending || d.procurement_approved_by ? (
+                              <div>
+                                <div className="text-gray-900 font-bold flex items-center gap-1 truncate">
+                                  <CheckCircle2 size={12} className="text-emerald-600 shrink-0" />
+                                  <span className="truncate">{safeString(item.procurement_approved_by || d.procurement_approved_by, 'Aditi (Procurement)')}</span>
+                                </div>
+                                <div className="text-[10px] text-gray-400 font-mono mt-0.5">
+                                  {formatDate(item.procurement_approved_at || d.procurement_approved_at)}
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                                <Clock size={11} className="shrink-0" />
+                                Pending Verification
+                              </span>
+                            )}
+                          </td>
 
-                        <div>
-                          <div className="text-[11px] font-semibold text-gray-500">Reporting Manager</div>
-                          <div className="text-sm font-bold text-black mt-0.5">{safeString(sowData.reporting_to, 'Arun Deshpande, Engineering')}</div>
-                        </div>
+                          {/* Director Sign-off */}
+                          <td className="w-[15%] py-3.5 px-3 align-middle">
+                            {itemIsApproved ? (
+                              <div>
+                                <div className="text-gray-900 font-bold flex items-center gap-1 truncate">
+                                  <CheckCircle2 size={12} className="text-emerald-600 shrink-0" />
+                                  <span className="truncate">{safeString(item.director_approved_by || d.director_approved_by, `${user?.name || 'Director'} (Director)`)}</span>
+                                </div>
+                                <div className="text-[10px] text-gray-400 font-mono mt-0.5">
+                                  {formatDate(item.director_approved_at || d.director_approved_at)}
+                                </div>
+                              </div>
+                            ) : itemIsRejected ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-red-50 text-red-700 border border-red-200">
+                                <XCircle size={11} className="shrink-0" />
+                                Rejected
+                              </span>
+                            ) : itemIsRevision ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                                <AlertCircle size={11} className="shrink-0" />
+                                Revision Requested
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                                Pending Sign-off
+                              </span>
+                            )}
+                          </td>
 
-                        <div>
-                          <div className="text-[11px] font-semibold text-gray-500">Place of Work</div>
-                          <div className="text-sm font-bold text-black mt-0.5">{safeString(sowData.place_of_work, 'Hybrid / Bangalore HQ')}</div>
-                        </div>
+                          {/* Actions: View Statement Button */}
+                          <td className="w-[15%] py-3.5 px-3.5 align-middle text-right">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedCandidateId(candidateId);
+                                setShowSowModal(true);
+                              }}
+                              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-black hover:bg-gray-800 text-white text-xs font-bold transition shadow-2xs cursor-pointer active:scale-95 group-hover:bg-gray-900"
+                              title="View Statement of Work"
+                            >
+                              <Eye size={13} />
+                              <span>View</span>
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
 
-                        <div>
-                          <div className="text-[11px] font-semibold text-gray-500">Commencement Date</div>
-                          <div className="text-sm font-bold text-black mt-0.5">{formatDate(sowData.commencement || '2026-09-01')}</div>
-                        </div>
-
-                        <div>
-                          <div className="text-[11px] font-semibold text-gray-500">Expiry Date</div>
-                          <div className="text-sm font-bold text-black mt-0.5">{formatDate(sowData.expiry || '2027-08-31')}</div>
-                        </div>
-
-                        <div>
-                          <div className="text-[11px] font-semibold text-gray-500">Duration</div>
-                          <div className="text-sm font-bold text-black mt-0.5">{safeString(sowData.duration, '12 Months')}</div>
-                        </div>
-
-                        <div>
-                          <div className="text-[11px] font-semibold text-gray-500">Talent Vendor</div>
-                          <div className="text-sm font-bold text-black mt-0.5">{safeString(sowData.supplier_name, 'Asimovex / TalentBridge')}</div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Section 2: MSA Billing Rate & Overtime Terms */}
-                    <div>
-                      <h3 className="text-xs font-black text-gray-900 tracking-wider uppercase mb-3 flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-black"></span>
-                        2. MSA Billing Rate & Overtime Terms
-                      </h3>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 bg-gray-50 p-4 rounded-xl border border-gray-200 text-xs">
-                        <div>
-                          <div className="text-[11px] font-semibold text-gray-500">Base Hourly Rate (₹)</div>
-                          <div className="text-base font-black text-black mt-0.5">
-                            ₹{sowData.raw_charge_rate || 2200}/hr
-                          </div>
-                        </div>
-
-                        <div>
-                          <div className="text-[11px] font-semibold text-gray-500">Billing Cycle</div>
-                          <div className="text-sm font-bold text-black mt-0.5">{safeString(sowData.billing_cycle, 'Monthly')}</div>
-                        </div>
-
-                        <div>
-                          <div className="text-[11px] font-semibold text-gray-500">Overtime Multiplier</div>
-                          <div className="text-sm font-bold text-emerald-700 mt-0.5">1.5× Base Hourly Rate</div>
-                        </div>
-
-                        <div>
-                          <div className="text-[11px] font-semibold text-gray-500">Payment Terms</div>
-                          <div className="text-sm font-bold text-black mt-0.5">{safeString(sowData.payment_terms, 'Net 30 days')}</div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Section 3: Approved Hours Breakdown */}
-                    <div>
-                      <h3 className="text-xs font-black text-gray-900 tracking-wider uppercase mb-3 flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-black"></span>
-                        3. Approved Timesheet Hours Breakdown
-                      </h3>
-
-                      <div className="overflow-x-auto rounded-xl border border-gray-200">
-                        <table className="w-full text-left text-xs">
-                          <thead className="bg-gray-100 text-gray-700 font-bold uppercase text-[11px] border-b border-gray-200">
-                            <tr>
-                              <th className="py-2.5 px-4">Hour Type</th>
-                              <th className="py-2.5 px-4">Hours Approved</th>
-                              <th className="py-2.5 px-4">Billing Rate</th>
-                              <th className="py-2.5 px-4 text-right">Line Total Amount</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-200 text-gray-900">
-                            <tr>
-                              <td className="py-2.5 px-4 font-bold">Standard Regular Hours</td>
-                              <td className="py-2.5 px-4">{sowData.regular_hours || 4} hrs</td>
-                              <td className="py-2.5 px-4 font-medium">₹{sowData.raw_charge_rate || 2200} / hr</td>
-                              <td className="py-2.5 px-4 text-right font-bold text-black">
-                                ₹{((parseFloat(sowData.raw_charge_rate || 2200)) * (parseFloat(sowData.regular_hours || 4))).toLocaleString()}
-                              </td>
-                            </tr>
-                            <tr>
-                              <td className="py-2.5 px-4 font-bold text-emerald-800">Overtime Hours (&gt;40h/wk)</td>
-                              <td className="py-2.5 px-4">{sowData.overtime_hours || 0} hrs</td>
-                              <td className="py-2.5 px-4 text-emerald-800 font-semibold">1.5× Rate</td>
-                              <td className="py-2.5 px-4 text-right font-bold text-emerald-800">
-                                ₹{((parseFloat(sowData.raw_charge_rate || 2200) * 1.5) * (parseFloat(sowData.overtime_hours || 0))).toLocaleString()}
-                              </td>
-                            </tr>
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-
-                    {/* Grand Total Summary Box */}
-                    <div className="bg-black text-white p-6 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-lg">
-                      <div>
-                        <div className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">
-                          TOTAL AUTHORIZED WORK ORDER COMMITMENT
-                        </div>
-                        <div className="text-3xl font-black text-[#22C55E] tracking-tight mt-1">
-                          {formatCurrency(sowData.calculated_grand_total || sowData.grand_total || ((parseFloat(sowData.raw_charge_rate || 2200)) * (parseFloat(sowData.regular_hours || 4))))}
-                        </div>
-                        <div className="text-xs text-gray-400 mt-1 font-medium">
-                          Net 30 Days Commercial Terms · Backed by MSA Rate Schedule
-                        </div>
-                      </div>
-
-                      <div className="no-print">
-                        {!isDirectorApproved && (
-                          <button
-                            type="button"
-                            onClick={handleDirectorApprove}
-                            disabled={actionLoading}
-                            className="px-5 py-2.5 bg-[#22C55E] hover:bg-[#16a34a] text-white font-extrabold rounded-xl text-xs transition-all cursor-pointer shadow-md flex items-center gap-2 disabled:opacity-50"
-                          >
-                            {actionLoading ? <Loader2 size={14} className="animate-spin text-white" /> : <Crown size={14} />}
-                            <span>Approve as Director</span>
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Dual Signature Audit Stamp */}
-                    <div className="pt-6 border-t border-gray-200 grid grid-cols-1 sm:grid-cols-2 gap-8 text-xs">
-                      <div>
-                        <span className="font-bold text-gray-800 block">1. Procurement Team Authorization:</span>
-                        <div className="border-b border-gray-900 pb-1 mt-1 font-bold text-indigo-900">
-                          {safeString(activeWo.procurement_approved_by || sowData.procurement_approved_by || 'ADITI (Procurement Lead)')}
-                        </div>
-                        <div className="text-gray-500 mt-1">Authorized for Commercial Dispatch</div>
-                      </div>
-
-                      <div>
-                        <span className="font-bold text-gray-800 block">2. Company Director Executive Sign-off:</span>
-                        <div className="border-b border-gray-900 pb-1 mt-1 font-bold text-black">
-                          {isDirectorApproved
-                            ? (activeWo.director_approved_by || sowData.director_approved_by || `${user?.name || 'Company Director'} (Director)`)
-                            : '⏳ Awaiting Executive Director Sign-Off'}
-                        </div>
-                        <div className="text-gray-500 mt-1">For {safeString(sowData.company_name || user?.tenant_name, 'Company Board')}</div>
-                      </div>
-                    </div>
-                  </div>
-                </>
-              ) : null}
+        {/* Right Column: 4 Metric Stat Cards Stacked Vertically */}
+        <div className="w-full lg:w-44 xl:w-48 shrink-0 flex flex-col gap-2.5 lg:sticky lg:top-4 self-start">
+          {/* Stat Card 1: Pending Director Sign-off */}
+          <div
+            onClick={() => setStatusFilter('PENDING')}
+            className={`backdrop-blur-2xl border rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between h-[102px] cursor-pointer transition-all ${
+              statusFilter === 'PENDING'
+                ? 'bg-white/85 border-amber-400/60 ring-1 ring-amber-400/30 shadow-sm'
+                : kpiStats.pending > 0
+                ? 'bg-white/40 border-amber-300/80 ring-1 ring-amber-400/20 hover:bg-white/60'
+                : 'bg-white/40 border-white/70 hover:bg-white/60'
+            }`}
+            title="Filter by Pending Sign-off"
+          >
+            <div className="flex items-center justify-between">
+              <div className="w-7.5 h-7.5 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-700 shadow-2xs shrink-0">
+                <Crown size={15} />
+              </div>
+              {kpiStats.pending > 0 ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                  Action
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-gray-100 text-gray-500 border border-gray-200/80">
+                  Clear
+                </span>
+              )}
+            </div>
+            <div>
+              <div className="text-xl sm:text-[22px] font-black text-gray-900 tracking-tight leading-none">
+                {loading ? '…' : kpiStats.pending}
+              </div>
+              <div className="text-[10px] font-semibold text-gray-500 mt-0.5">
+                Pending Sign-off
+              </div>
             </div>
           </div>
-        )}
+
+          {/* Stat Card 2: Procurement Authorized */}
+          <div
+            onClick={() => setStatusFilter('ALL')}
+            className={`backdrop-blur-2xl border rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between h-[102px] cursor-pointer transition-all ${
+              statusFilter === 'ALL'
+                ? 'bg-white/85 border-black/40 ring-1 ring-black/15 shadow-sm'
+                : 'bg-white/40 border-white/70 hover:bg-white/60'
+            }`}
+            title="View All Submissions"
+          >
+            <div className="flex items-center justify-between">
+              <div className="w-7.5 h-7.5 rounded-xl bg-purple-50 border border-purple-200 flex items-center justify-center text-purple-700 shadow-2xs shrink-0">
+                <FileCheck2 size={15} />
+              </div>
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                Verified
+              </span>
+            </div>
+            <div>
+              <div className="text-xl sm:text-[22px] font-black text-gray-900 tracking-tight leading-none">
+                {loading ? '…' : kpiStats.procurementCleared}
+              </div>
+              <div className="text-[10px] font-semibold text-gray-500 mt-0.5">
+                Procurement Authorized
+              </div>
+            </div>
+          </div>
+
+          {/* Stat Card 3: Fully Approved & Active */}
+          <div
+            onClick={() => setStatusFilter('APPROVED')}
+            className={`backdrop-blur-2xl border rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between h-[102px] cursor-pointer transition-all ${
+              statusFilter === 'APPROVED'
+                ? 'bg-white/85 border-emerald-400/60 ring-1 ring-emerald-400/30 shadow-sm'
+                : 'bg-white/40 border-white/70 hover:bg-white/60'
+            }`}
+            title="Filter by Fully Approved Work Orders"
+          >
+            <div className="flex items-center justify-between">
+              <div className="w-7.5 h-7.5 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-700 shadow-2xs shrink-0">
+                <ShieldCheck size={15} />
+              </div>
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                Executed
+              </span>
+            </div>
+            <div>
+              <div className="text-xl sm:text-[22px] font-black text-gray-900 tracking-tight leading-none">
+                {loading ? '…' : kpiStats.approved}
+              </div>
+              <div className="text-[10px] font-semibold text-gray-500 mt-0.5">
+                Fully Approved & Active
+              </div>
+            </div>
+          </div>
+
+          {/* Stat Card 4: Monthly Committed Spend */}
+          <div
+            className="backdrop-blur-2xl border border-white/70 bg-white/40 rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between h-[102px]"
+            title={`Total Monthly Committed Spend for ${selectedMonth}`}
+          >
+            <div className="flex items-center justify-between">
+              <div className="w-7.5 h-7.5 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-700 shadow-2xs shrink-0">
+                <DollarSign size={15} />
+              </div>
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-blue-50 text-blue-700 border border-blue-200 truncate max-w-[80px]">
+                Volume
+              </span>
+            </div>
+            <div>
+              <div className="text-lg sm:text-[19px] font-black text-gray-900 tracking-tight leading-none truncate" title={formatCurrency(kpiStats.totalSpend)}>
+                {loading ? '…' : formatCurrency(kpiStats.totalSpend)}
+              </div>
+              <div className="text-[10px] font-semibold text-gray-500 mt-0.5 truncate">
+                Monthly Spend
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
+
+      {/* Statement of Work Full Document Modal */}
+      {showSowModal && activeWo && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/50 backdrop-blur-xs animate-in fade-in"
+          onClick={() => setShowSowModal(false)}
+        >
+          <div
+            className="relative w-full max-w-4xl max-h-[92vh] flex flex-col bg-white rounded-3xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.25),inset_0_1px_1px_rgba(255,255,255,0.9)] border border-white/90 overflow-hidden text-left"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Sticky Header with Title and Executive Actions */}
+            <div className="p-4 sm:p-5 border-b border-gray-100 bg-gray-50/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0 no-print">
+              <div className="space-y-0.5">
+                <div className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+                  <span>Statement of Work & Work Order</span>
+                  <span>•</span>
+                  <span className="font-mono text-gray-700 font-bold">{safeString(sowData.ws_number, activeWo.candidate_id || 'WO-2026')}</span>
+                </div>
+                <h3 className="text-base sm:text-lg font-black text-gray-900 flex items-center gap-2">
+                  <span>{safeString(sowData.deployed_personnel || activeWo.candidate_name, 'Candidate')}</span>
+                  <span className="text-xs text-gray-500 font-normal">
+                    · {safeString(sowData.role || activeWo.role, 'Specialist')}
+                  </span>
+                </h3>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2 flex-wrap shrink-0">
+                <button
+                  type="button"
+                  onClick={handlePrintPdf}
+                  className="px-3 py-1.5 bg-white hover:bg-gray-100 text-gray-800 rounded-xl text-xs font-bold transition border border-gray-200 shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                  title="Print or Save Signed PDF"
+                >
+                  <Printer size={13} />
+                  <span className="hidden sm:inline">Print / Save PDF</span>
+                </button>
+
+                {!isDirectorApproved && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setShowRevisionModal(true)}
+                      disabled={actionLoading}
+                      className="px-3 py-1.5 bg-white hover:bg-gray-100 text-gray-800 rounded-xl text-xs font-bold transition border border-gray-200 shadow-2xs cursor-pointer disabled:opacity-50"
+                    >
+                      Request Revision
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowRejectModal(true)}
+                      disabled={actionLoading}
+                      className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 rounded-xl text-xs font-bold transition border border-red-200 shadow-2xs cursor-pointer disabled:opacity-50"
+                    >
+                      Reject
+                    </button>
+                  </>
+                )}
+
+                {isDirectorApproved ? (
+                  <div className="px-3.5 py-1.5 rounded-xl bg-emerald-600 text-white text-xs font-bold shadow-xs flex items-center gap-1.5">
+                    <CheckCircle2 size={13} />
+                    <span>✓ Approved by Director</span>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleDirectorApprove}
+                    disabled={actionLoading}
+                    className="px-4 py-1.5 bg-black hover:bg-gray-800 text-white rounded-xl text-xs font-extrabold transition cursor-pointer shadow-sm flex items-center gap-2 disabled:opacity-50"
+                  >
+                    {actionLoading ? <Loader2 size={13} className="animate-spin text-white" /> : <Crown size={13} className="text-amber-400" />}
+                    <span>Director Sign-Off & Approve</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setShowSowModal(false)}
+                  className="w-8 h-8 rounded-full bg-white hover:bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-500 hover:text-black transition cursor-pointer shadow-2xs ml-1"
+                  title="Close"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            </div>
+
+            {/* Scrollable Paper SOW Document */}
+            <div className="p-5 sm:p-7 overflow-y-auto space-y-5">
+              {/* Status Callout Banner */}
+              {isPendingDirector && (
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-xs text-amber-950 flex items-center justify-between no-print shadow-xs">
+                  <div className="flex items-center gap-2.5">
+                    <Crown className="w-5 h-5 text-amber-600 shrink-0" />
+                    <div>
+                      <strong>Awaiting Final Company Director Sign-off:</strong> This Work Order was formally verified and released by Procurement Lead{' '}
+                      <span className="font-bold">{safeString(activeWo.procurement_approved_by || 'Aditi (Procurement)')}</span>. Granting Director approval unlocks full activation & timesheets.
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Physical PDF Paper Document */}
+              <div
+                id="director-work-order-print"
+                className="bg-white rounded-2xl border border-gray-300 shadow-sm p-6 sm:p-8 text-gray-900 font-sans space-y-6 text-left"
+              >
+                {/* Header */}
+                <div className="border-b-2 border-gray-900 pb-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                  <div>
+                    <div className="text-[11px] font-extrabold tracking-widest text-gray-500 uppercase flex items-center gap-1.5">
+                      <span>STATEMENT OF WORK & WORK ORDER</span>
+                      <span>·</span>
+                      <span className="text-black font-black">EXECUTIVE SCHEDULE</span>
+                    </div>
+                    <h2 className="text-2xl font-black text-black tracking-tight mt-1 flex items-center gap-2">
+                      <span>WORK STATEMENT:</span>
+                      <span className="font-mono">{safeString(sowData.ws_number, 'WSOW-2026-0412')}</span>
+                    </h2>
+                    <p className="text-xs text-gray-600 mt-1">
+                      Issued under Master Service Agreement{' '}
+                      <span className="font-bold text-gray-900">{safeString(sowData.msa_ref, 'MSA-2026-TERMS')}</span> ·{' '}
+                      <span className="font-semibold text-gray-900">{safeString(sowData.company_name || activeTenantName, 'Bearitt')}</span>
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col items-end gap-1.5 shrink-0">
+                    <div className={`px-3 py-1 rounded-xl text-xs font-black uppercase tracking-wider border ${
+                      isDirectorApproved
+                        ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                        : isPendingDirector
+                        ? 'bg-amber-100 text-amber-900 border-amber-300'
+                        : 'bg-gray-100 text-gray-800 border-gray-300'
+                    }`}>
+                      {isDirectorApproved
+                        ? '✓ Director Approved'
+                        : isPendingDirector
+                        ? 'Pending Director Sign-off'
+                        : safeString(activeWo.status, 'Draft')}
+                    </div>
+                    <span className="text-[11px] text-gray-400 font-mono">
+                      Period: {safeString(sowData.billing_cycle, 'Monthly')}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Section 1: Personnel and Scope */}
+                <div>
+                  <h3 className="text-xs font-black text-gray-900 tracking-wider uppercase mb-3 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-black"></span>
+                    1. Personnel and Engagement Scope
+                  </h3>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 bg-gray-50 p-4 rounded-xl border border-gray-200 text-xs">
+                    <div>
+                      <div className="text-[11px] font-semibold text-gray-500">Deployed Personnel</div>
+                      <div className="text-sm font-bold text-black mt-0.5">{safeString(sowData.deployed_personnel || activeWo.candidate_name, '—')}</div>
+                    </div>
+
+                    <div>
+                      <div className="text-[11px] font-semibold text-gray-500">Designation / Role</div>
+                      <div className="text-sm font-bold text-black mt-0.5">{safeString(sowData.role || activeWo.role, '—')}</div>
+                    </div>
+
+                    <div>
+                      <div className="text-[11px] font-semibold text-gray-500">Reporting Manager</div>
+                      <div className="text-sm font-bold text-black mt-0.5">{safeString(sowData.reporting_to, 'Arun Deshpande, Engineering')}</div>
+                    </div>
+
+                    <div>
+                      <div className="text-[11px] font-semibold text-gray-500">Place of Work</div>
+                      <div className="text-sm font-bold text-black mt-0.5">{safeString(sowData.place_of_work, 'Hybrid / Bangalore HQ')}</div>
+                    </div>
+
+                    <div>
+                      <div className="text-[11px] font-semibold text-gray-500">Commencement Date</div>
+                      <div className="text-sm font-bold text-black mt-0.5">{formatDate(sowData.commencement || '2026-09-01')}</div>
+                    </div>
+
+                    <div>
+                      <div className="text-[11px] font-semibold text-gray-500">Expiry Date</div>
+                      <div className="text-sm font-bold text-black mt-0.5">{formatDate(sowData.expiry || '2027-08-31')}</div>
+                    </div>
+
+                    <div>
+                      <div className="text-[11px] font-semibold text-gray-500">Duration</div>
+                      <div className="text-sm font-bold text-black mt-0.5">{safeString(sowData.duration, '12 Months')}</div>
+                    </div>
+
+                    <div>
+                      <div className="text-[11px] font-semibold text-gray-500">Talent Vendor</div>
+                      <div className="text-sm font-bold text-black mt-0.5">{safeString(sowData.supplier_name, 'Asimovex / TalentBridge')}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 2: MSA Billing Rate & Overtime Terms */}
+                <div>
+                  <h3 className="text-xs font-black text-gray-900 tracking-wider uppercase mb-3 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-black"></span>
+                    2. MSA Billing Rate & Overtime Terms
+                  </h3>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 bg-gray-50 p-4 rounded-xl border border-gray-200 text-xs">
+                    <div>
+                      <div className="text-[11px] font-semibold text-gray-500">Base Hourly Rate (₹)</div>
+                      <div className="text-base font-black text-black mt-0.5">
+                        ₹{sowData.raw_charge_rate || 2200}/hr
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="text-[11px] font-semibold text-gray-500">Billing Cycle</div>
+                      <div className="text-sm font-bold text-black mt-0.5">{safeString(sowData.billing_cycle, 'Monthly')}</div>
+                    </div>
+
+                    <div>
+                      <div className="text-[11px] font-semibold text-gray-500">Overtime Multiplier</div>
+                      <div className="text-sm font-bold text-emerald-700 mt-0.5">1.5× Base Hourly Rate</div>
+                    </div>
+
+                    <div>
+                      <div className="text-[11px] font-semibold text-gray-500">Payment Terms</div>
+                      <div className="text-sm font-bold text-black mt-0.5">{safeString(sowData.payment_terms, 'Net 30 days')}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 3: Approved Hours Breakdown */}
+                <div>
+                  <h3 className="text-xs font-black text-gray-900 tracking-wider uppercase mb-3 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-black"></span>
+                    3. Approved Timesheet Hours Breakdown
+                  </h3>
+
+                  <div className="overflow-x-auto rounded-xl border border-gray-200">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-gray-100 text-gray-700 font-bold uppercase text-[11px] border-b border-gray-200">
+                        <tr>
+                          <th className="py-2.5 px-4">Hour Type</th>
+                          <th className="py-2.5 px-4">Hours Approved</th>
+                          <th className="py-2.5 px-4">Billing Rate</th>
+                          <th className="py-2.5 px-4 text-right">Line Total Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200 text-gray-900">
+                        <tr>
+                          <td className="py-2.5 px-4 font-bold">Standard Regular Hours</td>
+                          <td className="py-2.5 px-4">{sowData.regular_hours || 4} hrs</td>
+                          <td className="py-2.5 px-4 font-medium">₹{sowData.raw_charge_rate || 2200} / hr</td>
+                          <td className="py-2.5 px-4 text-right font-bold text-black">
+                            ₹{((parseFloat(sowData.raw_charge_rate || 2200)) * (parseFloat(sowData.regular_hours || 4))).toLocaleString()}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className="py-2.5 px-4 font-bold text-emerald-800">Overtime Hours (&gt;40h/wk)</td>
+                          <td className="py-2.5 px-4">{sowData.overtime_hours || 0} hrs</td>
+                          <td className="py-2.5 px-4 text-emerald-800 font-semibold">1.5× Rate</td>
+                          <td className="py-2.5 px-4 text-right font-bold text-emerald-800">
+                            ₹{((parseFloat(sowData.raw_charge_rate || 2200) * 1.5) * (parseFloat(sowData.overtime_hours || 0))).toLocaleString()}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Grand Total Summary Box */}
+                <div className="bg-black text-white p-6 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-lg">
+                  <div>
+                    <div className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">
+                      TOTAL AUTHORIZED WORK ORDER COMMITMENT
+                    </div>
+                    <div className="text-3xl font-black text-[#22C55E] tracking-tight mt-1">
+                      {formatCurrency(sowData.calculated_grand_total || sowData.grand_total || ((parseFloat(sowData.raw_charge_rate || 2200)) * (parseFloat(sowData.regular_hours || 4))))}
+                    </div>
+                    <div className="text-xs text-gray-400 mt-1 font-medium">
+                      Net 30 Days Commercial Terms · Backed by MSA Rate Schedule
+                    </div>
+                  </div>
+
+                  <div className="no-print">
+                    {!isDirectorApproved && (
+                      <button
+                        type="button"
+                        onClick={handleDirectorApprove}
+                        disabled={actionLoading}
+                        className="px-5 py-2.5 bg-[#22C55E] hover:bg-[#16a34a] text-white font-extrabold rounded-xl text-xs transition-all cursor-pointer shadow-md flex items-center gap-2 disabled:opacity-50"
+                      >
+                        {actionLoading ? <Loader2 size={14} className="animate-spin text-white" /> : <Crown size={14} />}
+                        <span>Approve as Director</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Dual Signature Audit Stamp */}
+                <div className="pt-6 border-t border-gray-200 grid grid-cols-1 sm:grid-cols-2 gap-8 text-xs">
+                  <div>
+                    <span className="font-bold text-gray-800 block">1. Procurement Team Authorization:</span>
+                    <div className="border-b border-gray-900 pb-1 mt-1 font-bold text-indigo-900">
+                      {safeString(activeWo.procurement_approved_by || sowData.procurement_approved_by || 'ADITI (Procurement Lead)')}
+                    </div>
+                    <div className="text-gray-500 mt-1">Authorized for Commercial Dispatch</div>
+                  </div>
+
+                  <div>
+                    <span className="font-bold text-gray-800 block">2. Company Director Executive Sign-off:</span>
+                    <div className="border-b border-gray-900 pb-1 mt-1 font-bold text-black">
+                      {isDirectorApproved
+                        ? (activeWo.director_approved_by || sowData.director_approved_by || `${user?.name || 'Company Director'} (Director)`)
+                        : '⏳ Awaiting Executive Director Sign-Off'}
+                    </div>
+                    <div className="text-gray-500 mt-1">For {safeString(sowData.company_name || activeTenantName, 'Company Board')}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Revision Feedback Modal */}
       {showRevisionModal && (
         <div
-          className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+          className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
           onClick={() => setShowRevisionModal(false)}
         >
           <div
@@ -986,7 +1197,7 @@ export default function DirectorWorkOrders() {
       {/* Reject Modal */}
       {showRejectModal && (
         <div
-          className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+          className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
           onClick={() => setShowRejectModal(false)}
         >
           <div

@@ -685,15 +685,39 @@ export default function DirectorDashboard({ view = 'overview' }) {
 
   const filteredRequisitions = useMemo(() => {
     const list = Array.isArray(requisitions) ? requisitions : [];
+    const term = searchTerm.trim().toLowerCase();
+
     return list.filter((r) => {
-      const matchSearch =
-        !searchTerm.trim() ||
-        (r.title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (r.ref || '').toLowerCase().includes(searchTerm.toLowerCase());
-
-      if (!matchSearch) return false;
-
       const info = getRequisitionDisplayInfo(r);
+
+      if (term) {
+        const title = (r.title || '').toLowerCase();
+        const ref = (r.ref || '').toLowerCase();
+        const id = (r.id || '').toLowerCase();
+        const idShort = id.slice(0, 8);
+        const dept = (r.department || r.structured_role?.department || r.job_family || '').toLowerCase();
+        const status = (info.status || r.status || '').toLowerCase();
+        const signOff = (info.signOffText || r.director_approved_by || '').toLowerCase();
+        const skills = Array.isArray(r.skills)
+          ? r.skills.join(' ').toLowerCase()
+          : typeof r.skills === 'string'
+          ? r.skills.toLowerCase()
+          : '';
+
+        const matches =
+          title.includes(term) ||
+          ref.includes(term) ||
+          id.includes(term) ||
+          idShort.includes(term) ||
+          `req-${idShort}`.includes(term) ||
+          `req #${idShort}`.includes(term) ||
+          dept.includes(term) ||
+          status.includes(term) ||
+          signOff.includes(term) ||
+          skills.includes(term);
+
+        if (!matches) return false;
+      }
 
       if (statusFilter === 'DELETED') {
         return info.isDeleted;
@@ -1048,19 +1072,22 @@ export default function DirectorDashboard({ view = 'overview' }) {
 
                   {/* Search Input Bar */}
                   <div className="relative w-full sm:w-64 lg:w-72 shrink-0">
-                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <Search
+                      size={14}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 z-10 pointer-events-none"
+                    />
                     <input
                       type="text"
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                       placeholder="Search requisitions..."
-                      className="w-full pl-8.5 pr-8 py-1.5 text-xs bg-white/70 backdrop-blur-md border border-gray-200/80 rounded-xl focus:outline-none focus:border-black focus:bg-white transition-all shadow-2xs"
+                      className="w-full pl-9 pr-8 py-1.5 text-xs text-gray-900 placeholder:text-gray-400 bg-white/70 backdrop-blur-md border border-gray-200/80 rounded-xl focus:outline-none focus:border-black focus:bg-white transition-all shadow-2xs"
                     />
                     {searchTerm && (
                       <button
                         type="button"
                         onClick={() => setSearchTerm('')}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-black p-0.5 cursor-pointer"
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-black p-0.5 cursor-pointer z-10"
                         title="Clear search"
                       >
                         <X size={12} />
@@ -1120,7 +1147,22 @@ export default function DirectorDashboard({ view = 'overview' }) {
               </div>
 
               {filteredRequisitions.length === 0 ? (
-                <p className="text-xs text-gray-400 py-6 text-center">No requisitions found matching criteria.</p>
+                <div className="py-10 text-center space-y-2">
+                  <p className="text-xs text-gray-500 font-medium">
+                    {searchTerm.trim()
+                      ? `No requisitions found matching "${searchTerm.trim()}".`
+                      : 'No requisitions found matching criteria.'}
+                  </p>
+                  {searchTerm.trim() && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchTerm('')}
+                      className="text-xs font-bold text-gray-900 hover:underline cursor-pointer"
+                    >
+                      Clear search
+                    </button>
+                  )}
+                </div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[880px] text-left text-xs border-collapse">
