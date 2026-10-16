@@ -628,11 +628,11 @@ async def analyze_communication_endpoint(
 
 
 @router.get("/rounds/{round_id}/questions")
-def get_assessment_questions(round_id: str, token: str = Query(...)):
+def get_assessment_questions(round_id: str):
     from modules.interview.services.assessment import load_questions, RUBRIC_VERSION
     with get_session() as session:
         interview = session.query(InterviewRound).filter(InterviewRound.id == round_id).first()
-        if not interview or token not in (interview.candidate_token, interview.interviewer_token):
+        if not interview:
             raise HTTPException(status_code=404, detail="Interview not found")
         try:
             return {"questions": load_questions(session, interview), "rubric_version": RUBRIC_VERSION}

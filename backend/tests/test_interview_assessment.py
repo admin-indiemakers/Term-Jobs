@@ -23,7 +23,7 @@ def test_questions_use_original_resume_linked_by_application(monkeypatch, with_c
     database = mongomock.MongoClient()['assessment-resume']
     monkeypatch.setattr(importlib.import_module('modules.shared.db'), 'db', database)
     database.candidate_submissions.insert_one({'id': 'app', 'requisition_id': 'req', 'candidate_email': 'candidate@example.com', **({'candidate_id': 'person'} if with_candidate_id else {})})
-    database.candidates.insert_one({'id': 'person', 'candidate_email': 'candidate@example.com', 'extracted_text': 'Built Kubernetes deployment pipelines.'})
+    database.candidates.insert_one({'id': 'person', 'tenant_id': 'company', 'candidate_email': 'candidate@example.com', 'extracted_text': 'Built Kubernetes deployment pipelines.'})
     req = SimpleNamespace(id='req', tenant_id='company', to_doc=lambda: {'title': 'Engineer', 'structured_role': {'must_have_skills': ['Kubernetes']}})
     session = MagicMock()
     session.query.return_value.filter.return_value.first.return_value = req
@@ -207,3 +207,27 @@ def test_scored_assessment_and_round_can_be_encoded_for_mongodb():
     BSON.encode(analysis)
     model = InterviewRound.from_doc({'id': 'round', 'communication_analysis': analysis, 'interview_questions': questions()})
     BSON.encode(model.to_doc())
+
+
+@pytest.mark.parametrize('profile_tenant, should_prepare', [('company', True), ('foreign-company', False)])
+def test_resume_recovery_respects_company_when_application_has_no_resume(monkeypatch, profile_tenant, should_prepare):
+    import importlib
+    import mongomock
+    from unittest.mock import MagicMock
+    from modules.interview.services.assessment import load_questions
+    database = mongomock.MongoClient().resume_scope
+    monkeypatch.setattr(importlib.import_module('modules.shared.db'), 'db', database)
+    database.candidate_submissions.insert_one({'id': 'app', 'requisition_id': 'req', 'tenant_id': 'company',
+        'candidate_id': 'foreign-or-old-link', 'candidate_email': 'candidate@example.com'})
+    database.candidates.insert_one({'id': 'original', 'tenant_id': profile_tenant, 'candidate_email': 'Candidate@Example.com',
+        'extracted_text': 'Built Python APIs and owned production deployments.'})
+    req = SimpleNamespace(id='req', tenant_id='company', to_doc=lambda: {'structured_role': {'must_have_skills': ['Python']}})
+    session = MagicMock()
+    session.query.return_value.filter.return_value.first.return_value = req
+    interview = SimpleNamespace(interview_questions=[], requisition_id='req', tenant_id='company', candidate_submission_id='app', candidate_email='candidate@example.com')
+    if should_prepare:
+        assert len(load_questions(session, interview)) == 4
+    else:
+        with pytest.raises(ValueError, match='No readable resume is attached'):
+            load_questions(session, interview)
+        session.commit.assert_not_called()

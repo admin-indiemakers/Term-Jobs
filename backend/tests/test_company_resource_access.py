@@ -195,3 +195,20 @@ def test_recording_credential_cannot_authorize_other_round_or_chat(monkeypatch, 
     database.interview_rounds.insert_one({'id': 'other-round', 'tenant_id': 'company-b', 'requisition_id': 'req-b'})
     assert client.get('/interviews/rounds/other-round/recording', params={'media_token': media_token}).status_code == 403
     assert client.get('/interviews/rounds/round-a/chat', params={'media_token': media_token}).status_code == 403
+
+
+def test_candidate_can_prepare_questions_after_detail_redacts_tokens(monkeypatch, database):
+    persistence = importlib.import_module('modules.shared.db')
+    monkeypatch.setattr(persistence, 'db', database)
+    router = importlib.import_module('modules.interview.router')
+    monkeypatch.setattr(router, 'db', database)
+    database.requisitions.update_one({'id': 'req-a'}, {'$set': {'structured_role': {'must_have_skills': ['Python']}}})
+    database.candidate_submissions.update_one({'id': 'sub-a'}, {'$set': {'resume_text': 'Built Python APIs and owned production deployments.'}})
+    database.interview_rounds.update_one({'id': 'round-a'}, {'$set': {'candidate_submission_id': 'sub-a', 'candidate_email': 'same@example.com'}})
+    app = FastAPI()
+    app.include_router(router.router)
+    client = TestClient(app)
+    response = client.get('/interviews/rounds/round-a/questions?token=candidate-secret')
+    assert response.status_code == 200
+    assert len(response.json()['questions']) == 4
+    assert client.get('/interviews/rounds/round-a/questions?token=wrong-invitation').status_code == 403

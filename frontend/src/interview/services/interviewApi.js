@@ -143,7 +143,8 @@ export const interviewApi = {
   },
 
   async getAssessmentQuestions(roundId, token) {
-    return request(`/api/interviews/rounds/${roundId}/questions?token=${encodeURIComponent(token || '')}`, { noCache: true });
+    const query = token ? `?token=${encodeURIComponent(token)}` : '';
+    return request(`/api/interviews/rounds/${roundId}/questions${query}`, { noCache: true });
   },
 
   async saveTranscript(roundId, transcriptTurns) {
@@ -171,6 +172,7 @@ export const interviewApi = {
 
   // Candidate Interview Video Recording
   async uploadRecording(roundId, videoBlob, durationSeconds = 0, interviewToken = '', onProgress = () => {}) {
+    interviewToken ||= new URLSearchParams(window.location.search).get('token') || '';
     if (interviewToken) {
       const size = 1024 * 1024;
       const count = Math.ceil(videoBlob.size / size);
