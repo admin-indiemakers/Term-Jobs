@@ -41,6 +41,6 @@ def test_state_machine_rejects_invalid():
 
 
 def test_terminal_state_is_closed():
-    # Only Published may transition to Closed.
+    # Pending approvals may also close when their submission deadline expires.
     for status in ALL:
-        assert can_transition(status, RequisitionStatus.CLOSED) is (status == RequisitionStatus.PUBLISHED)
+        assert can_transition(status, RequisitionStatus.CLOSED) is (status in (RequisitionStatus.PUBLISHED, RequisitionStatus.PENDING_APPROVAL))
