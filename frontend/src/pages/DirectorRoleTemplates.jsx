@@ -342,23 +342,20 @@ export default function DirectorRoleTemplates() {
   }).length;
 
   return (
-    <div className="w-full text-left space-y-4 max-w-7xl mx-auto pb-16">
-      {/* Brand Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div
+      className="w-full text-left space-y-4 max-w-7xl mx-auto pb-16"
+      style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}
+    >
+      {/* Top Header Area */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 shrink-0">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-bold text-gray-500 uppercase tracking-widest">
-              Executive Console · Role Templates
-            </span>
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
-              <FileText className="w-3.5 h-3.5" />
-              Pre-Approved Standards
-            </span>
+          <div className="text-[10px] font-extrabold text-gray-400 tracking-wider uppercase mb-1">
+            TERM JOBS • ROLE TEMPLATES
           </div>
-          <h1 className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight mt-1">
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight leading-none">
             Pre-Approved Role Templates
           </h1>
-          <p className="text-xs text-gray-500 mt-0.5">
+          <p className="text-xs sm:text-[13px] text-gray-500 font-normal mt-1 max-w-2xl">
             {activeTenantName} · Standardized roles that Hiring Managers can use to structure and publish instant requisitions.
           </p>
         </div>
@@ -440,7 +437,7 @@ export default function DirectorRoleTemplates() {
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-base font-extrabold text-gray-900">Standardized Templates</h2>
-                {user?.role === 'Super Admin' && clientTenants.length > 0 ? (
+                {user?.role === 'Super Admin' && clientTenants.length > 0 && (
                   <div className="flex items-center gap-1.5 bg-white/70 backdrop-blur-md border border-white/90 px-2.5 py-0.5 rounded-lg shadow-2xs">
                     <Building size={13} className="text-gray-500" />
                     <span className="text-[10.5px] font-bold text-gray-500 uppercase">Target Buyer:</span>
@@ -456,10 +453,6 @@ export default function DirectorRoleTemplates() {
                       ))}
                     </select>
                   </div>
-                ) : (
-                  <span className="px-2.5 py-0.5 rounded-md bg-white/70 border border-white/90 text-gray-700 text-[11px] font-bold shadow-3xs">
-                    🏢 {activeTenantName}
-                  </span>
                 )}
               </div>
               <p className="text-xs text-gray-500 mt-1">

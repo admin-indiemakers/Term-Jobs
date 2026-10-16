@@ -213,6 +213,23 @@ export default function RequisitionDetail() {
     return () => window.removeEventListener('click', handleOutside);
   }, []);
 
+  // Auto-dismiss notifications after 2 seconds
+  useEffect(() => {
+    if (!error) return;
+    const timer = setTimeout(() => {
+      setError('');
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [error]);
+
+  useEffect(() => {
+    if (!info) return;
+    const timer = setTimeout(() => {
+      setInfo('');
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [info]);
+
   const rawStatus = req?.status || 'Draft';
   const status = NORMALIZED[rawStatus] || rawStatus;
   const structuredRole = req?.structured_role || {};
@@ -243,9 +260,31 @@ export default function RequisitionDetail() {
     return [];
   }, [editForm.skills, structuredRole, req]);
 
+  const isPublished = isPublishedStatus(status);
+  const isHiringManager = !user?.role || user?.role === 'Hiring Manager' || user?.role?.toLowerCase().includes('hiring');
+  const cannotEdit = isPublished && (isHiringManager || user?.role !== 'Super Admin');
+
+  const handleEditClick = () => {
+    if (cannotEdit) {
+      setError('');
+      setTimeout(() => {
+        setError('This requisition is already approved, and cannot be edited.');
+      }, 0);
+      setInfo('');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+    setShowEditModal(true);
+  };
+
   // Handle Save Edit Form
   const handleSaveEdit = async (e) => {
     if (e) e.preventDefault();
+    if (cannotEdit) {
+      setError('This requisition is already approved, and cannot be edited.');
+      setShowEditModal(false);
+      return;
+    }
     if (deadlineError(editForm.deadline)) {
       setError(deadlineError(editForm.deadline));
       return;
@@ -459,10 +498,15 @@ export default function RequisitionDetail() {
 
             <button
               type="button"
-              onClick={() => setShowEditModal(true)}
-              className="px-4 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+              onClick={handleEditClick}
+              title={cannotEdit ? 'This requisition is already approved, and cannot be edited.' : 'Edit Requisition'}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                cannotEdit
+                  ? 'bg-gray-200/80 text-gray-400 border border-gray-300/80 shadow-none cursor-not-allowed select-none hover:bg-gray-200/80'
+                  : 'bg-black hover:bg-gray-900 text-white shadow-xs cursor-pointer'
+              }`}
             >
-              <Edit3 size={13} />
+              <Edit3 size={13} className={cannotEdit ? 'text-gray-400' : 'text-white'} />
               <span>Edit Requisition</span>
             </button>
 
@@ -553,7 +597,7 @@ export default function RequisitionDetail() {
 
       {/* Notifications */}
       {info && (
-        <div className="p-3 bg-emerald-50/90 border border-emerald-200/80 rounded-2xl text-xs text-emerald-700 font-semibold flex items-center gap-2.5 shadow-2xs animate-in fade-in">
+        <div className="p-3 bg-emerald-50/90 border border-emerald-200/80 rounded-2xl text-xs text-emerald-700 font-semibold flex items-center gap-2 shadow-2xs animate-in fade-in">
           <CheckCircle2 size={16} className="shrink-0 text-emerald-600" />
           <span>{info}</span>
         </div>
@@ -562,7 +606,7 @@ export default function RequisitionDetail() {
       {error && (
         <div className="p-3 bg-red-50/90 border border-red-200/80 rounded-2xl text-xs text-red-700 flex items-center gap-2 shadow-2xs animate-in fade-in">
           <AlertCircle size={15} className="shrink-0 text-red-500" />
-          <span>{error}</span>
+          <span className="font-semibold">{error}</span>
         </div>
       )}
 
@@ -589,10 +633,15 @@ export default function RequisitionDetail() {
 
               <button
                 type="button"
-                onClick={() => setShowEditModal(true)}
-                className="px-3 py-1.5 rounded-xl bg-white/90 hover:bg-white text-xs font-bold text-gray-800 border border-gray-200/80 shadow-3xs flex items-center gap-1.5 cursor-pointer transition-all hover:shadow-2xs"
+                onClick={handleEditClick}
+                title={cannotEdit ? 'This requisition is already approved, and cannot be edited.' : 'Edit'}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${
+                  cannotEdit
+                    ? 'bg-gray-100/90 text-gray-400 border border-gray-200/80 shadow-none cursor-not-allowed select-none hover:bg-gray-100/90'
+                    : 'bg-white/90 hover:bg-white text-gray-800 border border-gray-200/80 shadow-3xs cursor-pointer hover:shadow-2xs'
+                }`}
               >
-                <Edit3 size={12} />
+                <Edit3 size={12} className={cannotEdit ? 'text-gray-400' : 'text-gray-700'} />
                 <span>Edit</span>
               </button>
             </div>

@@ -39,339 +39,8 @@ import ScheduleInterviewModal from '../../components/ScheduleInterviewModal';
 import SetInterviewProcessModal from '../../components/SetInterviewProcessModal';
 import { mapRequisitionCandidates, attendedApplicants, candidateRounds } from '../../utils/requisitionCandidates';
 
-// Baseline candidate dataset matching the requisition candidate roster
-const DEFAULT_CANDIDATES = [
-  {
-    id: 'cand-2',
-    name: 'Sneha K',
-    initials: 'SK',
-    location: 'Kochi, India',
-    email: 'sneha.k@email.com',
-    phone: '+91 98765 43211',
-    score: 88,
-    skills: ['Python', 'FastAPI', 'PostgreSQL', '+2'],
-    experience: '4 yrs',
-    availability: '15 days',
-    status: 'AI Shortlisted',
-    matchRating: 'Strong Match',
-    matchSummary: 'Exceptional backend API performance tuning and relational DB optimization. High aptitude in asynchronous workflows.',
-    scoreBreakdown: {
-      technical: 92,
-      experience: 88,
-      problemSolving: 87,
-      communication: 84,
-      culturalFit: 86,
-      roleAlignment: 89,
-    },
-    strengths: [
-      'Deep FastAPI performance tuning',
-      'Relational schema design',
-      'Proactive communicator',
-      'High code coverage practices',
-    ],
-    concerns: [
-      'Limited exposure to Kubernetes clustering.',
-    ],
-  },
-  {
-    id: 'cand-3',
-    name: 'Vikram R',
-    initials: 'VR',
-    location: 'Chennai, India',
-    email: 'vikram.r@email.com',
-    phone: '+91 98765 43212',
-    score: 85,
-    skills: ['Python', 'React', 'Docker', '+2'],
-    experience: '2 yrs',
-    availability: 'Immediate',
-    status: 'AI Shortlisted',
-    matchRating: 'Strong Match',
-    matchSummary: 'Versatile fullstack developer with high agility and containerization knowledge. Quick problem solver.',
-    scoreBreakdown: {
-      technical: 86,
-      experience: 78,
-      problemSolving: 88,
-      communication: 85,
-      culturalFit: 87,
-      roleAlignment: 85,
-    },
-    strengths: [
-      'Fullstack Python & React versatility',
-      'Clean Docker containerization',
-      'Rapid prototype turnaround',
-    ],
-    concerns: [
-      'Lower total tenure (2 yrs experience).',
-    ],
-  },
-  {
-    id: 'cand-4',
-    name: 'Anjali S',
-    initials: 'AS',
-    location: 'Bangalore, India',
-    email: 'anjali.s@email.com',
-    phone: '+91 98765 43213',
-    score: 78,
-    skills: ['Python', 'Flask', 'SQL', '+1'],
-    experience: '2 yrs',
-    availability: '30 days',
-    status: 'AI Shortlisted',
-    matchRating: 'Good Match',
-    matchSummary: 'Solid foundations in Python web services and relational database operations with dependable coding style.',
-    scoreBreakdown: {
-      technical: 80,
-      experience: 75,
-      problemSolving: 80,
-      communication: 82,
-      culturalFit: 81,
-      roleAlignment: 79,
-    },
-    strengths: [
-      'Clean modular Flask architecture',
-      'Consistent test automation habits',
-    ],
-    concerns: [
-      'Standard 30-day notice period.',
-    ],
-  },
-  {
-    id: 'cand-5',
-    name: 'Rohit P',
-    initials: 'RP',
-    location: 'Hyderabad, India',
-    email: 'rohit.p@email.com',
-    phone: '+91 98765 43214',
-    score: 74,
-    skills: ['Python', 'Django', 'Linux', '+2'],
-    experience: '5 yrs',
-    availability: 'Immediate',
-    status: 'In Review',
-    matchRating: 'Moderate Match',
-    matchSummary: 'Experienced backend engineer with strong Linux administration skills, currently undergoing manual calibration.',
-    scoreBreakdown: {
-      technical: 76,
-      experience: 88,
-      problemSolving: 74,
-      communication: 70,
-      culturalFit: 73,
-      roleAlignment: 75,
-    },
-    strengths: [
-      '5 years enterprise Django stability',
-      'Linux server internal tuning',
-    ],
-    concerns: [
-      'Limited recent microservices experience.',
-    ],
-  },
-  {
-    id: 'cand-6',
-    name: 'Meera N',
-    initials: 'MN',
-    location: 'Kozhikode, India',
-    email: 'meera.n@email.com',
-    phone: '+91 98765 43215',
-    score: 71,
-    skills: ['Python', 'Odoo', 'PostgreSQL', '+1'],
-    experience: '3 yrs',
-    availability: 'Immediate',
-    status: 'In Review',
-    matchRating: 'Moderate Match',
-    matchSummary: 'Good ERP and Python backend capabilities with strong SQL query profiling skills.',
-    scoreBreakdown: {
-      technical: 72,
-      experience: 75,
-      problemSolving: 70,
-      communication: 76,
-      culturalFit: 74,
-      roleAlignment: 71,
-    },
-    strengths: [
-      'Extensive ERP module customization',
-      'PostgreSQL indexing proficiency',
-    ],
-    concerns: [
-      'Transitioning from specialized ERP to general microservices.',
-    ],
-  },
-  {
-    id: 'cand-7',
-    name: 'Daniel K',
-    initials: 'DK',
-    location: 'Bangalore, India',
-    email: 'daniel.k@email.com',
-    phone: '+91 98765 43216',
-    score: 68,
-    skills: ['Python', 'AWS', 'CI/CD', '+1'],
-    experience: '4 yrs',
-    availability: '15 days',
-    status: 'In Review',
-    matchRating: 'Moderate Match',
-    matchSummary: 'Good DevOps & cloud orientation, slightly lower depth in application-level algorithm design.',
-    scoreBreakdown: {
-      technical: 68,
-      experience: 80,
-      problemSolving: 66,
-      communication: 72,
-      culturalFit: 70,
-      roleAlignment: 68,
-    },
-    strengths: [
-      'AWS pipeline automation',
-      'Infrastructure as Code setup',
-    ],
-    concerns: [
-      'Lacks heavy web framework architectural design experience.',
-    ],
-  },
-  {
-    id: 'cand-8',
-    name: 'Priya M',
-    initials: 'PM',
-    location: 'Coimbatore, India',
-    email: 'priya.m@email.com',
-    phone: '+91 98765 43217',
-    score: 65,
-    skills: ['Python', 'Machine Learning', '+2'],
-    experience: '3 yrs',
-    availability: '30 days',
-    status: 'Not Shortlisted',
-    matchRating: 'Partial Fit',
-    matchSummary: 'Strong data science and ML toolkit, but role requires heavy web backend & API microservice experience.',
-    scoreBreakdown: {
-      technical: 70,
-      experience: 65,
-      problemSolving: 72,
-      communication: 68,
-      culturalFit: 66,
-      roleAlignment: 58,
-    },
-    strengths: [
-      'PyTorch & scikit-learn model development',
-      'Statistical data exploration',
-    ],
-    concerns: [
-      'Role requires web backend microservices rather than ML modeling.',
-    ],
-  },
-  {
-    id: 'cand-9',
-    name: 'Shahid V',
-    initials: 'SV',
-    location: 'Delhi, India',
-    email: 'shahid.v@email.com',
-    phone: '+91 98765 43218',
-    score: 62,
-    skills: ['Python', 'React', 'Docker', '+1'],
-    experience: '2 yrs',
-    availability: 'Immediate',
-    status: 'Not Shortlisted',
-    matchRating: 'Below Benchmark',
-    matchSummary: 'Junior fullstack profile with incomplete interview responses on backend concurrency.',
-    scoreBreakdown: {
-      technical: 62,
-      experience: 60,
-      problemSolving: 64,
-      communication: 66,
-      culturalFit: 65,
-      roleAlignment: 61,
-    },
-    strengths: [
-      'Frontend component agility',
-      'Enthusiastic team learner',
-    ],
-    concerns: [
-      'Insufficient depth on Python asynchronous event loop.',
-    ],
-  },
-  {
-    id: 'cand-10',
-    name: 'Karthik B',
-    initials: 'KB',
-    location: 'Bangalore, India',
-    email: 'karthik.b@email.com',
-    phone: '+91 98765 43219',
-    score: 58,
-    skills: ['Python', 'Flask', 'MySQL', '+1'],
-    experience: '1 yr',
-    availability: '30 days',
-    status: 'Not Shortlisted',
-    matchRating: 'Below Benchmark',
-    matchSummary: 'Entry-level candidate requiring mentoring on high-scale architecture.',
-    scoreBreakdown: {
-      technical: 58,
-      experience: 50,
-      problemSolving: 60,
-      communication: 65,
-      culturalFit: 68,
-      roleAlignment: 56,
-    },
-    strengths: [
-      'Basic REST API construction',
-    ],
-    concerns: [
-      'Less than 18 months hands-on experience.',
-    ],
-  },
-  {
-    id: 'cand-11',
-    name: 'Neha P',
-    initials: 'NP',
-    location: 'Kochi, India',
-    email: 'neha.p@email.com',
-    phone: '+91 98765 43220',
-    score: 55,
-    skills: ['Python', 'Data Analysis', '+1'],
-    experience: '2 yrs',
-    availability: 'Immediate',
-    status: 'Not Shortlisted',
-    matchRating: 'Below Benchmark',
-    matchSummary: 'Data analyst experience with limited backend service engineering.',
-    scoreBreakdown: {
-      technical: 56,
-      experience: 58,
-      problemSolving: 55,
-      communication: 62,
-      culturalFit: 64,
-      roleAlignment: 52,
-    },
-    strengths: [
-      'SQL querying and dashboard generation',
-    ],
-    concerns: [
-      'No experience with production web frameworks like Django or FastAPI.',
-    ],
-  },
-  {
-    id: 'cand-12',
-    name: 'Imran T',
-    initials: 'IT',
-    location: 'Chennai, India',
-    email: 'imran.t@email.com',
-    phone: '+91 98765 43221',
-    score: 48,
-    skills: ['Python', 'HTML', 'JavaScript', '+1'],
-    experience: '1 yr',
-    availability: '15 days',
-    status: 'Not Shortlisted',
-    matchRating: 'Unmatched',
-    matchSummary: 'Skillset does not meet minimum technical requirements for the role.',
-    scoreBreakdown: {
-      technical: 48,
-      experience: 45,
-      problemSolving: 50,
-      communication: 55,
-      culturalFit: 60,
-      roleAlignment: 46,
-    },
-    strengths: [
-      'HTML / CSS styling basics',
-    ],
-    concerns: [
-      'Failed core Python algorithmic evaluation benchmark.',
-    ],
-  },
-];
+// Baseline candidate dataset - only real candidates are displayed
+const DEFAULT_CANDIDATES = [];
 
 // Circular SVG gauge for scores (Light Theme Clean)
 function ScoreRing({ score, size = 38, stroke = 3 }) {
@@ -522,7 +191,7 @@ export default function RequisitionCandidates() {
     return `${loc} (${wp})`;
   })();
 
-  // Process Real API candidates combined with standard benchmark candidate roster
+  // Process Real API candidates exclusively
   const allCandidates = useMemo(() => {
     const rawList = apiCandidates && apiCandidates.length > 0
       ? (attendedApplicants(apiCandidates, interviews).length > 0
@@ -532,12 +201,8 @@ export default function RequisitionCandidates() {
 
     const mappedApi = mapRequisitionCandidates(rawList, interviews);
 
-    const namesSet = new Set(mappedApi.map((c) => (c.name || '').toLowerCase()));
-    const remainingDefaults = DEFAULT_CANDIDATES.filter((c) => !namesSet.has((c.name || '').toLowerCase()));
-    const baseList = [...mappedApi, ...remainingDefaults];
-
     // Dynamically mark candidates who have scheduled interviews as 'In Interview'
-    return baseList.map((c) => {
+    return mappedApi.map((c) => {
       const cid = String(c.id || c.submission_id || '');
       const sid = String(c.submission_id || '');
       const isSched =
@@ -596,7 +261,7 @@ export default function RequisitionCandidates() {
   const totalCount = allCandidates.length;
   const aiShortlistedCount = allCandidates.filter((c) => c.status === 'AI Shortlisted' || c.status === 'Shortlisted').length;
   const inInterviewCount = allCandidates.filter((c) => c.status === 'In Interview' || c.isScheduled || c.status === 'Interview Scheduled').length;
-  const offeredCount = allCandidates.filter((c) => ['Offered', 'Accepted', 'Hired'].includes(c.status)).length || 1;
+  const offeredCount = allCandidates.filter((c) => ['Offered', 'Accepted', 'Hired'].includes(c.status)).length;
 
   // Status Action handler
   const handleUpdateStatus = async (candidate, newStatus) => {
@@ -687,7 +352,7 @@ export default function RequisitionCandidates() {
             <span className="text-gray-300">•</span>
             <span>{reqLocation}</span>
             <span className="text-gray-300">•</span>
-            <span className="font-semibold text-gray-900">{totalCount} Candidates Applied</span>
+            <span className="font-semibold text-gray-900">{totalCount} {totalCount === 1 ? 'Candidate Applied' : 'Candidates Applied'}</span>
           </p>
         </div>
 

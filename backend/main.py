@@ -3595,6 +3595,9 @@ def update_requisition_role(
     _require_writable(current_user)
     req = _get_requisition(requisition_id)
     _require_tenant(req, current_user)
+    status_str = str(req.get("status") or "").lower()
+    if status_str in ("published", "active") and str(current_user.role or "").strip().lower() in ("hiring manager", "hiring_manager"):
+        raise HTTPException(status_code=400, detail="This requisition is already approved, and cannot be edited.")
     with get_session() as session:
         db_req = session.get(models.Requisition, requisition_id)
         if not db_req:
@@ -3618,7 +3621,11 @@ def update_requisition_role(
 @app.post("/api/requisitions/{requisition_id}/approve")
 def approve_requisition(requisition_id: str, body: ApproveIn | None = None, current_user: User = Depends(get_current_user)) -> dict:
     _require_writable(current_user)
-    _require_tenant(_get_requisition(requisition_id), current_user)
+    req_dict = _get_requisition(requisition_id)
+    _require_tenant(req_dict, current_user)
+    status_str = str(req_dict.get("status") or "").lower()
+    if status_str in ("published", "active") and str(current_user.role or "").strip().lower() in ("hiring manager", "hiring_manager"):
+        raise HTTPException(status_code=400, detail="This requisition is already approved, and cannot be edited.")
     edited = None
     if body and body.edited_role:
         try:

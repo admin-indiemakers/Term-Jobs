@@ -390,11 +390,11 @@ export default function AdminTeamMembers() {
               <table className="w-full text-left text-xs border-collapse">
                 <thead className="sticky top-0 bg-white/80 backdrop-blur-md border-b border-black/[0.04] z-10">
                   <tr className="text-[9.5px] font-bold text-gray-400 uppercase tracking-wider">
-                    <th className="py-2.5 px-3">MEMBER & IDENTITY</th>
-                    <th className="py-2.5 px-3">EMAIL ADDRESS</th>
-                    <th className="py-2.5 px-3">ORGANIZATIONAL ROLE</th>
-                    <th className="py-2.5 px-3">DEPARTMENT</th>
-                    <th className="py-2.5 px-3 text-right">STATUS</th>
+                    <th className="py-2.5 px-3 w-[26%]">MEMBER & IDENTITY</th>
+                    <th className="py-2.5 px-3 w-[28%]">EMAIL ADDRESS</th>
+                    <th className="py-2.5 px-3 w-[18%]">ORGANIZATIONAL ROLE</th>
+                    <th className="py-2.5 px-3 w-[16%]">DEPARTMENT</th>
+                    <th className="py-2.5 px-3 text-right w-[12%]">STATUS</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-black/[0.03]">

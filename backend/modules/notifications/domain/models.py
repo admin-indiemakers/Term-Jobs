@@ -36,14 +36,28 @@ class Notification(Model):
 
 
 def notification_dict(n: Notification) -> dict:
+    body = n.body or getattr(n, "message", "") or ""
+    data = n.data or {}
+    if not isinstance(data, dict):
+        data = {}
+    if not data.get("requisition_id") and getattr(n, "requisition_id", None):
+        data["requisition_id"] = getattr(n, "requisition_id")
+    if not data.get("candidate_id") and getattr(n, "candidate_id", None):
+        data["candidate_id"] = getattr(n, "candidate_id")
+    if not data.get("candidate_email") and getattr(n, "candidate_email", None):
+        data["candidate_email"] = getattr(n, "candidate_email")
+
+    is_read = bool(getattr(n, "read", False)) or getattr(n, "status", "") == "read"
+    created_at = n.created_at.isoformat() if hasattr(n.created_at, "isoformat") else (n.created_at or "")
+
     return {
-        "id": n.id,
-        "user_id": n.user_id,
-        "tenant_id": n.tenant_id,
-        "type": n.type,
-        "title": n.title,
-        "body": n.body,
-        "data": n.data or {},
-        "read": bool(getattr(n, "read", False)),
-        "created_at": n.created_at.isoformat() if hasattr(n.created_at, "isoformat") else n.created_at,
+        "id": str(n.id or getattr(n, "_id", "")),
+        "user_id": n.user_id or "",
+        "tenant_id": n.tenant_id or "",
+        "type": n.type or "notification",
+        "title": n.title or "Notification",
+        "body": str(body),
+        "data": data,
+        "read": is_read,
+        "created_at": str(created_at),
     }

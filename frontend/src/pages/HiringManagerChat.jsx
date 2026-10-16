@@ -195,11 +195,47 @@ export default function HiringManagerChat() {
     return requisitions.filter((r) => (r.status || '').toLowerCase().includes('draft')).length;
   }, [requisitions]);
 
-  const pendingApprovalsTotal = useMemo(() => {
-    const tsCount = wfStats?.stats?.pending_timesheets ?? pendingTimesheets.length;
-    const expCount = wfStats?.stats?.pending_expenses ?? 0;
-    return tsCount + expCount;
-  }, [wfStats, pendingTimesheets]);
+  // Unique Candidates In Review (deduplicating accepted and shortlisted)
+  const acceptedCandidateIds = useMemo(() => {
+    const ids = new Set();
+    acceptedCandidates.forEach((c) => {
+      const key = String(c.id || c.submission_id || c.candidate_id || c.candidate_email || c.name || '').toLowerCase().trim();
+      if (key) ids.add(key);
+    });
+    return ids;
+  }, [acceptedCandidates]);
+
+  const pureShortlistedCandidates = useMemo(() => {
+    return shortlistedCandidates.filter((c) => {
+      const key = String(c.id || c.submission_id || c.candidate_id || c.candidate_email || c.name || '').toLowerCase().trim();
+      return key && !acceptedCandidateIds.has(key);
+    });
+  }, [shortlistedCandidates, acceptedCandidateIds]);
+
+  const totalInReviewCount = useMemo(() => {
+    return acceptedCandidates.length + pureShortlistedCandidates.length;
+  }, [acceptedCandidates, pureShortlistedCandidates]);
+
+  const inReviewSubtitle = useMemo(() => {
+    const sCount = pureShortlistedCandidates.length;
+    const aCount = acceptedCandidates.length;
+    if (sCount > 0 && aCount > 0) {
+      return `${sCount} Shortlisted • ${aCount} Accepted`;
+    }
+    if (aCount > 0) {
+      return `${aCount} Accepted`;
+    }
+    if (sCount > 0) {
+      return `${sCount} Shortlisted`;
+    }
+    return '0 Candidates';
+  }, [pureShortlistedCandidates, acceptedCandidates]);
+
+  // Timesheet approvals pending count
+  const pendingTimesheetsCount = useMemo(() => {
+    return pendingTimesheets.length;
+  }, [pendingTimesheets]);
+  const pendingApprovalsTotal = pendingTimesheetsCount;
 
   // Filtered requisitions list
   const filteredRequisitions = useMemo(() => {
@@ -332,7 +368,7 @@ export default function HiringManagerChat() {
       )}
 
       {/* Action Required Banner (Timesheets / Approvals) */}
-      {pendingApprovalsTotal > 0 && (
+      {pendingTimesheetsCount > 0 && (
         <motion.div
           initial={{ opacity: 0, y: -4 }}
           animate={{ opacity: 1, y: 0 }}
@@ -344,11 +380,11 @@ export default function HiringManagerChat() {
             </div>
             <div>
               <h4 className="text-xs sm:text-[13px] font-bold text-amber-950">
-                Action Required: {pendingApprovalsTotal} pending approval
-                {pendingApprovalsTotal > 1 ? 's' : ''} awaiting your verification
+                Action Required: {pendingTimesheetsCount} pending timesheet approval
+                {pendingTimesheetsCount > 1 ? 's' : ''} awaiting your verification
               </h4>
               <p className="text-[10.5px] text-amber-800/90 font-medium">
-                Verify contractor timesheets and expenses before vendor billing deadline.
+                Verify contractor timesheets before vendor billing deadline.
               </p>
             </div>
           </div>
@@ -390,8 +426,8 @@ export default function HiringManagerChat() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 sm:gap-4 items-stretch min-h-0 pt-2 sm:pt-4">
         {/* ── LEFT COLUMN (7 cols): 4 Stat Metric Cards + Dedicated Recent Requisitions ── */}
         <div className="lg:col-span-7 flex flex-col justify-between gap-2.5 sm:gap-3 h-[520px] sm:h-[500px] min-h-0 pt-1 sm:pt-2">
-          {/* 4 Glassmorphic Stat Metric Cards Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-2.5 shrink-0">
+          {/* 3 Glassmorphic Stat Metric Cards Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-2.5 shrink-0">
             {/* Stat Card 1: Active Requisitions */}
             <div
               onClick={() => navigate('/dashboard/requisitions')}
@@ -425,7 +461,7 @@ export default function HiringManagerChat() {
                   <Users size={14} />
                 </div>
                 <div className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight leading-none">
-                  {shortlistedCandidates.length + acceptedCandidates.length}
+                  {totalInReviewCount}
                 </div>
               </div>
               <div>
@@ -433,40 +469,12 @@ export default function HiringManagerChat() {
                   Candidates In Review
                 </div>
                 <div className="text-[9.5px] font-semibold text-emerald-600 mt-0.5 truncate">
-                  {shortlistedCandidates.length} Shortlisted • {acceptedCandidates.length} Accepted
+                  {inReviewSubtitle}
                 </div>
               </div>
             </div>
 
-            {/* Stat Card 3: Interviews & AI Scores */}
-            <button
-              type="button"
-              aria-label="Review interview videos, transcripts and AI scoring criteria"
-              onClick={() => navigate('/dashboard/interviews')}
-              className="text-left bg-white/80 hover:bg-white/95 backdrop-blur-2xl border border-white/85 hover:border-white rounded-2xl p-2.5 sm:p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.04),inset_0_1px_1px_rgba(255,255,255,0.95)] hover:shadow-[0_12px_36px_0_rgba(0,0,0,0.06)] transition-all duration-300 flex flex-col justify-between group cursor-pointer"
-            >
-              <div className="flex items-center justify-between mb-1.5">
-                <div className="w-7 h-7 rounded-xl bg-white/70 backdrop-blur-md border border-white flex items-center justify-center text-gray-700 shadow-3xs group-hover:scale-105 transition-transform">
-                  <CalendarCheck size={14} />
-                </div>
-                <div className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight leading-none">
-                  {loading ? '…' : interviewDataError ? '—' : interviewStats.interviewCount}
-                </div>
-              </div>
-              <div>
-                <div className="text-[10.5px] font-medium text-gray-500 truncate">
-                  Interviews & AI Scores
-                </div>
-                <div className="text-[9.5px] font-semibold text-emerald-600 mt-0.5 truncate">
-                  {loading ? 'Loading interview data…' : interviewDataError || `${upcomingInterviews.length} upcoming • ${interviewStats.aiScoreCount} AI scores`}
-                </div>
-                <div className="mt-2 flex items-center justify-between gap-1 text-[10px] font-semibold text-zinc-600">
-                  <span>Video · Transcript · Criteria</span><ArrowRight size={12} className="shrink-0" />
-                </div>
-              </div>
-            </button>
-
-            {/* Stat Card 4: Workforce Approvals */}
+            {/* Stat Card 3: Timesheet Approvals Pending */}
             <div
               onClick={() => navigate('/dashboard/workforce/timesheets')}
               className="bg-white/80 hover:bg-white/95 backdrop-blur-2xl border border-white/85 hover:border-white rounded-2xl p-2.5 sm:p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.04),inset_0_1px_1px_rgba(255,255,255,0.95)] hover:shadow-[0_12px_36px_0_rgba(0,0,0,0.06)] transition-all duration-300 flex flex-col justify-between group cursor-pointer"
@@ -476,18 +484,22 @@ export default function HiringManagerChat() {
                   <Clock size={14} />
                 </div>
                 <div className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight leading-none flex items-center gap-1.5">
-                  <span>{pendingApprovalsTotal}</span>
-                  {pendingApprovalsTotal > 0 && (
+                  <span>{pendingTimesheetsCount}</span>
+                  {pendingTimesheetsCount > 0 && (
                     <span className="w-2 h-2 rounded-full bg-amber-500" />
                   )}
                 </div>
               </div>
               <div>
                 <div className="text-[10.5px] font-medium text-gray-500 truncate">
-                  Workforce Approvals
+                  Timesheet Approvals Pending
                 </div>
                 <div className="text-[9.5px] font-semibold text-gray-400 mt-0.5 truncate">
-                  {wfStats?.stats?.active ?? 0} Active Workers
+                  {pendingTimesheetsCount === 0
+                    ? 'All timesheets reviewed'
+                    : pendingTimesheetsCount === 1
+                    ? '1 timesheet awaiting review'
+                    : `${pendingTimesheetsCount} timesheets awaiting review`}
                 </div>
               </div>
             </div>
@@ -651,7 +663,7 @@ export default function HiringManagerChat() {
 
               <div className="flex items-center gap-2">
                 <Link
-                  to="/dashboard/interviews"
+                  to="/dashboard/candidates"
                   className="text-[11.5px] font-bold text-gray-600 hover:text-black flex items-center gap-1 transition-colors group cursor-pointer pl-1"
                 >
                   <span>View all</span>
@@ -685,17 +697,17 @@ export default function HiringManagerChat() {
                   <span className="text-xs font-medium">No upcoming interviews scheduled</span>
                   <button
                     type="button"
-                    onClick={() => navigate('/dashboard/interviews')}
+                    onClick={() => navigate('/dashboard/candidates')}
                     className="text-[10.5px] font-bold text-black mt-1 hover:underline cursor-pointer"
                   >
-                    Manage Interview Slots →
+                    View Candidates →
                   </button>
                 </div>
               ) : (
                 upcomingInterviews.slice(0, 4).map((round, idx) => (
                   <div
                     key={round.id || idx}
-                    onClick={() => navigate('/dashboard/interviews')}
+                    onClick={() => navigate('/dashboard/candidates')}
                     className="flex items-center justify-between p-2 rounded-xl bg-transparent hover:bg-white/35 border border-transparent hover:border-black/[0.03] transition-all cursor-pointer group"
                   >
                     <div className="min-w-0">

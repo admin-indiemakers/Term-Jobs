@@ -1,16 +1,58 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import {
+  Bell,
+  Briefcase,
+  UserCheck,
+  FileCheck,
+  CheckCheck,
+  Sparkles,
+  Clock,
+  X,
+  AlertCircle,
+  Users,
+  CheckCircle2,
+  RefreshCw
+} from 'lucide-react';
 import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 
-const TYPE_ICON = {
-  'requisition.published': '📢',
-  'candidate.shortlisted': '⭐',
-  'candidate.rejected': '🚫',
-  'candidate.selected': '🎉',
-  'shortlist.dispatched': '⚡',
-  'requisition.deleted_by_hm': '🗑️',
-};
+function getNotificationIcon(type = '') {
+  const t = type.toLowerCase();
+  if (t.includes('requisition')) {
+    return {
+      icon: Briefcase,
+      color: 'text-blue-600',
+      bg: 'bg-blue-50 border-blue-200/80',
+    };
+  }
+  if (t.includes('candidate.selected') || t.includes('shortlist')) {
+    return {
+      icon: Sparkles,
+      color: 'text-emerald-600',
+      bg: 'bg-emerald-50 border-emerald-200/80',
+    };
+  }
+  if (t.includes('offer') || t.includes('agreement')) {
+    return {
+      icon: FileCheck,
+      color: 'text-amber-600',
+      bg: 'bg-amber-50 border-amber-200/80',
+    };
+  }
+  if (t.includes('team') || t.includes('user') || t.includes('director')) {
+    return {
+      icon: Users,
+      color: 'text-purple-600',
+      bg: 'bg-purple-50 border-purple-200/80',
+    };
+  }
+  return {
+    icon: Bell,
+    color: 'text-gray-700',
+    bg: 'bg-gray-100 border-gray-200/80',
+  };
+}
 
 function timeAgo(iso) {
   if (!iso) return '';
@@ -33,6 +75,7 @@ export default function NotificationBell() {
   const navigate = useNavigate();
   const [items, setItems] = useState([]);
   const [open, setOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState('all'); // 'all' | 'unread'
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const panelRef = useRef(null);
@@ -52,7 +95,7 @@ export default function NotificationBell() {
         setLoading(false);
       }
     },
-    [token],
+    [token]
   );
 
   useEffect(() => {
@@ -63,13 +106,16 @@ export default function NotificationBell() {
 
   useEffect(() => {
     const onClick = (e) => {
-      if (panelRef.current && !panelRef.current.contains(e.target)) setOpen(false);
+      if (panelRef.current && !panelRef.current.contains(e.target)) {
+        setOpen(false);
+      }
     };
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
   }, []);
 
-  const unread = items.filter((n) => !n.read).length;
+  const unreadCount = items.filter((n) => !n.read).length;
+  const filteredItems = activeTab === 'unread' ? items.filter((n) => !n.read) : items;
 
   const handleOpen = () => {
     setOpen((v) => !v);
@@ -83,9 +129,21 @@ export default function NotificationBell() {
     } catch {
       // ignore
     }
-    const link = n.data?.link;
+    setOpen(false);
+
+    // Deep link navigation
+    let link = n.data?.link;
+    if (!link) {
+      const type = (n.type || '').toLowerCase();
+      if (type.includes('requisition')) {
+        link = user?.role === 'Director' ? '/dashboard/director/requisitions' : '/dashboard/requisitions';
+      } else if (type.includes('candidate') || type.includes('offer') || type.includes('agreement')) {
+        link = '/dashboard/workforce/overview';
+      } else if (type.includes('team') || type.includes('user') || type.includes('director')) {
+        link = '/dashboard/admin/team';
+      }
+    }
     if (link) {
-      setOpen(false);
       navigate(link);
     }
   };
@@ -102,59 +160,196 @@ export default function NotificationBell() {
   if (!user) return null;
 
   return (
-    <div className="notif-bell-wrap" ref={panelRef}>
+    <div className="relative inline-flex items-center" ref={panelRef}>
+      {/* Bell Button styled identically to portal header buttons */}
       <button
-        className={`notif-bell ${open ? 'active' : ''}`}
+        type="button"
         onClick={handleOpen}
         aria-label="Notifications"
         title="Notifications"
+        className={`relative w-8.5 h-8.5 sm:w-9 sm:h-9 rounded-xl border transition-all cursor-pointer active:scale-95 flex items-center justify-center group ${
+          open
+            ? 'bg-black text-white border-black shadow-xs'
+            : 'bg-white hover:bg-[#F7F7F5] border-gray-200/90 text-gray-800 shadow-2xs hover:shadow-xs'
+        }`}
       >
-        <span className="notif-bell-icon">🔔</span>
-        {unread > 0 && <span className="notif-badge">{unread > 9 ? '9+' : unread}</span>}
+        <Bell
+          size={15}
+          strokeWidth={2.1}
+          className={`${open ? 'text-white' : 'text-gray-800 group-hover:scale-105'} transition-transform`}
+        />
+        {unreadCount > 0 && (
+          <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-0.5 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center font-mono ring-2 ring-white animate-in zoom-in-75">
+            {unreadCount > 9 ? '9+' : unreadCount}
+          </span>
+        )}
       </button>
 
+      {/* Glassmorphic Notification Panel Dropdown */}
       {open && (
-        <div className="notif-panel">
-          <div className="notif-panel-head">
-            <span className="notif-panel-title">Notifications</span>
-            {unread > 0 && (
-              <button className="notif-read-all" onClick={markAllRead}>
-                Mark all read
+        <div
+          className="absolute right-0 top-full mt-2 w-80 sm:w-[380px] bg-white/95 backdrop-blur-2xl border border-white/80 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.14)] overflow-hidden z-50 flex flex-col max-h-[490px] animate-in fade-in zoom-in-95 duration-150 text-left select-none"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Panel Header */}
+          <div className="px-4 py-3 border-b border-black/[0.05] flex items-center justify-between shrink-0 bg-white/60">
+            <div className="flex items-center gap-2">
+              <span className="text-xs sm:text-[13px] font-bold text-gray-900 tracking-tight">Notifications</span>
+              {unreadCount > 0 && (
+                <span className="px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-blue-50 text-blue-700 border border-blue-200/60">
+                  {unreadCount} new
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              {unreadCount > 0 && (
+                <button
+                  type="button"
+                  onClick={markAllRead}
+                  className="text-[11px] font-bold text-gray-500 hover:text-black flex items-center gap-1 transition-colors cursor-pointer"
+                  title="Mark all as read"
+                >
+                  <CheckCheck size={12} />
+                  <span>Mark all read</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="p-1 text-gray-400 hover:text-black rounded-lg transition-colors cursor-pointer"
+              >
+                <X size={14} />
               </button>
-            )}
+            </div>
           </div>
 
-          <div className="notif-panel-body">
+          {/* Filter Tabs (All / Unread) */}
+          <div className="px-4 py-2 border-b border-black/[0.04] flex items-center justify-between bg-black/[0.015] shrink-0">
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setActiveTab('all')}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                  activeTab === 'all'
+                    ? 'bg-black text-white shadow-2xs'
+                    : 'text-gray-500 hover:text-black hover:bg-black/5'
+                }`}
+              >
+                All ({items.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('unread')}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                  activeTab === 'unread'
+                    ? 'bg-black text-white shadow-2xs'
+                    : 'text-gray-500 hover:text-black hover:bg-black/5'
+                }`}
+              >
+                Unread ({unreadCount})
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => load()}
+              className="p-1 text-gray-400 hover:text-black rounded-md transition-colors cursor-pointer"
+              title="Refresh notifications"
+            >
+              <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
+            </button>
+          </div>
+
+          {/* Panel Body / Notifications List */}
+          <div className="overflow-y-auto flex-1 min-h-0 divide-y divide-black/[0.03]">
             {loading && items.length === 0 ? (
-              <div className="notif-empty muted">Loading notifications...</div>
-            ) : error && items.length === 0 ? (
-              <div className="notif-empty" role="alert">
-                <p>Unable to load notifications.</p>
-                <button type="button" className="notif-read-all" onClick={() => load()}>Try again</button>
+              <div className="p-6 text-center space-y-2">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="flex items-start gap-2.5 p-2 rounded-xl bg-white/40 animate-pulse">
+                    <div className="w-7 h-7 rounded-lg bg-gray-200 shrink-0" />
+                    <div className="flex-1 space-y-1.5 text-left">
+                      <div className="h-3 w-3/4 bg-gray-200 rounded" />
+                      <div className="h-2.5 w-1/2 bg-gray-100 rounded" />
+                    </div>
+                  </div>
+                ))}
               </div>
-            ) : items.length === 0 ? (
-              <div className="notif-empty">
-                <p>No notifications yet</p>
-                <p className="muted">
-                  You'll be notified when a new requisition is published or a candidate is shortlisted or rejected.
-                </p>
+            ) : error && items.length === 0 ? (
+              <div className="p-6 text-center space-y-2">
+                <AlertCircle size={22} className="mx-auto text-amber-500" />
+                <p className="text-xs text-gray-600 font-medium">Unable to load notifications</p>
+                <button
+                  type="button"
+                  onClick={() => load()}
+                  className="px-3 py-1 text-[11px] font-bold bg-black text-white rounded-lg hover:bg-gray-800 transition-colors cursor-pointer"
+                >
+                  Retry
+                </button>
+              </div>
+            ) : filteredItems.length === 0 ? (
+              <div className="py-10 px-4 text-center flex flex-col items-center justify-center gap-1.5 text-gray-400">
+                <div className="w-9 h-9 rounded-xl bg-gray-100 border border-gray-200/70 flex items-center justify-center text-gray-400 mb-1">
+                  <Bell size={16} />
+                </div>
+                <span className="text-xs font-bold text-gray-700">
+                  {activeTab === 'unread' ? 'No unread notifications' : 'No notifications yet'}
+                </span>
+                <span className="text-[10.5px] text-gray-400 max-w-[220px]">
+                  {activeTab === 'unread'
+                    ? 'All pending notifications have been marked as read.'
+                    : 'System alerts, candidate submissions, and approval requests will appear here.'}
+                </span>
               </div>
             ) : (
-              items.map((n) => (
-                <button
-                  key={n.id}
-                  className={`notif-item ${n.read ? 'read' : 'unread'}`}
-                  onClick={() => markRead(n)}
-                >
-                  <span className="notif-item-icon">{TYPE_ICON[n.type] || '🔔'}</span>
-                  <span className="notif-item-main">
-                    <span className="notif-item-title">{n.title}</span>
-                    <span className="notif-item-body">{n.body}</span>
-                    <span className="notif-item-time">{timeAgo(n.created_at)}</span>
-                  </span>
-                  {!n.read && <span className="notif-dot"></span>}
-                </button>
-              ))
+              filteredItems.map((n) => {
+                const iconMeta = getNotificationIcon(n.type);
+                const IconComponent = iconMeta.icon;
+
+                return (
+                  <div
+                    key={n.id}
+                    onClick={() => markRead(n)}
+                    className={`p-3 transition-colors flex items-start gap-2.5 group cursor-pointer ${
+                      !n.read ? 'bg-blue-50/25 hover:bg-blue-50/40' : 'bg-transparent hover:bg-black/[0.02]'
+                    }`}
+                  >
+                    {/* Notification Type Icon */}
+                    <div
+                      className={`w-7.5 h-7.5 rounded-xl border flex items-center justify-center shrink-0 shadow-3xs mt-0.5 ${iconMeta.bg} ${iconMeta.color}`}
+                    >
+                      <IconComponent size={13} />
+                    </div>
+
+                    {/* Notification Content */}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-1.5">
+                        <div
+                          className={`text-xs font-bold leading-tight truncate group-hover:text-blue-600 transition-colors ${
+                            !n.read ? 'text-gray-900 font-extrabold' : 'text-gray-800'
+                          }`}
+                        >
+                          {n.title}
+                        </div>
+                        {!n.read && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-blue-600 shrink-0 mt-1" />
+                        )}
+                      </div>
+
+                      {n.body && (
+                        <p className="text-[11px] text-gray-500 font-normal leading-snug line-clamp-2 mt-0.5">
+                          {n.body}
+                        </p>
+                      )}
+
+                      <div className="flex items-center gap-1.5 mt-1 text-[9.5px] text-gray-400 font-medium">
+                        <Clock size={10} />
+                        <span>{timeAgo(n.created_at)}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
             )}
           </div>
         </div>

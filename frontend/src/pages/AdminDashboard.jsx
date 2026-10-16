@@ -547,7 +547,7 @@ export default function AdminDashboard() {
       )}
 
       {/* Top Header Area (Fixed at top) */}
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 pb-0.5 shrink-0">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 pb-0.5 shrink-0 relative z-30">
         <div className="pl-2.5 sm:pl-2.5 pt-1 sm:pt-2">
           <div className="text-[10px] font-extrabold text-gray-400 tracking-wider uppercase mb-1">
             TERM JOBS • COMPANY GOVERNANCE
@@ -570,7 +570,7 @@ export default function AdminDashboard() {
             {currentDateFormatted}
           </div>
 
-          <div className="hidden lg:block">
+          <div className="block">
             <NotificationBell />
           </div>
 
@@ -824,13 +824,16 @@ export default function AdminDashboard() {
               {loading ? (
                 <div className="space-y-2 py-1">
                   {[1, 2, 3].map((i) => (
-                    <div key={i} className="flex items-center justify-between p-2 rounded-xl bg-white/20 animate-pulse">
+                    <div
+                      key={i}
+                      className="grid grid-cols-[130px_minmax(0,1fr)_auto] sm:grid-cols-[145px_minmax(0,1fr)_auto] items-center gap-2.5 p-2 rounded-xl bg-white/20 animate-pulse"
+                    >
                       <div className="space-y-1">
-                        <div className="h-3.5 w-24 bg-gray-200/70 rounded"></div>
-                        <div className="h-2.5 w-14 bg-gray-200/50 rounded"></div>
+                        <div className="h-3.5 w-24 bg-gray-200/70 rounded" />
+                        <div className="h-2.5 w-14 bg-gray-200/50 rounded" />
                       </div>
-                      <div className="h-3 w-32 bg-gray-200/60 rounded hidden sm:block"></div>
-                      <div className="h-5 w-14 bg-gray-200/60 rounded-full"></div>
+                      <div className="h-3 w-32 bg-gray-200/60 rounded hidden sm:block" />
+                      <div className="h-5 w-14 bg-gray-200/60 rounded-full justify-self-end" />
                     </div>
                   ))}
                 </div>
@@ -842,8 +845,12 @@ export default function AdminDashboard() {
                 </div>
               ) : (
                 teamMembers.map((u) => (
-                  <div key={u.id} className="flex items-center justify-between p-2 rounded-xl bg-transparent hover:bg-white/35 border border-transparent hover:border-black/[0.03] transition-all">
-                    <div className="min-w-0">
+                  <div
+                    key={u.id}
+                    className="grid grid-cols-[130px_minmax(0,1fr)_auto] sm:grid-cols-[145px_minmax(0,1fr)_auto] items-center gap-2.5 p-2 rounded-xl bg-transparent hover:bg-white/35 border border-transparent hover:border-black/[0.03] transition-all"
+                  >
+                    {/* Column 1: Member Name & Role (Uniform fixed width) */}
+                    <div className="min-w-0 pr-1">
                       <div className="font-bold text-gray-900 text-xs sm:text-[12.5px] leading-tight truncate">
                         {u.name || 'Team Member'}
                       </div>
@@ -852,11 +859,13 @@ export default function AdminDashboard() {
                       </div>
                     </div>
 
-                    <div className="text-xs text-gray-500 font-normal px-2 truncate hidden sm:block">
+                    {/* Column 2: Consistently Aligned Email Address */}
+                    <div className="text-xs text-gray-500 font-normal truncate hidden sm:block">
                       {u.email}
                     </div>
 
-                    <div className="flex items-center gap-1 shrink-0">
+                    {/* Column 3: Status Badge & More Action */}
+                    <div className="flex items-center justify-end gap-1 shrink-0">
                       {u.is_active !== false ? (
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[9.5px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />

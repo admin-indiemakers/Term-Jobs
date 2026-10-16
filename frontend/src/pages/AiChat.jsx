@@ -62,36 +62,7 @@ import {
   Table
 } from 'lucide-react';
 
-/* ── REQUISITIONS MOCK DATA FOR RIGHT SIDEBAR OVERVIEW ─────────────────────── */
-const REQUISITIONS_DATA = [
-  {
-    id: 'req-1',
-    title: 'Senior Cloud Architect',
-    dept: 'Cloud Ops',
-    stage: 'Stage: Offer',
-    stageStyle: 'bg-black text-white border border-black',
-    hrLead: 'Marcus V.',
-    candidatesCount: '12 Candidates In-Process'
-  },
-  {
-    id: 'req-2',
-    title: 'Lead UX Designer',
-    dept: 'Product',
-    stage: 'Stage: Interview',
-    stageStyle: 'bg-gray-100 text-gray-800 border border-gray-200',
-    hrLead: 'Elena R.',
-    candidatesCount: '28 Candidates Screened'
-  },
-  {
-    id: 'req-3',
-    title: 'Staff Security Engineer',
-    dept: 'Infra & Sec',
-    stage: 'Stage: Screening',
-    stageStyle: 'bg-gray-100 text-gray-800 border border-gray-200',
-    hrLead: 'David K.',
-    candidatesCount: '19 Candidates In-Process'
-  }
-];
+
 
 
 

@@ -421,14 +421,14 @@ export function InterviewRoom({
                 </div>
               </div>
 
-              {/* Tile 2: Sneha K - Tech Lead */}
+              {/* Tile 2: Tech Lead Panelist */}
               <div className="flex-1 relative rounded-2xl overflow-hidden bg-[#0A0D14] border border-white/10 shadow-md flex items-center justify-center">
                 {/* No fake image: sleek black card with profile icon when not joined */}
                 <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-[#080B10] text-center select-none">
                   <div className="w-16 h-16 rounded-full bg-gradient-to-b from-zinc-800 to-zinc-900 border border-white/15 flex items-center justify-center shadow-lg ring-2 ring-white/5 mb-2.5">
                     <User size={28} className="text-zinc-400" />
                   </div>
-                  <div className="text-sm font-bold text-white">Sneha K</div>
+                  <div className="text-sm font-bold text-white">Panelist</div>
                   <div className="text-xs text-zinc-400 font-medium">Tech Lead &bull; Panelist</div>
                   <div className="flex items-center gap-1.5 mt-2 px-2.5 py-1 rounded-full bg-zinc-900/80 border border-white/5 text-[11px] text-zinc-500">
                     <span className="w-1.5 h-1.5 rounded-full bg-zinc-600" />
@@ -441,7 +441,7 @@ export function InterviewRoom({
                 </div>
 
                 <div className="absolute bottom-2.5 left-2.5 flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-md border border-white/10 text-[11px] font-bold text-white">
-                  <span>Sneha K</span>
+                  <span>Panelist</span>
                   <span className="text-[10px] text-zinc-400 font-normal">&bull; Tech Lead</span>
                 </div>
 
@@ -975,7 +975,7 @@ TECHNICAL SKILLS:
               </div>
               <div className="p-2.5 rounded-xl bg-zinc-900 border border-white/5 flex items-center justify-between">
                 <div>
-                  <div className="font-bold text-white">Sneha K</div>
+                  <div className="font-bold text-white">Panelist</div>
                   <div className="text-[10px] text-zinc-400">Tech Lead &bull; Panelist</div>
                 </div>
                 <span className="px-2 py-0.5 rounded-full bg-zinc-700 text-zinc-300 text-[10px] font-bold">

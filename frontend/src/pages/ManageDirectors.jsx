@@ -287,7 +287,7 @@ export default function ManageDirectors() {
             className="px-4 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
           >
             <Plus size={14} />
-            <span>+ Create Director</span>
+            <span> Create Director</span>
           </button>
         </div>
       </div>
@@ -383,13 +383,12 @@ export default function ManageDirectors() {
                     <th className="py-2.5 px-3">ROLE / ACCESS</th>
                     <th className="py-2.5 px-3">STATUS</th>
                     <th className="py-2.5 px-3">JOINED</th>
-                    <th className="py-2.5 px-3 text-right"></th>
+                    <th className="py-2.5 px-3 text-right">ACTIONS</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-black/[0.03]">
                   {filteredDirectors.map((u) => {
                     const firstLetter = (u.name || u.email || 'D').slice(0, 1).toUpperCase();
-                    const isMenuOpen = activeMenuId === u.id;
 
                     return (
                       <tr
@@ -398,12 +397,16 @@ export default function ManageDirectors() {
                       >
                         {/* Name Column with Black Square Rounded Avatar */}
                         <td className="py-3 px-3">
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-7.5 h-7.5 rounded-xl bg-black text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-3xs">
+                          <div
+                            onClick={() => setViewProfile(u)}
+                            className="flex items-center gap-2.5 cursor-pointer group"
+                            title="Click to view profile"
+                          >
+                            <div className="w-7.5 h-7.5 rounded-xl bg-black text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-3xs group-hover:scale-105 transition-transform">
                               {firstLetter}
                             </div>
                             <div className="min-w-0">
-                              <div className="font-bold text-gray-900 text-xs sm:text-[13px] leading-tight truncate">
+                              <div className="font-bold text-gray-900 text-xs sm:text-[13px] leading-tight truncate group-hover:text-blue-600 transition-colors">
                                 {u.name || 'Company Director'}
                               </div>
                               <div className="text-[10px] text-gray-400 truncate">
@@ -445,75 +448,42 @@ export default function ManageDirectors() {
                           {formatDate(u.created_at)}
                         </td>
 
-                        {/* Actions Column (3 Dots Button + Floating Popup Action Menu) */}
-                        <td className="py-3 px-3 text-right relative">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setActiveMenuId(isMenuOpen ? null : u.id);
-                            }}
-                            className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-white/60 rounded-lg inline-flex items-center justify-center transition-colors cursor-pointer"
-                          >
-                            <MoreHorizontal size={15} />
-                          </button>
-
-                          {/* Floating Action Menu Dropdown */}
-                          {isMenuOpen && (
-                            <div
-                              className="absolute right-3 top-10 w-36 bg-white/95 backdrop-blur-2xl border border-white/90 rounded-2xl shadow-[0_12px_40px_rgba(0,0,0,0.12)] p-1 z-30 animate-in fade-in zoom-in-95 text-left"
-                              onClick={(e) => e.stopPropagation()}
-                            >
+                        {/* Actions Column */}
+                        <td className="py-3 px-3 text-right">
+                          {u.is_active === false ? (
+                            <div className="inline-flex items-center gap-2">
                               <button
                                 type="button"
-                                onClick={() => {
-                                  setViewProfile(u);
-                                  setActiveMenuId(null);
-                                }}
-                                className="w-full px-3 py-1.5 text-xs text-gray-700 hover:text-black hover:bg-gray-100/80 rounded-xl transition-colors flex items-center gap-2 font-medium cursor-pointer"
+                                onClick={() => handleApproveDirector(u)}
+                                disabled={approvingId === u.id}
+                                className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] flex items-center gap-1 shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
                               >
-                                <User size={13} className="text-gray-500" />
-                                <span>View Profile</span>
+                                <Check size={11} />
+                                <span>{approvingId === u.id ? 'Approving...' : 'Approve'}</span>
                               </button>
-
                               <button
                                 type="button"
-                                onClick={() => {
-                                  setEdit({ ...u, password: '' });
-                                  setActiveMenuId(null);
-                                }}
-                                className="w-full px-3 py-1.5 text-xs text-gray-700 hover:text-black hover:bg-gray-100/80 rounded-xl transition-colors flex items-center gap-2 font-medium cursor-pointer"
+                                onClick={() => setConfirmDelete(u)}
+                                className="font-bold text-red-500 hover:text-red-700 text-[10px] transition-colors cursor-pointer"
                               >
-                                <Edit3 size={13} className="text-gray-500" />
-                                <span>Edit</span>
+                                Reject
                               </button>
-
-                              {u.is_active === false && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    handleApproveDirector(u);
-                                    setActiveMenuId(null);
-                                  }}
-                                  className="w-full px-3 py-1.5 text-xs text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors flex items-center gap-2 font-semibold cursor-pointer"
-                                >
-                                  <Check size={13} className="text-emerald-500" />
-                                  <span>Approve</span>
-                                </button>
-                              )}
-
-                              <div className="h-px bg-black/[0.04] my-1" />
-
+                            </div>
+                          ) : (
+                            <div className="inline-flex items-center gap-3">
                               <button
                                 type="button"
-                                onClick={() => {
-                                  setConfirmDelete(u);
-                                  setActiveMenuId(null);
-                                }}
-                                className="w-full px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-xl transition-colors flex items-center gap-2 font-semibold cursor-pointer"
+                                onClick={() => setEdit({ ...u, password: '' })}
+                                className="font-bold text-gray-700 hover:text-black text-[10px] transition-colors cursor-pointer"
                               >
-                                <Trash2 size={13} className="text-red-500" />
-                                <span>Remove</span>
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDelete(u)}
+                                className="font-bold text-red-500 hover:text-red-700 text-[10px] transition-colors cursor-pointer"
+                              >
+                                Remove
                               </button>
                             </div>
                           )}

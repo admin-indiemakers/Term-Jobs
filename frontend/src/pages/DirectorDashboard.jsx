@@ -151,11 +151,10 @@ export default function DirectorDashboard({ view = 'overview' }) {
   const routeParams = useParams();
 
   const currentTab = useMemo(() => {
-    if (view && view !== 'overview') return view;
+    if (view && view !== 'overview' && view !== 'approvals') return view;
     const p = location.pathname.toLowerCase();
-    if (p.includes('/approvals')) return 'approvals';
-    if (p.includes('/requisitions')) return 'requisitions';
-    return view || 'overview';
+    if (p.includes('/templates')) return 'templates';
+    return 'requisitions';
   }, [view, location.pathname]);
 
   const [requisitions, setRequisitions] = useState([]);
@@ -303,7 +302,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
           const customTplUrl = `/templates?tenant_id=${defaultTenant.id}`;
           request(customTplUrl, { token })
             .then((res) => setTemplates(Array.isArray(res) ? res : res?.templates || []))
-            .catch(() => {});
+            .catch(() => { });
         }
 
         setError('');
@@ -516,24 +515,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
         (Array.isArray(prev) ? prev : []).map((r) =>
           r.id === reqId
             ? {
-                ...r,
-                status: updatedReq?.status || 'Published',
-                director_approved: true,
-                director_approved_by: approverName,
-                director_approved_at: approvedAt,
-                approved_by: approverName,
-                approved_at: approvedAt,
-                rejection_reason: null,
-                rejected_by: null,
-                rejected_at: null,
-              }
-            : r
-        )
-      );
-      setSelectedRequisitionForView((prev) =>
-        prev && prev.id === reqId
-          ? {
-              ...prev,
+              ...r,
               status: updatedReq?.status || 'Published',
               director_approved: true,
               director_approved_by: approverName,
@@ -544,6 +526,23 @@ export default function DirectorDashboard({ view = 'overview' }) {
               rejected_by: null,
               rejected_at: null,
             }
+            : r
+        )
+      );
+      setSelectedRequisitionForView((prev) =>
+        prev && prev.id === reqId
+          ? {
+            ...prev,
+            status: updatedReq?.status || 'Published',
+            director_approved: true,
+            director_approved_by: approverName,
+            director_approved_at: approvedAt,
+            approved_by: approverName,
+            approved_at: approvedAt,
+            rejection_reason: null,
+            rejected_by: null,
+            rejected_at: null,
+          }
           : prev
       );
       loadAll(true);
@@ -591,26 +590,26 @@ export default function DirectorDashboard({ view = 'overview' }) {
         (Array.isArray(prev) ? prev : []).map((r) =>
           r.id === reqId
             ? {
-                ...r,
-                status: 'Structuring',
-                director_approved: false,
-                rejection_reason: reasonText,
-                rejected_by: reviewerName,
-                rejected_at: nowIso,
-              }
-            : r
-        )
-      );
-      setSelectedRequisitionForView((prev) =>
-        prev && prev.id === reqId
-          ? {
-              ...prev,
+              ...r,
               status: 'Structuring',
               director_approved: false,
               rejection_reason: reasonText,
               rejected_by: reviewerName,
               rejected_at: nowIso,
             }
+            : r
+        )
+      );
+      setSelectedRequisitionForView((prev) =>
+        prev && prev.id === reqId
+          ? {
+            ...prev,
+            status: 'Structuring',
+            director_approved: false,
+            rejection_reason: reasonText,
+            rejected_by: reviewerName,
+            rejected_at: nowIso,
+          }
           : prev
       );
       loadAll(true);
@@ -770,81 +769,6 @@ export default function DirectorDashboard({ view = 'overview' }) {
         </div>
       </div>
 
-      {/* Glassmorphic Nav Tabs */}
-      <div className="flex items-center gap-1.5 p-1.5 bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl overflow-x-auto shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)]">
-        <button
-          type="button"
-          onClick={() => {
-            setActiveTab('overview');
-            navigate('/dashboard/director');
-          }}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
-            activeTab === 'overview'
-              ? 'bg-black text-white shadow-xs'
-              : 'text-gray-600 hover:text-black hover:bg-white/60'
-          }`}
-        >
-          <LayoutDashboard size={13.5} className={activeTab === 'overview' ? 'text-white' : 'text-gray-500'} />
-          <span>Executive Overview</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            setActiveTab('approvals');
-            navigate('/dashboard/director/approvals');
-          }}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
-            activeTab === 'approvals'
-              ? 'bg-black text-white shadow-xs'
-              : 'text-gray-600 hover:text-black hover:bg-white/60'
-          }`}
-        >
-          <ShieldCheck size={13.5} className={activeTab === 'approvals' ? 'text-white' : 'text-gray-500'} />
-          <span>Requisition Approvals</span>
-          {pendingApprovalsList.length > 0 ? (
-            <span
-              className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
-                activeTab === 'approvals' ? 'bg-white text-black' : 'bg-amber-400 text-black shadow-xs ring-1 ring-amber-500/20'
-              }`}
-            >
-              {pendingApprovalsList.length}
-            </span>
-          ) : (
-            <span
-              className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                activeTab === 'approvals' ? 'bg-white/20 text-white' : 'bg-black/5 text-gray-500'
-              }`}
-            >
-              0
-            </span>
-          )}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            setActiveTab('requisitions');
-            navigate('/dashboard/director/requisitions');
-          }}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
-            activeTab === 'requisitions'
-              ? 'bg-black text-white shadow-xs'
-              : 'text-gray-600 hover:text-black hover:bg-white/60'
-          }`}
-        >
-          <Briefcase size={13.5} className={activeTab === 'requisitions' ? 'text-white' : 'text-gray-500'} />
-          <span>All Requisitions</span>
-          <span
-            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-              activeTab === 'requisitions' ? 'bg-white/20 text-white' : 'bg-black/5 text-gray-700'
-            }`}
-          >
-            {requisitions.length}
-          </span>
-        </button>
-
-      </div>
 
       {/* Alert Notifications */}
       {templateMsg && (
@@ -917,652 +841,467 @@ export default function DirectorDashboard({ view = 'overview' }) {
         {/* Left Column: Active Content Section */}
         <div className="flex-1 min-w-0 w-full space-y-4">
 
-      {/* SECTION 1: REQUISITION APPROVALS QUEUE */}
-      {(activeTab === 'approvals' || activeTab === 'overview') && (
-        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-3xl p-5 sm:p-6 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3.5 border-b border-gray-100">
-            <div>
-              <div className="flex items-center gap-2 text-gray-500 text-[11px] font-bold uppercase tracking-wider">
-                <ShieldCheck size={14} className="text-gray-800" />
-                <span>Requisition Approvals Queue</span>
-              </div>
-              <h2 className="text-base sm:text-lg font-extrabold text-gray-900 mt-0.5">
-                Requisitions Awaiting Director Sign-off ({pendingApprovalsList.length})
-              </h2>
-            </div>
-            {pendingApprovalsList.length > 0 && (
-              <span className="text-xs font-semibold text-amber-900 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-xl">
-                ⏳ Action required to unlock HM publishing
-              </span>
-            )}
-          </div>
 
-          {pendingApprovalsList.length === 0 ? (
-            <div className="py-12 text-center space-y-2">
-              <CheckCircle2 size={32} className="mx-auto text-emerald-500" />
-              <div className="text-sm font-bold text-gray-900">All Requisitions Approved!</div>
-              <p className="text-xs text-gray-500 max-w-md mx-auto">
-                There are currently no job requisitions waiting for Director approval. Hiring managers can publish approved roles directly.
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-1">
-              {pendingApprovalsList.map((r) => {
-                const sr = r.structured_role || {};
-                return (
-                  <div
-                    key={r.id}
-                    className="bg-white/70 backdrop-blur-md border border-white/90 hover:border-gray-300 rounded-2xl p-4 sm:p-5 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between space-y-4"
-                  >
-                    <div className="space-y-2.5">
-                      <div className="flex items-center justify-between text-[11px] font-extrabold text-gray-500 uppercase tracking-wider">
-                        <span>REQ #{r.id.slice(0, 8)}</span>
-                        <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 font-bold">
-                          Pending Approval
-                        </span>
-                      </div>
 
-                      <div>
-                        <h3 className="text-base font-extrabold text-gray-900 hover:text-black transition-colors">
-                          {r.title || sr.title || 'Untitled Requisition'}
-                        </h3>
-                        <p className="text-xs text-gray-500 font-medium mt-0.5">
-                          Created {formatDate(r.created_at)} • Hiring Manager: {sr.hiring_manager || r.hiring_manager_name || 'Hiring Manager'}
-                        </p>
-                      </div>
-
-                      {/* Criteria Tags */}
-                      <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                        {sr.work_mode && (
-                          <span className="px-2.5 py-1 rounded-lg bg-gray-100/90 text-gray-700 text-[11px] font-semibold">
-                            📍 {sr.work_mode}
-                          </span>
-                        )}
-                        {sr.duration && (
-                          <span className="px-2.5 py-1 rounded-lg bg-gray-100/90 text-gray-700 text-[11px] font-semibold">
-                            ⏱️ {sr.duration}
-                          </span>
-                        )}
-                        {sr.ceiling_internal && (
-                          <span className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-900 border border-amber-200/60 text-[11px] font-bold">
-                            💰 Ceiling: ₹{sr.ceiling_internal}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="pt-3 border-t border-gray-100 flex items-center justify-between gap-2">
-                      <button
-                        type="button"
-                        onClick={(e) => handleViewRequisition(r, e)}
-                        className="px-3 py-1.5 rounded-xl bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 text-xs font-bold transition-colors cursor-pointer"
-                      >
-                        Review Criteria →
-                      </button>
-
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={(e) => handleOpenRejectModal(r, e)}
-                          disabled={approvingId === r.id}
-                          className="px-3 py-1.5 rounded-xl bg-white hover:bg-red-50 border border-red-200 text-red-600 text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
+          {/* SECTION 2: ROLE TEMPLATES */}
+          {activeTab === 'templates' && (
+            <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-3xl p-5 sm:p-6 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3.5 border-b border-gray-100">
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-base font-extrabold text-gray-900">Pre-Approved Role Templates</h2>
+                    {user?.role === 'Super Admin' && clientTenants.length > 0 ? (
+                      <div className="flex items-center gap-1.5 bg-white/70 backdrop-blur-md border border-white/90 px-2.5 py-0.5 rounded-lg shadow-2xs">
+                        <Building size={13} className="text-gray-500" />
+                        <span className="text-[10.5px] font-bold text-gray-500 uppercase">Target Buyer:</span>
+                        <select
+                          value={selectedTenantId}
+                          onChange={(e) => handleTenantChange(e.target.value)}
+                          className="text-xs font-extrabold bg-transparent text-gray-900 focus:outline-none cursor-pointer"
                         >
-                          Reject ✕
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => handleApproveRequisition(r.id, e)}
-                          disabled={approvingId === r.id}
-                          className="px-3.5 py-1.5 rounded-xl bg-black hover:bg-gray-800 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                        >
-                          <Check size={13} />
-                          <span>{approvingId === r.id ? 'Authorizing...' : 'Approve ✓'}</span>
-                        </button>
+                          {clientTenants.map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.name}
+                            </option>
+                          ))}
+                        </select>
                       </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* SECTION 1.5: PENDING WORK ORDERS / CANDIDATE PLACEMENTS */}
-      {(activeTab === 'approvals' || activeTab === 'overview') && pendingWorkOrders.length > 0 && (
-        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-3xl p-5 sm:p-6 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3.5 border-b border-gray-100">
-            <div>
-              <div className="flex items-center gap-2 text-gray-500 text-[11px] font-bold uppercase tracking-wider">
-                <FileCheck size={14} className="text-gray-800" />
-                <span>Work Orders — Director Sign-Off</span>
-              </div>
-              <h2 className="text-base sm:text-lg font-extrabold text-gray-900 mt-0.5">
-                Candidate Placements Awaiting Approval ({pendingWorkOrders.length})
-              </h2>
-            </div>
-            <button
-              type="button"
-              onClick={() => navigate('/dashboard/director/work-orders')}
-              className="text-xs font-bold text-gray-700 bg-white/70 border border-white/90 px-3 py-1.5 rounded-xl hover:bg-white transition-colors cursor-pointer shadow-2xs"
-            >
-              View All Work Orders →
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-1">
-            {pendingWorkOrders.map((wo) => {
-              const cid = wo.candidate_id || wo.workorder_id;
-              const sow = wo.sow_data || {};
-              const name = sow.deployed_personnel || wo.candidate_name || wo.recruiter_name || 'Candidate';
-              const role = sow.role || wo.company_name || 'Specialist';
-              const company = sow.company_name || wo.company_name || 'Client Company';
-              const vendor = sow.supplier_name || wo.recruiter_name || 'Direct Applicant';
-              const rate = sow.charge_rate || wo.bill_rate || '—';
-              const duration = sow.duration || '—';
-              const isProcessing = approvingId === cid;
-              return (
-                <div
-                  key={cid}
-                  className="bg-white/70 backdrop-blur-md border border-white/90 hover:border-gray-300 rounded-2xl p-4 sm:p-5 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between space-y-4"
-                >
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-[11px] font-extrabold text-gray-500 uppercase tracking-wider">
-                      <span>WO #{(cid || '').slice(0, 12)}</span>
-                      <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 font-bold flex items-center gap-1">
-                        <Clock size={11} /> Pending Approval
+                    ) : (
+                      <span className="px-2.5 py-0.5 rounded-md bg-white/70 border border-white/90 text-gray-700 text-[11px] font-bold shadow-3xs">
+                        🏢 {activeTenantName}
                       </span>
-                    </div>
-                    <div>
-                      <h3 className="text-base font-extrabold text-gray-900">{name}</h3>
-                      <p className="text-xs text-gray-500 font-medium mt-0.5">{role} · {company}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">Vendor: {vendor}</p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                      {rate && (
-                        <span className="px-2.5 py-1 rounded-lg bg-gray-100 text-gray-800 text-[11px] font-semibold">
-                          💰 {rate}
-                        </span>
-                      )}
-                      {duration && (
-                        <span className="px-2.5 py-1 rounded-lg bg-gray-100 text-gray-700 text-[11px] font-semibold">
-                          ⏱️ {duration}
-                        </span>
-                      )}
-                    </div>
+                    )}
                   </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Standardized role templates assigned exclusively to <strong>{activeTenantName}</strong>. Hiring managers at {activeTenantName} can pre-fill requisitions with standardized criteria.
+                  </p>
+                </div>
 
-                  <div className="pt-3 border-t border-gray-100 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 flex-wrap shrink-0">
+                  <input
+                    ref={templateFileRef}
+                    type="file"
+                    accept=".json,application/json,text/json,text/plain,application/octet-stream"
+                    onChange={handleTemplateUpload}
+                    className="hidden"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={handleSeedAllPresets}
+                    disabled={seedingPresets}
+                    title="Populate 9 comprehensive pre-approved role templates for your company"
+                    className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <Sparkles size={14} className={seedingPresets ? 'animate-spin' : ''} />
+                    <span>{seedingPresets ? 'Seeding Roles...' : '⚡ Seed 9 Standard Roles'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTemplateFormError('');
+                      setSelectedPresetIdx('');
+                      setShowCreateTemplateModal(true);
+                    }}
+                    className="px-3.5 py-2 rounded-xl bg-black hover:bg-gray-800 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Plus size={14} />
+                    <span>Create Role Template</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => templateFileRef.current?.click()}
+                    disabled={uploading}
+                    title="Alternative: Import existing JSON template file"
+                    className="px-3 py-2 rounded-xl bg-white/70 hover:bg-white border border-white/90 text-gray-700 text-xs font-semibold shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <Upload size={13} className="text-gray-500" />
+                    <span className="hidden sm:inline">{uploading ? 'Importing...' : 'Import JSON'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Inline Upload Status Notification */}
+              {templateMsg && (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 flex items-center gap-2 shadow-2xs">
+                  <CheckCircle2 size={16} className="shrink-0 text-emerald-600" />
+                  <span className="font-semibold">{templateMsg}</span>
+                </div>
+              )}
+
+              {templates.length === 0 ? (
+                <div className="py-8 text-center bg-white/50 backdrop-blur-md rounded-2xl border border-dashed border-gray-200">
+                  <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-2 text-gray-400">
+                    <Briefcase size={20} />
+                  </div>
+                  <p className="text-xs font-bold text-gray-700">No role templates added yet</p>
+                  <p className="text-[11px] text-gray-400 max-w-sm mx-auto mt-1 mb-3">
+                    Create pre-approved role templates with standardized skills, rates, and compliance criteria for your Hiring Managers.
+                  </p>
+                  <div className="flex items-center justify-center gap-2 flex-wrap">
                     <button
                       type="button"
-                      onClick={() => navigate('/dashboard/director/work-orders')}
-                      className="px-3 py-1.5 rounded-xl bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 text-xs font-bold transition-colors cursor-pointer"
+                      onClick={handleSeedAllPresets}
+                      disabled={seedingPresets}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-50"
                     >
-                      Review SOW →
+                      <Sparkles size={13} className={seedingPresets ? 'animate-spin' : ''} />
+                      <span>{seedingPresets ? 'Seeding...' : '⚡ Seed 9 Standard Roles'}</span>
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleApproveWorkOrder(cid)}
-                      disabled={isProcessing}
-                      className="px-3.5 py-1.5 rounded-xl bg-black hover:bg-gray-800 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                      onClick={() => {
+                        setTemplateFormError('');
+                        setSelectedPresetIdx('');
+                        setShowCreateTemplateModal(true);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-black hover:bg-gray-800 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
                     >
-                      <Check size={13} />
-                      <span>{isProcessing ? 'Approving...' : 'Approve ✓'}</span>
+                      <Plus size={13} />
+                      <span>Create Custom Template</span>
                     </button>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* SECTION 2: ROLE TEMPLATES */}
-      {activeTab === 'templates' && (
-        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-3xl p-5 sm:p-6 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3.5 border-b border-gray-100">
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-base font-extrabold text-gray-900">Pre-Approved Role Templates</h2>
-                {user?.role === 'Super Admin' && clientTenants.length > 0 ? (
-                  <div className="flex items-center gap-1.5 bg-white/70 backdrop-blur-md border border-white/90 px-2.5 py-0.5 rounded-lg shadow-2xs">
-                    <Building size={13} className="text-gray-500" />
-                    <span className="text-[10.5px] font-bold text-gray-500 uppercase">Target Buyer:</span>
-                    <select
-                      value={selectedTenantId}
-                      onChange={(e) => handleTenantChange(e.target.value)}
-                      className="text-xs font-extrabold bg-transparent text-gray-900 focus:outline-none cursor-pointer"
-                    >
-                      {clientTenants.map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {t.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                ) : (
-                  <span className="px-2.5 py-0.5 rounded-md bg-white/70 border border-white/90 text-gray-700 text-[11px] font-bold shadow-3xs">
-                    🏢 {activeTenantName}
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-gray-500 mt-1">
-                Standardized role templates assigned exclusively to <strong>{activeTenantName}</strong>. Hiring managers at {activeTenantName} can pre-fill requisitions with standardized criteria.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2 flex-wrap shrink-0">
-              <input
-                ref={templateFileRef}
-                type="file"
-                accept=".json,application/json,text/json,text/plain,application/octet-stream"
-                onChange={handleTemplateUpload}
-                className="hidden"
-              />
-
-              <button
-                type="button"
-                onClick={handleSeedAllPresets}
-                disabled={seedingPresets}
-                title="Populate 9 comprehensive pre-approved role templates for your company"
-                className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-              >
-                <Sparkles size={14} className={seedingPresets ? 'animate-spin' : ''} />
-                <span>{seedingPresets ? 'Seeding Roles...' : '⚡ Seed 9 Standard Roles'}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setTemplateFormError('');
-                  setSelectedPresetIdx('');
-                  setShowCreateTemplateModal(true);
-                }}
-                className="px-3.5 py-2 rounded-xl bg-black hover:bg-gray-800 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
-              >
-                <Plus size={14} />
-                <span>Create Role Template</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => templateFileRef.current?.click()}
-                disabled={uploading}
-                title="Alternative: Import existing JSON template file"
-                className="px-3 py-2 rounded-xl bg-white/70 hover:bg-white border border-white/90 text-gray-700 text-xs font-semibold shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-              >
-                <Upload size={13} className="text-gray-500" />
-                <span className="hidden sm:inline">{uploading ? 'Importing...' : 'Import JSON'}</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Inline Upload Status Notification */}
-          {templateMsg && (
-            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 flex items-center gap-2 shadow-2xs">
-              <CheckCircle2 size={16} className="shrink-0 text-emerald-600" />
-              <span className="font-semibold">{templateMsg}</span>
-            </div>
-          )}
-
-          {templates.length === 0 ? (
-            <div className="py-8 text-center bg-white/50 backdrop-blur-md rounded-2xl border border-dashed border-gray-200">
-              <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-2 text-gray-400">
-                <Briefcase size={20} />
-              </div>
-              <p className="text-xs font-bold text-gray-700">No role templates added yet</p>
-              <p className="text-[11px] text-gray-400 max-w-sm mx-auto mt-1 mb-3">
-                Create pre-approved role templates with standardized skills, rates, and compliance criteria for your Hiring Managers.
-              </p>
-              <div className="flex items-center justify-center gap-2 flex-wrap">
-                <button
-                  type="button"
-                  onClick={handleSeedAllPresets}
-                  disabled={seedingPresets}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-50"
-                >
-                  <Sparkles size={13} className={seedingPresets ? 'animate-spin' : ''} />
-                  <span>{seedingPresets ? 'Seeding...' : '⚡ Seed 9 Standard Roles'}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTemplateFormError('');
-                    setSelectedPresetIdx('');
-                    setShowCreateTemplateModal(true);
-                  }}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-black hover:bg-gray-800 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
-                >
-                  <Plus size={13} />
-                  <span>Create Custom Template</span>
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b border-gray-100 text-[10px] font-extrabold text-gray-400 uppercase tracking-wider">
-                    <th className="pb-2.5">Template & Role</th>
-                    <th className="pb-2.5">Department / Skills</th>
-                    <th className="pb-2.5">Rates / Commercials</th>
-                    <th className="pb-2.5">Work Mode</th>
-                    <th className="pb-2.5">Created</th>
-                    <th className="pb-2.5 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {templates.map((t) => {
-                    const sr = t.structured_role || {};
-                    const skills = Array.isArray(sr.must_have_skills) ? sr.must_have_skills : [];
-                    const currency = sr.budget_cap_currency === 'USD' ? '$' : (sr.budget_cap_currency === 'EUR' ? '€' : (sr.budget_cap_currency === 'GBP' ? '£' : '₹'));
-                    const rateStr = sr.vendor_cap || (sr.rate_band && sr.rate_band[1])
-                      ? `${currency}${sr.vendor_floor || (sr.rate_band && sr.rate_band[0]) || 0} - ${currency}${sr.vendor_cap || (sr.rate_band && sr.rate_band[1])}/${sr.rate_basis === 'Annual' ? 'yr' : 'hr'}`
-                      : (sr.ceiling_internal ? `Max ${currency}${sr.ceiling_internal}` : '—');
-
-                    return (
-                      <tr key={t.id} className="hover:bg-white/60 transition-colors">
-                        <td className="py-3">
-                          <div className="font-bold text-gray-900">{t.name || 'Untitled Template'}</div>
-                          <div className="text-[11px] text-gray-500 font-medium">{sr.title || '—'}</div>
-                        </td>
-                        <td className="py-3">
-                          <div className="text-gray-700 font-semibold">{sr.department || sr.job_family || 'General'}</div>
-                          {skills.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mt-1">
-                              {skills.slice(0, 3).map((s, idx) => (
-                                <span key={idx} className="px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-600 text-[10px] font-medium">
-                                  {s}
-                                </span>
-                              ))}
-                              {skills.length > 3 && (
-                                <span className="text-[10px] text-gray-400 font-medium">+{skills.length - 3}</span>
-                              )}
-                            </div>
-                          )}
-                        </td>
-                        <td className="py-3 text-gray-700 font-semibold">{rateStr}</td>
-                        <td className="py-3">
-                          <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-800 text-[10px] font-bold border border-gray-200/80">
-                            {sr.work_mode || 'Remote'}
-                          </span>
-                        </td>
-                        <td className="py-3 text-gray-400">{formatDate(t.created_at)}</td>
-                        <td className="py-3 text-right">
-                          <button
-                            type="button"
-                            onClick={() => handleTemplateDelete(t.id)}
-                            className="text-gray-400 hover:text-red-600 text-xs font-bold transition-colors cursor-pointer"
-                          >
-                            Delete
-                          </button>
-                        </td>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[780px] text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-gray-100 text-[10px] font-extrabold text-gray-400 uppercase tracking-wider">
+                        <th className="w-[28%] py-3 px-3.5 text-left">Template & Role</th>
+                        <th className="w-[24%] py-3 px-3 text-left">Department / Skills</th>
+                        <th className="w-[18%] py-3 px-3 text-left">Rates / Commercials</th>
+                        <th className="w-[12%] py-3 px-3 text-left">Work Mode</th>
+                        <th className="w-[10%] py-3 px-3 text-left">Created</th>
+                        <th className="w-[8%] py-3 px-3.5 text-right">Action</th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {templates.map((t) => {
+                        const sr = t.structured_role || {};
+                        const skills = Array.isArray(sr.must_have_skills) ? sr.must_have_skills : [];
+                        const currency = sr.budget_cap_currency === 'USD' ? '$' : (sr.budget_cap_currency === 'EUR' ? '€' : (sr.budget_cap_currency === 'GBP' ? '£' : '₹'));
+                        const rateStr = sr.vendor_cap || (sr.rate_band && sr.rate_band[1])
+                          ? `${currency}${sr.vendor_floor || (sr.rate_band && sr.rate_band[0]) || 0} - ${currency}${sr.vendor_cap || (sr.rate_band && sr.rate_band[1])}/${sr.rate_basis === 'Annual' ? 'yr' : 'hr'}`
+                          : (sr.ceiling_internal ? `Max ${currency}${sr.ceiling_internal}` : '—');
 
-      {/* SECTION 3: ALL REQUISITIONS DIRECTORY */}
-      {activeTab === 'requisitions' && (
-        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-3xl p-5 sm:p-6 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] space-y-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3.5 border-b border-gray-100">
-          <div>
-            <h2 className="text-base font-extrabold text-gray-900">All Company Requisitions</h2>
-            <p className="text-xs text-gray-500 mt-0.5">
-              Complete catalog of active, pending, and published job requisitions across the company.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="relative">
-              <Search size={14} className="absolute left-3 top-2.5 text-gray-400" />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search requisitions..."
-                className="pl-8 pr-3 py-1.5 text-xs bg-white/70 backdrop-blur-md border border-gray-200/80 rounded-xl focus:outline-none focus:border-black focus:bg-white transition-all shadow-2xs"
-              />
-            </div>
-
-            <div className="flex items-center gap-1 bg-white/60 backdrop-blur-md border border-white/80 p-1 rounded-xl text-[11px] font-bold shadow-2xs">
-              <button
-                type="button"
-                onClick={() => setStatusFilter('ALL')}
-                className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
-                  statusFilter === 'ALL' ? 'bg-black text-white shadow-2xs font-extrabold' : 'text-gray-600 hover:text-black'
-                }`}
-              >
-                All {requisitions.length > 0 ? `(${requisitions.length})` : ''}
-              </button>
-              <button
-                type="button"
-                onClick={() => setStatusFilter('PENDING')}
-                className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
-                  statusFilter === 'PENDING' ? 'bg-black text-white shadow-2xs font-extrabold' : 'text-gray-600 hover:text-black'
-                }`}
-              >
-                Pending Approval {pendingApprovalsList.length > 0 ? `(${pendingApprovalsList.length})` : ''}
-              </button>
-              <button
-                type="button"
-                onClick={() => setStatusFilter('APPROVED')}
-                className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
-                  statusFilter === 'APPROVED' ? 'bg-black text-white shadow-2xs font-extrabold' : 'text-gray-600 hover:text-black'
-                }`}
-              >
-                Approved {approvedList.length > 0 ? `(${approvedList.length})` : ''}
-              </button>
-              <button
-                type="button"
-                onClick={() => setStatusFilter('REJECTED')}
-                className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
-                  statusFilter === 'REJECTED' ? 'bg-black text-white shadow-2xs font-extrabold' : 'text-gray-600 hover:text-black'
-                }`}
-              >
-                Restructuring / Rejected {rejectedList.length > 0 ? `(${rejectedList.length})` : ''}
-              </button>
-              {deletedByHmRequisitions.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setStatusFilter('DELETED')}
-                  className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 ${
-                    statusFilter === 'DELETED' ? 'bg-black text-white shadow-2xs font-extrabold' : 'text-gray-600 hover:text-rose-700'
-                  }`}
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                  <span>Deleted by HM ({deletedByHmRequisitions.length})</span>
-                </button>
+                        return (
+                          <tr key={t.id} className="hover:bg-white/60 transition-colors">
+                            <td className="w-[28%] py-3.5 px-3.5 align-middle">
+                              <div className="font-bold text-gray-900">{t.name || 'Untitled Template'}</div>
+                              <div className="text-[11px] text-gray-500 font-medium">{sr.title || '—'}</div>
+                            </td>
+                            <td className="w-[24%] py-3.5 px-3 align-middle">
+                              <div className="text-gray-700 font-semibold">{sr.department || sr.job_family || 'General'}</div>
+                              {skills.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {skills.slice(0, 3).map((s, idx) => (
+                                    <span key={idx} className="px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-600 text-[10px] font-medium">
+                                      {s}
+                                    </span>
+                                  ))}
+                                  {skills.length > 3 && (
+                                    <span className="text-[10px] text-gray-400 font-medium">+{skills.length - 3}</span>
+                                  )}
+                                </div>
+                              )}
+                            </td>
+                            <td className="w-[18%] py-3.5 px-3 align-middle text-gray-700 font-semibold">{rateStr}</td>
+                            <td className="w-[12%] py-3.5 px-3 align-middle">
+                              <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-800 text-[10px] font-bold border border-gray-200/80">
+                                {sr.work_mode || 'Remote'}
+                              </span>
+                            </td>
+                            <td className="w-[10%] py-3.5 px-3 align-middle text-gray-400">{formatDate(t.created_at)}</td>
+                            <td className="w-[8%] py-3.5 px-3.5 align-middle text-right">
+                              <button
+                                type="button"
+                                onClick={() => handleTemplateDelete(t.id)}
+                                className="text-gray-400 hover:text-red-600 text-xs font-bold transition-colors cursor-pointer"
+                              >
+                                Delete
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
-          </div>
-        </div>
+          )}
 
-        {filteredRequisitions.length === 0 ? (
-          <p className="text-xs text-gray-400 py-6 text-center">No requisitions found matching criteria.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b border-gray-100 text-[10px] font-extrabold text-gray-400 uppercase tracking-wider">
-                  <th className="pb-3">Requisition Title</th>
-                  <th className="pb-3">Status</th>
-                  <th className="pb-3">Director Sign-off</th>
-                  <th className="pb-3">Candidates</th>
-                  <th className="pb-3">Timeline (Created / Approved)</th>
-                  <th className="pb-3 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {filteredRequisitions.map((r) => {
-                  const disp = getRequisitionDisplayInfo(r);
-                  const isDeletedByHm = disp.isDeleted;
-                  const approvalDate = disp.approvedAt || r.director_approved_at || r.approved_at || (r.director_approved ? r.updated_at : null);
-                  return (
-                    <tr
-                      key={r.id}
-                      onClick={() => handleViewRequisition(r)}
-                      className={`transition-colors cursor-pointer ${
-                        isDeletedByHm ? 'bg-rose-50/25 hover:bg-rose-50/40' : 'hover:bg-gray-50/80'
-                      }`}
+          {/* ALL COMPANY REQUISITIONS DIRECTORY */}
+          {activeTab !== 'templates' && (
+            <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-3xl p-5 sm:p-6 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] space-y-4">
+              {/* Top Controls Row: Title & Subtitle on Left, Search Bar on Right */}
+              <div className="pb-3.5 border-b border-gray-100 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-base font-extrabold text-gray-900">All Company Requisitions</h2>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Complete catalog of active, pending, and published job requisitions across the company.
+                    </p>
+                  </div>
+
+                  {/* Search Input Bar */}
+                  <div className="relative w-full sm:w-64 lg:w-72 shrink-0">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      placeholder="Search requisitions..."
+                      className="w-full pl-8.5 pr-8 py-1.5 text-xs bg-white/70 backdrop-blur-md border border-gray-200/80 rounded-xl focus:outline-none focus:border-black focus:bg-white transition-all shadow-2xs"
+                    />
+                    {searchTerm && (
+                      <button
+                        type="button"
+                        onClick={() => setSearchTerm('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-black p-0.5 cursor-pointer"
+                        title="Clear search"
+                      >
+                        <X size={12} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Filter Pills Toolbar */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <div className="inline-flex items-center gap-1 bg-white/60 backdrop-blur-md border border-white/80 p-1 rounded-xl text-[11px] font-bold shadow-2xs overflow-x-auto max-w-full">
+                    <button
+                      type="button"
+                      onClick={() => setStatusFilter('ALL')}
+                      className={`px-3 py-1 rounded-lg transition-colors cursor-pointer ${statusFilter === 'ALL' ? 'bg-black text-white shadow-2xs font-extrabold' : 'text-gray-600 hover:text-black'
+                        }`}
                     >
-                      <td className="py-3.5 font-bold text-gray-900">
-                        {r.title || 'Untitled Requisition'}
-                        <div className="text-[10px] text-gray-400 font-normal">
-                          {r.ref || `REQ #${r.id.slice(0, 8)}`}
-                        </div>
-                      </td>
-                      <td className="py-3.5">
-                        {isDeletedByHm ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-rose-50 text-rose-800 border border-rose-300">
-                            <Trash2 size={12} className="text-rose-600" />
-                            <span>Deleted by HM</span>
-                          </span>
-                        ) : disp.isApproved ? (
-                          <StatusBadge status="Published" />
-                        ) : disp.isRejected ? (
-                          <StatusBadge status="Restructuring" />
-                        ) : disp.isPending ? (
-                          <StatusBadge status="Pending Approval" />
-                        ) : (
-                          <StatusBadge status={disp.status} />
-                        )}
-                      </td>
-                      <td className="py-3.5">
-                        {isDeletedByHm ? (
-                          <div className="space-y-0.5">
-                            <div className="text-[10px] text-gray-400 line-through">
-                              Approved ({r.director_approved_by || 'Director'})
-                            </div>
-                            <div className="text-[11px] font-bold text-rose-700 flex items-center gap-1">
-                              <AlertTriangle size={11} className="text-rose-600" />
-                              <span>Deleted by {r.deleted_by || 'Hiring Manager'}</span>
-                            </div>
-                            {r.deleted_at && (
-                              <div className="text-[10px] text-gray-400">{formatDate(r.deleted_at)}</div>
-                            )}
-                          </div>
-                        ) : disp.isApproved ? (
-                          <div className="space-y-0.5">
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                              <CheckCircle2 size={12} className="text-emerald-600" />
-                              <span>Approved{r.director_approved_by ? ` (${r.director_approved_by})` : ''}</span>
-                            </span>
-                            {approvalDate && (
-                              <div className="text-[10px] text-gray-400 font-medium">
-                                on {formatDate(approvalDate)}
+                      All {requisitions.length > 0 ? `(${requisitions.length})` : ''}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStatusFilter('PENDING')}
+                      className={`px-3 py-1 rounded-lg transition-colors cursor-pointer ${statusFilter === 'PENDING' ? 'bg-black text-white shadow-2xs font-extrabold' : 'text-gray-600 hover:text-black'
+                        }`}
+                    >
+                      Pending Approval {pendingApprovalsList.length > 0 ? `(${pendingApprovalsList.length})` : ''}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStatusFilter('APPROVED')}
+                      className={`px-3 py-1 rounded-lg transition-colors cursor-pointer ${statusFilter === 'APPROVED' ? 'bg-black text-white shadow-2xs font-extrabold' : 'text-gray-600 hover:text-black'
+                        }`}
+                    >
+                      Approved {approvedList.length > 0 ? `(${approvedList.length})` : ''}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStatusFilter('REJECTED')}
+                      className={`px-3 py-1 rounded-lg transition-colors cursor-pointer ${statusFilter === 'REJECTED' ? 'bg-black text-white shadow-2xs font-extrabold' : 'text-gray-600 hover:text-black'
+                        }`}
+                    >
+                      Restructuring / Rejected {rejectedList.length > 0 ? `(${rejectedList.length})` : ''}
+                    </button>
+                    {deletedByHmRequisitions.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setStatusFilter('DELETED')}
+                        className={`px-3 py-1 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 ${statusFilter === 'DELETED' ? 'bg-black text-white shadow-2xs font-extrabold' : 'text-gray-600 hover:text-rose-700'
+                          }`}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                        <span>Deleted by HM ({deletedByHmRequisitions.length})</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {filteredRequisitions.length === 0 ? (
+                <p className="text-xs text-gray-400 py-6 text-center">No requisitions found matching criteria.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[880px] text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-gray-100 text-[10px] font-extrabold text-gray-400 uppercase tracking-wider">
+                        <th className="w-[22%] py-3 px-3.5 text-left">Requisition Title</th>
+                        <th className="w-[13%] py-3 px-3 text-left">Status</th>
+                        <th className="w-[16%] py-3 px-3 text-left">Director Sign-off</th>
+                        <th className="w-[11%] py-3 px-3 text-left">Candidates</th>
+                        <th className="w-[15%] py-3 px-3 text-left">Timeline</th>
+                        <th className="w-[23%] min-w-[225px] py-3 px-3.5 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {filteredRequisitions.map((r) => {
+                        const disp = getRequisitionDisplayInfo(r);
+                        const isDeletedByHm = disp.isDeleted;
+                        const approvalDate = disp.approvedAt || r.director_approved_at || r.approved_at || (r.director_approved ? r.updated_at : null);
+                        return (
+                          <tr
+                            key={r.id}
+                            onClick={() => handleViewRequisition(r)}
+                            className={`transition-colors cursor-pointer ${isDeletedByHm ? 'bg-rose-50/25 hover:bg-rose-50/40' : 'hover:bg-gray-50/80'
+                              }`}
+                          >
+                            <td className="w-[22%] py-3.5 px-3.5 align-middle font-bold text-gray-900">
+                              <div className="truncate" title={r.title || 'Untitled Requisition'}>
+                                {r.title || 'Untitled Requisition'}
                               </div>
-                            )}
-                          </div>
-                        ) : disp.isRejected ? (
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-800 border border-rose-200">
-                                <X size={12} className="text-rose-600" />
-                                <span>Rejected{r.rejected_by ? ` (${r.rejected_by})` : ''}</span>
-                              </span>
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                                <AlertCircle size={10} className="text-amber-600" />
-                                <span>Revision Required</span>
-                              </span>
-                            </div>
-                            <div className="text-[10px] text-gray-500 font-medium flex items-center gap-1">
-                              <span className="text-amber-700 font-semibold">Awaiting Resubmission</span>
-                              {r.rejection_reason && (
-                                <span className="text-gray-400 max-w-xs truncate" title={r.rejection_reason}>
-                                  • "{r.rejection_reason}"
+                              <div className="text-[10px] text-gray-400 font-mono font-normal mt-0.5">
+                                {r.ref || `REQ #${r.id.slice(0, 8)}`}
+                              </div>
+                            </td>
+                            <td className="w-[13%] py-3.5 px-3 align-middle">
+                              {isDeletedByHm ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-rose-50 text-rose-800 border border-rose-300 whitespace-nowrap">
+                                  <Trash2 size={12} className="text-rose-600" />
+                                  <span>Deleted by HM</span>
+                                </span>
+                              ) : disp.isApproved ? (
+                                <StatusBadge status="Published" />
+                              ) : disp.isRejected ? (
+                                <StatusBadge status="Restructuring" />
+                              ) : disp.isPending ? (
+                                <StatusBadge status="Pending Approval" />
+                              ) : (
+                                <StatusBadge status={disp.status} />
+                              )}
+                            </td>
+                            <td className="w-[16%] py-3.5 px-3 align-middle">
+                              {isDeletedByHm ? (
+                                <div className="space-y-0.5">
+                                  <div className="text-[10px] text-gray-400 line-through">
+                                    Approved ({r.director_approved_by || 'Director'})
+                                  </div>
+                                  <div className="text-[11px] font-bold text-rose-700 flex items-center gap-1">
+                                    <AlertTriangle size={11} className="text-rose-600 shrink-0" />
+                                    <span className="truncate">Deleted by {r.deleted_by || 'HM'}</span>
+                                  </div>
+                                  {r.deleted_at && (
+                                    <div className="text-[10px] text-gray-400">{formatDate(r.deleted_at)}</div>
+                                  )}
+                                </div>
+                              ) : disp.isApproved ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 whitespace-nowrap">
+                                  <CheckCircle2 size={12} className="text-emerald-600 shrink-0" />
+                                  <span>Approved{r.director_approved_by ? ` (${r.director_approved_by})` : ''}</span>
+                                </span>
+                              ) : disp.isRejected ? (
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-800 border border-rose-200">
+                                      <X size={12} className="text-rose-600 shrink-0" />
+                                      <span>Rejected{r.rejected_by ? ` (${r.rejected_by})` : ''}</span>
+                                    </span>
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                                      <AlertCircle size={10} className="text-amber-600 shrink-0" />
+                                      <span>Revision Required</span>
+                                    </span>
+                                  </div>
+                                  <div className="text-[10px] text-gray-500 font-medium flex items-center gap-1">
+                                    <span className="text-amber-700 font-semibold">Awaiting Resubmission</span>
+                                    {r.rejection_reason && (
+                                      <span className="text-gray-400 max-w-xs truncate" title={r.rejection_reason}>
+                                        • "{r.rejection_reason}"
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              ) : disp.isPending ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-900 border border-amber-200 whitespace-nowrap">
+                                  <Clock size={12} className="text-amber-600 shrink-0" />
+                                  <span>Pending Approval</span>
+                                </span>
+                              ) : (
+                                <span className="text-gray-400 font-medium text-[11px]">{disp.signOffText}</span>
+                              )}
+                            </td>
+                            <td className="w-[11%] py-3.5 px-3 align-middle font-semibold text-gray-700 whitespace-nowrap">
+                              {isDeletedByHm ? (
+                                <span className="text-gray-400">—</span>
+                              ) : (
+                                <span>
+                                  {candidatesByRequisition[r.id] || 0} {candidatesByRequisition[r.id] === 1 ? 'candidate' : 'candidates'}
                                 </span>
                               )}
-                            </div>
-                          </div>
-                        ) : disp.isPending ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-900 border border-amber-200">
-                            <Clock size={12} className="text-amber-600" />
-                            <span>Pending Approval</span>
-                          </span>
-                        ) : (
-                          <span className="text-gray-400 font-medium text-[11px]">{disp.signOffText}</span>
-                        )}
-                      </td>
-                      <td className="py-3.5 font-semibold text-gray-700">
-                        {isDeletedByHm ? '—' : `${candidatesByRequisition[r.id] || 0} candidates`}
-                      </td>
-                      <td className="py-3.5">
-                        <div className="text-gray-900 font-semibold text-xs flex items-center gap-1">
-                          <span className="text-gray-400 font-medium">Created:</span>
-                          <span>{formatDate(r.created_at)}</span>
-                        </div>
-                        {disp.isApproved && approvalDate && (
-                          <div className="text-emerald-700 font-bold text-[11px] mt-0.5 flex items-center gap-1">
-                            <CheckCircle2 size={11} className="text-emerald-600 shrink-0" />
-                            <span>Approved: {formatDate(approvalDate)}</span>
-                          </div>
-                        )}
-                      </td>
-                      <td className="py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
-                        {isDeletedByHm ? (
-                          <div className="flex items-center justify-end gap-1.5">
-                            <span className="inline-block px-2.5 py-1 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-[10px] font-bold">
-                              Removed by HM
-                            </span>
-                            <button
-                              type="button"
-                              onClick={(e) => handleViewRequisition(r, e)}
-                              className="px-2.5 py-1 rounded-lg text-gray-500 hover:text-black hover:bg-gray-100 text-xs font-bold transition-colors cursor-pointer"
-                            >
-                              View →
-                            </button>
-                          </div>
-                        ) : disp.isPending ? (
-                          <div className="flex items-center justify-end gap-1.5">
-                            <button
-                              type="button"
-                              onClick={(e) => handleViewRequisition(r, e)}
-                              className="px-2.5 py-1.5 rounded-xl bg-white hover:bg-gray-100 border border-gray-200 text-gray-700 text-xs font-bold transition-colors cursor-pointer"
-                            >
-                              View
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(e) => handleOpenRejectModal(r, e)}
-                              disabled={approvingId === r.id}
-                              className="px-2.5 py-1.5 rounded-xl bg-white hover:bg-red-50 border border-red-200 text-red-600 text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
-                            >
-                              Reject ✕
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(e) => handleApproveRequisition(r.id, e)}
-                              disabled={approvingId === r.id}
-                              className="px-3 py-1.5 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-50"
-                            >
-                              {approvingId === r.id ? 'Approving...' : 'Approve ✓'}
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={(e) => handleViewRequisition(r, e)}
-                            className="px-2.5 py-1 rounded-lg text-gray-600 hover:text-black hover:bg-gray-100 text-xs font-bold transition-colors cursor-pointer"
-                          >
-                            View →
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-        </div>
-      )}
+                            </td>
+                            <td className="w-[15%] py-3.5 px-3 align-middle">
+                              <div className="text-gray-900 font-semibold text-xs flex items-center gap-1 whitespace-nowrap">
+                                <span className="text-gray-400 font-medium text-[11px]">Created:</span>
+                                <span>{formatDate(r.created_at)}</span>
+                              </div>
+                              {disp.isApproved && approvalDate && (
+                                <div className="text-emerald-700 font-bold text-[11px] mt-0.5 flex items-center gap-1 whitespace-nowrap">
+                                  <CheckCircle2 size={11} className="text-emerald-600 shrink-0" />
+                                  <span>Approved: {formatDate(approvalDate)}</span>
+                                </div>
+                              )}
+                            </td>
+                            <td className="w-[23%] min-w-[225px] py-3.5 px-3.5 align-middle text-right" onClick={(e) => e.stopPropagation()}>
+                              {isDeletedByHm ? (
+                                <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                                  <span className="inline-block px-2.5 py-1 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-[10px] font-bold">
+                                    Removed by HM
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => handleViewRequisition(r, e)}
+                                    className="w-16 py-1.5 rounded-lg bg-white hover:bg-gray-100 border border-gray-200 text-gray-700 text-xs font-bold transition-colors shadow-2xs cursor-pointer text-center"
+                                  >
+                                    View →
+                                  </button>
+                                </div>
+                              ) : disp.isPending ? (
+                                <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => handleViewRequisition(r, e)}
+                                    className="w-16 py-1.5 rounded-lg bg-white hover:bg-gray-100 border border-gray-200 text-gray-700 text-xs font-bold transition-colors cursor-pointer shadow-2xs text-center"
+                                  >
+                                    View
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => handleOpenRejectModal(r, e)}
+                                    disabled={approvingId === r.id}
+                                    className="w-16 py-1.5 rounded-lg bg-white hover:bg-red-50 border border-red-200 text-red-600 text-xs font-bold transition-colors cursor-pointer shadow-2xs disabled:opacity-50 text-center"
+                                  >
+                                    Reject
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => handleApproveRequisition(r.id, e)}
+                                    disabled={approvingId === r.id}
+                                    className="w-16 py-1.5 rounded-lg bg-black hover:bg-gray-900 border border-black text-white text-xs font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-50 text-center"
+                                  >
+                                    {approvingId === r.id ? '...' : 'Approve'}
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center justify-end whitespace-nowrap">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => handleViewRequisition(r, e)}
+                                    className="inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg bg-white hover:bg-gray-100 border border-gray-200 text-gray-700 text-xs font-bold transition-colors shadow-2xs cursor-pointer"
+                                  >
+                                    <span>View</span>
+                                    <span className="text-gray-400">→</span>
+                                  </button>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Right Column: 4 Metric Stat Cards Stacked Vertically (Matches Company Admin ManageHiringManagers) */}
@@ -1573,11 +1312,10 @@ export default function DirectorDashboard({ view = 'overview' }) {
               setActiveTab('requisitions');
               setStatusFilter('ALL');
             }}
-            className={`backdrop-blur-2xl border rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between h-[102px] cursor-pointer transition-all ${
-              activeTab === 'requisitions' && statusFilter === 'ALL'
+            className={`backdrop-blur-2xl border rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between h-[102px] cursor-pointer transition-all ${activeTab === 'requisitions' && statusFilter === 'ALL'
                 ? 'bg-white/85 border-black/40 ring-1 ring-black/15 shadow-sm'
                 : 'bg-white/40 border-white/70 hover:bg-white/60'
-            }`}
+              }`}
             title="View All Requisitions"
           >
             <div className="flex items-center justify-between">
@@ -1601,23 +1339,22 @@ export default function DirectorDashboard({ view = 'overview' }) {
           {/* Stat Card 2: Pending Sign-off */}
           <div
             onClick={() => {
-              setActiveTab('approvals');
+              setActiveTab('requisitions');
               setStatusFilter('PENDING');
             }}
-            className={`backdrop-blur-2xl border rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between h-[102px] cursor-pointer transition-all ${
-              activeTab === 'approvals' || statusFilter === 'PENDING'
+            className={`backdrop-blur-2xl border rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between h-[102px] cursor-pointer transition-all ${statusFilter === 'PENDING'
                 ? 'bg-white/85 border-amber-400/60 ring-1 ring-amber-400/30 shadow-sm'
-                : pendingApprovalsList.length + pendingWorkOrders.length > 0
-                ? 'bg-white/40 border-amber-300/80 ring-1 ring-amber-400/20 hover:bg-white/60'
-                : 'bg-white/40 border-white/70 hover:bg-white/60'
-            }`}
+                : pendingApprovalsList.length > 0
+                  ? 'bg-white/40 border-amber-300/80 ring-1 ring-amber-400/20 hover:bg-white/60'
+                  : 'bg-white/40 border-white/70 hover:bg-white/60'
+              }`}
             title="Filter by Pending Sign-off"
           >
             <div className="flex items-center justify-between">
               <div className="w-7.5 h-7.5 rounded-xl bg-amber-50/80 border border-amber-200/60 flex items-center justify-center text-amber-700 shadow-2xs shrink-0">
                 <Clock size={15} />
               </div>
-              {pendingApprovalsList.length + pendingWorkOrders.length > 0 ? (
+              {pendingApprovalsList.length > 0 ? (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
                   <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
                   Sign-off
@@ -1630,7 +1367,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
             </div>
             <div>
               <div className="text-xl sm:text-[22px] font-black text-gray-900 tracking-tight leading-none">
-                {pendingApprovalsList.length + pendingWorkOrders.length}
+                {pendingApprovalsList.length}
               </div>
               <div className="text-[10px] font-semibold text-gray-500 mt-0.5">
                 Pending Sign-off
@@ -1644,11 +1381,10 @@ export default function DirectorDashboard({ view = 'overview' }) {
               setActiveTab('requisitions');
               setStatusFilter('APPROVED');
             }}
-            className={`backdrop-blur-2xl border rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between h-[102px] cursor-pointer transition-all ${
-              statusFilter === 'APPROVED'
+            className={`backdrop-blur-2xl border rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between h-[102px] cursor-pointer transition-all ${statusFilter === 'APPROVED'
                 ? 'bg-white/85 border-emerald-400/60 ring-1 ring-emerald-400/30 shadow-sm'
                 : 'bg-white/40 border-white/70 hover:bg-white/60'
-            }`}
+              }`}
             title="Filter by Approved Requisitions"
           >
             <div className="flex items-center justify-between">

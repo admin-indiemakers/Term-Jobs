@@ -690,8 +690,8 @@ export default function OpenRolesPage({ enabled = true }) {
       };
     }
 
-    // 2. Standard request with SWR cache
-    request('/api/public/requisitions')
+    // 2. Standard request with fresh data fetch
+    request('/api/public/requisitions', { forceRefresh: true, noCache: true })
       .then(onDataLoaded)
       .catch((err) => {
         console.error('Error fetching public requisitions:', err);

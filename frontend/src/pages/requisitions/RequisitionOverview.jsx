@@ -283,6 +283,7 @@ function RequisitionDetailDrawer({
   const r = req || initialReq || {};
   const structuredRole = r.structured_role || {};
   const isDeleted = Boolean(r.is_deleted || r.status === 'Deleted by HM' || r.status === 'Deleted');
+  const isPublished = ['published', 'active', 'open'].includes((r.status || '').toLowerCase().replace(/[\s_]+/g, ''));
   const reqCode = r.ref ? r.ref.replace('REQ-', 'REQ #') : `REQ #${String(r.id || requisitionId || '').slice(0, 6).toUpperCase()}`;
 
   const toSafeString = (val, fallback = '') => {
@@ -645,8 +646,17 @@ function RequisitionDetailDrawer({
                       onClick={() => navigate(`/dashboard/requisitions/${requisitionId}`)}
                       className="px-2 py-0.5 rounded-lg bg-gray-100 hover:bg-gray-200 border border-black/[0.06] text-[11px] font-semibold text-gray-700 hover:text-black flex items-center gap-1 transition-colors cursor-pointer shadow-3xs"
                     >
-                      <Pencil size={10} />
-                      <span>Edit</span>
+                      {isPublished ? (
+                        <>
+                          <Eye size={10} />
+                          <span>View Details</span>
+                        </>
+                      ) : (
+                        <>
+                          <Pencil size={10} />
+                          <span>Edit</span>
+                        </>
+                      )}
                     </button>
                   </div>
 
@@ -1100,8 +1110,14 @@ function RequisitionDetailDrawer({
               <div className="space-y-3">
                 <div className="flex items-center justify-between p-3.5 rounded-xl bg-gray-50 border border-gray-200/80">
                   <div>
-                    <div className="text-xs font-bold text-gray-900">Full Edit Mode</div>
-                    <div className="text-[11px] text-gray-500">Open detailed edit view to modify budget or job description</div>
+                    <div className="text-xs font-bold text-gray-900">
+                      {isPublished ? 'Requisition View Mode' : 'Full Edit Mode'}
+                    </div>
+                    <div className="text-[11px] text-gray-500">
+                      {isPublished
+                        ? 'View complete approved requisition details and audit trail'
+                        : 'Open detailed edit view to modify budget or job description'}
+                    </div>
                   </div>
                   <button
                     type="button"

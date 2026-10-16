@@ -46,6 +46,12 @@ export function HiringManagerInterviews() {
   const { token, user } = useAuth();
   const navigate = useNavigate();
 
+  useEffect(() => {
+    if (user?.role === 'Hiring Manager' || user?.role === 'HR') {
+      navigate('/dashboard/candidates', { replace: true });
+    }
+  }, [user, navigate]);
+
   const [candidatesSummary, setCandidatesSummary] = useState([]);
   const [rounds, setRounds] = useState([]);
   const [selectedCandidate, setSelectedCandidate] = useState(null);
