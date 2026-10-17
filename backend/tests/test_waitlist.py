@@ -101,7 +101,7 @@ def test_talent_pool_sends_resume_to_script(client, monkeypatch):
     ('Test', 'test@example.com', 'resume.exe', b'exe', 422),
     ('Test', 'test@example.com', 'resume.pdf', b'', 422),
     ('Test', 'test@example.com', 'resume.pdf', b'x' * (2 * 1024 * 1024 + 1), 413),
-])
+], ids=['empty-name', 'bad-email', 'bad-ext', 'empty-file', 'oversize'])
 def test_talent_pool_rejects_invalid_upload(client, monkeypatch, name, email, filename, contents, status):
     post = Mock()
     monkeypatch.setattr(router.httpx, 'post', post)
