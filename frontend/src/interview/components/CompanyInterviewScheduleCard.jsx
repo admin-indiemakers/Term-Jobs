@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Calendar, Send } from 'lucide-react';
 import { request } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import { getInterviewerAvailability } from '../../components/ScheduleInterviewModal';
 
 export default function CompanyInterviewScheduleCard({ proposal, timezone = 'Asia/Kolkata', onSaved }) {
   const { token } = useAuth();
@@ -26,6 +27,11 @@ export default function CompanyInterviewScheduleCard({ proposal, timezone = 'Asi
   }, [token]);
   const candidate = proposal.candidate || proposal.candidate_name;
 
+  const selectedInterviewerObj = interviewers.find(p => p.email === interviewer);
+  const interviewerConflict = selectedInterviewerObj && date && time
+    ? getInterviewerAvailability(selectedInterviewerObj, date, time, duration, -1, [])
+    : { isAvailable: true, conflict: null };
+
   const checkSlot = async () => {
     setChecking(true); setAvailability(null); setError('');
     try {
@@ -39,6 +45,11 @@ export default function CompanyInterviewScheduleCard({ proposal, timezone = 'Asi
 
   const dispatch = async event => {
     event.preventDefault(); setBusy(true); setError('');
+    if (!interviewerConflict.isAvailable) {
+      setError(`Selected interviewer is already booked during this time: ${interviewerConflict.conflict?.reason || 'Schedule overlap'}. Please choose another interviewer or time.`);
+      setBusy(false);
+      return;
+    }
     try {
       const result = await request('/api/interviews/company-round', { method: 'POST', token, timeout: 90000, body: {
         candidate_identifier: proposal.candidate_submission_id || proposal.candidate_email || candidate,
@@ -61,7 +72,32 @@ export default function CompanyInterviewScheduleCard({ proposal, timezone = 'Asi
       <label className="text-xs font-semibold text-zinc-600">Duration (minutes)<input required type="number" min={15} max={240} value={duration} onChange={event => setDuration(event.target.value)} className="mt-1 w-full rounded-lg border border-zinc-300 p-2 text-sm" /></label>
       <label className="text-xs font-semibold text-zinc-600 sm:col-span-2">Round name<input required disabled={Boolean(saved)} value={round} onChange={event => setRound(event.target.value)} className="mt-1 w-full rounded-lg border border-zinc-300 p-2 text-sm disabled:bg-zinc-50" /></label>
     </div>
-    <label className="mt-3 block text-xs font-semibold">Interviewer<select value={interviewer} onChange={e => setInterviewer(e.target.value)} className="mt-1 w-full rounded border p-2"><option value="">My account</option>{interviewers.map(person => <option key={person.id} value={person.email}>{person.name} · {person.email}</option>)}</select></label>
+    <label className="mt-3 block text-xs font-semibold">
+      Interviewer
+      <select value={interviewer} onChange={e => setInterviewer(e.target.value)} className="mt-1 w-full rounded border p-2">
+        <option value="">My account</option>
+        {interviewers.map(person => {
+          const avail = (date && time)
+            ? getInterviewerAvailability(person, date, time, duration, -1, [])
+            : { isAvailable: true };
+          return (
+            <option
+              key={person.id || person.email}
+              value={person.email}
+              disabled={!avail.isAvailable}
+              className={!avail.isAvailable ? 'text-gray-400 bg-gray-50' : ''}
+            >
+              {person.name} &bull; {person.email}{!avail.isAvailable ? ` (Unavailable - ${avail.conflict?.timeRange || 'Booked'})` : ''}
+            </option>
+          );
+        })}
+      </select>
+    </label>
+    {!interviewerConflict.isAvailable && (
+      <p className="mt-1.5 text-xs text-rose-600 font-medium">
+        Conflict: {interviewerConflict.conflict?.reason}. Please select an available interviewer or different time.
+      </p>
+    )}
     <p className="mt-3 text-xs text-zinc-500">Booking checks your primary Google Calendar for conflicts, reserves the slot as busy, sends the company LiveKit invitation, and schedules candidate email reminders 60 and 10 minutes before the interview.</p>
     <button type="button" disabled={checking || !date || !time} onClick={checkSlot} className="mt-3 rounded-lg border border-zinc-300 bg-white text-zinc-900 px-3 py-2 text-xs font-semibold disabled:opacity-50">{checking ? 'Checking Google Calendar…' : 'Check availability'}</button>
     {availability?.checkedSlot === `${date}:${time}:${zone}:${duration}` && <div role="status" className={`mt-2 text-xs ${availability.available ? 'text-emerald-700' : 'text-red-600'}`}>

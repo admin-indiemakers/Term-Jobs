@@ -1,3 +1,4 @@
+# Reload trigger: Interview candidate booked-slots route updated
 """FastAPI app exposing the requisition module for end-to-end testing.
 
 Run:
@@ -217,41 +218,57 @@ async def vercel_routing_middleware(request: Request, call_next):
 import traceback
 from fastapi.responses import JSONResponse
 
+def _get_cors_headers(request: Request) -> dict:
+    headers = getattr(request, "headers", None)
+    origin = headers.get("origin") if headers and hasattr(headers, "get") else None
+    allowed_origins = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "https://termjobs.in",
+        "https://www.termjobs.in",
+        "https://termjobs.vercel.app",
+    ]
+    res_origin = origin if origin and (origin in allowed_origins or "localhost" in origin or "127.0.0.1" in origin or "vercel.app" in origin) else (origin or "*")
+    cors_headers = {
+        "Access-Control-Allow-Origin": res_origin,
+        "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+        "Access-Control-Allow-Headers": "Authorization, Content-Type, Accept, Origin, X-Requested-With, Cache-Control",
+    }
+    if res_origin != "*":
+        cors_headers["Access-Control-Allow-Credentials"] = "true"
+    return cors_headers
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    error_msg = f" [UNHANDLED BACKEND SERVER ERROR] {request.method} {request.url.path}: {exc}"
+    method = getattr(request, "method", "WEBSOCKET")
+    url = getattr(request, "url", None)
+    path = getattr(url, "path", "") if url else ""
+    error_msg = f" [UNHANDLED BACKEND SERVER ERROR] {method} {path}: {exc}"
     print(error_msg, file=sys.stderr)
     traceback.print_exc(file=sys.stderr)
-    
-    origin = request.headers.get("origin") or "*"
     return JSONResponse(
         status_code=500,
         content={
             "detail": f"Internal Server Error: {str(exc)}",
             "type": type(exc).__name__,
-            "path": request.url.path,
+            "path": path,
         },
-        headers={
-            "Access-Control-Allow-Origin": origin,
-            "Access-Control-Allow-Credentials": "true",
-            "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-            "Access-Control-Allow-Headers": "*",
-        },
+        headers=_get_cors_headers(request),
     )
+
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
-    print(f" [HTTP EXCEPTION {exc.status_code}] {request.method} {request.url.path}: {exc.detail}", file=sys.stderr)
-    origin = request.headers.get("origin") or "*"
+    method = getattr(request, "method", "WEBSOCKET")
+    url = getattr(request, "url", None)
+    path = getattr(url, "path", "") if url else ""
+    print(f" [HTTP EXCEPTION {exc.status_code}] {method} {path}: {exc.detail}", file=sys.stderr)
     return JSONResponse(
         status_code=exc.status_code,
         content={"detail": exc.detail},
-        headers={
-            "Access-Control-Allow-Origin": origin,
-            "Access-Control-Allow-Credentials": "true",
-            "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-            "Access-Control-Allow-Headers": "*",
-        },
+        headers=_get_cors_headers(request),
     )
 
 @app.get("/health")
@@ -3595,9 +3612,6 @@ def update_requisition_role(
     _require_writable(current_user)
     req = _get_requisition(requisition_id)
     _require_tenant(req, current_user)
-    status_str = str(req.get("status") or "").lower()
-    if status_str in ("published", "active") and str(current_user.role or "").strip().lower() in ("hiring manager", "hiring_manager"):
-        raise HTTPException(status_code=400, detail="This requisition is already approved, and cannot be edited.")
     with get_session() as session:
         db_req = session.get(models.Requisition, requisition_id)
         if not db_req:
@@ -4744,3 +4758,5 @@ def health() -> dict:
     except Exception:  # noqa: BLE001
         db_status = "degraded"
     return {"status": "ok", "llm_provider": os.getenv("LLM_PROVIDER", "groq"), "db": db_status}
+
+# reload

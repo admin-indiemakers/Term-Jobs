@@ -1,5 +1,6 @@
 import { Room, RoomEvent } from 'livekit-client';
 import { API_BASE_URL } from '../../api/client';
+import { interviewCredentialsQuery } from './interviewApi';
 
 export class LiveKitService {
   constructor() {
@@ -18,6 +19,7 @@ export class LiveKitService {
     this.myId = Math.random().toString(36).substring(2, 9);
     this.currentRole = '';
     this.currentRoundId = '';
+    this._activeVideoTracks = new Set();
     this.listeners = {
       participantConnected: [],
       participantDisconnected: [],
@@ -33,6 +35,55 @@ export class LiveKitService {
       screenShareEnded: [],
       chatMessageReceived: [],
     };
+  }
+
+  _registerVideoTracks(stream) {
+    if (!stream) return;
+    try {
+      stream.getVideoTracks().forEach((track) => {
+        this._activeVideoTracks.add(track);
+        track.addEventListener('ended', () => {
+          this._activeVideoTracks.delete(track);
+        });
+      });
+    } catch (_) {}
+  }
+
+  _stopAllVideoTracks() {
+    this._activeVideoTracks.forEach((track) => {
+      try {
+        track.enabled = false;
+        track.stop();
+      } catch (_) {}
+    });
+    this._activeVideoTracks.clear();
+
+    if (this.fallbackLocalStream) {
+      try {
+        const vTracks = this.fallbackLocalStream.getVideoTracks();
+        vTracks.forEach((track) => {
+          try {
+            track.enabled = false;
+            track.stop();
+            this.fallbackLocalStream.removeTrack(track);
+          } catch (_) {}
+        });
+      } catch (_) {}
+    }
+
+    if (this.peerConnection) {
+      try {
+        this.peerConnection.getSenders().forEach((sender) => {
+          if (sender.track && sender.track.kind === 'video') {
+            try {
+              sender.track.enabled = false;
+              sender.track.stop();
+              sender.replaceTrack(null);
+            } catch (_) {}
+          }
+        });
+      } catch (_) {}
+    }
   }
 
   on(event, callback) {
@@ -102,13 +153,13 @@ export class LiveKitService {
       // If local stream already active and healthy, reuse it directly without restarting camera
       const activeVideo = this.fallbackLocalStream?.getVideoTracks()?.find((t) => t.readyState === 'live');
       const activeAudio = this.fallbackLocalStream?.getAudioTracks()?.find((t) => t.readyState === 'live');
-      if (activeVideo && activeAudio) {
+      if (activeVideo || activeAudio) {
         this.isLiveKitConnected = false;
         this._emit('connectionStateChanged', 'connected');
         this._emit('localTrackChanged', {
           stream: this.fallbackLocalStream,
-          hasVideo: activeVideo.enabled,
-          hasAudio: activeAudio.enabled,
+          hasVideo: !!activeVideo && activeVideo.enabled,
+          hasAudio: !!activeAudio && activeAudio.enabled,
         });
         if (!isAiInterview) {
           this.initP2PConnection(roundId, role, participantName);
@@ -119,24 +170,71 @@ export class LiveKitService {
         };
       }
 
-      this.fallbackLocalStream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
-        audio: {
-          echoCancellation: { ideal: true },
-          noiseSuppression: { ideal: true },
-          autoGainControl: { ideal: true },
-          googEchoCancellation: { ideal: true },
-          googAutoGainControl: { ideal: true },
-          googNoiseSuppression: { ideal: true },
-          googHighpassFilter: { ideal: true },
-        },
-      });
+      // Robust separate fallbacks: never fail audio if video is busy/absent, and vice versa
+      let stream = null;
+      let hasVideo = false;
+      let hasAudio = false;
+
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
+          audio: {
+            echoCancellation: { ideal: true },
+            noiseSuppression: { ideal: true },
+            autoGainControl: { ideal: true },
+          },
+        });
+        hasVideo = stream.getVideoTracks().length > 0;
+        hasAudio = stream.getAudioTracks().length > 0;
+      } catch (comboErr) {
+        console.warn('Could not acquire bundled video + audio, trying individual devices:', comboErr);
+        const collectedTracks = [];
+
+        // Attempt video only
+        try {
+          const vStream = await navigator.mediaDevices.getUserMedia({
+            video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
+          });
+          const vTracks = vStream.getVideoTracks();
+          if (vTracks.length > 0) {
+            collectedTracks.push(...vTracks);
+            hasVideo = true;
+          }
+        } catch (vErr) {
+          console.warn('Camera not available or access denied:', vErr);
+        }
+
+        // Attempt audio only
+        try {
+          const aStream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: { ideal: true },
+              noiseSuppression: { ideal: true },
+              autoGainControl: { ideal: true },
+            },
+          });
+          const aTracks = aStream.getAudioTracks();
+          if (aTracks.length > 0) {
+            collectedTracks.push(...aTracks);
+            hasAudio = true;
+          }
+        } catch (aErr) {
+          console.warn('Microphone not available or access denied:', aErr);
+        }
+
+        if (collectedTracks.length > 0) {
+          stream = new MediaStream(collectedTracks);
+        }
+      }
+
+      this.fallbackLocalStream = stream;
+      this._registerVideoTracks(stream);
       this.isLiveKitConnected = false;
       this._emit('connectionStateChanged', 'connected');
       this._emit('localTrackChanged', {
         stream: this.fallbackLocalStream,
-        hasVideo: true,
-        hasAudio: true,
+        hasVideo,
+        hasAudio,
       });
 
       // Start P2P WebRTC Signaling via WebSocket only if not an AI-conducted interview
@@ -176,7 +274,8 @@ export class LiveKitService {
         const host = typeof window !== 'undefined' ? window.location.host : 'localhost:8000';
         wsBase = `${protocol}//${host}`;
       }
-      const wsUrl = `${wsBase}/api/interviews/rounds/${roundId}/ws`;
+      const creds = interviewCredentialsQuery();
+      const wsUrl = `${wsBase}/api/interviews/rounds/${roundId}/ws${creds ? `?${creds}` : ''}`;
 
       const socket = new WebSocket(wsUrl);
       this.signalingSocket = socket;
@@ -457,71 +556,119 @@ export class LiveKitService {
       this._emitLocalMedia();
       return publication;
     }
-    if (enabled && !this.fallbackLocalStream?.getVideoTracks().some(track => track.readyState === 'live')) {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-      const audioTracks = this.fallbackLocalStream?.getAudioTracks() || [];
-      this.fallbackLocalStream?.getVideoTracks().forEach(track => track.stop());
-      this.fallbackLocalStream = new MediaStream([...stream.getVideoTracks(), ...audioTracks]);
-    }
-    if (this.fallbackLocalStream) {
-      let videoTrack = this.fallbackLocalStream.getVideoTracks()[0];
-      if (enabled && (!videoTrack || videoTrack.readyState === 'ended')) {
+
+    if (enabled) {
+      let videoTrack = this.fallbackLocalStream?.getVideoTracks()?.find((t) => t.readyState === 'live');
+      if (!videoTrack) {
         try {
-          const freshStream = await navigator.mediaDevices.getUserMedia({
+          const fresh = await navigator.mediaDevices.getUserMedia({
             video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
           });
-          const newTrack = freshStream.getVideoTracks()[0];
+          this._registerVideoTracks(fresh);
+          const newTrack = fresh.getVideoTracks()[0];
           if (newTrack) {
-            if (videoTrack) {
-              try { this.fallbackLocalStream.removeTrack(videoTrack); } catch (_) {}
+            if (!this.fallbackLocalStream) {
+              this.fallbackLocalStream = new MediaStream([newTrack]);
+            } else {
+              this.fallbackLocalStream.getVideoTracks().forEach((t) => {
+                try { t.stop(); this.fallbackLocalStream.removeTrack(t); } catch (_) {}
+              });
+              this.fallbackLocalStream.addTrack(newTrack);
             }
-            this.fallbackLocalStream.addTrack(newTrack);
             videoTrack = newTrack;
+
+            // Sync with active WebRTC PeerConnection
+            if (this.peerConnection) {
+              const sender = this.peerConnection.getSenders().find((s) => s.track && s.track.kind === 'video');
+              if (sender) {
+                sender.replaceTrack(newTrack);
+              } else {
+                this.peerConnection.addTrack(newTrack, this.fallbackLocalStream);
+              }
+            }
           }
         } catch (e) {
-          console.error('Failed to re-acquire camera track on toggle:', e);
+          console.error('Failed to acquire camera track on toggle:', e);
+          throw e;
         }
       }
       if (videoTrack) {
-        videoTrack.enabled = enabled;
-        this._emit('localTrackChanged', {
-          stream: this.fallbackLocalStream,
-          hasVideo: enabled,
-          hasAudio: this.fallbackLocalStream.getAudioTracks()[0]?.enabled ?? false,
-        });
+        videoTrack.enabled = true;
       }
-    } else if (enabled) {
-      try {
-        this.fallbackLocalStream = await navigator.mediaDevices.getUserMedia({
-          video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
-          audio: true,
-        });
-        this._emit('localTrackChanged', {
-          stream: this.fallbackLocalStream,
-          hasVideo: true,
-          hasAudio: true,
-        });
-      } catch (e) {
-        console.error('Failed to initialize local stream on toggle:', e);
-      }
+    } else {
+      this._stopAllVideoTracks();
     }
+
+    const hasVideo = enabled && (this.fallbackLocalStream?.getVideoTracks()?.some((t) => t.readyState === 'live' && t.enabled) ?? false);
+    const hasAudio = this.fallbackLocalStream?.getAudioTracks()?.some((t) => t.readyState === 'live' && t.enabled) ?? false;
+    this._emit('localTrackChanged', {
+      stream: this.fallbackLocalStream,
+      hasVideo,
+      hasAudio,
+    });
   }
 
   async toggleMicrophone(enabled) {
     if (this.room && this.isLiveKitConnected) {
       return await this.room.localParticipant.setMicrophoneEnabled(enabled);
     }
-    if (this.fallbackLocalStream) {
-      const audioTrack = this.fallbackLocalStream.getAudioTracks()[0];
+
+    if (enabled) {
+      let audioTrack = this.fallbackLocalStream?.getAudioTracks()?.find((t) => t.readyState === 'live');
+      if (!audioTrack) {
+        try {
+          const fresh = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: { ideal: true },
+              noiseSuppression: { ideal: true },
+              autoGainControl: { ideal: true },
+            },
+          });
+          const newTrack = fresh.getAudioTracks()[0];
+          if (newTrack) {
+            if (!this.fallbackLocalStream) {
+              this.fallbackLocalStream = new MediaStream([newTrack]);
+            } else {
+              this.fallbackLocalStream.getAudioTracks().forEach((t) => {
+                try { t.stop(); this.fallbackLocalStream.removeTrack(t); } catch (_) {}
+              });
+              this.fallbackLocalStream.addTrack(newTrack);
+            }
+            audioTrack = newTrack;
+
+            // Sync with active WebRTC PeerConnection
+            if (this.peerConnection) {
+              const sender = this.peerConnection.getSenders().find((s) => s.track && s.track.kind === 'audio');
+              if (sender) {
+                sender.replaceTrack(newTrack);
+              } else {
+                this.peerConnection.addTrack(newTrack, this.fallbackLocalStream);
+              }
+            }
+          }
+        } catch (e) {
+          console.error('Failed to acquire audio track on toggle:', e);
+          throw e;
+        }
+      }
       if (audioTrack) {
-        audioTrack.enabled = enabled;
-        this._emit('localTrackChanged', {
-          stream: this.fallbackLocalStream,
-          hasVideo: this.fallbackLocalStream.getVideoTracks()[0]?.enabled ?? false,
-          hasAudio: enabled,
+        audioTrack.enabled = true;
+      }
+    } else {
+      if (this.fallbackLocalStream) {
+        this.fallbackLocalStream.getAudioTracks().forEach((t) => {
+          t.enabled = false;
         });
       }
     }
+
+    const hasVideo = this.fallbackLocalStream?.getVideoTracks()?.some((t) => t.readyState === 'live' && t.enabled) ?? false;
+    const hasAudio = this.fallbackLocalStream?.getAudioTracks()?.some((t) => t.readyState === 'live' && t.enabled) ?? false;
+    this._emit('localTrackChanged', {
+      stream: this.fallbackLocalStream,
+      hasVideo,
+      hasAudio,
+    });
   }
 
   async toggleScreenShare(enabled) {
@@ -721,6 +868,7 @@ export class LiveKitService {
       } catch (_) {}
       this.fallbackScreenStream = null;
     }
+    this._stopAllVideoTracks();
     this.closeP2PConnection();
     this.isLiveKitConnected = false;
     this._emit('connectionStateChanged', 'disconnected');

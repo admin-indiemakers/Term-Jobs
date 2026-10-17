@@ -25,19 +25,37 @@ export function CandidateInterviewPortal() {
   const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
+    let sessData = null;
     const raw = sessionStorage.getItem('termjobs_candidate_session');
-    if (!raw) {
+    if (raw) {
+      try {
+        sessData = JSON.parse(raw);
+      } catch (e) {}
+    }
+
+    if (!sessData) {
+      const urlParams = new URLSearchParams(window.location.search);
+      const tokenParam = urlParams.get('token');
+      const emailParam = urlParams.get('email');
+      if (tokenParam || emailParam) {
+        sessData = {
+          candidate_token: tokenParam || '',
+          candidate_email: emailParam || '',
+          candidate_name: urlParams.get('name') || 'Candidate',
+        };
+        try {
+          sessionStorage.setItem('termjobs_candidate_session', JSON.stringify(sessData));
+        } catch (_) {}
+      }
+    }
+
+    if (!sessData) {
       navigate('/interview/login', { replace: true });
       return;
     }
 
-    try {
-      const parsed = JSON.parse(raw);
-      setSession(parsed);
-      loadCandidateRounds(parsed);
-    } catch (e) {
-      navigate('/interview/login', { replace: true });
-    }
+    setSession(sessData);
+    loadCandidateRounds(sessData);
   }, [navigate]);
 
   const loadCandidateRounds = async (sess) => {

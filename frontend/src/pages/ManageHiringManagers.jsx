@@ -501,13 +501,12 @@ export default function ManageHiringManagers() {
                     <th className="py-2.5 px-3">DEPARTMENT</th>
                     <th className="py-2.5 px-3">STATUS</th>
                     <th className="py-2.5 px-3">JOINED</th>
-                    <th className="py-2.5 px-3 text-right"></th>
+                    <th className="py-2.5 px-3 text-right">ACTIONS</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-black/[0.03]">
                   {filteredManagers.map((u) => {
                     const firstLetter = (u.name || u.email || 'M').slice(0, 1).toUpperCase();
-                    const isMenuOpen = activeMenuId === u.id;
 
                     return (
                       <tr
@@ -516,12 +515,16 @@ export default function ManageHiringManagers() {
                       >
                         {/* Name Column with Black Square Rounded Avatar */}
                         <td className="py-3 px-3">
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-7.5 h-7.5 rounded-xl bg-black text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-3xs">
+                          <div
+                            onClick={() => setViewProfile(u)}
+                            className="flex items-center gap-2.5 cursor-pointer group"
+                            title="Click to view profile"
+                          >
+                            <div className="w-7.5 h-7.5 rounded-xl bg-black text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-3xs group-hover:scale-105 transition-transform">
                               {firstLetter}
                             </div>
                             <div className="min-w-0">
-                              <div className="font-bold text-gray-900 text-xs sm:text-[13px] leading-tight truncate">
+                              <div className="font-bold text-gray-900 text-xs sm:text-[13px] leading-tight truncate group-hover:text-blue-600 transition-colors">
                                 {u.name || 'Team Member'}
                               </div>
                               <div className="text-[10px] text-gray-400 truncate">
@@ -569,76 +572,44 @@ export default function ManageHiringManagers() {
                           {formatDate(u.created_at)}
                         </td>
 
-                        {/* Actions Column (3 Dots Button + Floating Popup Action Menu) */}
-                        <td className="py-3 px-3 text-right relative">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setActiveMenuId(isMenuOpen ? null : u.id);
-                            }}
-                            className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-white/60 rounded-lg inline-flex items-center justify-center transition-colors cursor-pointer"
-                          >
-                            <MoreHorizontal size={15} />
-                          </button>
-
-                          {/* Floating Action Menu Dropdown */}
-                          {isMenuOpen && (
-                            <div
-                              className="absolute right-3 top-10 w-36 bg-white/95 backdrop-blur-2xl border border-white/90 rounded-2xl shadow-[0_12px_40px_rgba(0,0,0,0.12)] p-1 z-30 animate-in fade-in zoom-in-95 text-left"
-                              onClick={(e) => e.stopPropagation()}
-                            >
+                        {/* Actions Column (Direct Edit & Remove Buttons) */}
+                        <td className="py-3 px-3 text-right">
+                          {u.is_active === false ? (
+                            <div className="inline-flex items-center gap-2">
                               <button
                                 type="button"
-                                onClick={() => {
-                                  setViewProfile(u);
-                                  setActiveMenuId(null);
-                                }}
-                                className="w-full px-3 py-1.5 text-xs text-gray-700 hover:text-black hover:bg-gray-100/80 rounded-xl transition-colors flex items-center gap-2 font-medium cursor-pointer"
+                                onClick={() => handleApproveManager(u)}
+                                className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] flex items-center gap-1 shadow-2xs transition-colors cursor-pointer"
                               >
-                                <User size={13} className="text-gray-500" />
-                                <span>View Profile</span>
+                                <Check size={11} />
+                                <span>Approve</span>
                               </button>
-
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDelete(u)}
+                                className="font-bold text-red-500 hover:text-red-700 text-[10px] transition-colors cursor-pointer"
+                              >
+                                Reject
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="inline-flex items-center gap-3">
                               <button
                                 type="button"
                                 onClick={() => {
                                   setEdit({ ...u, password: '' });
                                   setEditOriginal({ ...u });
-                                  setActiveMenuId(null);
                                 }}
-                                className="w-full px-3 py-1.5 text-xs text-gray-700 hover:text-black hover:bg-gray-100/80 rounded-xl transition-colors flex items-center gap-2 font-medium cursor-pointer"
+                                className="font-bold text-gray-700 hover:text-black text-[10px] transition-colors cursor-pointer"
                               >
-                                <Edit3 size={13} className="text-gray-500" />
-                                <span>Edit</span>
+                                Edit
                               </button>
-
-                              {u.is_active === false && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    handleApproveManager(u);
-                                    setActiveMenuId(null);
-                                  }}
-                                  className="w-full px-3 py-1.5 text-xs text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors flex items-center gap-2 font-semibold cursor-pointer"
-                                >
-                                  <Check size={13} className="text-emerald-500" />
-                                  <span>Approve</span>
-                                </button>
-                              )}
-
-                              <div className="h-px bg-black/[0.04] my-1" />
-
                               <button
                                 type="button"
-                                onClick={() => {
-                                  setConfirmDelete(u);
-                                  setActiveMenuId(null);
-                                }}
-                                className="w-full px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-xl transition-colors flex items-center gap-2 font-semibold cursor-pointer"
+                                onClick={() => setConfirmDelete(u)}
+                                className="font-bold text-red-500 hover:text-red-700 text-[10px] transition-colors cursor-pointer"
                               >
-                                <Trash2 size={13} className="text-red-500" />
-                                <span>Remove</span>
+                                Remove
                               </button>
                             </div>
                           )}
@@ -681,9 +652,6 @@ export default function ManageHiringManagers() {
               <div className="w-7.5 h-7.5 rounded-xl bg-white/60 backdrop-blur-md border border-white/70 flex items-center justify-center text-gray-700 shadow-2xs shrink-0">
                 <FileText size={15} />
               </div>
-              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600">
-                <span>▲</span> +0%
-              </span>
             </div>
             <div>
               <div className="text-xl sm:text-[22px] font-black text-gray-900 tracking-tight leading-none">

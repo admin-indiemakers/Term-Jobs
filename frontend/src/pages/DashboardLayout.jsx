@@ -32,6 +32,7 @@ import {
 import { request } from '../api/client';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Backdrop } from '../components/landing/Backdrop';
+import { isPublishedStatus } from '../utils/requisitionStatus';
 
 function initials(name) {
   if (!name) return 'AM';
@@ -231,7 +232,8 @@ export default function DashboardLayout() {
       request('/api/onboarding/issues', { token, forceRefresh: force }).catch(() => []),
       request('/api/workforce/stats', { token, forceRefresh: force }).catch(() => null),
     ]).then(([reqs, shortlisted, accepted, issuesData, wfStats]) => {
-      const rCount = Array.isArray(reqs) ? reqs.length : (Array.isArray(reqs?.requisitions) ? reqs.requisitions.length : 0);
+      const rawReqs = Array.isArray(reqs) ? reqs : (Array.isArray(reqs?.requisitions) ? reqs.requisitions : []);
+      const rCount = rawReqs.filter((r) => !r.is_deleted && r.status !== 'Deleted by HM' && r.status !== 'Deleted' && isPublishedStatus(r?.status)).length;
       const sList = Array.isArray(shortlisted) ? shortlisted : (shortlisted?.shortlisted_candidates || []);
       const aList = Array.isArray(accepted) ? accepted : (accepted?.candidates || []);
       const uniqueCandIds = new Set();

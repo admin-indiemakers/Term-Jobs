@@ -87,6 +87,15 @@ export function useInterviewMedia() {
   const toggleCamera = useCallback(async () => {
     try {
       const nextState = !isCameraOn;
+      if (!nextState && localStreamRef.current) {
+        localStreamRef.current.getVideoTracks().forEach((track) => {
+          try {
+            track.enabled = false;
+            track.stop();
+            localStreamRef.current.removeTrack(track);
+          } catch (_) {}
+        });
+      }
       await livekitService.toggleCamera(nextState);
       setIsCameraOn(nextState);
     } catch (err) {

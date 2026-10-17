@@ -19,13 +19,19 @@ from modules.interview.domain.models import InterviewSchedule, InterviewStatus, 
 from modules.calendar.domain.models import CalendarConfig
 from modules.candidate.domain.models import CandidateSubmission
 
-LINK_EXPIRATION_HOURS = 10
+LINK_EXPIRATION_HOURS = int(os.getenv("INTERVIEW_LINK_EXPIRATION_HOURS", "72"))
 
 
 def is_round_link_expired(round_doc_or_obj) -> bool:
-    """Return True if the AI interview link has expired (strictly 10 hours validity limit)."""
+    """Return True if the interview link has expired. Active or In-Progress rounds are never expired."""
     if not round_doc_or_obj:
         return True
+
+    status = getattr(round_doc_or_obj, "status", None)
+    if status is None and isinstance(round_doc_or_obj, dict):
+        status = round_doc_or_obj.get("status")
+    if status in ("In Progress", "Live", "Scheduled", "Upcoming"):
+        return False
 
     now = datetime.now(timezone.utc)
 
@@ -45,7 +51,7 @@ def is_round_link_expired(round_doc_or_obj) -> bool:
                 expires_at = expires_at.replace(tzinfo=timezone.utc)
             return now > expires_at
 
-    # 2. Fallback to created_at + 10 hours
+    # 2. Fallback to created_at + validity hours
     created_at = getattr(round_doc_or_obj, "created_at", None)
     if created_at is None and isinstance(round_doc_or_obj, dict):
         created_at = round_doc_or_obj.get("created_at")
@@ -67,6 +73,10 @@ def is_round_link_expired(round_doc_or_obj) -> bool:
 def get_round_expiration_info(round_doc_or_obj) -> dict:
     """Compute expiration metadata for an interview round."""
     now = datetime.now(timezone.utc)
+    status = getattr(round_doc_or_obj, "status", None)
+    if status is None and isinstance(round_doc_or_obj, dict):
+        status = round_doc_or_obj.get("status")
+
     created_at = getattr(round_doc_or_obj, "created_at", None)
     if created_at is None and isinstance(round_doc_or_obj, dict):
         created_at = round_doc_or_obj.get("created_at")
@@ -99,8 +109,13 @@ def get_round_expiration_info(round_doc_or_obj) -> dict:
         else:
             expires_at = now + timedelta(hours=LINK_EXPIRATION_HOURS)
 
-    is_expired = now > expires_at
-    remaining_secs = max(0, int((expires_at - now).total_seconds())) if not is_expired else 0
+    # Active or In-Progress rounds are never expired
+    if status in ("In Progress", "Live", "Scheduled", "Upcoming"):
+        is_expired = False
+        remaining_secs = max(86400 * 3, int((expires_at - now).total_seconds()))
+    else:
+        is_expired = now > expires_at
+        remaining_secs = max(0, int((expires_at - now).total_seconds())) if not is_expired else 0
 
     return {
         "is_expired": is_expired,
@@ -237,6 +252,184 @@ def send_interview_invitation_email(
 </html>"""
 
     return send_email_via_gmail(candidate_email, subject, html)
+
+
+def send_interviewer_invitation_email(
+    interviewer_name: str,
+    interviewer_email: str,
+    candidate_name: str,
+    candidate_email: str,
+    requisition_title: str,
+    company_name: str,
+    round_name: str,
+    round_type: str,
+    scheduled_date: str,
+    scheduled_time: str,
+    duration_minutes: int,
+    meeting_link: str,
+    staff_portal_link: str,
+    candidate_phone: Optional[str] = None,
+    candidate_resume_link: Optional[str] = None,
+    candidate_match_score: Optional[Any] = None,
+    instructions: str = "",
+) -> Dict[str, Any]:
+    """Sends an official HTML interview assignment notification to the assigned interviewer."""
+    from modules.candidate_screening_agent.services.email_service import send_email_via_gmail
+    import re
+
+    if not interviewer_email:
+        return {"status": "skipped", "reason": "No interviewer email provided"}
+
+    domain = _resolve_interview_domain()
+    if meeting_link:
+        meeting_link = re.sub(r"https?://(localhost|127\.0\.0\.1)(:\d+)?", domain, meeting_link)
+    if staff_portal_link:
+        staff_portal_link = re.sub(r"https?://(localhost|127\.0\.0\.1)(:\d+)?", domain, staff_portal_link)
+    if candidate_resume_link and candidate_resume_link.startswith("/"):
+        candidate_resume_link = f"{domain}{candidate_resume_link}"
+
+    subject = f"Interview Scheduled: {round_name} with {candidate_name} for {requisition_title}"
+
+    resume_row = ""
+    if candidate_resume_link:
+        resume_row = f"""
+            <tr>
+              <td style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Resume</td>
+              <td style="font-size: 14px; font-weight: 700;">
+                <a href="{candidate_resume_link}" target="_blank" style="color: #0284c7; text-decoration: underline;">📄 View Candidate Resume</a>
+              </td>
+            </tr>
+        """
+
+    score_row = ""
+    if candidate_match_score:
+        score_row = f"""
+            <tr>
+              <td style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Match Score</td>
+              <td style="font-size: 14px; color: #059669; font-weight: 800;">{candidate_match_score}% Match</td>
+            </tr>
+        """
+
+    phone_row = ""
+    if candidate_phone and candidate_phone != "Not provided":
+        phone_row = f"""
+            <tr>
+              <td style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Phone</td>
+              <td style="font-size: 14px; color: #0f172a; font-weight: 700;">{candidate_phone}</td>
+            </tr>
+        """
+
+    message_content = instructions.strip() if instructions and instructions.strip() else (
+        f"You have been assigned to conduct the {round_name} session for candidate {candidate_name} applying for the {requisition_title} role at {company_name}. "
+        "Please review the candidate's profile, resume, and experience prior to the interview. "
+        "Join the session 5 minutes prior to the scheduled time using the 'Enter Interview Room' button below. "
+        "During or following the interview, submit your scorecard and qualitative assessment in the platform."
+    )
+    instructions_block = f"""
+    <div style="background-color: #f0fdf4; border-left: 4px solid #16a34a; padding: 14px 18px; border-radius: 8px; font-size: 13px; color: #166534; margin-bottom: 24px; line-height: 1.6;">
+      <strong>Message from Hiring Team & Interview Focus:</strong><br/>
+      <div style="margin-top: 6px; color: #15803d;">{message_content}</div>
+    </div>
+    """
+
+    html = f"""<!DOCTYPE html>
+<html>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #1e293b;">
+  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+    <tr>
+      <td style="padding: 24px 32px; background-color: #0f172a; text-align: left;">
+        <span style="font-size: 20px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px;">TermJobs</span>
+        <span style="font-size: 11px; font-weight: 700; color: #38bdf8; background: rgba(56,189,248,0.15); padding: 3px 8px; border-radius: 6px; margin-left: 8px; text-transform: uppercase;">Interviewer Assignment</span>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 32px;">
+        <h2 style="font-size: 20px; font-weight: 800; color: #0f172a; margin: 0 0 12px 0;">Interview Scheduled & Assigned</h2>
+        <p style="font-size: 14px; line-height: 1.6; color: #475569; margin: 0 0 20px 0;">
+          Hi <strong>{interviewer_name}</strong>,<br/>
+          You have been confirmed as the interviewer for <strong>{round_name}</strong> with candidate <strong>{candidate_name}</strong> for the <strong>{requisition_title}</strong> role at <strong>{company_name}</strong>.
+        </p>
+
+        <!-- Meeting & Candidate Details Box -->
+        <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
+          <table width="100%" border="0" cellspacing="0" cellpadding="6">
+            <tr>
+              <td style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase; width: 35%;">Candidate</td>
+              <td style="font-size: 14px; color: #0f172a; font-weight: 800;">{candidate_name}</td>
+            </tr>
+            <tr>
+              <td style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Candidate Email</td>
+              <td style="font-size: 14px; color: #0f172a; font-weight: 700;">{candidate_email}</td>
+            </tr>
+            {phone_row}
+            {score_row}
+            {resume_row}
+            <tr>
+              <td style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Role</td>
+              <td style="font-size: 14px; color: #0f172a; font-weight: 800;">{requisition_title}</td>
+            </tr>
+            <tr>
+              <td style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Hiring Company</td>
+              <td style="font-size: 14px; color: #0f172a; font-weight: 700;">{company_name}</td>
+            </tr>
+            <tr>
+              <td style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Round Name</td>
+              <td style="font-size: 14px; color: #0f172a; font-weight: 800;">{round_name} ({round_type or 'Interview'})</td>
+            </tr>
+            <tr>
+              <td style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Scheduled Date</td>
+              <td style="font-size: 14px; color: #0f172a; font-weight: 700;">📅 {scheduled_date or 'To Be Decided'}</td>
+            </tr>
+            <tr>
+              <td style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Scheduled Time</td>
+              <td style="font-size: 14px; color: #0f172a; font-weight: 700;">⏰ {scheduled_time or 'TBD'} ({duration_minutes} minutes)</td>
+            </tr>
+            <tr>
+              <td style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Format</td>
+              <td style="font-size: 14px; color: #0f172a; font-weight: 700;">🎥 Online LiveKit Video Meeting (TermJobs)</td>
+            </tr>
+          </table>
+        </div>
+
+        {instructions_block}
+
+        <!-- Join Meeting Button -->
+        <div style="text-align: center; margin-bottom: 12px;">
+          <a href="{meeting_link}" target="_blank" style="background-color: #0f172a; color: #ffffff; font-size: 14px; font-weight: 800; text-decoration: none; padding: 14px 28px; border-radius: 10px; display: inline-block; box-shadow: 0 4px 10px rgba(15,23,42,0.25);">
+            🎥 Enter Interview Room as Interviewer
+          </a>
+        </div>
+        <p style="font-size: 12px; color: #64748b; text-align: center; margin: 0 0 24px 0; word-break: break-all;">
+          Direct Room Link: <a href="{meeting_link}" target="_blank" style="color: #0284c7; text-decoration: underline;">{meeting_link}</a>
+        </p>
+
+        <!-- Secondary Portal Link -->
+        <div style="text-align: center; margin-bottom: 24px; padding: 12px; background: #f8fafc; border-radius: 8px; border: 1px dashed #cbd5e1;">
+          <a href="{staff_portal_link}" target="_blank" style="color: #2563eb; font-size: 13px; font-weight: 700; text-decoration: underline;">
+            📋 Open Interviewer Staff Portal & Evaluation Forms
+          </a>
+        </div>
+
+        <div style="background-color: #f1f5f9; border-radius: 10px; padding: 14px 18px; margin-bottom: 20px; font-size: 12px; color: #475569; line-height: 1.6;">
+          <strong>Interviewer Checklist:</strong>
+          <ul style="margin: 6px 0 0 0; padding-left: 20px;">
+            <li>Please enter the interview room 5 minutes prior to the start time.</li>
+            <li>Ensure camera and microphone permissions are granted in your browser.</li>
+            <li>You can score competencies and submit evaluation rubrics directly within the room or via the staff portal.</li>
+          </ul>
+        </div>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 16px; background-color: #f8fafc; border-top: 1px solid #e2e8f0; text-align: center; font-size: 11px; color: #94a3b8;">
+        TermJobs AI Talent & Interview Platform &copy; {datetime.now().year}
+      </td>
+    </tr>
+  </table>
+</body>
+</html>"""
+
+    return send_email_via_gmail(interviewer_email, subject, html)
 
 
 def normalize_cal_url(raw_input: str, event_slug: str = "30min") -> tuple[str, str]:
@@ -835,6 +1028,33 @@ def create_interview_round(data: dict, tenant_id: str, created_by: str, origin: 
             _, scheduled_end = schedule_window(data['scheduled_date'], data['scheduled_time'],
                 data.get('scheduled_timezone') or 'Asia/Kolkata', int(data.get('duration_minutes', 45)))
             expires_at_val = scheduled_end + timedelta(hours=LINK_EXPIRATION_HOURS)
+
+            from .interviewer_availability import validate_candidate_availability, validate_interviewer_availability
+            validate_candidate_availability(
+                candidate_submission_id=cand_sub_id,
+                candidate_email=cand_email,
+                scheduled_date=data["scheduled_date"],
+                scheduled_time=data["scheduled_time"],
+                scheduled_timezone=data.get("scheduled_timezone") or "Asia/Kolkata",
+                duration_minutes=int(data.get("duration_minutes", 45)),
+                exclude_round_id=data.get("round_id"),
+                candidate_name=cand_name,
+                session=session,
+            )
+
+            int_email = (data.get("interviewer_email") or "").strip()
+            int_name = (data.get("interviewer_name") or "").strip()
+            if int_email or int_name:
+                validate_interviewer_availability(
+                    interviewer_email=int_email,
+                    scheduled_date=data["scheduled_date"],
+                    scheduled_time=data["scheduled_time"],
+                    scheduled_timezone=data.get("scheduled_timezone") or "Asia/Kolkata",
+                    duration_minutes=int(data.get("duration_minutes", 45)),
+                    exclude_round_id=data.get("round_id"),
+                    interviewer_name=int_name,
+                    session=session,
+                )
         
         round_obj = InterviewRound(
             tenant_id=tenant_id,
@@ -903,6 +1123,33 @@ def create_interview_round(data: dict, tenant_id: str, created_by: str, origin: 
         except Exception as em_err:
             doc['email_delivery'] = {'status': 'failed', 'reason': 'Email could not be delivered.'}
             print(f"[ROUND EMAIL DISPATCH ERROR] {em_err}")
+
+    # Automatically dispatch notification to interviewer
+    int_email = (doc.get("interviewer_email") or "").strip()
+    int_name = doc.get("interviewer_name") or "Interviewer"
+    if int_email and not data.get("suppress_email"):
+        try:
+            int_room_link = f"{base_url}/interview/room/{doc['id']}?role=interviewer&token={doc.get('interviewer_token')}&name={urllib.parse.quote(int_name)}"
+            int_portal_link = f"{base_url}/interview/staff?token={doc.get('interviewer_token')}&email={urllib.parse.quote(int_email)}"
+            doc['interviewer_email_delivery'] = send_interviewer_invitation_email(
+                interviewer_name=int_name,
+                interviewer_email=int_email,
+                candidate_name=cand_name,
+                candidate_email=cand_email,
+                requisition_title=doc.get("requisition_title", "Position"),
+                company_name=created_by or "Hiring Team",
+                round_name=round_name,
+                round_type=doc.get("round_type") or "Technical",
+                scheduled_date=doc.get("scheduled_date", ""),
+                scheduled_time=f"{doc.get('scheduled_time', '')} ({doc.get('scheduled_timezone', 'Asia/Kolkata')})",
+                duration_minutes=int(doc.get("duration_minutes", 45)),
+                meeting_link=int_room_link,
+                staff_portal_link=int_portal_link,
+                instructions=doc.get("instructions", ""),
+            )
+        except Exception as int_err:
+            doc['interviewer_email_delivery'] = {'status': 'failed', 'reason': f'Email could not be delivered: {str(int_err)}'}
+            print(f"[INTERVIEWER EMAIL DISPATCH ERROR] {int_err}")
 
     # Automatically notify Telegram if connected
     try:
@@ -995,19 +1242,28 @@ def get_candidate_rounds_by_token(token_or_email: str) -> List[dict]:
         token_or_email_clean = token_or_email.strip().lower()
         all_rounds = session.query(InterviewRound).all()
         matched = []
+        domain = _resolve_interview_domain()
         for r in all_rounds:
             c_token = (r.candidate_token or "").strip().lower()
             c_email = (r.candidate_email or "").strip().lower()
-            if c_token and c_token == token_or_email_clean:
+            if (c_token and c_token == token_or_email_clean) or (c_email and c_email == token_or_email_clean):
                 rdoc = r.to_doc()
+                if r.requisition_id:
+                    try:
+                        from modules.requisition.domain.models import Requisition
+                        req = session.query(Requisition).filter(Requisition.id == r.requisition_id).first()
+                        if req and getattr(req, "company_name", None):
+                            rdoc["company_name"] = req.company_name
+                    except Exception:
+                        pass
                 exp_info = get_round_expiration_info(r)
                 rdoc["is_expired"] = exp_info["is_expired"]
                 rdoc["expires_at"] = exp_info["expires_at"]
                 rdoc["remaining_seconds"] = exp_info["remaining_seconds"]
+                rdoc["meeting_link"] = f"{domain}/interview/room/{r.id}"
                 rdoc.pop('interviewer_token', None)
-                rdoc.pop('candidate_passcode', None)
                 matched.append(rdoc)
-        matched.sort(key=lambda x: x.get("round_number", 1))
+        matched.sort(key=lambda x: (x.get("scheduled_date") or "", x.get("scheduled_time") or ""), reverse=True)
         return matched
 
 
@@ -1476,7 +1732,14 @@ def generate_livekit_token(
     api_key = os.getenv("LIVEKIT_API_KEY", "").strip()
     api_secret = os.getenv("LIVEKIT_API_SECRET", "").strip()
     if not livekit_url or not api_key or not api_secret:
-        raise ValueError("Interview video service is not configured. Configure LIVEKIT_URL, LIVEKIT_API_KEY and LIVEKIT_API_SECRET.")
+        return {
+            "token": f"webrtc_local_{uuid.uuid4().hex[:12]}",
+            "url": "",
+            "room": room_name or f"room_{identity}",
+            "identity": identity,
+            "role": role,
+            "mode": "webrtc_direct",
+        }
     
     now = int(time.time())
     exp = now + (6 * 3600)  # 6 hours valid
