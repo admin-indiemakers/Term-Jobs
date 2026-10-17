@@ -1,47 +1,9 @@
-import { useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Backdrop } from "./Backdrop";
 import { EASE, fadeUp, lineReveal } from "./animations";
-import { useCountUp } from "./useCountUp";
-import GeneralTalentPoolModal from "../GeneralTalentPoolModal";
+import { HeroVideo } from "./HeroVideo";
 
-const stats = [
-  { label: "Active Requirements", value: 24, suffix: "" },
-  { label: "Verified Talent", value: 1284, suffix: "" },
-  { label: "AI Matches", value: 94, suffix: "%" },
-  { label: "Active Engagements", value: 86, suffix: "" },
-];
-
-function Stat({ label, value, suffix, active }: (typeof stats)[number] & { active: boolean }) {
-  const n = useCountUp(value, active);
-  return (
-    <div className="rounded-xl border border-ink/10 bg-paper/70 p-4 backdrop-blur-sm">
-      <div className="flex items-center gap-2 text-[0.6rem] font-semibold tracking-[0.18em] text-ink-soft uppercase">
-        <motion.span
-          className="h-1.5 w-1.5 rounded-full bg-ink/60"
-          animate={active ? { opacity: [1, 0.25, 1] } : { opacity: 1 }}
-          transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
-        />
-        {label}
-      </div>
-      <div className="mt-3 text-3xl font-extrabold tracking-tight text-ink tabular-nums">
-        {n.toLocaleString()}
-        {suffix}
-      </div>
-    </div>
-  );
-}
-
-export function HeroSection({
-  active,
-  onNext,
-  onOpenTalentPool,
-}: {
-  active: boolean;
-  onNext: () => void;
-  onOpenTalentPool?: () => void;
-}) {
-  const [showPoolModal, setShowPoolModal] = useState(false);
+export function HeroSection({ active, onJoinWaitlist, onJoinTalentPool }: { active: boolean; onJoinWaitlist: () => void; onJoinTalentPool: () => void }) {
   const reduced = useReducedMotion();
   const state = active ? "show" : "hidden";
 
@@ -98,25 +60,20 @@ export function HeroSection({
             animate={state}
             className="mt-10 flex flex-wrap items-center gap-3"
           >
-            {/* Dark glassmorphic button - advances slides without opening modal */}
-            <button
-              type="button"
-              onClick={onNext}
+            {/* Dark glassmorphic button */}
+            <button type="button" onClick={onJoinWaitlist} aria-haspopup="dialog"
               className="group inline-flex items-center gap-2.5 rounded-full bg-ink/80 hover:bg-ink/90 text-paper px-7 py-3.5 text-[0.7rem] font-semibold tracking-[0.18em] uppercase transition-all duration-300 hover:-translate-y-0.5 backdrop-blur-2xl border border-white/20 shadow-[0_12px_36px_rgba(0,0,0,0.22),inset_0_1px_1.5px_rgba(255,255,255,0.35)] active:scale-95 cursor-pointer"
             >
               <span className="w-1.5 h-1.5 rounded-full bg-paper/90 animate-pulse" />
-              <span>Join the Waitlist</span>
+              <span>Join waiting list</span>
               <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
             </button>
-
-            {/* Frosted white glassmorphic button - opens talent pool modal */}
             <button
-              type="button"
-              onClick={onOpenTalentPool || (() => setShowPoolModal(true))}
-              className="group inline-flex items-center gap-3 rounded-full bg-white/55 hover:bg-white/75 text-ink px-7 py-3.5 text-[0.7rem] font-semibold tracking-[0.18em] uppercase transition-all duration-300 hover:-translate-y-0.5 backdrop-blur-2xl border border-white/80 shadow-[0_12px_36px_rgba(0,0,0,0.06),inset_0_1px_2px_rgba(255,255,255,0.95)] active:scale-95 cursor-pointer"
+              type="button" onClick={onJoinTalentPool} aria-haspopup="dialog"
+              className="group inline-flex items-center gap-2.5 rounded-full border border-ink/20 bg-white/60 px-7 py-3.5 text-[0.7rem] font-semibold tracking-[0.18em] text-ink uppercase backdrop-blur-xl transition-all duration-300 hover:-translate-y-0.5 hover:border-ink/40 hover:bg-white/90 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ink active:scale-95"
             >
-              JOIN TALENT
-              <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
+              <span>Join talent pool</span>
+              <span aria-hidden="true" className="transition-transform duration-300 group-hover:translate-x-1">→</span>
             </button>
           </motion.div>
         </div>
@@ -128,49 +85,9 @@ export function HeroSection({
           transition={{ duration: 1.2, ease: EASE, delay: 0.3 }}
           className="relative hidden lg:block"
         >
-          <div className="rounded-2xl border border-ink/10 bg-paper/80 p-5 shadow-[0_40px_90px_-50px_oklch(0.2_0_0/0.45)] backdrop-blur-md md:p-6">
-            <div className="flex items-center justify-between border-b border-ink/10 pb-4">
-              <span className="text-[0.62rem] font-semibold tracking-[0.24em] text-ink uppercase">
-                Workforce Overview
-              </span>
-              <span className="text-[0.6rem] tracking-[0.2em] text-ink-soft uppercase">Live</span>
-            </div>
-            <div className="mt-5 grid grid-cols-2 gap-3">
-              {stats.map((s) => (
-                <Stat key={s.label} {...s} active={active} />
-              ))}
-            </div>
-
-            <motion.div
-              initial={{ opacity: 0, y: 18 }}
-              animate={active ? { opacity: 1, y: 0 } : { opacity: 0, y: 18 }}
-              transition={{ duration: 0.9, ease: EASE, delay: 1.1 }}
-              className="mt-4 rounded-xl border border-ink/12 bg-ink p-4 text-paper"
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-[0.6rem] tracking-[0.2em] text-paper/60 uppercase">Match found</div>
-                  <div className="mt-1.5 text-sm font-bold">Senior Data Engineer · 8 months</div>
-                </div>
-                <div className="text-xl font-extrabold tabular-nums">96%</div>
-              </div>
-              <div className="mt-4 h-[3px] w-full overflow-hidden rounded-full bg-paper/20">
-                <motion.div
-                  className="h-full bg-paper"
-                  initial={{ width: "0%" }}
-                  animate={active ? { width: "96%" } : { width: "0%" }}
-                  transition={{ duration: 1.4, ease: EASE, delay: 1.3 }}
-                />
-              </div>
-            </motion.div>
-          </div>
+          <HeroVideo active={active} />
         </motion.div>
       </div>
-
-      <GeneralTalentPoolModal
-        isOpen={showPoolModal}
-        onClose={() => setShowPoolModal(false)}
-      />
     </section>
   );
 }

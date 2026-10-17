@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ArrowControl } from "./ArrowControl";
 import { BrandMark } from "./BrandMark";
 import { ComingSoonNotification } from "./ComingSoonNotification";
@@ -11,6 +11,7 @@ import { PageProgress } from "./PageProgress";
 import { SectionNavigation } from "./SectionNavigation";
 import { StatementSection } from "./StatementSection";
 import { TalentSection } from "./TalentSection";
+import { WaitlistModal } from "./WaitlistModal";
 import { WorkflowSection } from "./WorkflowSection";
 import GeneralTalentPoolModal from "../GeneralTalentPoolModal";
 
@@ -20,8 +21,15 @@ const DARK_SECTIONS = new Set([1, 5]);
 export function LandingPage({ enabled = true }: { enabled?: boolean }) {
   const [showComingSoon, setShowComingSoon] = useState(false);
   const [showTalentPoolModal, setShowTalentPoolModal] = useState(false);
+  const [waitlistOpen, setWaitlistOpen] = useState(false);
+  const [talentOpen, setTalentOpen] = useState(false);
 
-  const isModalActive = showComingSoon || showTalentPoolModal;
+  const openTalent = useCallback(() => setTalentOpen(true), []);
+  const closeTalent = useCallback(() => setTalentOpen(false), []);
+  const openWaitlist = useCallback(() => setWaitlistOpen(true), []);
+  const closeWaitlist = useCallback(() => setWaitlistOpen(false), []);
+
+  const isModalActive = showComingSoon || showTalentPoolModal || waitlistOpen || talentOpen;
   const { index, goTo, step } = useHorizontalPanels(TOTAL, enabled && !isModalActive);
   const dark = DARK_SECTIONS.has(index);
 
@@ -41,8 +49,8 @@ export function LandingPage({ enabled = true }: { enabled?: boolean }) {
       <HorizontalScroller index={index}>
         <HeroSection
           active={index === 0}
-          onNext={() => step(1)}
-          onOpenTalentPool={() => setShowTalentPoolModal(true)}
+          onJoinWaitlist={openWaitlist}
+          onJoinTalentPool={openTalent}
         />
         <StatementSection active={index === 1} />
         <WorkflowSection active={index === 2} />
@@ -73,6 +81,7 @@ export function LandingPage({ enabled = true }: { enabled?: boolean }) {
             dark={dark}
             onHomeClick={() => goTo(0)}
             onOpenRolesClick={() => setShowComingSoon(true)}
+            onJoinWaitlist={openWaitlist}
           />
 
           {/* Desktop Navigation (completely untouched for md and up) */}
@@ -107,6 +116,10 @@ export function LandingPage({ enabled = true }: { enabled?: boolean }) {
         isOpen={showTalentPoolModal}
         onClose={() => setShowTalentPoolModal(false)}
       />
+
+      {/* Waitlist and Talent Pool Google Sheets Modal from main */}
+      {talentOpen && <WaitlistModal onClose={closeTalent} talent />}
+      {waitlistOpen && <WaitlistModal onClose={closeWaitlist} />}
     </main>
   );
 }
