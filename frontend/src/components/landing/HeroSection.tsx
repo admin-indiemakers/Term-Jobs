@@ -1,8 +1,9 @@
+import { useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { Link } from "react-router-dom";
 import { Backdrop } from "./Backdrop";
 import { EASE, fadeUp, lineReveal } from "./animations";
 import { useCountUp } from "./useCountUp";
+import GeneralTalentPoolModal from "../GeneralTalentPoolModal";
 
 const stats = [
   { label: "Active Requirements", value: 24, suffix: "" },
@@ -31,7 +32,16 @@ function Stat({ label, value, suffix, active }: (typeof stats)[number] & { activ
   );
 }
 
-export function HeroSection({ active, onNext }: { active: boolean; onNext: () => void }) {
+export function HeroSection({
+  active,
+  onNext,
+  onOpenTalentPool,
+}: {
+  active: boolean;
+  onNext: () => void;
+  onOpenTalentPool?: () => void;
+}) {
+  const [showPoolModal, setShowPoolModal] = useState(false);
   const reduced = useReducedMotion();
   const state = active ? "show" : "hidden";
 
@@ -88,33 +98,24 @@ export function HeroSection({ active, onNext }: { active: boolean; onNext: () =>
             animate={state}
             className="mt-10 flex flex-wrap items-center gap-3"
           >
-            {/* Dark glassmorphic button */}
-            <Link
-              to="/open-roles"
+            {/* Dark glassmorphic button - advances slides without opening modal */}
+            <button
+              type="button"
+              onClick={onNext}
               className="group inline-flex items-center gap-2.5 rounded-full bg-ink/80 hover:bg-ink/90 text-paper px-7 py-3.5 text-[0.7rem] font-semibold tracking-[0.18em] uppercase transition-all duration-300 hover:-translate-y-0.5 backdrop-blur-2xl border border-white/20 shadow-[0_12px_36px_rgba(0,0,0,0.22),inset_0_1px_1.5px_rgba(255,255,255,0.35)] active:scale-95 cursor-pointer"
             >
               <span className="w-1.5 h-1.5 rounded-full bg-paper/90 animate-pulse" />
-              <span>Explore Open Roles</span>
-              <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
-            </Link>
-
-            {/* Frosted white glassmorphic button */}
-            <button
-              type="button"
-              onClick={onNext}
-              className="group inline-flex items-center gap-3 rounded-full bg-white/55 hover:bg-white/75 text-ink px-7 py-3.5 text-[0.7rem] font-semibold tracking-[0.18em] uppercase transition-all duration-300 hover:-translate-y-0.5 backdrop-blur-2xl border border-white/80 shadow-[0_12px_36px_rgba(0,0,0,0.06),inset_0_1px_2px_rgba(255,255,255,0.95)] active:scale-95 cursor-pointer"
-            >
-              Get started
+              <span>Join the Waitlist</span>
               <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
             </button>
 
-            {/* Translucent glassmorphic button */}
+            {/* Frosted white glassmorphic button - opens talent pool modal */}
             <button
               type="button"
-              onClick={onNext}
-              className="group inline-flex items-center gap-3 rounded-full bg-white/35 hover:bg-white/60 text-ink/85 hover:text-ink px-7 py-3.5 text-[0.7rem] font-semibold tracking-[0.18em] uppercase transition-all duration-300 hover:-translate-y-0.5 backdrop-blur-2xl border border-white/60 shadow-[0_8px_28px_rgba(0,0,0,0.04),inset_0_1px_2px_rgba(255,255,255,0.85)] active:scale-95 cursor-pointer"
+              onClick={onOpenTalentPool || (() => setShowPoolModal(true))}
+              className="group inline-flex items-center gap-3 rounded-full bg-white/55 hover:bg-white/75 text-ink px-7 py-3.5 text-[0.7rem] font-semibold tracking-[0.18em] uppercase transition-all duration-300 hover:-translate-y-0.5 backdrop-blur-2xl border border-white/80 shadow-[0_12px_36px_rgba(0,0,0,0.06),inset_0_1px_2px_rgba(255,255,255,0.95)] active:scale-95 cursor-pointer"
             >
-              How it works
+              JOIN TALENT
               <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
             </button>
           </motion.div>
@@ -165,6 +166,11 @@ export function HeroSection({ active, onNext }: { active: boolean; onNext: () =>
           </div>
         </motion.div>
       </div>
+
+      <GeneralTalentPoolModal
+        isOpen={showPoolModal}
+        onClose={() => setShowPoolModal(false)}
+      />
     </section>
   );
 }

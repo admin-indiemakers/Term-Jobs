@@ -1,7 +1,16 @@
 import { Link } from "react-router-dom";
+import { Lock } from "lucide-react";
 import logo from "@/assets/termjobs-logo.png";
 
-export function BrandMark({ dark, onHomeClick }: { dark: boolean; onHomeClick?: () => void }) {
+export function BrandMark({
+  dark,
+  onHomeClick,
+  onOpenRolesClick,
+}: {
+  dark: boolean;
+  onHomeClick?: () => void;
+  onOpenRolesClick?: () => void;
+}) {
   return (
     <header className="absolute top-0 inset-x-0 z-40 px-3.5 py-3.5 sm:px-6 sm:py-5 md:px-12 md:py-6 flex items-center justify-between pointer-events-none">
       {/* Brand logo & name */}
@@ -26,17 +35,19 @@ export function BrandMark({ dark, onHomeClick }: { dark: boolean; onHomeClick?: 
 
       {/* Top right navigation links */}
       <div className="pointer-events-auto flex items-center gap-1.5 sm:gap-2.5 shrink-0">
-        <Link
-          to="/open-roles"
-          className={`inline-flex items-center gap-1.5 sm:gap-2 rounded-full px-2.5 py-1.5 sm:px-4 sm:py-2 text-[0.58rem] sm:text-[0.65rem] font-bold tracking-[0.12em] sm:tracking-[0.16em] uppercase whitespace-nowrap transition-all duration-300 border backdrop-blur-xl active:scale-95 ${
+        <button
+          type="button"
+          onClick={onOpenRolesClick}
+          aria-label="Open Roles (Coming Soon)"
+          className={`inline-flex items-center gap-1.5 sm:gap-2 rounded-full px-2.5 py-1.5 sm:px-4 sm:py-2 text-[0.58rem] sm:text-[0.65rem] font-bold tracking-[0.12em] sm:tracking-[0.16em] uppercase whitespace-nowrap transition-all duration-300 border backdrop-blur-xl active:scale-95 cursor-pointer ${
             dark
               ? "bg-white/[0.08] hover:bg-white/[0.14] border-white/20 text-paper shadow-[0_4px_16px_rgba(0,0,0,0.2),inset_0_1px_1px_rgba(255,255,255,0.15)]"
               : "bg-white/70 hover:bg-white/90 border-ink/12 hover:border-ink/25 text-ink shadow-[0_4px_16px_rgba(0,0,0,0.04),inset_0_1px_1px_rgba(255,255,255,0.8)]"
           }`}
         >
-          <span className="w-1.5 h-1.5 rounded-full bg-current/60 animate-pulse shrink-0" />
+          <Lock className="w-2.5 h-2.5 opacity-70 shrink-0" />
           <span>Open Roles</span>
-        </Link>
+        </button>
 
         <Link
           to="/login"

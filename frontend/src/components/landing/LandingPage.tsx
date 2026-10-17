@@ -1,6 +1,7 @@
-import { useEffect } from "react";
+import { useState, useEffect } from "react";
 import { ArrowControl } from "./ArrowControl";
 import { BrandMark } from "./BrandMark";
+import { ComingSoonNotification } from "./ComingSoonNotification";
 import { FeaturesSection } from "./FeaturesSection";
 import { FinalCTA } from "./FinalCTA";
 import { HeroSection } from "./HeroSection";
@@ -11,12 +12,17 @@ import { SectionNavigation } from "./SectionNavigation";
 import { StatementSection } from "./StatementSection";
 import { TalentSection } from "./TalentSection";
 import { WorkflowSection } from "./WorkflowSection";
+import GeneralTalentPoolModal from "../GeneralTalentPoolModal";
 
 const TOTAL = 6;
 const DARK_SECTIONS = new Set([1, 5]);
 
 export function LandingPage({ enabled = true }: { enabled?: boolean }) {
-  const { index, goTo, step } = useHorizontalPanels(TOTAL, enabled);
+  const [showComingSoon, setShowComingSoon] = useState(false);
+  const [showTalentPoolModal, setShowTalentPoolModal] = useState(false);
+
+  const isModalActive = showComingSoon || showTalentPoolModal;
+  const { index, goTo, step } = useHorizontalPanels(TOTAL, enabled && !isModalActive);
   const dark = DARK_SECTIONS.has(index);
 
   useEffect(() => {
@@ -33,12 +39,22 @@ export function LandingPage({ enabled = true }: { enabled?: boolean }) {
   return (
     <main className="relative h-dvh w-screen max-w-full overflow-hidden bg-paper">
       <HorizontalScroller index={index}>
-        <HeroSection active={index === 0} onNext={() => step(1)} />
+        <HeroSection
+          active={index === 0}
+          onNext={() => step(1)}
+          onOpenTalentPool={() => setShowTalentPoolModal(true)}
+        />
         <StatementSection active={index === 1} />
         <WorkflowSection active={index === 2} />
-        <TalentSection active={index === 3} />
+        <TalentSection
+          active={index === 3}
+          onOpenRolesClick={() => setShowComingSoon(true)}
+        />
         <FeaturesSection active={index === 4} />
-        <FinalCTA active={index === 5} />
+        <FinalCTA
+          active={index === 5}
+          onOpenRolesClick={() => setShowComingSoon(true)}
+        />
       </HorizontalScroller>
 
       {enabled && (
@@ -53,7 +69,11 @@ export function LandingPage({ enabled = true }: { enabled?: boolean }) {
             }}
           />
 
-          <BrandMark dark={dark} onHomeClick={() => goTo(0)} />
+          <BrandMark
+            dark={dark}
+            onHomeClick={() => goTo(0)}
+            onOpenRolesClick={() => setShowComingSoon(true)}
+          />
 
           {/* Desktop Navigation (completely untouched for md and up) */}
           <div className="hidden md:block">
@@ -74,6 +94,19 @@ export function LandingPage({ enabled = true }: { enabled?: boolean }) {
           />
         </>
       )}
+
+      {/* Modern Glassmorphic Coming Soon / Locked Notification */}
+      <ComingSoonNotification
+        isOpen={showComingSoon}
+        onClose={() => setShowComingSoon(false)}
+        onJoinWaitlist={() => setShowTalentPoolModal(true)}
+      />
+
+      {/* General Talent Pool / Waitlist Modal */}
+      <GeneralTalentPoolModal
+        isOpen={showTalentPoolModal}
+        onClose={() => setShowTalentPoolModal(false)}
+      />
     </main>
   );
 }

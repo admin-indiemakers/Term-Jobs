@@ -2396,26 +2396,6 @@ function HiringManagerDashboardContent() {
             <button
               type="button"
               disabled={isAiTyping}
-              onClick={() => handleSendPrompt('Also suggest 5 potential candidates from our candidate pool')}
-              className="px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl bg-white hover:bg-gray-50 border-0 text-[10.5px] sm:text-xs font-semibold text-gray-700 shadow-xs hover:shadow-sm transition-all cursor-pointer flex items-center gap-1 sm:gap-1.5 active:scale-95 disabled:opacity-50 whitespace-nowrap"
-            >
-              <Users size={12} className="text-gray-600 shrink-0" />
-              <span>Screen candidates</span>
-            </button>
-
-            <button
-              type="button"
-              disabled={isAiTyping}
-              onClick={() => handleSendPrompt('Compare top shortlisted candidates and their match scores')}
-              className="px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl bg-white hover:bg-gray-50 border-0 text-[10.5px] sm:text-xs font-semibold text-gray-700 shadow-xs hover:shadow-sm transition-all cursor-pointer flex items-center gap-1 sm:gap-1.5 active:scale-95 disabled:opacity-50 whitespace-nowrap"
-            >
-              <BarChart2 size={12} className="text-gray-600 shrink-0" />
-              <span>Compare candidates</span>
-            </button>
-
-            <button
-              type="button"
-              disabled={isAiTyping}
               onClick={() => handleSendPrompt('Schedule an interview')}
               className="hidden sm:flex px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl bg-white hover:bg-gray-50 border-0 text-[10.5px] sm:text-xs font-semibold text-gray-700 shadow-xs hover:shadow-sm transition-all cursor-pointer items-center gap-1 sm:gap-1.5 active:scale-95 disabled:opacity-50 whitespace-nowrap"
             >
@@ -3212,17 +3192,8 @@ function HiringManagerDashboardContent() {
                 <button
                   type="button"
                   disabled={isAiTyping}
-                  onClick={() => handleSendPrompt('Also suggest 5 potential candidates from our candidate pool')}
-                  className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-gray-50 border border-gray-200/80 text-[11px] font-medium text-gray-700 shadow-2xs transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
-                  title="Show me candidates for DevSecOps"
-                >
-                  DevSecOps candidates
-                </button>
-                <button
-                  type="button"
-                  disabled={isAiTyping}
                   onClick={() => handleSendPrompt('Schedule an interview')}
-                  className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-gray-50 border border-gray-200/80 text-[11px] font-medium text-gray-700 shadow-2xs transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                  className="hidden sm:inline-flex px-3.5 py-1.5 rounded-xl bg-white hover:bg-gray-50 border border-gray-200/80 text-[11px] font-medium text-gray-700 shadow-2xs transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
                   title="Schedule an interview"
                 >
                   Schedule interview
@@ -3231,7 +3202,7 @@ function HiringManagerDashboardContent() {
                   type="button"
                   disabled={isAiTyping}
                   onClick={() => handleSendPrompt('Help me create a new requisition for a DevSecOps Engineer')}
-                  className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-gray-50 border border-gray-200/80 text-[11px] font-medium text-gray-700 shadow-2xs transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                  className="hidden sm:inline-flex px-3.5 py-1.5 rounded-xl bg-white hover:bg-gray-50 border border-gray-200/80 text-[11px] font-medium text-gray-700 shadow-2xs transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
                   title="Draft a new requisition"
                 >
                   Draft requisition

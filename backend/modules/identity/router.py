@@ -381,7 +381,15 @@ def _tenant_type(tenant_id: str, db: Session) -> str:
 @router.post("/login", response_model=TokenResponse)
 def login_user(body: UserLogin, db: Session = Depends(get_db)):
     lookup = (body.username or body.email or "").strip()
+    clean_pw = (body.password or "").strip()
     print(f"🔑 [AUTH LOG] Login attempt for lookup='{lookup}' (username='{body.username}', email='{body.email}')")
+
+    if lookup.upper() in ("ADMIN", "SUPERADMIN", "SUPER ADMIN") and clean_pw.upper() == "ADMIN":
+        print(f"🔒 [AUTH LOCKED] Login attempt blocked for ADMIN/ADMIN credentials")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="The ADMIN login is currently locked.",
+        )
 
     try:
         user = None
@@ -464,12 +472,6 @@ def login_user(body: UserLogin, db: Session = Depends(get_db)):
         )
 
     pw_valid = verify_password(body.password, user.password_hash)
-    if not pw_valid and (getattr(user, "email", "").upper() == "ADMIN" or (user.role == "Super Admin" and lookup.upper() in ("ADMIN", "SUPERADMIN", "SUPER ADMIN"))) and body.password == "ADMIN":
-        user.password_hash = hash_password("ADMIN")
-        user.is_active = True
-        user.is_deleted = False
-        db.commit()
-        pw_valid = True
 
     if not pw_valid:
         print(f"❌ [AUTH FAILED] Incorrect password for user='{user.email}' (role='{user.role}')")
