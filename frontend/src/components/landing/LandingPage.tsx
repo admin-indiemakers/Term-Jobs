@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { WaitlistModal } from './WaitlistModal';
+import { useCallback, useEffect, useState } from "react";
 import { ArrowControl } from "./ArrowControl";
 import { BrandMark } from "./BrandMark";
 import { FeaturesSection } from "./FeaturesSection";
@@ -16,8 +17,14 @@ const TOTAL = 6;
 const DARK_SECTIONS = new Set([1, 5]);
 
 export function LandingPage({ enabled = true }: { enabled?: boolean }) {
-  const { index, goTo, step } = useHorizontalPanels(TOTAL, enabled);
+  const [waitlistOpen, setWaitlistOpen] = useState(false);
+  const [talentOpen, setTalentOpen] = useState(false);
+  const openTalent = useCallback(() => setTalentOpen(true), []);
+  const closeTalent = useCallback(() => setTalentOpen(false), []);
+  const { index, goTo, step } = useHorizontalPanels(TOTAL, enabled && !waitlistOpen && !talentOpen);
   const dark = DARK_SECTIONS.has(index);
+  const openWaitlist = useCallback(() => setWaitlistOpen(true), []);
+  const closeWaitlist = useCallback(() => setWaitlistOpen(false), []);
 
   useEffect(() => {
     if (!enabled) return;
@@ -33,7 +40,7 @@ export function LandingPage({ enabled = true }: { enabled?: boolean }) {
   return (
     <main className="relative h-dvh w-screen max-w-full overflow-hidden bg-paper">
       <HorizontalScroller index={index}>
-        <HeroSection active={index === 0} onNext={() => step(1)} />
+        <HeroSection active={index === 0} onJoinWaitlist={openWaitlist} onJoinTalentPool={openTalent} />
         <StatementSection active={index === 1} />
         <WorkflowSection active={index === 2} />
         <TalentSection active={index === 3} />
@@ -53,7 +60,7 @@ export function LandingPage({ enabled = true }: { enabled?: boolean }) {
             }}
           />
 
-          <BrandMark dark={dark} onHomeClick={() => goTo(0)} />
+          <BrandMark dark={dark} onHomeClick={() => goTo(0)} onJoinWaitlist={openWaitlist} />
 
           {/* Desktop Navigation (completely untouched for md and up) */}
           <div className="hidden md:block">
@@ -74,6 +81,8 @@ export function LandingPage({ enabled = true }: { enabled?: boolean }) {
           />
         </>
       )}
+      {talentOpen && <WaitlistModal onClose={closeTalent} talent /> }
+      {waitlistOpen && <WaitlistModal onClose={closeWaitlist} />}
     </main>
   );
 }
