@@ -525,7 +525,7 @@ def get_company_full_knowledge(tenant_id: str, company_name: str = "Company") ->
 
             skills = struct.get("must_have_skills") or []
             seniority = struct.get("seniority") or "Senior"
-            created_at_val = (r.created_at.isoformat() if hasattr(getattr(r, "created_at", None), "isoformat") else str(getattr(r, "created_at", None) or _utcnow_iso()))
+            created_at_val = (r.created_at.isoformat() if hasattr(getattr(r, "created_at", None), "isoformat") else getattr(r, "created_at", None))
 
             seen_keys.add(f"{title.lower()}:{dept.lower()}")
             knowledge["requisitions"].append({
@@ -557,8 +557,6 @@ def get_company_full_knowledge(tenant_id: str, company_name: str = "Company") ->
                 m_title = d.get("title") or "Untitled Role"
                 m_dept = d.get("department") or "Engineering"
                 k = f"{m_title.lower()}:{m_dept.lower()}"
-                if k in seen_keys:
-                    continue
                 seen_keys.add(k)
                 req_ids.add(m_id)
                 knowledge["requisitions"].append({
@@ -575,7 +573,7 @@ def get_company_full_knowledge(tenant_id: str, company_name: str = "Company") ->
                     "skills": d.get("skills") or [],
                     "vendor_candidate_limit": 2,
                     "client_name": actual_comp_name,
-                    "created_at": d.get("created_at") or _utcnow_iso()
+                    "created_at": d.get("created_at")
                 })
         except Exception as me:
             print("MongoDB reqs merge error:", me)
@@ -1188,6 +1186,13 @@ def run_company_admin_agent_chat(prompt: str, history: list = None, current_user
 
     # Step 1: Ingest live ground-truth enterprise knowledge
     knowledge = get_company_full_knowledge(tenant_id, company_name)
+    from modules.shared.requisition_chat import filtered_requisition_reply
+    requisition_reply = filtered_requisition_reply(
+        prompt, lambda: knowledge.get("requisitions", []), "list_company_requisitions",
+        user_data.get("timezone") or "Asia/Kolkata",
+    )
+    if requisition_reply is not None:
+        return requisition_reply
     actual_company_name = knowledge.get("company", {}).get("name") or company_name
     hms = knowledge.get("hiring_managers", [])
     directors = knowledge.get("directors", [])
