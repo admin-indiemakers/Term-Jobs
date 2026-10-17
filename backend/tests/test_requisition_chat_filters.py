@@ -59,7 +59,7 @@ def test_other_intents_continue_existing_routing(prompt):
 def test_chat_routes_filtered_results_before_model_or_general_directory(agent, entry, tool):
     # Run real entry functions with database/model dependencies replaced; no live services.
     path = Path(__file__).parents[1] / 'modules' / agent / 'agent.py'
-    tree = ast.parse(path.read_text())
+    tree = ast.parse(path.read_text(encoding='utf-8'))
     function = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == entry)
     function.decorator_list = []
     loader = Mock(return_value=ROWS)
@@ -79,7 +79,7 @@ def test_chat_routes_filtered_results_before_model_or_general_directory(agent, e
 
 def test_hiring_loader_preserves_same_title_records_and_missing_timestamps():
     path = Path(__file__).parents[1] / 'modules/hiring_manager_agent/agent.py'
-    tree = ast.parse(path.read_text())
+    tree = ast.parse(path.read_text(encoding='utf-8'))
     function = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'list_hiring_requisitions')
     docs = [
         {'id': 'a', 'title': 'Engineer', 'status': 'Open', 'created_at': '2026-10-17T00:00:00Z'},
