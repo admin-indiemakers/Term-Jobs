@@ -47,7 +47,8 @@ from modules.identity.router import router as identity_router
 from modules.notifications.router import router as notifications_router
 from modules.notifications.services.notification_service import notify_requisition_published
 from modules.requisition.domain import models, schemas
-from modules.requisition.domain.deadline import validate_submission_deadline
+from modules.requisition.domain.deadline import validate_submission_deadline, submission_deadline_passed
+from modules.requisition.services.deadline_policy import enforce_approval_deadline, DeadlineExpired
 from modules.requisition.domain.state import StateMachine
 from modules.shared.db import get_session, init_db, _utcnow
 from modules.shared.cache import cache as _cache
@@ -139,18 +140,10 @@ app = FastAPI(
 
 @app.exception_handler(404)
 async def custom_404_handler(request: Request, exc):
-    return JSONResponse(
-        status_code=404,
-        content={
-            "error": "Route Not Found",
-            "requested_url": str(request.url),
-            "scope_path": request.scope.get("path"),
-            "scope_root_path": request.scope.get("root_path"),
-            "scope_raw_path": str(request.scope.get("raw_path")),
-            "query_params": dict(request.query_params),
-            "headers": dict(request.headers),
-        }
-    )
+    detail = getattr(exc, 'detail', None)
+    if detail and detail != 'Not Found':
+        return JSONResponse(status_code=404, content={'detail': detail})
+    return JSONResponse(status_code=404, content={'error': 'Route Not Found'})
 
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
@@ -709,63 +702,44 @@ _auto_close_last_run: float = 0.0  # module-level debounce
 
 
 def _auto_close_expired() -> None:
-    """Auto-close Published requisitions whose submission deadline has passed.
-
-    Debounced: runs at most once per 5 minutes to avoid repeated DB scans.
-    """
+    """Close expired approval queues and published roles before serving cached lists."""
     global _auto_close_last_run
     import time as _time
-    import datetime as _dt
-
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    today = datetime.now(ZoneInfo('Asia/Kolkata')).date()
     now = _time.time()
-    if now - _auto_close_last_run < 300:  # 5 min debounce
+    last_day = datetime.fromtimestamp(_auto_close_last_run, ZoneInfo('Asia/Kolkata')).date()
+    if now - _auto_close_last_run < 300 and today == last_day:
         return
+    changed = False
+    with get_session() as session:
+        rows = session.query(models.Requisition).filter(models.Requisition.status.in_(
+            ['Published', 'Active', 'Approved', 'PendingApproval', 'Pending Approval', 'Pending_Approval', 'pending_approval']
+        )).all()
+        for req in rows:
+            role = req.structured_role or (req.intake_meta or {}).get('prefill') or {}
+            ends_on = role.get('ends_on')
+            if submission_deadline_passed(role, today) or submission_deadline_passed({'submission_deadline': ends_on}, today):
+                req.status = schemas.RequisitionStatus.CLOSED.value
+                req.updated_at = _utcnow()
+                changed = True
+        if changed:
+            session.commit()
+            _cache.clear()
     _auto_close_last_run = now
 
+
+def _require_approval_deadline(requisition_id):
     with get_session() as session:
-        # Only query PUBLISHED requisitions (avoids full table scan)
-        for req in session.query(models.Requisition).filter(
-            models.Requisition.status == schemas.RequisitionStatus.PUBLISHED.value
-        ).all():
-            sr = req.structured_role or {}
-            deadline = sr.get("submission_deadline")
-            ends_on = sr.get("ends_on")
-            today = _dt.date.today()
-            should_close = False
-
-            if deadline:
-                try:
-                    deadline_date = _dt.date.fromisoformat(str(deadline)[:10])
-                    if deadline_date < today:
-                        should_close = True
-                except ValueError:
-                    pass
-
-            if not should_close and ends_on:
-                try:
-                    ends_on_date = _dt.date.fromisoformat(str(ends_on)[:10])
-                    if ends_on_date < today:
-                        should_close = True
-                except ValueError:
-                    pass
-
-            if should_close:
-                try:
-                    sm = StateMachine(schemas.RequisitionStatus(req.status))
-                    sm.transition(schemas.RequisitionStatus.CLOSED)
-                    req.status = sm.status.value
-                except Exception:
-                    req.status = schemas.RequisitionStatus.CLOSED.value
-                session.commit()
-                try:
-                    from modules.shared.db import db
-                    db["requisitions"].update_one(
-                        {"id": req.id},
-                        {"$set": {"status": schemas.RequisitionStatus.CLOSED.value, "updated_at": _dt.datetime.now(_dt.timezone.utc).isoformat()}}
-                    )
-                except Exception:
-                    pass
-                req = None  # release for next iteration
+        req = session.get(models.Requisition, requisition_id)
+        if not req:
+            raise HTTPException(status_code=404, detail='Requisition not found')
+        try:
+            enforce_approval_deadline(session, req)
+        except DeadlineExpired as exc:
+            _cache.clear()
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 def _auto_check_shortlists_48h() -> None:
@@ -1568,14 +1542,14 @@ def list_requisitions(
 ) -> list[dict]:
     from modules.identity.domain.models import VendorEngagement
 
+    _auto_close_expired()
+
     # Cache requisitions per user for 30s to avoid repeated DB scans
     _cache_key = f"reqs:{current_user.id}:{current_user.role}:{current_user.tenant_id}:{'dashboard' if dashboard else 'full'}"
     _cached = None if fresh else _cache.get(_cache_key)
     if _cached is not None:
         return _cached
 
-    import threading
-    threading.Thread(target=_auto_close_expired, daemon=True).start()
     with get_session() as session:
         query = session.query(models.Requisition).order_by(models.Requisition.created_at.desc())
         if current_user.role == "Super Admin":
@@ -3637,6 +3611,7 @@ def approve_requisition(requisition_id: str, body: ApproveIn | None = None, curr
     _require_writable(current_user)
     req_dict = _get_requisition(requisition_id)
     _require_tenant(req_dict, current_user)
+    _require_approval_deadline(requisition_id)
     status_str = str(req_dict.get("status") or "").lower()
     if status_str in ("published", "active") and str(current_user.role or "").strip().lower() in ("hiring manager", "hiring_manager"):
         raise HTTPException(status_code=400, detail="This requisition is already approved, and cannot be edited.")
@@ -3721,6 +3696,7 @@ def director_approve_requisition(
     req = _get_requisition(requisition_id)
     _require_tenant(req, current_user)
 
+    _require_approval_deadline(requisition_id)
     with get_session() as session:
         db_req = session.get(models.Requisition, requisition_id)
         if db_req:
@@ -3832,6 +3808,7 @@ def submit_requisition_for_director_approval_route(
     req = _get_requisition(requisition_id)
     _require_tenant(req, current_user)
 
+    _require_approval_deadline(requisition_id)
     now_iso = _utcnow().isoformat()
     with get_session() as session:
         db_req = session.get(models.Requisition, requisition_id)
@@ -3891,6 +3868,7 @@ def publish_requisition(
 ) -> dict:
     _require_tenant(_get_requisition(requisition_id), current_user)
 
+    _require_approval_deadline(requisition_id)
     db_req = _get_requisition(requisition_id)
     is_director_or_admin = current_user.role in ("Director", "Admin", "Super Admin")
 

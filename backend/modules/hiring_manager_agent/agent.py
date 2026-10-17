@@ -958,7 +958,7 @@ def list_hiring_requisitions(user_id: str, tenant_id: str, status_filter: str = 
         for d in docs:
             r_id = d.get("id") or str(d.get("_id", ""))
             title = d.get("title") or "Untitled Requisition"
-            key = (title.lower().strip(), (d.get("status") or "").lower().strip())
+            key = str(r_id)
             if not title or key in seen:
                 continue
             seen.add(key)
@@ -983,7 +983,7 @@ def list_hiring_requisitions(user_id: str, tenant_id: str, status_filter: str = 
                 "department": dept,
                 "location": loc,
                 "salary_range": salary,
-                "created_at": d.get("created_at") or _utcnow_iso()
+                "created_at": d.get("created_at")
             })
     except Exception as e:
         print("Error reading requisitions from DB:", e)
@@ -2878,6 +2878,13 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
     company_name = current_user.get("company_name") or current_user.get("tenant_name") or "Client Workspace"
     user_id = str(current_user.get("id") or "hm-user")
     tenant_id = str(current_user.get("tenant_id") or "local")
+    from modules.shared.requisition_chat import filtered_requisition_reply
+    requisition_reply = filtered_requisition_reply(
+        prompt, lambda: list_hiring_requisitions(user_id, tenant_id, "all"),
+        "list_hiring_requisitions", current_user.get("timezone") or "Asia/Kolkata",
+    )
+    if requisition_reply is not None:
+        return requisition_reply
     calendar_context = current_user.get("google_calendar") or {}
     workforce_result = workforce_chat_reply(prompt)
     if workforce_result is not None:

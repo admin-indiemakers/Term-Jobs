@@ -335,6 +335,20 @@ export default function DirectorDashboard({ view = 'overview' }) {
 
   useEffect(loadAll, [token]);
 
+  const deadlineRefreshRef = useRef(loadAll);
+  deadlineRefreshRef.current = loadAll;
+  useEffect(() => {
+    if (!token) return;
+    const refresh = () => deadlineRefreshRef.current(true);
+    let day = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    const timer = setInterval(() => {
+      const nextDay = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+      if (nextDay !== day) { day = nextDay; refresh(); }
+    }, 1000);
+    window.addEventListener('focus', refresh);
+    return () => { clearInterval(timer); window.removeEventListener('focus', refresh); };
+  }, [token]);
+
   const handleTemplateUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;

@@ -108,16 +108,20 @@ def load_questions(session, round_obj) -> list:
     submission = db["candidate_submissions"].find_one({"requisition_id": req.id, "$or": identity})
     if not submission:
         raise ValueError("A candidate application linked to this requisition is required.")
-    if submission.get('tenant_id') not in (None, req.tenant_id):
-        raise ValueError('The candidate application does not belong to this interview company.')
     resume = recover_resume_text(submission)
     # Portal outreach applications reference the original resume instead of copying it.
     if not has_resume_evidence(resume):
         application_email = str(submission.get('candidate_email') or round_obj.candidate_email or '').strip().lower()
-        linked = db['candidates'].find_one({'id': submission['candidate_id']}) if submission.get('candidate_id') else None
+        allowed_tenants = list({req.tenant_id, submission.get('tenant_id')} - {None, ''})
+        linked = db['candidates'].find_one({'id': submission['candidate_id'], '$or': [
+            {'tenant_id': {'$in': allowed_tenants}}, {'tenant_id': None}
+        ]}) if submission.get('candidate_id') else None
         if not linked or not (has_resume_evidence(linked) or linked.get('resume_pdf')):
             # Older applications may omit candidate_id; resolve the exact application email only.
-            sources = list(db['candidates'].find({'candidate_email': application_email})) if application_email else []
+            sources = list(db['candidates'].find({
+                'candidate_email': {'$regex': '^' + re.escape(application_email) + '$', '$options': 'i'},
+                'tenant_id': {'$in': allowed_tenants}
+            })) if application_email else []
             sources = [source for source in sources if has_resume_evidence(source) or source.get('resume_pdf')]
             linked = sources[0] if len(sources) == 1 else None
         if linked:
@@ -126,6 +130,8 @@ def load_questions(session, round_obj) -> list:
             if source_email and application_email and source_email != application_email:
                 raise ValueError('The linked resume does not match this application. Ask the hiring team to correct it.')
             resume = recover_resume_text(linked)
+    if not has_resume_evidence(resume):
+        raise ValueError('No readable resume is attached to this application. Ask the hiring team to upload or link the candidate resume for this company, then retry question preparation.')
     questions = build_questions(resume, req.to_doc())
     round_obj.interview_questions = questions
     session._track(round_obj)

@@ -195,3 +195,60 @@ def test_recording_credential_cannot_authorize_other_round_or_chat(monkeypatch, 
     database.interview_rounds.insert_one({'id': 'other-round', 'tenant_id': 'company-b', 'requisition_id': 'req-b'})
     assert client.get('/interviews/rounds/other-round/recording', params={'media_token': media_token}).status_code == 403
     assert client.get('/interviews/rounds/round-a/chat', params={'media_token': media_token}).status_code == 403
+
+
+def test_candidate_can_prepare_questions_after_detail_redacts_tokens(monkeypatch, database):
+    persistence = importlib.import_module('modules.shared.db')
+    monkeypatch.setattr(persistence, 'db', database)
+    router = importlib.import_module('modules.interview.router')
+    monkeypatch.setattr(router, 'db', database)
+    database.requisitions.update_one({'id': 'req-a'}, {'$set': {'structured_role': {'must_have_skills': ['Python']}}})
+    database.candidate_submissions.update_one({'id': 'sub-a'}, {'$set': {'resume_text': 'Built Python APIs and owned production deployments.'}})
+    database.interview_rounds.update_one({'id': 'round-a'}, {'$set': {'candidate_submission_id': 'sub-a', 'candidate_email': 'same@example.com'}})
+    app = FastAPI()
+    app.include_router(router.router)
+    client = TestClient(app)
+    response = client.get('/interviews/rounds/round-a/questions?token=candidate-secret')
+    assert response.status_code == 200
+    assert len(response.json()['questions']) == 4
+    assert client.get('/interviews/rounds/round-a/questions?token=wrong-invitation').status_code == 403
+
+
+def test_submission_accepts_verified_url_invitation_without_duplicate_body_token(monkeypatch, database):
+    router = importlib.import_module('modules.interview.router')
+    monkeypatch.setattr(router, 'db', database)
+    calls = []
+
+    async def analyze(**kwargs):
+        calls.append(kwargs)
+        return {'round_id': kwargs['round_id'], 'status': 'Completed'}
+
+    monkeypatch.setattr(router, 'analyze_round_communication', analyze)
+    app = FastAPI()
+    app.include_router(router.router, prefix='/api')
+    client = TestClient(app)
+    url = '/api/interviews/rounds/round-a/analyze-communication'
+    payload = {'transcript_turns': [{'speaker': 'candidate', 'text': 'My answer'}], 'call_duration_seconds': 60}
+    response = client.post(url + '?token=candidate-secret', json=payload)
+    assert response.status_code == 200
+    assert response.json()['status'] == 'Completed'
+    assert calls[0]['round_id'] == 'round-a'
+    assert calls[0]['transcript_turns'] == payload['transcript_turns']
+    assert client.post(url + '?token=foreign-invitation', json=payload).status_code == 403
+    assert client.post(url, json=payload).status_code == 403
+    assert len(calls) == 1
+
+
+def test_submission_retains_actionable_validation_error(monkeypatch, database):
+    router = importlib.import_module('modules.interview.router')
+    monkeypatch.setattr(router, 'db', database)
+
+    async def analyze(**kwargs):
+        raise ValueError('A saved video recording is required before assessment.')
+
+    monkeypatch.setattr(router, 'analyze_round_communication', analyze)
+    app = FastAPI()
+    app.include_router(router.router, prefix='/api')
+    response = TestClient(app).post('/api/interviews/rounds/round-a/analyze-communication?token=candidate-secret', json={})
+    assert response.status_code == 422
+    assert response.json()['detail'] == 'A saved video recording is required before assessment.'

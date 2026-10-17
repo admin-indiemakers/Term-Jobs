@@ -16,6 +16,7 @@ from .. import events
 from ..agent.graph import JobRequirementAgent
 from ..domain import models
 from ..domain.deadline import validate_submission_deadline
+from .deadline_policy import enforce_approval_deadline
 from ..domain.schemas import (
     RequisitionStatus,
     RoleIntent,
@@ -236,6 +237,9 @@ class RequisitionService:
         edited_role: StructuredRole | None = None,
     ) -> tuple[dict, Any]:
         """Approve the generated role (optionally with human edits)."""
+        with self.session_factory() as session:
+            req = session.get(models.Requisition, requisition_id)
+            enforce_approval_deadline(session, req)
         resume = {"decision": "approved"}
         if edited_role is not None:
             resume["edited_role"] = edited_role.model_dump()
@@ -268,6 +272,7 @@ class RequisitionService:
     def publish(self, requisition_id: str, by: str | None = None) -> models.Requisition:
         with self.session_factory() as session:
             req = session.get(models.Requisition, requisition_id)
+            enforce_approval_deadline(session, req)
             if rate_card_variance(req.structured_role):
                 raise ValueError(
                     "Your ceiling is above the agreed rate card. HR must approve "

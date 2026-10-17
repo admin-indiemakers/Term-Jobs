@@ -1249,7 +1249,7 @@ export default function RequisitionOverview({ section }) {
     setLoading(true);
     setError('');
     try {
-      const reqs = await request('/api/requisitions', { token, forceRefresh: force }).catch(() => []);
+      const reqs = await request('/api/requisitions?fresh=true', { token, noCache: true }).catch(() => []);
       const reqList = Array.isArray(reqs) ? reqs : reqs?.requisitions || [];
       const rows = reqList.map((r) => ({
         ...r,
@@ -1328,6 +1328,18 @@ export default function RequisitionOverview({ section }) {
       setDeleting(false);
     }
   };
+
+  useEffect(() => {
+    if (!token) return;
+    const refresh = () => loadData(true);
+    let day = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    const timer = setInterval(() => {
+      const nextDay = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+      if (nextDay !== day) { day = nextDay; refresh(); }
+    }, 1000);
+    window.addEventListener('focus', refresh);
+    return () => { clearInterval(timer); window.removeEventListener('focus', refresh); };
+  }, [token, loadData]);
 
   // Live Section Counts
   const counts = useMemo(() => {

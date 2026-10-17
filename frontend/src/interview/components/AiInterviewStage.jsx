@@ -92,7 +92,7 @@ export function AiInterviewStage({
 
   // Auto-record candidate video/audio stream using MediaRecorder (if not handled centrally by parent InterviewRoom)
   useEffect(() => {
-    if (round?.status === 'Completed' || isCompleted) return;
+    if (round?.status === 'Completed' || isCompleted || questions.length !== 4 || questionLoadError) return;
     if (onSaveProofRecording) return;
     if (typeof window === 'undefined' || typeof MediaRecorder === 'undefined') return;
 
@@ -148,7 +148,7 @@ export function AiInterviewStage({
     return () => {
       isCancelled = true;
     };
-  }, [localStream]);
+  }, [localStream, questions, questionLoadError, isCompleted, round?.status, onSaveProofRecording]);
 
   useEffect(() => () => {
     const recorder = mediaRecorderRef.current;
