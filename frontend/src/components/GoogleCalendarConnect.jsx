@@ -3,9 +3,9 @@ import { Loader2, RotateCw, Check, AlertCircle, Plus, ChevronDown, Mail, Globe, 
 import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 
-function GoogleCalendarLogo({ size = 26 }) {
+function GoogleCalendarLogo({ size = 26, className = '' }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <svg width={size} height={size} className={className} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
       <rect x="2" y="2" width="28" height="28" rx="6" fill="white" stroke="#E5E7EB" strokeWidth="0.8" />
       <path d="M2 8C2 4.68629 4.68629 2 8 2H24C27.3137 2 30 4.68629 30 8V9H2V8Z" fill="#1A73E8" />
       <path d="M24 2H22V9H30V8C30 4.68629 27.3137 2 24 2Z" fill="#EA4335" />
@@ -99,36 +99,37 @@ export default function GoogleCalendarConnect({ onStatus, onConnected, variant =
         <button
           type="button"
           onClick={() => setIsPopoverOpen((prev) => !prev)}
-          className={`flex items-center gap-1.5 sm:gap-2 h-7.5 px-2.5 rounded-xl transition-all cursor-pointer select-none text-left border ${
+          className={`flex items-center gap-1 sm:gap-2 h-6.5 sm:h-7.5 px-1.5 sm:px-2.5 rounded-lg sm:rounded-xl transition-all cursor-pointer select-none text-left border ${
             isPopoverOpen
               ? 'bg-white border-black/30 shadow-xs ring-1 ring-black/10'
               : 'bg-white hover:bg-gray-50 border-gray-200/80 shadow-3xs hover:shadow-2xs'
           }`}
           title={status?.email ? `${status.email} (${status.timezone || 'Asia/Kolkata'})` : 'Google Calendar'}
         >
-          <div className="w-4 h-4 flex items-center justify-center shrink-0">
-            <GoogleCalendarLogo size={15} />
+          <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex items-center justify-center shrink-0">
+            <GoogleCalendarLogo size={13} className="sm:hidden" />
+            <GoogleCalendarLogo size={15} className="hidden sm:block" />
           </div>
 
-          <div className="flex items-center gap-1.5 min-w-0">
-            <span className="text-[11.5px] font-bold text-gray-800 tracking-tight whitespace-nowrap">
+          <div className="flex items-center gap-1 sm:gap-1.5 min-w-0">
+            <span className="text-[10px] sm:text-[11.5px] font-bold text-gray-800 tracking-tight whitespace-nowrap">
               Google Calendar
             </span>
 
             {isConnected ? (
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-semibold border border-emerald-100">
+              <span className="inline-flex items-center gap-1 px-1 sm:px-1.5 py-0.5 sm:py-0.2 rounded-full bg-emerald-50 text-emerald-700 text-[9px] sm:text-[10px] font-semibold border border-emerald-100">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 <span className="hidden sm:inline">Connected</span>
               </span>
             ) : (
-              <span className="inline-flex items-center px-1.5 py-0.2 rounded-full bg-gray-100 text-gray-500 text-[10px] font-medium">
+              <span className="inline-flex items-center px-1 sm:px-1.5 py-0.5 sm:py-0.2 rounded-full bg-gray-100 text-gray-500 text-[9px] sm:text-[10px] font-medium">
                 Connect
               </span>
             )}
           </div>
 
           <ChevronDown
-            size={11}
+            size={10}
             className={`text-gray-400 transition-transform duration-150 ${isPopoverOpen ? 'rotate-180 text-black' : ''}`}
           />
         </button>

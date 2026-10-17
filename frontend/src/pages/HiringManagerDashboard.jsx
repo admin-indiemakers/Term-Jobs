@@ -2104,53 +2104,42 @@ function HiringManagerDashboardContent() {
           </div>
         </div>
 
-        <GoogleCalendarConnect onStatus={setGoogleCalendar} onConnected={data => setMessages(previous => [...previous, { sender: 'ai', text: `Google Calendar connected: ${data.email}. Calendar: primary. Timezone: ${data.timezone}. Company interview dates, times and durations can now be edited in the interview card and synced on dispatch.` }])} />
-        {/* Mobile compact tool buttons */}
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={handleStartNewChat}
-            className="w-7 h-7 rounded-lg bg-gray-100 hover:bg-black hover:text-white text-gray-800 flex items-center justify-center transition-all cursor-pointer text-xs"
-            title="New Chat"
-          >
-            <Plus size={13} strokeWidth={2.4} />
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setConversationsSearchQuery('');
-              setIsConversationsDrawerOpen((prev) => !prev);
-            }}
-            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
-              isConversationsDrawerOpen ? 'bg-black text-white' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
-            }`}
-            title="Chat History"
-          >
-            <History size={13} strokeWidth={2} />
-          </button>
-          <button
-            type="button"
-            onClick={() => setIsCalendarModalOpen(true)}
-            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
-              isCalendarModalOpen ? 'bg-black text-white' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
-            }`}
-            title="Calendar"
-          >
-            <Calendar size={13} strokeWidth={2} />
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setToolsSearchQuery('');
-              setIsToolsDrawerOpen((prev) => !prev);
-            }}
-            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
-              isToolsDrawerOpen ? 'bg-black text-white' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
-            }`}
-            title="Tools & Actions"
-          >
-            <MoreHorizontal size={13} strokeWidth={2} />
-          </button>
+        <div className="flex items-center gap-1.5 sm:gap-2 ml-auto">
+          <GoogleCalendarConnect onStatus={setGoogleCalendar} onConnected={data => setMessages(previous => [...previous, { sender: 'ai', text: `Google Calendar connected: ${data.email}. Calendar: primary. Timezone: ${data.timezone}. Company interview dates, times and durations can now be edited in the interview card and synced on dispatch.` }])} />
+          {/* Mobile compact tool buttons */}
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={handleStartNewChat}
+              className="w-7 h-7 rounded-lg bg-gray-100 hover:bg-black hover:text-white text-gray-800 flex items-center justify-center transition-all cursor-pointer text-xs"
+              title="New Chat"
+            >
+              <Plus size={13} strokeWidth={2.4} />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setConversationsSearchQuery('');
+                setIsConversationsDrawerOpen((prev) => !prev);
+              }}
+              className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
+                isConversationsDrawerOpen ? 'bg-black text-white' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+              }`}
+              title="Chat History"
+            >
+              <History size={13} strokeWidth={2} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsCalendarModalOpen(true)}
+              className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
+                isCalendarModalOpen ? 'bg-black text-white' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+              }`}
+              title="Calendar"
+            >
+              <Calendar size={13} strokeWidth={2} />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -2391,26 +2380,6 @@ function HiringManagerDashboardContent() {
             >
               <FileText size={12} className="text-gray-600 shrink-0" />
               <span>Create requisition</span>
-            </button>
-
-            <button
-              type="button"
-              disabled={isAiTyping}
-              onClick={() => handleSendPrompt('Also suggest 5 potential candidates from our candidate pool')}
-              className="px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl bg-white hover:bg-gray-50 border-0 text-[10.5px] sm:text-xs font-semibold text-gray-700 shadow-xs hover:shadow-sm transition-all cursor-pointer flex items-center gap-1 sm:gap-1.5 active:scale-95 disabled:opacity-50 whitespace-nowrap"
-            >
-              <Users size={12} className="text-gray-600 shrink-0" />
-              <span>Screen candidates</span>
-            </button>
-
-            <button
-              type="button"
-              disabled={isAiTyping}
-              onClick={() => handleSendPrompt('Compare top shortlisted candidates and their match scores')}
-              className="px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl bg-white hover:bg-gray-50 border-0 text-[10.5px] sm:text-xs font-semibold text-gray-700 shadow-xs hover:shadow-sm transition-all cursor-pointer flex items-center gap-1 sm:gap-1.5 active:scale-95 disabled:opacity-50 whitespace-nowrap"
-            >
-              <BarChart2 size={12} className="text-gray-600 shrink-0" />
-              <span>Compare candidates</span>
             </button>
 
             <button
@@ -3208,33 +3177,6 @@ function HiringManagerDashboardContent() {
                   title="Summarize my hiring pipeline"
                 >
                   Pipeline summary
-                </button>
-                <button
-                  type="button"
-                  disabled={isAiTyping}
-                  onClick={() => handleSendPrompt('Also suggest 5 potential candidates from our candidate pool')}
-                  className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-gray-50 border border-gray-200/80 text-[11px] font-medium text-gray-700 shadow-2xs transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
-                  title="Show me candidates for DevSecOps"
-                >
-                  DevSecOps candidates
-                </button>
-                <button
-                  type="button"
-                  disabled={isAiTyping}
-                  onClick={() => handleSendPrompt('Schedule an interview')}
-                  className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-gray-50 border border-gray-200/80 text-[11px] font-medium text-gray-700 shadow-2xs transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
-                  title="Schedule an interview"
-                >
-                  Schedule interview
-                </button>
-                <button
-                  type="button"
-                  disabled={isAiTyping}
-                  onClick={() => handleSendPrompt('Help me create a new requisition for a DevSecOps Engineer')}
-                  className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-gray-50 border border-gray-200/80 text-[11px] font-medium text-gray-700 shadow-2xs transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
-                  title="Draft a new requisition"
-                >
-                  Draft requisition
                 </button>
                 <button
                   type="button"

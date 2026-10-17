@@ -1,4 +1,5 @@
 import { motion, useReducedMotion } from "framer-motion";
+import { Lock } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Backdrop } from "./Backdrop";
 import { EASE, fadeUp, lineReveal } from "./animations";
@@ -8,7 +9,13 @@ const roles = [
   { title: "Product Marketing Lead", meta: "Hybrid · 12 months", match: "89% match" },
 ];
 
-export function TalentSection({ active }: { active: boolean }) {
+export function TalentSection({
+  active,
+  onOpenRolesClick,
+}: {
+  active: boolean;
+  onOpenRolesClick?: () => void;
+}) {
   const reduced = useReducedMotion();
   const state = active ? "show" : "hidden";
 
@@ -59,13 +66,16 @@ export function TalentSection({ active }: { active: boolean }) {
             animate={state}
             className="mt-6 sm:mt-8"
           >
-            <Link
-              to="/open-roles"
-              className="group inline-flex items-center gap-3 rounded-full bg-ink/90 hover:bg-ink text-paper px-6 sm:px-7 py-3 sm:py-3.5 text-[0.66rem] sm:text-[0.7rem] font-semibold tracking-[0.18em] uppercase transition-all duration-300 hover:-translate-y-0.5 backdrop-blur-xl border border-white/20 shadow-[0_8px_30px_rgba(0,0,0,0.18),inset_0_1px_1px_rgba(255,255,255,0.3)] active:scale-95 cursor-pointer"
+            <button
+              type="button"
+              onClick={onOpenRolesClick}
+              aria-label="Browse Open Positions (Locked - Coming Soon)"
+              className="group inline-flex items-center gap-2.5 sm:gap-3 rounded-full bg-ink/90 hover:bg-ink text-paper px-6 sm:px-7 py-3 sm:py-3.5 text-[0.66rem] sm:text-[0.7rem] font-semibold tracking-[0.18em] uppercase transition-all duration-300 hover:-translate-y-0.5 backdrop-blur-xl border border-white/20 shadow-[0_8px_30px_rgba(0,0,0,0.18),inset_0_1px_1px_rgba(255,255,255,0.3)] active:scale-95 cursor-pointer"
             >
-              Browse Open Positions
+              <Lock className="w-3 h-3 opacity-75 shrink-0" />
+              <span>Browse Open Positions</span>
               <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
-            </Link>
+            </button>
           </motion.div>
         </div>
 
@@ -84,18 +94,21 @@ export function TalentSection({ active }: { active: boolean }) {
                 <div className="mx-auto mb-6 h-1 w-14 rounded-full bg-ink/15" />
                 <p className="text-[0.7rem] tracking-[0.12em] text-ink-soft uppercase">Good morning 👋</p>
                 <h3 className="mt-2 text-xl font-extrabold tracking-tight">Find work that fits.</h3>
-                <Link
-                  to="/open-roles"
-                  className="mt-5 block rounded-xl border border-ink/12 bg-paper px-3 py-2.5 text-xs text-ink-soft hover:border-ink/30 transition cursor-pointer"
+                <button
+                  type="button"
+                  onClick={onOpenRolesClick}
+                  className="mt-5 w-full text-left flex items-center justify-between rounded-xl border border-ink/12 bg-paper px-3 py-2.5 text-xs text-ink-soft hover:border-ink/30 transition cursor-pointer"
                 >
-                  Search live roles...
-                </Link>
+                  <span>Search live roles...</span>
+                  <Lock className="w-3 h-3 opacity-40 shrink-0" />
+                </button>
                 <div className="mt-4 space-y-3">
                   {roles.map((r, i) => (
-                    <Link
+                    <button
                       key={r.title}
-                      to="/open-roles"
-                      className="block"
+                      type="button"
+                      onClick={onOpenRolesClick}
+                      className="block w-full text-left cursor-pointer"
                     >
                       <motion.div
                         initial={{ opacity: 0, y: 14 }}
@@ -105,11 +118,12 @@ export function TalentSection({ active }: { active: boolean }) {
                       >
                         <div className="text-[0.82rem] font-bold leading-snug">{r.title}</div>
                         <div className="mt-1 text-[0.68rem] text-ink-soft">{r.meta}</div>
-                        <div className="mt-2.5 inline-flex rounded-full bg-ink px-2.5 py-1 text-[0.6rem] font-semibold tracking-[0.1em] text-paper uppercase">
-                          {r.match}
+                        <div className="mt-2.5 inline-flex items-center gap-1.5 rounded-full bg-ink px-2.5 py-1 text-[0.6rem] font-semibold tracking-[0.1em] text-paper uppercase">
+                          <Lock className="w-2.5 h-2.5 opacity-70 shrink-0" />
+                          <span>{r.match}</span>
                         </div>
                       </motion.div>
-                    </Link>
+                    </button>
                   ))}
                 </div>
               </div>

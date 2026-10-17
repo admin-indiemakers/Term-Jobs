@@ -1,4 +1,5 @@
 import { motion, useReducedMotion } from "framer-motion";
+import { Building2, Users } from "lucide-react";
 import { Backdrop } from "./Backdrop";
 import { EASE, fadeUp, lineReveal } from "./animations";
 import { HeroVideo } from "./HeroVideo";
@@ -60,19 +61,29 @@ export function HeroSection({ active, onJoinWaitlist, onJoinTalentPool }: { acti
             animate={state}
             className="mt-10 flex flex-wrap items-center gap-3"
           >
-            {/* Dark glassmorphic button */}
-            <button type="button" onClick={onJoinWaitlist} aria-haspopup="dialog"
-              className="group inline-flex items-center gap-2.5 rounded-full bg-ink/80 hover:bg-ink/90 text-paper px-7 py-3.5 text-[0.7rem] font-semibold tracking-[0.18em] uppercase transition-all duration-300 hover:-translate-y-0.5 backdrop-blur-2xl border border-white/20 shadow-[0_12px_36px_rgba(0,0,0,0.22),inset_0_1px_1.5px_rgba(255,255,255,0.35)] active:scale-95 cursor-pointer"
+            {/* Dark glassmorphic button - Join Waitlist */}
+            <button
+              type="button"
+              onClick={onJoinWaitlist}
+              aria-haspopup="dialog"
+              className="group inline-flex items-center gap-2.5 sm:gap-3 rounded-full bg-ink/80 hover:bg-ink/90 text-paper px-6 sm:px-7 py-3 sm:py-3.5 text-[0.68rem] sm:text-[0.7rem] font-semibold tracking-[0.16em] sm:tracking-[0.18em] uppercase transition-all duration-300 hover:-translate-y-0.5 backdrop-blur-2xl border border-white/20 shadow-[0_12px_36px_rgba(0,0,0,0.22),inset_0_1px_1.5px_rgba(255,255,255,0.35)] active:scale-95 cursor-pointer"
             >
-              <span className="w-1.5 h-1.5 rounded-full bg-paper/90 animate-pulse" />
-              <span>Join waiting list</span>
+              <Building2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-paper/90 shrink-0" />
+              <span className="h-3.5 w-px bg-current/25 shrink-0" aria-hidden="true" />
+              <span>Join Waitlist</span>
               <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
             </button>
+
+            {/* Light glassmorphic button - Join Talent */}
             <button
-              type="button" onClick={onJoinTalentPool} aria-haspopup="dialog"
-              className="group inline-flex items-center gap-2.5 rounded-full border border-ink/20 bg-white/60 px-7 py-3.5 text-[0.7rem] font-semibold tracking-[0.18em] text-ink uppercase backdrop-blur-xl transition-all duration-300 hover:-translate-y-0.5 hover:border-ink/40 hover:bg-white/90 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ink active:scale-95"
+              type="button"
+              onClick={onJoinTalentPool}
+              aria-haspopup="dialog"
+              className="group inline-flex items-center gap-2.5 sm:gap-3 rounded-full border border-ink/20 bg-white/60 px-6 sm:px-7 py-3 sm:py-3.5 text-[0.68rem] sm:text-[0.7rem] font-semibold tracking-[0.16em] sm:tracking-[0.18em] text-ink uppercase backdrop-blur-xl transition-all duration-300 hover:-translate-y-0.5 hover:border-ink/40 hover:bg-white/90 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ink active:scale-95 cursor-pointer"
             >
-              <span>Join talent pool</span>
+              <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-ink/85 shrink-0" />
+              <span className="h-3.5 w-px bg-current/25 shrink-0" aria-hidden="true" />
+              <span>Join Talent</span>
               <span aria-hidden="true" className="transition-transform duration-300 group-hover:translate-x-1">→</span>
             </button>
           </motion.div>
