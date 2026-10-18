@@ -6,6 +6,7 @@ import AssistantWidget from '../components/AssistantWidget';
 import OnboardCompanyModal from '../components/OnboardCompanyModal';
 import OnboardVendorModal from '../components/OnboardVendorModal';
 import CalendarModal from '../components/CalendarModal';
+import { TermJobsLoader } from '../components/TermJobsLoader';
 import {
   Sparkles,
   Menu,
@@ -460,7 +461,7 @@ export default function DashboardLayout() {
   if (authLoading) {
     return (
       <div className="flex h-screen w-screen items-center justify-center bg-[#F8F9FA]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black"></div>
+        <TermJobsLoader size={36} ariaLabel="Loading session..." />
       </div>
     );
   }
@@ -468,7 +469,7 @@ export default function DashboardLayout() {
   if (!user) {
     return (
       <div className="flex h-screen w-screen items-center justify-center bg-[#F8F9FA]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black"></div>
+        <TermJobsLoader size={36} ariaLabel="Loading user..." />
       </div>
     );
   }

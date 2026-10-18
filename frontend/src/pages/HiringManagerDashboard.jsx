@@ -2086,7 +2086,7 @@ function HiringManagerDashboardContent() {
       }}
     >
       {/* Mobile Top Navigation Bar (< lg) */}
-      <div className="lg:hidden shrink-0 flex items-center justify-between px-3 py-2 border-b border-gray-200/80 bg-white/80 backdrop-blur-md z-30">
+      <div className="lg:hidden shrink-0 flex items-center justify-between px-3 py-2 mx-2 mt-2 rounded-2xl border border-gray-200/80 bg-white/80 backdrop-blur-md shadow-xs z-30">
         <div className="flex items-center gap-2">
           <button
             type="button"

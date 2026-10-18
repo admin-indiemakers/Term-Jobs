@@ -79,7 +79,7 @@ export function ComingSoonNotification({
               <div className="min-w-0 flex-1 pt-0.5">
                 <div className="flex items-center gap-2 text-[0.62rem] font-bold uppercase tracking-[0.22em] text-white/70">
                   <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse shrink-0" />
-                  <span>Coming Soon · Directory Locked</span>
+                  <span>Coming Soon </span>
                 </div>
                 <h4 className="mt-1 text-xs sm:text-sm font-extrabold tracking-tight text-white">
                   Open Roles Launching Soon
@@ -101,13 +101,7 @@ export function ComingSoonNotification({
                     <span>Join the Waitlist</span>
                     <ArrowRight className="h-3 w-3 transition-transform duration-300 group-hover:translate-x-0.5" />
                   </button>
-                  <button
-                    type="button"
-                    onClick={onClose}
-                    className="px-2.5 py-1.5 text-[0.65rem] font-medium text-neutral-400 hover:text-white transition cursor-pointer"
-                  >
-                    Dismiss
-                  </button>
+
                 </div>
               </div>
             </div>

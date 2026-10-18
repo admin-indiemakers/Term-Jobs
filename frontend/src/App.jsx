@@ -10,6 +10,7 @@ import OpenRolesPage from './pages/OpenRolesPage';
 import DashboardLayout from './pages/DashboardLayout';
 import { directorRedirect } from './utils/directorAccess';
 import FieldRequirementIndicators from './components/FieldRequirementIndicators';
+import { TermJobsLoader } from './components/TermJobsLoader';
 
 // Lazy-loaded routes for code splitting (reduces initial bundle from 4.15MB down to ~250KB)
 const InterviewRequests = lazy(() => import('./pages/recruiter/InterviewRequests'));
@@ -79,8 +80,8 @@ const HiringManagerInterviews = lazy(() => import('./interview/pages/HiringManag
 
 function FullScreenLoader() {
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', fontSize: '0.9rem', fontWeight: 600 }}>
-      Loading workspace...
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent' }}>
+      <TermJobsLoader size={38} ariaLabel="Loading workspace..." />
     </div>
   );
 }

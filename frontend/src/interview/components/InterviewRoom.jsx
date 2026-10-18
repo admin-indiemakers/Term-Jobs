@@ -30,6 +30,7 @@ import { useInterviewRoom } from '../hooks/useInterviewRoom';
 import { useInterviewChat } from '../hooks/useInterviewChat';
 import { EvaluationForm } from './EvaluationForm';
 import { interviewApi } from '../services/interviewApi';
+import { useAuth } from '../../context/AuthContext';
 import termjobsLogo from '../../assets/termjobs-logo.png';
 
 export function InterviewRoom({
@@ -120,6 +121,7 @@ export function InterviewRoom({
 
   // LiveKit WebRTC lifecycle hook
   const {
+    participants,
     remoteStream,
     disconnect,
   } = useInterviewRoom({
@@ -277,12 +279,25 @@ export function InterviewRoom({
   // Real Dynamic Metadata derived from actual round and user props
   const isInterviewer = currentUserRole === 'interviewer';
 
+  // Role Display: check authenticated user role first (e.g. "Hiring Manager" for Arjun)
+  const { user } = useAuth() || {};
+  let activeUser = user;
+  if (!activeUser) {
+    try {
+      const saved = localStorage.getItem('auth_user');
+      if (saved) activeUser = JSON.parse(saved);
+    } catch {}
+  }
+  const loggedInRole = activeUser?.role;
+  const myRole = isInterviewer
+    ? (loggedInRole || round?.interviewer_role || 'Hiring Manager')
+    : 'Candidate';
+
   const myName =
     currentUserName ||
     (isInterviewer
-      ? round?.interviewer_name || 'Interviewer'
+      ? (activeUser?.name || round?.interviewer_name || 'Interviewer')
       : round?.candidate_name || 'Candidate');
-  const myRole = isInterviewer ? round?.interviewer_role || 'Hiring Manager' : 'Candidate';
   const myInitials =
     (myName || 'U')
       .split(' ')
@@ -292,13 +307,19 @@ export function InterviewRoom({
       .slice(0, 2)
       .toUpperCase() || 'U';
 
-  const otherPersonName = isInterviewer
+  // Dynamic remote participant detection
+  const hasRemoteParticipant = Boolean(remoteStream || (participants && participants.length > 0));
+  const remotePeer = participants && participants.length > 0 ? participants[0] : null;
+
+  const otherPersonName = remotePeer?.name || (isInterviewer
     ? round?.candidate_name || 'Candidate'
-    : round?.interviewer_name || 'Interviewer';
+    : round?.interviewer_name || 'Interviewer');
   const otherPersonRole = isInterviewer
     ? round?.requisition_title || 'Candidate'
-    : round?.interviewer_role || 'Hiring Manager';
-  const otherPersonRoleLabel = isInterviewer ? 'Candidate' : 'Interviewer';
+    : (remotePeer?.role === 'Hiring Manager' ? 'Hiring Manager' : round?.interviewer_role || 'Hiring Manager');
+  const otherPersonRoleLabel = isInterviewer
+    ? 'Candidate'
+    : (remotePeer?.role === 'Hiring Manager' ? 'Hiring Manager' : 'Interviewer');
   const otherPersonInitials =
     (otherPersonName || 'C')
       .split(' ')
@@ -331,7 +352,7 @@ export function InterviewRoom({
     ? `${round.duration_minutes} Mins Session`
     : 'Live Session';
 
-  const participantCount = remoteStream ? 2 : 1;
+  const participantCount = hasRemoteParticipant ? 2 : 1;
 
   return (
     <div className="relative w-full h-screen h-[100dvh] bg-[#090B10] text-zinc-100 flex flex-col overflow-hidden font-sans select-none">
@@ -451,79 +472,69 @@ export function InterviewRoom({
         {/* LEFT COLUMN: 2-TILE CLEAN VIDEO GRID + FLOATING CONTROL DOCK   */}
         {/* ============================================================== */}
         <div className="flex-1 min-w-0 h-full flex flex-col gap-3 overflow-hidden">
-          {/* VIDEO GRID AREA: Clean 1-on-1 Split Grid */}
-          <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 overflow-hidden">
+          {/* VIDEO GRID AREA: Dynamic 1-Person or 2-Person Grid */}
+          <div className={`flex-1 min-h-0 grid gap-3 sm:gap-4 overflow-hidden ${
+            hasRemoteParticipant ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 max-w-4xl mx-auto w-full'
+          }`}>
             {/* ─────────────────────────────────────────────────────────────
                 TILE 1: REMOTE PARTICIPANT (Interviewer or Candidate)
+                Only shown when another participant is in the room
                 ───────────────────────────────────────────────────────────── */}
-            <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden bg-[#11141D] border border-white/[0.08] shadow-2xl flex items-center justify-center group">
-              {remoteStream ? (
-                <video ref={setRemoteVideo} autoPlay playsInline className="w-full h-full object-cover" />
-              ) : (
-                /* Elegant Waiting State */
-                <div className="w-full h-full flex flex-col items-center justify-center p-6 bg-gradient-to-b from-[#141824] to-[#0D1018] text-center select-none relative overflow-hidden">
-                  {/* Subtle pulsing background ripple */}
-                  <div className="absolute w-64 h-64 rounded-full bg-emerald-500/5 blur-3xl pointer-events-none" />
-
-                  <div className="relative mb-4">
-                    <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-zinc-800 to-zinc-900 border-2 border-white/15 flex items-center justify-center shadow-2xl text-white text-2xl sm:text-3xl font-black">
-                      {otherPersonInitials}
-                    </div>
-                    {/* Glowing status indicator badge */}
-                    <span className="absolute bottom-0 right-0 w-5 h-5 rounded-full bg-amber-400 border-2 border-[#141824] flex items-center justify-center">
-                      <span className="w-2 h-2 rounded-full bg-amber-200 animate-ping" />
-                    </span>
-                  </div>
-
-                  <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
-                    {otherPersonName}
-                  </h3>
-                  <p className="text-xs text-zinc-400 font-medium mt-0.5">
-                    {otherPersonRole} &bull; {otherPersonRoleLabel}
-                  </p>
-
-                  <div className="flex items-center gap-2 mt-4 px-3.5 py-1.5 rounded-full bg-white/[0.06] border border-white/10 text-xs text-zinc-300 shadow-sm">
-                    <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                    <span>Waiting for {otherPersonName} to join...</span>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleCopyLink}
-                    className="mt-4 flex items-center gap-2 px-4 py-2 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] text-xs font-semibold text-zinc-200 border border-white/10 transition cursor-pointer active:scale-95 shadow"
-                  >
-                    {copiedLink ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} className="text-zinc-400" />}
-                    <span>{copiedLink ? 'Link Copied!' : 'Copy Meeting Link'}</span>
-                  </button>
-                </div>
-              )}
-
-              {/* Top-left: Mic Status Indicator */}
-              <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-black/60 backdrop-blur-md border border-white/10 text-white shadow text-xs">
+            {hasRemoteParticipant && (
+              <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden bg-[#11141D] border border-white/[0.08] shadow-2xl flex items-center justify-center group">
                 {remoteStream ? (
-                  <>
-                    <Mic size={13} className="text-emerald-400" />
-                    <span className="text-[10.5px] font-medium text-zinc-300">Connected</span>
-                  </>
+                  <video ref={setRemoteVideo} autoPlay playsInline className="w-full h-full object-cover" />
                 ) : (
-                  <>
-                    <MicOff size={13} className="text-zinc-500" />
-                    <span className="text-[10.5px] font-medium text-zinc-400">Standby</span>
-                  </>
-                )}
-              </div>
+                  /* Active Remote Participant with Camera Off */
+                  <div className="w-full h-full flex flex-col items-center justify-center p-6 bg-gradient-to-b from-[#141824] to-[#0D1018] text-center select-none relative overflow-hidden">
+                    <div className="absolute w-64 h-64 rounded-full bg-emerald-500/5 blur-3xl pointer-events-none" />
 
-              {/* Bottom-left: Participant Label Pill */}
-              <div className="absolute bottom-3 left-3 flex items-center gap-2 px-3 py-1.5 rounded-xl bg-black/75 backdrop-blur-md border border-white/10 text-xs font-bold text-white shadow">
-                <span>{otherPersonName}</span>
-                <span className="text-[10.5px] text-zinc-400 font-normal">&bull; {otherPersonRoleLabel}</span>
-                <span
-                  className={`w-2 h-2 rounded-full ${
-                    remoteStream ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400/80'
-                  }`}
-                />
+                    <div className="relative mb-4">
+                      <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-zinc-800 to-zinc-900 border-2 border-white/15 flex items-center justify-center shadow-2xl text-white text-2xl sm:text-3xl font-black">
+                        {otherPersonInitials}
+                      </div>
+                      <span className="absolute bottom-0 right-0 w-5 h-5 rounded-full bg-emerald-500 border-2 border-[#141824] flex items-center justify-center">
+                        <span className="w-2 h-2 rounded-full bg-emerald-300" />
+                      </span>
+                    </div>
+
+                    <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
+                      {otherPersonName}
+                    </h3>
+                    <p className="text-xs text-zinc-400 font-medium mt-0.5">
+                      {otherPersonRole} &bull; {otherPersonRoleLabel}
+                    </p>
+
+                    <div className="flex items-center gap-1.5 mt-3 px-3 py-1 rounded-full bg-white/[0.05] border border-white/10 text-xs text-zinc-400">
+                      <VideoOff size={13} className="text-rose-400" />
+                      <span>Camera is off</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Top-left: Mic Status Indicator */}
+                <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-black/60 backdrop-blur-md border border-white/10 text-white shadow text-xs">
+                  {remoteStream ? (
+                    <>
+                      <Mic size={13} className="text-emerald-400" />
+                      <span className="text-[10.5px] font-medium text-zinc-300">Connected</span>
+                    </>
+                  ) : (
+                    <>
+                      <MicOff size={13} className="text-zinc-500" />
+                      <span className="text-[10.5px] font-medium text-zinc-400">Connected</span>
+                    </>
+                  )}
+                </div>
+
+                {/* Bottom-left: Participant Label Pill */}
+                <div className="absolute bottom-3 left-3 flex items-center gap-2 px-3 py-1.5 rounded-xl bg-black/75 backdrop-blur-md border border-white/10 text-xs font-bold text-white shadow">
+                  <span>{otherPersonName}</span>
+                  <span className="text-[10.5px] text-zinc-400 font-normal">&bull; {otherPersonRoleLabel}</span>
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                </div>
               </div>
-            </div>
+            )}
 
             {/* ─────────────────────────────────────────────────────────────
                 TILE 2: LOCAL PARTICIPANT (You)

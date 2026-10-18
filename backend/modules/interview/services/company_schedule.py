@@ -27,13 +27,25 @@ def save_company_interview(user, data):
     if data.get('round_id'):
         with get_session() as session:
             target = session.get(InterviewRound, data['round_id'])
-            if not target or target.tenant_id != user.tenant_id or target.created_by != str(user.id):
+            can_manage = (
+                target is not None and
+                target.tenant_id == user.tenant_id and
+                (
+                    user.role in ('Admin', 'HR', 'Director', 'Hiring Manager') or
+                    target.created_by == str(user.id) or
+                    getattr(target, 'interviewer_email', None) == user.email
+                )
+            )
+            if not can_manage:
                 raise ValueError('Only the booking manager can reschedule this Google Calendar interview.')
     with booking_lock(user):
         with get_session() as session:
-            own_rounds = session.query(InterviewRound).filter(InterviewRound.tenant_id == user.tenant_id).all()
-            own_rounds = [row for row in own_rounds if getattr(row, 'created_by', None) == str(user.id) or getattr(row, 'interviewer_email', None) == user.email]
-            target = next((row for row in own_rounds if row.id == data.get('round_id')), None)
+            all_rounds = session.query(InterviewRound).filter(InterviewRound.tenant_id == user.tenant_id).all()
+            if user.role in ('Admin', 'HR', 'Director', 'Hiring Manager'):
+                own_rounds = all_rounds
+            else:
+                own_rounds = [row for row in all_rounds if getattr(row, 'created_by', None) == str(user.id) or getattr(row, 'interviewer_email', None) == user.email]
+            target = next((row for row in all_rounds if row.id == data.get('round_id')), None)
             if not target and not data.get('round_id'):
                 identifier = str(data.get('candidate_identifier') or '').lower()
                 target = next((row for row in own_rounds if row.round_name == data['round_name'] and identifier in

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { parseSlotToMinutes } from '../utils/interviewSchedule';
 import {
   Search,
   Briefcase,
@@ -338,6 +339,26 @@ export default function OpenRolesPage({ enabled = true }) {
     }
   };
 
+  // Helper to parse interview start and end Date objects accurately
+  const getInterviewWindow = (scheduledDate, scheduledTime, duration = 45) => {
+    if (!scheduledDate) return null;
+    try {
+      const normalized = scheduledDate.includes('T') ? scheduledDate.split('T')[0] : scheduledDate;
+      const startMin = parseSlotToMinutes(scheduledTime) ?? 540;
+      const durMins = Number(duration) || 45;
+
+      const [y, m, d] = normalized.split('-').map(Number);
+      if (!y || !m || !d) return null;
+
+      const startDate = new Date(y, m - 1, d, Math.floor(startMin / 60), startMin % 60, 0);
+      const endDate = new Date(startDate.getTime() + durMins * 60 * 1000);
+
+      return { startDate, endDate, durMins };
+    } catch (_) {
+      return null;
+    }
+  };
+
   // Parse time details into separate range and duration strings
   const parseTimeDetails = (timeStr, duration = 45) => {
     const durMins = Number(duration) || 45;
@@ -347,20 +368,20 @@ export default function OpenRolesPage({ enabled = true }) {
     if (timeStr.toLowerCase().includes('immediate') || timeStr.toLowerCase().includes('demand')) {
       return { range: 'Immediate / On-Demand', duration: `${durMins} minutes` };
     }
-    const match = timeStr.match(/^(\d{1,2}):(\d{2})/);
-    if (match) {
-      const hour = parseInt(match[1], 10);
-      const minute = parseInt(match[2], 10);
-      const startPeriod = hour >= 12 ? 'PM' : 'AM';
-      const displayHour = hour % 12 === 0 ? 12 : hour % 12;
-      const startFormatted = `${String(displayHour).padStart(2, '0')}:${String(minute).padStart(2, '0')} ${startPeriod}`;
+    const startMinutes = parseSlotToMinutes(timeStr);
+    if (startMinutes !== null) {
+      const startH = Math.floor(startMinutes / 60) % 24;
+      const startM = startMinutes % 60;
+      const startPeriod = startH >= 12 ? 'PM' : 'AM';
+      const displayStartH = startH % 12 === 0 ? 12 : startH % 12;
+      const startFormatted = `${String(displayStartH).padStart(2, '0')}:${String(startM).padStart(2, '0')} ${startPeriod}`;
 
-      const totalMinutes = hour * 60 + minute + durMins;
-      const endHour24 = Math.floor(totalMinutes / 60) % 24;
-      const endMin = totalMinutes % 60;
-      const endPeriod = endHour24 >= 12 ? 'PM' : 'AM';
-      const displayEndHour = endHour24 % 12 === 0 ? 12 : endHour24 % 12;
-      const endFormatted = `${String(displayEndHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')} ${endPeriod}`;
+      const totalMinutes = startMinutes + durMins;
+      const endH = Math.floor(totalMinutes / 60) % 24;
+      const endM = totalMinutes % 60;
+      const endPeriod = endH >= 12 ? 'PM' : 'AM';
+      const displayEndH = endH % 12 === 0 ? 12 : endH % 12;
+      const endFormatted = `${String(displayEndH).padStart(2, '0')}:${String(endM).padStart(2, '0')} ${endPeriod}`;
 
       return {
         range: `${startFormatted} – ${endFormatted}`,
@@ -411,7 +432,7 @@ export default function OpenRolesPage({ enabled = true }) {
     };
   };
 
-  const getStatusBadgeInfo = (round, daysUntil, isLive, isCompleted, isCancelled) => {
+  const getStatusBadgeInfo = (round, windowInfo, isLiveNow, isCompleted, isCancelled, isAiOnDemand) => {
     if (isCancelled) {
       return {
         text: 'Cancelled',
@@ -426,29 +447,70 @@ export default function OpenRolesPage({ enabled = true }) {
         style: 'text-blue-400 bg-blue-950/40 border-blue-500/30',
       };
     }
-    if (isLive) {
+    if (isLiveNow) {
       return {
         text: 'Live Now',
         icon: '✦',
         style: 'text-emerald-400 bg-emerald-950/50 border-emerald-500/40 animate-pulse',
       };
     }
-    if (daysUntil <= 0) {
+    if (isAiOnDemand) {
       return {
-        text: 'Starts in 2 hours',
+        text: 'Available Now',
         icon: '✦',
-        style: 'text-emerald-400 bg-emerald-950/50 border-emerald-500/40',
+        style: 'text-teal-400 bg-teal-950/50 border-teal-500/40',
       };
     }
-    if (daysUntil === 1) {
+    if (windowInfo?.startDate) {
+      const now = new Date();
+      const diffMs = windowInfo.startDate.getTime() - now.getTime();
+      const diffMinutes = Math.floor(diffMs / (60 * 1000));
+      const diffHours = Math.floor(diffMinutes / 60);
+      const diffDays = Math.floor(diffHours / 24);
+
+      if (diffMinutes <= 15) {
+        return {
+          text: diffMinutes > 0 ? `Starts in ${diffMinutes} mins` : 'Starting soon',
+          icon: '✦',
+          style: 'text-emerald-400 bg-emerald-950/50 border-emerald-500/40 animate-pulse',
+        };
+      }
+      if (diffMinutes < 60) {
+        return {
+          text: `Starts in ${diffMinutes} mins`,
+          icon: '✦',
+          style: 'text-emerald-400 bg-emerald-950/50 border-emerald-500/40',
+        };
+      }
+      if (diffHours < 24) {
+        const remMins = diffMinutes % 60;
+        let timeText = `Starts in ${diffHours} ${diffHours === 1 ? 'hour' : 'hours'}`;
+        if (diffHours < 4 && remMins > 0) {
+          timeText = `Starts in ${diffHours}h ${remMins}m`;
+        } else if (diffHours >= 4 && remMins >= 30) {
+          timeText = `Starts in ${diffHours + 1} hours`;
+        }
+        return {
+          text: timeText,
+          icon: '✦',
+          style: 'text-emerald-400 bg-emerald-950/50 border-emerald-500/40',
+        };
+      }
+      if (diffDays === 1 || (diffHours < 48 && windowInfo.startDate.getDate() === now.getDate() + 1)) {
+        return {
+          text: 'Tomorrow',
+          icon: '✦',
+          style: 'text-blue-400 bg-blue-950/40 border-blue-500/30',
+        };
+      }
       return {
-        text: 'In 1 day',
+        text: `In ${diffDays} days`,
         icon: '✦',
         style: 'text-blue-400 bg-blue-950/40 border-blue-500/30',
       };
     }
     return {
-      text: `In ${daysUntil} days`,
+      text: 'Scheduled',
       icon: '✦',
       style: 'text-blue-400 bg-blue-950/40 border-blue-500/30',
     };
@@ -472,12 +534,50 @@ export default function OpenRolesPage({ enabled = true }) {
     const list = Array.isArray(candidateInterviews) ? candidateInterviews : [];
     if (list.length === 0) return [];
 
+    const now = new Date();
+
     return list.map((round) => {
-      const isLive = round.status === 'In Progress' || round.status === 'Live' || round.round_type === 'AI' || (round.round_name && round.round_name.toLowerCase().includes('ai fast-track'));
-      const isCompleted = round.status === 'Completed' || round.status === 'Evaluated';
       const isCancelled = round.status === 'Cancelled' || round.status === 'Rejected';
+      const isExplicitCompleted = round.status === 'Completed' || round.status === 'Evaluated';
+      const isAiOnDemand = round.round_type === 'AI' || (round.round_name && round.round_name.toLowerCase().includes('ai fast-track'));
+      const isManualLive = round.status === 'In Progress' || round.status === 'Live';
+
+      const windowInfo = getInterviewWindow(round.scheduled_date, round.scheduled_time, round.duration_minutes || 45);
+      const startDate = windowInfo?.startDate;
+      const endDate = windowInfo?.endDate;
+
+      // Has this interview window passed in real time?
+      const hasEndedByTime = Boolean(endDate && now.getTime() > endDate.getTime());
+
+      // Is interview currently live?
+      const isLiveNow = !isCancelled && !isExplicitCompleted && (
+        isManualLive ||
+        (startDate && endDate && now.getTime() >= (startDate.getTime() - 10 * 60 * 1000) && now.getTime() <= endDate.getTime())
+      );
+
+      // Final status category: Cancelled, Completed, or Upcoming
+      let finalStatus = 'Upcoming';
+      if (isCancelled) {
+        finalStatus = 'Cancelled';
+      } else if (isExplicitCompleted || (hasEndedByTime && !isAiOnDemand)) {
+        finalStatus = 'Completed';
+      } else {
+        finalStatus = 'Upcoming';
+      }
+
+      const isCompleted = finalStatus === 'Completed';
+
+      // Can candidate enter right now?
+      // - AI on demand: always ready unless completed
+      // - Live interviews: ready within 15 mins before start until end
+      const canEnter = !isCancelled && !isCompleted && (
+        isAiOnDemand ||
+        isLiveNow ||
+        (startDate && endDate && now.getTime() >= (startDate.getTime() - 15 * 60 * 1000) && now.getTime() <= endDate.getTime())
+      );
+
+      const statusBadge = getStatusBadgeInfo(round, windowInfo, isLiveNow, isCompleted, isCancelled, isAiOnDemand);
       const badge = parseInterviewDateBadge(round.scheduled_date);
-      const days = getDaysUntil(round.scheduled_date);
 
       // Match requisition for company name and info if not already in round
       const matchingReq = Array.isArray(requisitions)
@@ -530,13 +630,16 @@ export default function OpenRolesPage({ enabled = true }) {
         time_range: timeDetails.range,
         time_duration: timeDetails.duration,
         scheduled_time: `${timeDetails.range} (${timeDetails.duration})`,
-        status: isCancelled ? 'Cancelled' : isCompleted ? 'Completed' : 'Upcoming',
+        status: finalStatus,
+        status_info: statusBadge,
+        can_enter: canEnter,
+        is_live_now: isLiveNow,
         interviewer_name: interviewerName,
         interviewer_role: interviewerRole,
         interviewer_avatar: round.interviewer_avatar || '',
         mode: 'Online (Term Jobs Panel)',
-        is_ready: !isCompleted && !isCancelled && (isLive || days <= 0),
-        days_until: days > 0 ? days : 0,
+        is_ready: canEnter,
+        days_until: startDate ? Math.max(0, Math.ceil((startDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))) : 0,
       };
     });
   }, [candidateInterviews, requisitions]);
@@ -2569,11 +2672,10 @@ export default function OpenRolesPage({ enabled = true }) {
                     const isUpcoming = round.status === 'Upcoming';
                     const isCompleted = round.status === 'Completed';
                     const isCancelled = round.status === 'Cancelled';
-                    const isLive = round.status === 'In Progress' || round.status === 'Live' || round.round_type === 'AI';
-                    const canEnter = isUpcoming && round.is_ready;
-                    const daysUntil = round.days_until || 0;
+                    const isLive = round.is_live_now;
+                    const canEnter = Boolean(round.can_enter);
                     const typeConfig = getRoundTypeConfig(round.round_name, round.round_number);
-                    const statusInfo = getStatusBadgeInfo(round, daysUntil, isLive, isCompleted, isCancelled);
+                    const statusInfo = round.status_info || getStatusBadgeInfo(round, null, isLive, isCompleted, isCancelled, false);
                     const IconComponent = typeConfig.icon;
 
                     return (

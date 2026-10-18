@@ -383,6 +383,14 @@ export class LiveKitService {
           // Handle in-meeting chat message
           if (data.type === 'chat' && data.message) {
             this._emit('chatMessageReceived', data.message);
+            if (data.message.senderName && data.message.senderName !== participantName) {
+              this._emit('participantConnected', {
+                identity: data.message.senderId || 'chat_peer',
+                name: data.message.senderName,
+                role: data.message.senderRole || (role === 'candidate' ? 'interviewer' : 'candidate'),
+                videoTrack: false,
+              });
+            }
             return;
           }
 
@@ -390,9 +398,26 @@ export class LiveKitService {
 
           console.log('📥 P2P Signal received:', data.action, 'from role:', data.sender_role);
 
-          if (data.action === 'join') {
+          if (data.action === 'join' || data.action === 'peer-presence') {
+            this._emit('participantConnected', {
+              identity: data.sender_id || 'remote_peer',
+              name: data.sender_name || (data.sender_role === 'candidate' ? 'Candidate' : 'Interviewer'),
+              role: data.sender_role || (role === 'candidate' ? 'interviewer' : 'candidate'),
+              videoTrack: false,
+            });
+
+            if (data.action === 'join' && socket.readyState === WebSocket.OPEN) {
+              socket.send(JSON.stringify({
+                type: 'signal',
+                action: 'peer-presence',
+                sender_id: this.myId,
+                sender_role: role,
+                sender_name: participantName,
+              }));
+            }
+
             // Another peer arrived; if we are the interviewer, make an offer
-            if (role === 'interviewer') {
+            if (role === 'interviewer' && data.action === 'join') {
               await this._initiateP2POffer(pc, socket, role);
             }
             // If we are currently sharing screen, let the newcomer know
@@ -408,6 +433,10 @@ export class LiveKitService {
                 track_id: screenTrack?.id,
               }));
             }
+          } else if (data.action === 'leave') {
+            this._emit('participantDisconnected', {
+              identity: data.sender_id || 'remote_peer',
+            });
           } else if (data.action === 'offer' && data.sdp) {
             if (pc.signalingState !== 'stable') {
               await Promise.all([

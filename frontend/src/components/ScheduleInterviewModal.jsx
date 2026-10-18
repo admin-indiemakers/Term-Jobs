@@ -5,6 +5,7 @@ import {
   Clock,
   Plus,
   Check,
+  CheckCheck,
   CheckCircle2,
   Sparkles,
   User,
@@ -29,7 +30,16 @@ import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import GoogleCalendarConnect from './GoogleCalendarConnect';
 import { todayForDeadline } from '../utils/submissionDeadline';
-import { toInterviewTime } from '../utils/interviewSchedule';
+import {
+  toInterviewTime,
+  format12to24,
+  parseSlotToMinutes,
+  getNowInKolkata,
+  isTimeInPast,
+  isRoundEnded,
+} from '../utils/interviewSchedule';
+
+export { isRoundEnded };
 
 // Default editable process when this requisition has no saved template yet.
 const DEFAULT_ROUNDS = ['Technical', 'HR', 'Manager', 'Final'].map((type, index) => ({ id: `round-${index + 1}`, title: type === 'Final' ? 'Final Review' : `${type} Interview`, type, duration: type === 'Final' ? 30 : 45, scheduledDate: '', scheduledTime: '', interviewer: null }));
@@ -60,24 +70,6 @@ const TIME_SLOTS = [
   '08:00 PM',
 ];
 
-function parseSlotToMinutes(slotStr) {
-  if (!slotStr) return null;
-  const match12 = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i.exec(slotStr.trim());
-  if (match12) {
-    let hours = parseInt(match12[1], 10) % 12;
-    if (match12[3].toUpperCase() === 'PM') hours += 12;
-    const minutes = parseInt(match12[2], 10);
-    return hours * 60 + minutes;
-  }
-  const match24 = /^(\d{1,2}):(\d{2})$/.exec(slotStr.trim());
-  if (match24) {
-    const hours = parseInt(match24[1], 10);
-    const minutes = parseInt(match24[2], 10);
-    return hours * 60 + minutes;
-  }
-  return null;
-}
-
 function format24to12(timeStr) {
   if (!timeStr) return '';
   const match = /^(\d{1,2}):(\d{2})$/.exec(timeStr.trim());
@@ -87,15 +79,6 @@ function format24to12(timeStr) {
   const ampm = hours >= 12 ? 'PM' : 'AM';
   hours = hours % 12 || 12;
   return `${String(hours).padStart(2, '0')}:${minutes} ${ampm}`;
-}
-
-function format12to24(timeStr) {
-  if (!timeStr) return '';
-  try {
-    return toInterviewTime(timeStr);
-  } catch {
-    return '';
-  }
 }
 
 export function getInterviewerAvailability(
@@ -317,39 +300,6 @@ export function getCandidateSlotConflict(
   }
 
   return { hasConflict: false, conflict: null };
-}
-
-function getNowInKolkata() {
-  const now = new Date();
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Asia/Kolkata',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).formatToParts(now);
-  const get = (type) => parts.find((p) => p.type === type)?.value;
-  const todayStr = `${get('year')}-${get('month')}-${get('day')}`;
-  const currentHour = parseInt(get('hour'), 10) || 0;
-  const currentMinute = parseInt(get('minute'), 10) || 0;
-  const currentMinutes = currentHour * 60 + currentMinute;
-  const minTime24 = `${String(currentHour).padStart(2, '0')}:${String(Math.min(59, currentMinute + 1)).padStart(2, '0')}`;
-  const ampm = currentHour >= 12 ? 'PM' : 'AM';
-  const displayHour = currentHour % 12 || 12;
-  const currentTimeDisplay = `${String(displayHour).padStart(2, '0')}:${String(currentMinute).padStart(2, '0')} ${ampm}`;
-  return { todayStr, currentMinutes, minTime24, currentTimeDisplay };
-}
-
-function isTimeInPast(timeStr, dateStr) {
-  if (!dateStr || !timeStr) return false;
-  const { todayStr, currentMinutes } = getNowInKolkata();
-  if (dateStr < todayStr) return true;
-  if (dateStr > todayStr) return false;
-  const slotMinutes = parseSlotToMinutes(timeStr);
-  if (slotMinutes === null) return false;
-  return slotMinutes <= currentMinutes;
 }
 
 function getCategoryIcon(type) {
@@ -906,7 +856,13 @@ export default function ScheduleInterviewModal({
     const finalDate = selectedDate || todayForDeadline();
     const finalSlot = selectedTimeSlot || activeRound.scheduledTime;
 
-    if (finalSlot && isTimeInPast(finalSlot, finalDate)) {
+    const isActiveRoundEnded = isRoundEnded({
+      ...activeRound,
+      scheduledDate: finalDate,
+      scheduledTime: finalSlot,
+    });
+
+    if (!isActiveRoundEnded && finalSlot && isTimeInPast(finalSlot, finalDate)) {
       setError(`The selected time (${finalSlot}) is in the past for ${finalDate}. Please select a future time.`);
       return;
     }
@@ -999,6 +955,7 @@ export default function ScheduleInterviewModal({
       }
       
       for (const r of scheduledRounds) {
+        if (isRoundEnded(r)) continue;
         if (isTimeInPast(r.scheduledTime, r.scheduledDate)) {
           throw new Error(`Round "${r.title}" has a past time (${r.scheduledTime} on ${r.scheduledDate}). Please select a future time.`);
         }
@@ -1026,6 +983,7 @@ export default function ScheduleInterviewModal({
       // Also validate candidate against any database bookings
       for (let idx = 0; idx < scheduledRounds.length; idx++) {
         const r = scheduledRounds[idx];
+        if (isRoundEnded(r)) continue;
         const dbConflict = getCandidateSlotConflict(
           r.scheduledDate,
           r.scheduledTime,
@@ -1042,6 +1000,7 @@ export default function ScheduleInterviewModal({
       // Validate all interviewers against conflicts across all candidates, requisitions, and rounds
       for (let idx = 0; idx < scheduledRounds.length; idx++) {
         const r = scheduledRounds[idx];
+        if (isRoundEnded(r)) continue;
         if (r.interviewer) {
           const avail = getInterviewerAvailability(
             r.interviewer,
@@ -1059,19 +1018,25 @@ export default function ScheduleInterviewModal({
       }
 
       for (const r of scheduledRounds) {
-        // Only schedule if newly scheduled OR modified
-        const wasScheduled = r.isAlreadyScheduled;
-        const dateChanged = r.scheduledDate !== r.originalDate;
-        const timeChanged = toInterviewTime(r.scheduledTime) !== toInterviewTime(r.originalTime);
+        const dateChanged = Boolean(r.originalDate && r.scheduledDate !== r.originalDate);
+        const timeChanged = Boolean(r.originalTime && format12to24(r.scheduledTime) !== format12to24(r.originalTime));
         const interviewerChanged = (r.interviewer?.email || '').toLowerCase().trim() !== (r.originalInterviewerEmail || '').toLowerCase().trim();
         const instructionsChanged = (r.instructions || '').trim() !== (r.originalInstructions || '').trim();
 
-        // If it was already scheduled and completely unchanged, skip sending duplicate API calls and emails
-        if (wasScheduled && !dateChanged && !timeChanged && !interviewerChanged && !instructionsChanged && r.persistedRoundId) {
+        // 1. If this round has already ended and was not rescheduled to a new date/time, NEVER re-dispatch it
+        if (isRoundEnded(r) && !dateChanged && !timeChanged) {
           continue;
         }
 
-        const roundId = r.persistedRoundId || (r.id && !String(r.id).startsWith('round-') && !String(r.id).startsWith('planned-') ? r.id : (dispatchResults[r.id]?.id || null));
+        // 2. If it was already scheduled and completely unchanged, skip sending duplicate API calls and emails
+        if (r.isAlreadyScheduled && !dateChanged && !timeChanged && !interviewerChanged && !instructionsChanged) {
+          continue;
+        }
+
+        const existingRoundId = r.persistedRoundId || (r.id && !String(r.id).startsWith('round-') && !String(r.id).startsWith('planned-') ? r.id : (dispatchResults[r.id]?.id || null));
+        // Only send round_id if the round was already previously scheduled (rescheduling).
+        // For fresh new bookings, pass null so the backend creates a fresh booking without triggering reschedule checks.
+        const roundId = (r.isAlreadyScheduled || dispatchResults[r.id]?.id) ? existingRoundId : null;
 
         const saved = await request('/api/interviews/company-round', { method: 'POST', token, timeout: 90000, body: {
           candidate_identifier: candidate.submission_id || candidate.id,
@@ -1276,22 +1241,30 @@ export default function ScheduleInterviewModal({
                                 candidateBookedRounds
                               );
                               const hasOverlap = candConflict.hasConflict;
+                              const isEnded = isRoundEnded(round);
                               return (
                                 <div className="min-w-0 flex-1">
                                   <div className="flex items-center gap-1.5 flex-wrap">
                                     <span className="text-xs sm:text-[13px] font-bold text-gray-900 tracking-tight truncate">
                                       {round.title}
                                     </span>
-                                    {hasOverlap && (
+                                    {isEnded ? (
+                                      <span className="px-1.5 py-0.2 rounded-md bg-slate-100 border border-slate-200 text-slate-700 text-[9.5px] font-bold shrink-0 flex items-center gap-0.5">
+                                        <CheckCheck size={9} className="text-slate-600" />
+                                        Interview Ended
+                                      </span>
+                                    ) : hasOverlap ? (
                                       <span className="px-1.5 py-0.2 rounded-md bg-rose-100 text-rose-700 text-[9.5px] font-bold shrink-0">
                                         Time Conflict
                                       </span>
-                                    )}
+                                    ) : null}
                                   </div>
                                   <div
                                     className={`text-[10px] font-medium truncate ${
                                       hasOverlap
                                         ? 'text-rose-600 font-semibold'
+                                        : isEnded
+                                        ? 'text-slate-500 font-medium'
                                         : isScheduled
                                         ? 'text-emerald-700 font-semibold'
                                         : 'text-gray-400'
@@ -1299,6 +1272,8 @@ export default function ScheduleInterviewModal({
                                   >
                                     {hasOverlap
                                       ? candConflict.conflict?.reason || 'Schedule overlaps with another round'
+                                      : isEnded
+                                      ? `${round.scheduledDate ? new Date(`${round.scheduledDate}T00:00:00`).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }) : 'Scheduled'}, ${round.scheduledTime} (Ended)`
                                       : isScheduled
                                       ? `${round.scheduledDate ? new Date(`${round.scheduledDate}T00:00:00`).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }) : 'Scheduled'}, ${round.scheduledTime}`
                                       : 'Not Scheduled'}
@@ -1620,11 +1595,21 @@ export default function ScheduleInterviewModal({
                   {/* Header for Active Round */}
                   <div className="flex items-center justify-between gap-2 border-b border-black/[0.06] pb-1.5">
                     <div>
-                      <h4 className="text-sm font-bold text-gray-900 tracking-tight leading-tight">
-                        {activeRound.title}
-                      </h4>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="text-sm font-bold text-gray-900 tracking-tight leading-tight">
+                          {activeRound.title}
+                        </h4>
+                        {isRoundEnded(activeRound) && (
+                          <span className="px-2 py-0.5 rounded-full bg-slate-100 border border-slate-300 text-slate-700 text-[10px] font-bold flex items-center gap-1">
+                            <CheckCheck size={10} className="text-slate-600" />
+                            Interview Ended
+                          </span>
+                        )}
+                      </div>
                       <p className="text-[11px] text-gray-500 font-normal">
-                        Select date, time and interviewer for this round.
+                        {isRoundEnded(activeRound)
+                          ? `This round took place on ${activeRound.scheduledDate} at ${activeRound.scheduledTime} and has ended. Select a future time to reschedule.`
+                          : 'Select date, time and interviewer for this round.'}
                       </p>
                     </div>
 
@@ -1681,12 +1666,15 @@ export default function ScheduleInterviewModal({
                           return (
                             <div
                               key={i}
-                              onClick={() => handleSelectDay(dObj)}
+                              onClick={() => {
+                                if (isPast && !isChosen) return;
+                                handleSelectDay(dObj);
+                              }}
                               className={`h-6 rounded-md flex flex-col items-center justify-center transition-all relative ${
-                                isPast
-                                  ? 'text-gray-300 pointer-events-none cursor-not-allowed'
-                                  : isChosen
+                                isChosen
                                   ? 'bg-black text-white font-bold shadow-3xs cursor-pointer'
+                                  : isPast
+                                  ? 'text-gray-300 pointer-events-none cursor-not-allowed'
                                   : isToday
                                   ? 'text-gray-900 font-bold border border-black/30 hover:bg-gray-100 cursor-pointer'
                                   : 'text-gray-800 hover:bg-gray-100 font-medium cursor-pointer'
@@ -1945,7 +1933,12 @@ export default function ScheduleInterviewModal({
                             {idx + 1}
                           </span>
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            {round.isAlreadyScheduled ? (
+                            {isRoundEnded(round) ? (
+                              <span className="px-2 py-0.5 rounded-full bg-slate-100 border border-slate-300 text-slate-700 text-[10px] font-bold flex items-center gap-1">
+                                <CheckCheck size={10} className="text-slate-600" />
+                                Interview Ended
+                              </span>
+                            ) : round.isAlreadyScheduled ? (
                               <span className="px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-bold flex items-center gap-1">
                                 <Check size={10} className="text-emerald-600" />
                                 Already Scheduled
@@ -1979,18 +1972,26 @@ export default function ScheduleInterviewModal({
                                 )
                               : { hasConflict: false };
                             const hasCandConflict = candConflict.hasConflict;
+                            const isEnded = isRoundEnded(round);
                             return (
                               <>
                                 {isScheduled ? (
-                                  <div className="text-[11px] font-bold text-emerald-800 flex items-center justify-between gap-1 flex-wrap">
+                                  <div className={`text-[11px] font-bold flex items-center justify-between gap-1 flex-wrap ${
+                                    isEnded ? 'text-slate-700' : 'text-emerald-800'
+                                  }`}>
                                     <div className="flex items-center gap-1.5">
-                                      <Calendar size={12} className="text-emerald-600" />
+                                      <Calendar size={12} className={isEnded ? 'text-slate-500' : 'text-emerald-600'} />
                                       <span>
                                         {new Date(`${round.scheduledDate}T00:00:00`).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })}
                                       </span>
                                       <span>&bull;</span>
-                                      <Clock size={12} className="text-emerald-600" />
+                                      <Clock size={12} className={isEnded ? 'text-slate-500' : 'text-emerald-600'} />
                                       <span>{round.scheduledTime}</span>
+                                      {isEnded && (
+                                        <span className="text-[10px] font-semibold text-slate-500 ml-1">
+                                          (Ended)
+                                        </span>
+                                      )}
                                     </div>
                                     {hasCandConflict && (
                                       <span className="px-1.5 py-0.2 rounded-md bg-rose-100 text-rose-700 text-[9.5px] font-bold">
@@ -2032,6 +2033,7 @@ export default function ScheduleInterviewModal({
                             candidate
                           );
                           const isConflicted = !roundAvail.isAvailable && !round.isAlreadyScheduled;
+                          const isEnded = isRoundEnded(round);
                           return (
                             <div className="space-y-1.5">
                               <div className="flex items-center gap-2.5">
@@ -2045,7 +2047,12 @@ export default function ScheduleInterviewModal({
                                     <span className="text-xs font-bold text-gray-900 truncate">
                                       {round.interviewer.name}
                                     </span>
-                                    {round.isAlreadyScheduled ? (
+                                    {isEnded ? (
+                                      <span className="px-1.5 py-0.2 rounded-md bg-slate-100 border border-slate-200 text-slate-700 text-[9.5px] font-bold flex items-center gap-1">
+                                        <CheckCheck size={9} className="text-slate-600" />
+                                        Completed
+                                      </span>
+                                    ) : round.isAlreadyScheduled ? (
                                       <span className="px-1.5 py-0.2 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-700 text-[9.5px] font-bold flex items-center gap-1">
                                         <Check size={9} className="text-emerald-600" />
                                         Confirmed
