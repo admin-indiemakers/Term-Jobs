@@ -13,6 +13,9 @@ export function BrandMark({
   onOpenRolesClick?: () => void;
   onJoinWaitlist?: () => void;
 }) {
+  // Temporarily hide account actions in the landing-page header.
+  const showAccountActions = false;
+
   return (
     <header className="absolute top-0 inset-x-0 z-40 px-3.5 py-3.5 sm:px-6 sm:py-5 md:px-12 md:py-6 flex items-center justify-between pointer-events-none">
       {/* Brand logo & name */}
@@ -53,7 +56,7 @@ export function BrandMark({
           </button>
         )}
 
-        {onJoinWaitlist && (
+        {showAccountActions && onJoinWaitlist && (
           <button
             type="button"
             onClick={onJoinWaitlist}
@@ -69,7 +72,7 @@ export function BrandMark({
           </button>
         )}
 
-        <Link
+        {showAccountActions && <Link
           to="/login"
           className={`inline-flex items-center gap-1 sm:gap-1.5 rounded-full px-2.5 py-1.5 sm:px-4 sm:py-2 text-[0.58rem] sm:text-[0.65rem] font-bold tracking-[0.12em] sm:tracking-[0.16em] uppercase whitespace-nowrap transition-all duration-300 border backdrop-blur-xl active:scale-95 ${
             dark
@@ -78,7 +81,7 @@ export function BrandMark({
           }`}
         >
           Sign In
-        </Link>
+        </Link>}
       </div>
     </header>
   );
