@@ -2903,11 +2903,11 @@ function HiringManagerDashboardContent() {
       {/* Edit Requisition Modal (Inline Card Tweak) */}
       {editingDraftData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 max-w-xl w-full max-h-[90vh] flex flex-col overflow-hidden text-left animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-white text-gray-900 rounded-2xl shadow-2xl border border-gray-200 max-w-xl w-full max-h-[90vh] flex flex-col overflow-hidden text-left animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between p-4 sm:p-5 border-b border-gray-100">
               <div>
                 <h3 className="text-sm sm:text-base font-bold text-gray-900">Edit Requisition Details</h3>
-                <p className="text-xs text-gray-400 mt-0.5">Modify parameters for {editingDraftData.title}</p>
+                <p className="text-xs text-gray-500 mt-0.5">Modify parameters for {editingDraftData.title}</p>
               </div>
               <button
                 type="button"
@@ -2925,7 +2925,7 @@ function HiringManagerDashboardContent() {
                   type="text"
                   value={editingDraftData.title || ''}
                   onChange={(e) => setEditingDraftData((prev) => ({ ...prev, title: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-black/10 outline-none"
+                  className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-gray-900 placeholder:text-gray-400 text-xs focus:ring-2 focus:ring-black/10 focus:border-gray-500 outline-none transition-colors"
                 />
               </div>
 
@@ -2936,7 +2936,7 @@ function HiringManagerDashboardContent() {
                     type="text"
                     value={editingDraftData.department || ''}
                     onChange={(e) => setEditingDraftData((prev) => ({ ...prev, department: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-black/10 outline-none"
+                    className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-gray-900 placeholder:text-gray-400 text-xs focus:ring-2 focus:ring-black/10 focus:border-gray-500 outline-none transition-colors"
                   />
                 </div>
                 <div>
@@ -2945,7 +2945,7 @@ function HiringManagerDashboardContent() {
                     type="text"
                     value={editingDraftData.location || ''}
                     onChange={(e) => setEditingDraftData((prev) => ({ ...prev, location: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-black/10 outline-none"
+                    className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-gray-900 placeholder:text-gray-400 text-xs focus:ring-2 focus:ring-black/10 focus:border-gray-500 outline-none transition-colors"
                   />
                 </div>
               </div>
@@ -2957,7 +2957,7 @@ function HiringManagerDashboardContent() {
                     type="text"
                     value={editingDraftData.experience || ''}
                     onChange={(e) => setEditingDraftData((prev) => ({ ...prev, experience: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-black/10 outline-none"
+                    className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-gray-900 placeholder:text-gray-400 text-xs focus:ring-2 focus:ring-black/10 focus:border-gray-500 outline-none transition-colors"
                   />
                 </div>
                 <div>
@@ -2966,7 +2966,7 @@ function HiringManagerDashboardContent() {
                     type="text"
                     value={editingDraftData.employment_type || ''}
                     onChange={(e) => setEditingDraftData((prev) => ({ ...prev, employment_type: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-black/10 outline-none"
+                    className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-gray-900 placeholder:text-gray-400 text-xs focus:ring-2 focus:ring-black/10 focus:border-gray-500 outline-none transition-colors"
                   />
                 </div>
                 <div>
@@ -2976,7 +2976,7 @@ function HiringManagerDashboardContent() {
                     min="1"
                     value={editingDraftData.openings || 1}
                     onChange={(e) => setEditingDraftData((prev) => ({ ...prev, openings: parseInt(e.target.value, 10) || 1 }))}
-                    className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-black/10 outline-none"
+                    className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-gray-900 placeholder:text-gray-400 text-xs focus:ring-2 focus:ring-black/10 focus:border-gray-500 outline-none transition-colors"
                   />
                 </div>
               </div>
@@ -2993,7 +2993,7 @@ function HiringManagerDashboardContent() {
                     }))
                   }
                   placeholder="e.g. Python, React"
-                  className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-black/10 outline-none"
+                  className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-gray-900 placeholder:text-gray-400 text-xs focus:ring-2 focus:ring-black/10 focus:border-gray-500 outline-none transition-colors"
                 />
               </div>
 
@@ -3004,31 +3004,16 @@ function HiringManagerDashboardContent() {
                   value={editingDraftData.summary !== undefined ? editingDraftData.summary : (editingDraftData.job_description || '')}
                   onChange={(e) => setEditingDraftData((prev) => ({ ...prev, summary: e.target.value, job_description: e.target.value }))}
                   placeholder="Brief summary of the role responsibilities..."
-                  className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-black/10 outline-none resize-none leading-relaxed"
+                  className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-gray-900 placeholder:text-gray-400 text-xs focus:ring-2 focus:ring-black/10 focus:border-gray-500 outline-none resize-none leading-relaxed transition-colors"
                 />
               </div>
             </div>
 
             <div className="flex items-center justify-end gap-2 p-4 sm:p-5 border-t border-gray-100 bg-gray-50/50">
-              {resumeError && <p role="alert" className="text-xs text-red-700">{resumeError}</p>}
-              <button type="button" disabled={resumeLoading} className="px-4 py-2 rounded-xl border border-gray-200 text-xs font-semibold disabled:opacity-50" onClick={async () => {
-                setResumeError(''); setResumeLoading(true);
-                const tab = window.open('', '_blank');
-                if (tab) tab.opener = null;
-                try {
-                  const response = await fetch(`${API_BASE_URL}/api/candidates/manager/${encodeURIComponent(selectedCandidateProfile.id)}/resume`, { headers: { Authorization: `Bearer ${token}` } });
-                  if (!response.ok) { const error = await response.json().catch(() => ({})); throw new Error(error.detail || 'Could not open resume.'); }
-                  const url = URL.createObjectURL(await response.blob());
-                  if (tab) tab.location.href = url;
-                  else { const link = document.createElement('a'); link.href = url; link.download = 'resume'; link.click(); }
-                  setTimeout(() => URL.revokeObjectURL(url), 60000);
-                } catch (error) { tab?.close(); setResumeError(error.message); }
-                finally { setResumeLoading(false); }
-              }}>{resumeLoading ? 'Opening…' : 'Open Resume'}</button>
               <button
                 type="button"
                 onClick={() => setEditingDraftData(null)}
-                className="px-4 py-2 rounded-xl border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
+                className="px-4 py-2 rounded-xl border border-gray-200 bg-white text-xs font-semibold text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
               >
                 Cancel
               </button>
@@ -3120,25 +3105,66 @@ function HiringManagerDashboardContent() {
               )}
             </div>
 
-            <div className="flex items-center justify-end gap-2 p-4 sm:p-5 border-t border-gray-100 bg-gray-50/50">
-              <button
-                type="button"
-                onClick={() => setSelectedCandidateProfile(null)}
-                className="px-4 py-2 rounded-xl border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
-              >
-                Close
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const candName = selectedCandidateProfile.name;
-                  setSelectedCandidateProfile(null);
-                  handleSendPrompt(`Schedule an interview with ${candName}`);
-                }}
-                className="px-4 py-2 rounded-xl bg-black text-white text-xs font-semibold hover:bg-gray-800 transition-colors shadow-xs cursor-pointer"
-              >
-                Schedule Interview
-              </button>
+            <div className="flex items-center justify-between gap-2 p-4 sm:p-5 border-t border-gray-100 bg-gray-50/50">
+              <div className="flex items-center gap-2">
+                {resumeError && <p role="alert" className="text-xs text-red-700">{resumeError}</p>}
+                <button
+                  type="button"
+                  disabled={resumeLoading}
+                  className="px-3.5 py-2 rounded-xl border border-gray-200 bg-white text-xs font-semibold text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50 cursor-pointer"
+                  onClick={async () => {
+                    setResumeError('');
+                    setResumeLoading(true);
+                    const tab = window.open('', '_blank');
+                    if (tab) tab.opener = null;
+                    try {
+                      const response = await fetch(`${API_BASE_URL}/api/candidates/manager/${encodeURIComponent(selectedCandidateProfile.id)}/resume`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                      });
+                      if (!response.ok) {
+                        const error = await response.json().catch(() => ({}));
+                        throw new Error(error.detail || 'Could not open resume.');
+                      }
+                      const url = URL.createObjectURL(await response.blob());
+                      if (tab) tab.location.href = url;
+                      else {
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.download = 'resume';
+                        link.click();
+                      }
+                      setTimeout(() => URL.revokeObjectURL(url), 60000);
+                    } catch (error) {
+                      tab?.close();
+                      setResumeError(error.message);
+                    } finally {
+                      setResumeLoading(false);
+                    }
+                  }}
+                >
+                  {resumeLoading ? 'Opening…' : 'Open Resume'}
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedCandidateProfile(null)}
+                  className="px-4 py-2 rounded-xl border border-gray-200 bg-white text-xs font-semibold text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const candName = selectedCandidateProfile.name;
+                    setSelectedCandidateProfile(null);
+                    handleSendPrompt(`Schedule an interview with ${candName}`);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-black text-white text-xs font-semibold hover:bg-gray-800 transition-colors shadow-xs cursor-pointer"
+                >
+                  Schedule Interview
+                </button>
+              </div>
             </div>
           </div>
         </div>

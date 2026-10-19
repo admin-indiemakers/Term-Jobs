@@ -17,59 +17,91 @@ except ImportError:
     import logging
     logger = logging.getLogger(__name__)
 
+class _MockStub:
+    """Mock stub class that gracefully accepts any constructor arguments, calls, and attributes."""
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    def __getattr__(self, name: str) -> Any:
+        return _MockStub()
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        return _MockStub()
+
+    def __iter__(self) -> Any:
+        return iter([])
+
+    def __aiter__(self) -> Any:
+        async def _aiter():
+            if False:
+                yield None
+        return _aiter()
+
+    async def __aenter__(self) -> "_MockStub":
+        return self
+
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        pass
+
+    def __await__(self) -> Any:
+        async def _coro() -> "_MockStub":
+            return _MockStub()
+        return _coro().__await__()
+
+
 # Optional runtime dependencies — installed in .venv but not always present in dev linters.
 # All imports are guarded so the module degrades gracefully if pipecat is unavailable.
 try:
-    from openai import RateLimitError, AuthenticationError, NotFoundError  # type: ignore[import-untyped]
-    from pipecat.frames.frames import Frame, TTSSpeakFrame  # type: ignore[import-untyped]
-    from pipecat.pipeline.pipeline import Pipeline  # type: ignore[import-untyped]
-    from pipecat.pipeline.runner import PipelineRunner  # type: ignore[import-untyped]
-    from pipecat.pipeline.task import PipelineTask  # type: ignore[import-untyped]
-    from pipecat.services.groq.llm import GroqLLMService  # type: ignore[import-untyped]
-    from pipecat.services.sarvam.stt import SarvamSTTService, SarvamSTTSettings  # type: ignore[import-untyped]
-    from pipecat.services.sarvam.tts import SarvamTTSService, SarvamTTSSettings  # type: ignore[import-untyped]
-    from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport  # type: ignore[import-untyped]
-    from pipecat.transports.smallwebrtc.connection import SmallWebRTCConnection  # type: ignore[import-untyped]
-    from pipecat.transports.smallwebrtc.request_handler import SmallWebRTCRequestHandler  # type: ignore[import-untyped]
-    from pipecat.transports.base_transport import TransportParams  # type: ignore[import-untyped]
-    from pipecat.processors.aggregators.llm_context import LLMContext, ToolsSchema  # type: ignore[import-untyped]
-    from pipecat.processors.aggregators.llm_response_universal import (  # type: ignore[import-untyped]
+    from openai import RateLimitError, AuthenticationError, NotFoundError  # type: ignore
+    from pipecat.frames.frames import Frame, TTSSpeakFrame  # type: ignore
+    from pipecat.pipeline.pipeline import Pipeline  # type: ignore
+    from pipecat.pipeline.runner import PipelineRunner  # type: ignore
+    from pipecat.pipeline.task import PipelineTask  # type: ignore
+    from pipecat.services.groq.llm import GroqLLMService  # type: ignore
+    from pipecat.services.sarvam.stt import SarvamSTTService, SarvamSTTSettings  # type: ignore
+    from pipecat.services.sarvam.tts import SarvamTTSService, SarvamTTSSettings  # type: ignore
+    from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport  # type: ignore
+    from pipecat.transports.smallwebrtc.connection import SmallWebRTCConnection  # type: ignore
+    from pipecat.transports.smallwebrtc.request_handler import SmallWebRTCRequestHandler  # type: ignore
+    from pipecat.transports.base_transport import TransportParams  # type: ignore
+    from pipecat.processors.aggregators.llm_context import LLMContext, ToolsSchema  # type: ignore
+    from pipecat.processors.aggregators.llm_response_universal import (  # type: ignore
         LLMContextAggregatorPair,
         LLMUserAggregatorParams,
     )
-    from pipecat.audio.vad.silero import SileroVADAnalyzer  # type: ignore[import-untyped]
-    from pipecat.audio.vad.vad_analyzer import VADParams  # type: ignore[import-untyped]
-    from pipecat.processors.frameworks.rtvi import RTVIProcessor  # type: ignore[import-untyped]
-    from pipecat.adapters.schemas.function_schema import FunctionSchema  # type: ignore[import-untyped]
+    from pipecat.audio.vad.silero import SileroVADAnalyzer  # type: ignore
+    from pipecat.audio.vad.vad_analyzer import VADParams  # type: ignore
+    from pipecat.processors.frameworks.rtvi import RTVIProcessor  # type: ignore
+    from pipecat.adapters.schemas.function_schema import FunctionSchema  # type: ignore
     PIPECAT_AVAILABLE = True
-except ImportError:
+except (ImportError, Exception):
     PIPECAT_AVAILABLE = False
     # Provide stubs so the rest of the module can be imported without pipecat
-    Frame = object  # type: ignore[assignment,misc]
-    TTSSpeakFrame = object  # type: ignore[assignment,misc]
-    Pipeline = object  # type: ignore[assignment,misc]
-    PipelineRunner = object  # type: ignore[assignment,misc]
-    PipelineTask = object  # type: ignore[assignment,misc]
-    GroqLLMService = object  # type: ignore[assignment,misc]
-    SarvamSTTService = object  # type: ignore[assignment,misc]
-    SarvamSTTSettings = object  # type: ignore[assignment,misc]
-    SarvamTTSService = object  # type: ignore[assignment,misc]
-    SarvamTTSSettings = object  # type: ignore[assignment,misc]
-    SmallWebRTCTransport = object  # type: ignore[assignment,misc]
-    SmallWebRTCConnection = object  # type: ignore[assignment,misc]
-    SmallWebRTCRequestHandler = object  # type: ignore[assignment,misc]
-    TransportParams = object  # type: ignore[assignment,misc]
-    LLMContext = object  # type: ignore[assignment,misc]
-    ToolsSchema = object  # type: ignore[assignment,misc]
-    LLMContextAggregatorPair = object  # type: ignore[assignment,misc]
-    LLMUserAggregatorParams = object  # type: ignore[assignment,misc]
-    SileroVADAnalyzer = object  # type: ignore[assignment,misc]
-    VADParams = object  # type: ignore[assignment,misc]
-    RTVIProcessor = object  # type: ignore[assignment,misc]
-    FunctionSchema = object  # type: ignore[assignment,misc]
-    RateLimitError = Exception  # type: ignore[assignment,misc]
-    AuthenticationError = Exception  # type: ignore[assignment,misc]
-    NotFoundError = Exception  # type: ignore[assignment,misc]
+    Frame: Any = _MockStub
+    TTSSpeakFrame: Any = _MockStub
+    Pipeline: Any = _MockStub
+    PipelineRunner: Any = _MockStub
+    PipelineTask: Any = _MockStub
+    GroqLLMService: Any = _MockStub
+    SarvamSTTService: Any = _MockStub
+    SarvamSTTSettings: Any = _MockStub
+    SarvamTTSService: Any = _MockStub
+    SarvamTTSSettings: Any = _MockStub
+    SmallWebRTCTransport: Any = _MockStub
+    SmallWebRTCConnection: Any = _MockStub
+    SmallWebRTCRequestHandler: Any = _MockStub
+    TransportParams: Any = _MockStub
+    LLMContext: Any = _MockStub
+    ToolsSchema: Any = _MockStub
+    LLMContextAggregatorPair: Any = _MockStub
+    LLMUserAggregatorParams: Any = _MockStub
+    SileroVADAnalyzer: Any = _MockStub
+    VADParams: Any = _MockStub
+    RTVIProcessor: Any = _MockStub
+    FunctionSchema: Any = _MockStub
+    RateLimitError: Any = Exception
+    AuthenticationError: Any = Exception
+    NotFoundError: Any = Exception
 
 from .groq_manager import get_next_groq_key
 from .agent import TOOLS, TOOL_MAP
@@ -100,7 +132,7 @@ def get_sarvam_api_key() -> str:
 SARVAM_API_KEY = get_sarvam_api_key()
 
 # Shared WebRTC handler with Google STUN server
-small_webrtc_handler = SmallWebRTCRequestHandler(ice_servers=["stun:stun.l.google.com:19302"])
+small_webrtc_handler: Any = SmallWebRTCRequestHandler(ice_servers=["stun:stun.l.google.com:19302"])
 
 # Active session tracking and executed actions memory for web client sync
 active_voice_sessions: dict[str, dict] = {}
@@ -228,18 +260,23 @@ def create_superadmin_voice_system_prompt(user_name: str = "Super Admin") -> str
     )
 
 
-def build_superadmin_tools_schema() -> ToolsSchema:
+def build_superadmin_tools_schema() -> Any:
     """Convert all 25 SuperAdmin TOOLS definitions into Pipecat FunctionSchema format."""
-    schemas = []
+    schemas: list[Any] = []
     for t in TOOLS:
-        fn = t.get("function", {})
-        params = fn.get("parameters", {})
+        if not isinstance(t, dict):
+            continue
+        fn = t.get("function")
+        if not isinstance(fn, dict):
+            continue
+        params = fn.get("parameters")
+        params_dict = params if isinstance(params, dict) else {}
         schemas.append(
             FunctionSchema(
-                name=fn["name"],
-                description=fn.get("description", ""),
-                properties=params.get("properties", {}),
-                required=params.get("required", [])
+                name=str(fn.get("name", "")),
+                description=str(fn.get("description", "")),
+                properties=params_dict.get("properties", {}),
+                required=params_dict.get("required", [])
             )
         )
     return ToolsSchema(standard_tools=schemas)
@@ -263,8 +300,8 @@ def register_superadmin_tools(
             await play_spoken_filler(params, tool_name)
 
             # 2. Execute underlying database tool function
+            args: dict[str, Any] = getattr(params, "arguments", None) or {}
             try:
-                args = params.arguments or {}
                 # Run synchronous DB tool in executor to prevent blocking the async audio loop
                 loop = asyncio.get_running_loop()
                 result = await loop.run_in_executor(None, lambda: tool_fn(**args))
@@ -274,7 +311,7 @@ def register_superadmin_tools(
 
             action_data = {
                 "tool": tool_name,
-                "args": params.arguments,
+                "args": args,
                 "result": result
             }
 
@@ -387,7 +424,7 @@ async def run_superadmin_webrtc_bot(webrtc_connection: SmallWebRTCConnection, se
     audio_in_filter = None
     if aic_license_key:
         try:
-            from pipecat.audio.filters.aic_filter import AICFilter
+            from pipecat.audio.filters.aic_filter import AICFilter  # type: ignore
             audio_in_filter = AICFilter(license_key=aic_license_key)
             logger.info("🛡️ [AIC FILTER ACTIVE] AI-Coustics neural noise filter engaged.")
         except Exception as e:
@@ -487,7 +524,7 @@ async def run_superadmin_webrtc_bot(webrtc_connection: SmallWebRTCConnection, se
         context_aggregator.assistant()
     ])
 
-    resources = {"session_id": session_id}
+    resources: dict[str, Any] = {"session_id": session_id}
     task = PipelineTask(
         pipeline,
         app_resources=resources,
