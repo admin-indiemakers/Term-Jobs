@@ -6,8 +6,8 @@ from fastapi import HTTPException
 
 def billing_period(value=None):
     value = value or datetime.now(timezone.utc).strftime('%Y-%m')
-    if not isinstance(value, str) or not re.fullmatch(r'\d{4}-(0[1-9]|1[0-2])', value):
-        raise HTTPException(422, 'Billing period must be YYYY-MM')
+    if not isinstance(value, str) or not re.fullmatch(r'(?!0000)[0-9]{4}-(0[1-9]|1[0-2])', value):
+        raise HTTPException(422, 'Billing period must be YYYY-MM with a four-digit year (0001–9999)')
     return value
 
 

@@ -29,6 +29,22 @@ def _matches_user(n: Notification, current_user: User) -> bool:
     if n_tid and user_tenant and n_tid != user_tenant:
         return False
 
+    # Legacy producers omitted target_role. Recover only known event audiences.
+    kind = str(getattr(n, "type", "") or "").lower()
+    legacy_roles = {
+        "requisition_approval_request": {"director", "admin"},
+        "agreement_signed": {"hr", "admin", "super admin"},
+        "sow_submitted_to_procurement": {"procurement", "admin"},
+        "sow_forwarded_to_director": {"director", "admin"},
+    }
+    normalized_role = "procurement" if user_role == "procurement team" else user_role
+    normalized_target = "procurement" if n_role == "procurement team" else n_role
+    if not n_role and kind in legacy_roles:
+        return normalized_role in legacy_roles[kind] and bool(n_tid and n_tid == user_tenant)
+    # Procurement must receive an explicit recipient, role or known procurement event.
+    if normalized_role == "procurement":
+        return normalized_target == "procurement" and bool(n_tid and n_tid == user_tenant)
+
     # 3. If notification targets a specific role (e.g. 'director', 'admin', 'hiring manager')
     if n_role:
         if user_role == n_role:
@@ -107,6 +123,9 @@ def mark_notification_read(
                     n = it
                     break
         if not n:
+            raise HTTPException(status_code=404, detail="Notification not found")
+
+        if not _matches_user(n, current_user):
             raise HTTPException(status_code=404, detail="Notification not found")
 
         n_uid = str(getattr(n, "user_id", "") or "")

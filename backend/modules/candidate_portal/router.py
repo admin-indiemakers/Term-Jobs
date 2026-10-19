@@ -53,7 +53,7 @@ def _ensure_active_work_order(candidate_id: str, candidate_name: str, candidate_
             {"work_order_number": cid},
         ])
     if cid_clean:
-        reg = re.escape(cid_clean)
+        reg = "^" + re.escape(cid_clean) + "$"
         id_conditions.extend([
             {"workorder_id": {"$regex": reg, "$options": "i"}},
             {"candidate_id": {"$regex": reg, "$options": "i"}},
@@ -62,17 +62,20 @@ def _ensure_active_work_order(candidate_id: str, candidate_name: str, candidate_
         ])
     if cemail:
         id_conditions.append({"candidate_email": {"$regex": f"^{re.escape(cemail)}$", "$options": "i"}})
-    if cname:
-        id_conditions.append({"candidate_name": {"$regex": f"^{re.escape(cname)}$", "$options": "i"}})
 
     if not id_conditions:
         return None
 
-    candidates = wo_coll.find({"$or": id_conditions}).sort("updated_at", -1)
+    tenant_filter = {"tenant_id": tenant_id}
+    # Prefer the portal's explicit work-order/candidate identity over email history.
+    exact_conditions = [{key: cid} for key in ("workorder_id", "candidate_id", "id", "work_order_number")] if cid else []
+    exact = list(wo_coll.find({**tenant_filter, "$or": exact_conditions}).sort("updated_at", -1)) if exact_conditions else []
+    candidates = exact or wo_coll.find({**tenant_filter, "$or": id_conditions}).sort("updated_at", -1)
     candidates_list = list(candidates)
 
     if not candidates_list and cemail:
         candidates_list = list(wo_coll.find({
+            **tenant_filter,
             "candidate_email": {"$regex": f"^{re.escape(cemail)}$", "$options": "i"}
         }).sort("updated_at", -1))
 
@@ -106,24 +109,22 @@ def _ensure_active_work_order(candidate_id: str, candidate_name: str, candidate_
     
     # Enrich empty fields from multiple sources
     sub_coll = db["candidate_submissions"]
-    sub = sub_coll.find_one({
-        "$or": [
-            {"workorder_id": candidate_id},
-            {"candidate_id": candidate_id},
-            {"id": candidate_id},
-            {"candidate_email": candidate_email}
-        ]
-    }) or {}
-    
+    submission_conditions = [{"id": keep.get("candidate_submission_id")}, {"id": cid}, {"candidate_id": cid}, {"candidate_email": cemail}]
+    submission_conditions = [condition for condition in submission_conditions if next(iter(condition.values()))]
+    submission_filter = {"tenant_id": tenant_id}
+    if keep.get("requisition_id"):
+        submission_filter["requisition_id"] = keep["requisition_id"]
+    sub = sub_coll.find_one({**submission_filter, "$or": submission_conditions}) if submission_conditions else None
+    sub = sub or {}
     req_id = keep.get("requisition_id") or sub.get("requisition_id") or ""
-    req_doc = {}
-    if req_id:
-        req_doc = db["requisitions"].find_one({"id": req_id}) or {}
-    
+    req_doc = db["requisitions"].find_one({"id": req_id, "tenant_id": tenant_id}) or {} if req_id else {}
+
     sr = req_doc.get("structured_role") or {}
     
     # Also pull from onboarding checklist (persists even when requisitions are deleted)
     ob = db["onboarding_checklists"].find_one({
+        "tenant_id": tenant_id,
+        **({"requisition_id": req_id} if req_id else {}),
         "$or": [
             {"workorder_id": candidate_id},
             {"candidate_id": candidate_id}
@@ -158,19 +159,27 @@ def _ensure_active_work_order(candidate_id: str, candidate_name: str, candidate_
     _fill("location", sr)
     if not keep.get("location"):
         locations = sr.get("work_locations") or []
-        keep["location"] = locations[0] if locations else sr.get("location") or ""
+        keep["location"] = locations[0] if locations else sr.get("primary_location") or sr.get("location") or ""
     _fill("work_arrangement", sr, req_doc)
     if not keep.get("work_arrangement"):
         keep["work_arrangement"] = sr.get("work_mode") or req_doc.get("work_mode") or ""
     _fill("reporting_manager", sr, req_doc)
     if not keep.get("reporting_manager"):
         keep["reporting_manager"] = sr.get("hiring_manager") or req_doc.get("hiring_manager") or ""
+    if not keep.get("reporting_manager"):
+        manager_id = req_doc.get("created_by")
+        manager = db["users"].find_one({"id": manager_id, "tenant_id": tenant_id, "role": "Hiring Manager", "is_deleted": {"$ne": True}}) if manager_id else None
+        if manager:
+            keep["reporting_manager"] = manager.get("name") or ""
+    for contact_field in ("procurement_name", "finance_name"):
+        _fill(contact_field, sr, req_doc)
     _fill("overtime_policy", sr, req_doc)
     if not keep.get("overtime_policy"):
         keep["overtime_policy"] = sr.get("overtime_policy") or req_doc.get("overtime_policy") or ""
     _fill("engagement_type", sr, req_doc)
     if not keep.get("engagement_type"):
         keep["engagement_type"] = sr.get("engagement_type") or req_doc.get("engagement_type") or ""
+    _fill("start_date", sr, req_doc)
     _fill("end_date", sr, req_doc)
     if not keep.get("end_date"):
         keep["end_date"] = sr.get("ends_on") or req_doc.get("end_date") or ""
@@ -217,6 +226,8 @@ def _sanitize_work_order_for_candidate(wo: dict) -> dict:
         "location": wo.get("location", ""),
         "work_arrangement": wo.get("work_arrangement", ""),
         "reporting_manager": wo.get("reporting_manager", ""),
+        "procurement_name": wo.get("procurement_name", ""),
+        "finance_name": wo.get("finance_name", ""),
         "overtime_eligible": wo.get("overtime_eligible", True),
         "overtime_policy": wo.get("overtime_policy", ""),
         "engagement_type": wo.get("engagement_type", ""),
@@ -819,9 +830,16 @@ def get_candidate_attendance(
     import re
     from datetime import date
 
-    now = datetime.now(timezone.utc)
+    from zoneinfo import ZoneInfo
+    now = datetime.now(ZoneInfo("Asia/Kolkata"))
     current_month_str = now.strftime("%Y-%m")
     target_month = month or current_month_str
+    try:
+        if not re.fullmatch(r"\d{4}-\d{2}", target_month):
+            raise ValueError
+        datetime.strptime(target_month, "%Y-%m")
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="Month must be a valid YYYY-MM value")
 
     cand_id = (current_user.workorder_id or current_user.candidate_id or "").strip()
     cemail = (current_user.email or "").strip()
@@ -830,6 +848,7 @@ def get_candidate_attendance(
     # 1. Fetch active/associated work order
     wo_coll = db["work_orders"]
     wo = wo_coll.find_one({
+        "tenant_id": current_user.tenant_id,
         "$or": [
             {"workorder_id": cand_id},
             {"candidate_id": cand_id},
@@ -851,7 +870,7 @@ def get_candidate_attendance(
     ts_coll = db["timesheets"]
     or_clauses = []
     for c in cids:
-        reg = re.escape(c)
+        reg = "^" + re.escape(c) + "$"
         or_clauses.extend([
             {"workorder_id": {"$regex": reg, "$options": "i"}},
             {"candidate_id": {"$regex": reg, "$options": "i"}},
@@ -862,7 +881,7 @@ def get_candidate_attendance(
     if cemail:
         or_clauses.append({"candidate_email": {"$regex": f"^{re.escape(cemail)}$", "$options": "i"}})
 
-    timesheets = list(ts_coll.find({"$or": or_clauses})) if or_clauses else []
+    timesheets = list(ts_coll.find({"tenant_id": current_user.tenant_id, "$or": or_clauses})) if or_clauses else []
 
     # 4. Map daily entries across all candidate timesheets
     entries_map = {}
@@ -903,7 +922,8 @@ def get_candidate_attendance(
     days_in_month = calendar.monthrange(yr, mo)[1]
     month_label = datetime(yr, mo, 1).strftime("%B %Y")
 
-    start_date_str = (wo.get("start_date") if wo else "") or ""
+    start_date_str = str((wo.get("start_date") if wo else "") or "")[:10]
+    end_date_str = str((wo.get("end_date") or wo.get("ends_on") if wo else "") or "")[:10]
     today_date = now.date()
 
     daily_records = []
@@ -917,13 +937,15 @@ def get_candidate_attendance(
     for d in range(1, days_in_month + 1):
         cur_d = date(yr, mo, d)
         d_iso = cur_d.isoformat()
+        if not wo or not start_date_str or d_iso < start_date_str or (end_date_str and d_iso > end_date_str):
+            continue
         date_label = cur_d.strftime("%d %b")
         day_name = cur_d.strftime("%A")
         is_weekend = cur_d.weekday() >= 5
         is_future = cur_d > today_date
         is_pre_assignment = bool(start_date_str and d_iso < start_date_str)
 
-        if d_iso in entries_map:
+        if d_iso in entries_map and not is_future:
             item = entries_map[d_iso]
             e = item["entry"]
             h = float(e.get("hours", 0.0))
@@ -1022,17 +1044,18 @@ def get_candidate_attendance(
     payable_days = present_days + paid_leave_days + client_holidays
 
     # 6. Generate dynamic available months list
-    months_set = set([current_month_str, target_month, "2026-08", "2026-09"])
+    months_set = set()
+    # Show assignment months through today (or the assignment end), without demo periods.
     if start_date_str:
-        months_set.add(start_date_str[:7])
-    for ts in timesheets:
-        w_start = ts.get("week_start_date")
-        if w_start:
-            months_set.add(w_start[:7])
-        for de in ts.get("daily_entries", []):
-            dt = de.get("date")
-            if dt:
-                months_set.add(dt[:7])
+        first_month = start_date_str[:7]
+        last_month = min(current_month_str, end_date_str[:7]) if end_date_str else current_month_str
+        cursor = first_month
+        while cursor <= last_month:
+            months_set.add(cursor)
+            year, number = map(int, cursor.split('-'))
+            cursor = f"{year + (number == 12):04d}-{1 if number == 12 else number + 1:02d}"
+    if not months_set:
+        months_set.add(current_month_str)
 
     sorted_months = sorted(list(months_set), reverse=True)
     available_months = []
@@ -1067,6 +1090,8 @@ def get_candidate_attendance(
         "pending_approval_days": pending_approval_days,
         "total_hours": total_hours,
         "available_months": available_months,
+        "has_records": any(row["timesheet_status"] in ("APPROVED", "SUBMITTED", "DRAFT", "REJECTED") for row in daily_records),
+        "assignment_start_date": start_date_str,
         "daily_records": daily_records
     }
 

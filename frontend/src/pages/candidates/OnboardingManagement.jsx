@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { request } from '../../api/client';
 import {
@@ -37,7 +37,8 @@ export default function OnboardingManagement() {
   const [successInfo, setSuccessInfo] = useState('');
   const [creatingWO, setCreatingWO] = useState('');
   const [sendingCredsId, setSendingCredsId] = useState(null);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchParams] = useSearchParams();
+  const [searchQuery, setSearchQuery] = useState(() => searchParams.get('candidate') || '');
 
   // Setup Modal State
   const [editingCandidate, setEditingCandidate] = useState(null);
@@ -785,7 +786,7 @@ export default function OnboardingManagement() {
                             onClick={() => handleOpenSetup(cand)}
                             className="px-2.5 py-1 rounded-xl bg-white/80 hover:bg-white text-gray-800 text-xs font-bold border border-gray-200/80 hover:border-black transition cursor-pointer shadow-2xs"
                           >
-                            {isCompleted ? 'Edit Setup' : 'Setup Onboarding'}
+                            {isCompleted || obDoc?.software_access?.length || obDoc?.training_modules?.length ? 'Edit Setup' : 'Setup Onboarding'}
                           </button>
 
                           {hasWO || woActivated ? (

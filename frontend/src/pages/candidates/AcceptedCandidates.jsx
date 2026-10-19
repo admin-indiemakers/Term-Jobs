@@ -80,8 +80,11 @@ export default function AcceptedCandidates() {
       // Create mapping by candidate id
       const obMap = {};
       obList.forEach((item) => {
-        const id = item.candidate_id || item.id;
-        if (id) obMap[id] = item;
+        for (const value of [item.candidate_id, item.id, item.workorder_id, item.candidate_submission_id]) {
+          if (!value) continue;
+          const clean = String(value).replace(/^(?:SDC|BEAR)\s*-\s*/, '').trim();
+          for (const alias of [String(value), clean, `SDC-${clean}`, `SDC -${clean}`, `BEAR-${clean}`]) obMap[alias] = item;
+        }
       });
 
       setCandidates(candList);
@@ -160,22 +163,9 @@ export default function AcceptedCandidates() {
   }, [candidates, searchQuery]);
 
   // Open Onboarding Setup Modal
-  const handleOpenSetup = (cand) => {
-    const id = cand.id || cand.candidate_id;
-    const existing = onboardingDocs[id];
-
-    setEditingCandidate(cand);
-    if (existing?.software_access?.length) {
-      setSetupSoftware(existing.software_access);
-    } else {
-      setSetupSoftware(DEFAULT_SOFTWARE.map((s) => ({ ...s, enabled: false })));
-    }
-
-    if (existing?.training_modules?.length) {
-      setSetupTraining(existing.training_modules);
-    } else {
-      setSetupTraining(DEFAULT_TRAINING.map((t) => ({ ...t, enabled: t.mandatory || false })));
-    }
+  const handleOpenSetup = (candidate) => {
+    const identifier = candidate.candidate_id || candidate.id;
+    navigate(`/dashboard/candidates/onboarding?candidate=${encodeURIComponent(identifier)}`);
   };
 
   // Save Onboarding Setup
@@ -458,8 +448,9 @@ export default function AcceptedCandidates() {
 
                   const score = cand.match_score != null ? Math.round(cand.match_score) : null;
                   const obDoc = onboardingDocs[id];
-                  const isCompleted = obDoc?.status === 'completed';
-                  const isInProgress = obDoc?.status === 'in_progress';
+                  const isCompleted = obDoc?.status === 'completed' || obDoc?.setup_status === 'completed';
+                  const isConfigured = Boolean(obDoc?.software_access?.length || obDoc?.training_modules?.length);
+                  const isInProgress = obDoc?.status === 'in_progress' || obDoc?.setup_status === 'in_progress' || isConfigured;
 
                   const wo =
                     woMap[id] ||
@@ -533,7 +524,7 @@ export default function AcceptedCandidates() {
                             onClick={() => handleOpenSetup(cand)}
                             className="px-2.5 py-1.5 bg-white/70 hover:bg-white text-gray-800 hover:text-black font-bold text-xs rounded-xl border border-white/90 shadow-3xs transition-all cursor-pointer"
                           >
-                            {isCompleted ? 'Edit Setup' : 'Setup Onboarding'}
+                            {isCompleted || isConfigured ? 'View Onboarding' : 'Start Onboarding'}
                           </button>
                         )}
                       </td>

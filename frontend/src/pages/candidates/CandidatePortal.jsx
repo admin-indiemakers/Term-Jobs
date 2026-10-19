@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo, useRef } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { request } from '../../api/client';
+import { todayForDeadline } from '../../utils/submissionDeadline';
 import {
   Briefcase, Hash, LogOut, Check, Flag, Clock, Calendar,
   ChevronRight, ArrowRight, AlertCircle, FileText, CheckCircle2,
@@ -77,7 +78,7 @@ const AI_SUGGESTIONS = [
   {
     question: 'How is monthly Attendance calculated?',
     answer:
-      'Attendance tracks your Present Days, Approved Leaves, and Client Holidays for August 2026 to ensure 100% accurate payroll computation.',
+      'Attendance shows recorded work, leave, and holidays for your assignment period.',
     actionTab: 'attendance',
     actionLabel: 'Check Attendance',
   },
@@ -211,18 +212,15 @@ export default function CandidatePortal() {
   const [dailyEntries, setDailyEntries] = useState(generateInitialSevenDays);
 
   // Attendance state
-  const [selectedMonth, setSelectedMonth] = useState('2026-08');
+  const [selectedMonth, setSelectedMonth] = useState(() => todayForDeadline().slice(0, 7));
   const [attendanceData, setAttendanceData] = useState({
     present_days: 0,
     paid_leave_days: 0,
     client_holidays: 0,
     payable_days: 0.0,
-    daily_records: [
-      { date: '25 Aug', day: 'Tuesday', status: 'Pending', note: 'Assignment start' },
-      { date: '26 Aug', day: 'Wednesday', status: 'Pending', note: 'Regular' },
-      { date: '27 Aug', day: 'Thursday', status: 'Pending', note: 'Regular' },
-      { date: '28 Aug', day: 'Friday', status: 'Pending', note: 'Regular' },
-    ],
+    daily_records: [],
+    available_months: [],
+    has_records: false,
   });
 
   // Expense State
@@ -429,14 +427,23 @@ export default function CandidatePortal() {
     setShowNotifications(false);
   };
 
+  const [attendanceLoading, setAttendanceLoading] = useState(false);
+  const [attendanceError, setAttendanceError] = useState('');
+  const attendanceRequest = useRef(0);
+
   async function loadAttendance(monthStr) {
+    const version = ++attendanceRequest.current;
+    setAttendanceLoading(true);
+    setAttendanceError('');
     try {
       const res = await request(`/api/candidate-portal/attendance?month=${monthStr}`, { token });
-      if (res?.attendance) {
+      if (version === attendanceRequest.current && res?.attendance) {
         setAttendanceData(res.attendance);
       }
     } catch (err) {
-      /* fallback to state */
+      if (version === attendanceRequest.current) setAttendanceError(err.message || 'Unable to load attendance. Please try again.');
+    } finally {
+      if (version === attendanceRequest.current) setAttendanceLoading(false);
     }
   }
 
@@ -493,11 +500,7 @@ export default function CandidatePortal() {
         })
         .catch(() => {});
 
-      request('/api/candidate-portal/attendance?month=2026-08', { token })
-        .then((attRes) => {
-          if (attRes?.attendance) setAttendanceData(attRes.attendance);
-        })
-        .catch(() => {});
+
     } catch (err) {
       setError(err.message || 'Failed to load candidate portal data.');
     }
@@ -817,12 +820,12 @@ export default function CandidatePortal() {
     requisition_title: cand.requisition_title || 'Contractor Role',
     company_name: cand.company || 'Company',
     vendor_name: cand.vendor || 'Vendor',
-    start_date: isWorkOrderActive ? (woRaw?.start_date || '25 Aug 2026') : 'Awaiting Approval',
-    end_date: isWorkOrderActive ? (woRaw?.end_date || '25 Feb 2027') : '—',
+    start_date: isWorkOrderActive ? (woRaw?.start_date || '') : 'Awaiting Approval',
+    end_date: isWorkOrderActive ? (woRaw?.end_date || '') : '—',
     weekly_hours: 40,
-    location: 'Bangalore',
-    work_arrangement: 'Hybrid',
-    reporting_manager: 'Hiring Manager',
+    location: '',
+    work_arrangement: '',
+    reporting_manager: '',
     overtime_policy: 'Standard Cap',
     engagement_type: 'Contractor',
     status: isWorkOrderActive ? 'ACTIVE' : isPendingApproval ? 'PENDING APPROVAL' : 'PENDING',
@@ -865,7 +868,7 @@ export default function CandidatePortal() {
   };
 
   const snapshot = data?.assignment_snapshot || {
-    work_arrangement: 'Hybrid',
+    work_arrangement: '',
     weekly_expectation: '40h',
     overtime: 'Allowed',
     engagement: 'Contractor',
@@ -911,104 +914,34 @@ export default function CandidatePortal() {
 
   // Participant Rail Card: Who's Involved
   const renderWhosInvolvedCard = () => {
-    const candidateName = cand.name || user.name || 'Arjun M';
-    const candParts = candidateName.trim().split(/\s+/);
-    const candidateInitials = candParts.length >= 2 
-      ? (candParts[0][0] + candParts[1][0]).toUpperCase()
-      : candidateName.slice(0, 2).toUpperCase();
-
-    const vendorName = wo.vendor_name || cand.vendor || 'Acme Systems';
-    const vendParts = vendorName.trim().split(/\s+/);
-    const vendorInitials = vendParts.length >= 2
-      ? (vendParts[0][0] + vendParts[1][0]).toUpperCase()
-      : vendorName.slice(0, 2).toUpperCase();
-
-    const managerName = wo.reporting_manager || 'Rohith';
-    const mgrParts = managerName.trim().split(/\s+/);
-    const managerInitials = mgrParts.length >= 2
-      ? (mgrParts[0][0] + mgrParts[1][0]).toUpperCase()
-      : managerName.slice(0, 2).toUpperCase();
-
-    const procurementName = wo.procurement_name || 'ADITI';
-    const procParts = procurementName.trim().split(/\s+/);
-    const procurementInitials = procParts.length >= 2
-      ? (procParts[0][0] + procParts[1][0]).toUpperCase()
-      : procurementName.slice(0, 2).toUpperCase();
+    const configured = value => typeof value === 'string' && value.trim() && ![
+      'not configured', 'not provided', 'direct applicant', 'vendor', 'hiring manager', 'finance / ap', 'procurement',
+    ].includes(value.trim().toLowerCase());
+    const stakeholders = woRaw ? [
+      { name: wo.procurement_name, role: 'Procurement' },
+      { name: wo.vendor_name, role: 'Staffing partner' },
+      { name: cand.name || user.name, role: 'Contract worker' },
+      { name: wo.reporting_manager, role: 'Hiring manager' },
+      { name: wo.finance_name, role: 'Finance / AP' },
+    ].filter(person => configured(person.name)) : [];
 
     return (
-      <div
-        style={{
-          backgroundColor: '#FFFFFF',
-          borderRadius: 22,
-          border: '1px solid #E2E2DC',
-          boxShadow: '0 2px 10px rgba(0,0,0,0.02)',
-        }}
-        className="p-5 space-y-3.5 bento-card-hover"
-      >
-        <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">
-          WHO'S INVOLVED
-        </div>
-
-        <div className="space-y-2">
-          {/* Procurement */}
-          <div className="flex items-center gap-2.5 p-2 rounded-xl bg-gray-50/80 border border-gray-100">
-            <div className="w-8 h-8 rounded-full bg-blue-900 text-white font-bold text-[11px] flex items-center justify-center shrink-0 shadow-xs">
-              {procurementInitials || 'AD'}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="font-bold text-xs text-gray-900 truncate">{procurementName.toUpperCase()}</div>
-              <div className="text-[10px] text-gray-500">Procurement</div>
-            </div>
-            <span className="w-2 h-2 rounded-full bg-blue-600 shrink-0" />
-          </div>
-
-          {/* Recruiter / Vendor */}
-          <div className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-gray-50 transition-colors">
-            <div className="w-8 h-8 rounded-full bg-gray-100 text-gray-700 font-bold text-[11px] flex items-center justify-center shrink-0">
-              {vendorInitials || 'AC'}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="font-bold text-xs text-gray-900 truncate">{vendorName}</div>
-              <div className="text-[10px] text-gray-500 truncate">{vendorName}</div>
-            </div>
-            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-800">EXT</span>
-          </div>
-
-          {/* Candidate / Contract Worker */}
-          <div className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-gray-50 transition-colors">
-            <div className="w-8 h-8 rounded-full bg-gray-100 text-gray-700 font-bold text-[11px] flex items-center justify-center shrink-0">
-              {candidateInitials || 'AR'}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="font-bold text-xs text-gray-900 truncate">{candidateName.toUpperCase()}</div>
-              <div className="text-[10px] text-gray-500">Contract worker</div>
-            </div>
-            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-800">EXT</span>
-          </div>
-
-          {/* Hiring Manager */}
-          <div className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-gray-50 transition-colors">
-            <div className="w-8 h-8 rounded-full bg-gray-100 text-gray-700 font-bold text-[11px] flex items-center justify-center shrink-0">
-              {managerInitials || 'RO'}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="font-bold text-xs text-gray-900 truncate">{managerName.toUpperCase()}</div>
-              <div className="text-[10px] text-gray-500">Hiring manager</div>
-            </div>
-          </div>
-
-          {/* Finance / AP */}
-          <div className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-gray-50 transition-colors">
-            <div className="w-8 h-8 rounded-full bg-gray-100 text-gray-700 font-bold text-[11px] flex items-center justify-center shrink-0">
-              FA
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="font-bold text-xs text-gray-900 truncate">Finance / AP</div>
-              <div className="text-[10px] text-gray-500">Commercial Sign-Off</div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <section className="p-5 space-y-3.5 bento-card-hover rounded-[22px] border border-[#E2E2DC] bg-white" aria-label="Assignment stakeholders">
+        <h2 className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">Who's involved</h2>
+        {stakeholders.length ? <ul className="space-y-2">
+          {stakeholders.map(person => (
+            <li key={person.role} className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-gray-50">
+              <span aria-hidden="true" className="w-8 h-8 rounded-full bg-gray-100 text-gray-700 font-bold text-[11px] flex items-center justify-center shrink-0">
+                {person.name.trim().split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase()}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="font-bold text-xs text-gray-900 truncate">{person.name}</p>
+                <p className="text-[10px] text-gray-500">{person.role}</p>
+              </div>
+            </li>
+          ))}
+        </ul> : <p className="text-xs text-gray-500">No assignment stakeholders have been configured.</p>}
+      </section>
     );
   };
 
@@ -1620,7 +1553,7 @@ export default function CandidatePortal() {
                   </h1>
                   <p className="text-[13px] md:text-[13.5px] text-[#5A5A57] mt-2 font-normal leading-relaxed max-w-xl">
                     {isWorkOrderActive
-                      ? `Your onboarding is complete. Your assignment start date is ${wo.start_date || '25 Aug 2026'}, and your workspace is ready.`
+                      ? `Your onboarding is complete. Your assignment start date is ${wo.start_date || 'Not configured'}, and your workspace is ready.`
                       : isPendingApproval
                         ? `Your Master Service Agreement has been submitted to Company Director for approval. Timesheets, attendance, and expense submissions will unlock automatically once approved.`
                         : 'Your candidate account is set up. Timesheets, attendance, and expense submissions will unlock automatically once your Hiring Manager activates your Work Order.'}
@@ -1629,7 +1562,7 @@ export default function CandidatePortal() {
 
                 <div className="text-left md:text-right shrink-0">
                   <div className="text-[1.4rem] md:text-[1.55rem] font-extrabold text-[#0A0A0A] tracking-tight">
-                    {isWorkOrderActive ? (wo.start_date || '25 Aug 2026') : (wo.work_order_number || 'Pending')}
+                    {isWorkOrderActive ? (wo.start_date || 'Not configured') : (wo.work_order_number || 'Pending')}
                   </div>
                   <div className="text-[12px] text-[#737373] font-medium mt-0.5">
                     {isWorkOrderActive ? 'Assignment starts' : 'Work Order Status'}
@@ -1840,19 +1773,19 @@ export default function CandidatePortal() {
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t border-[#F2F2EE]">
                     <div>
                       <div className="text-[9px] font-bold tracking-wider uppercase text-[#A3A39F]">Start</div>
-                      <div className="text-[12px] font-bold text-[#0A0A0A] mt-0.5">{wo.start_date || '25 Aug 2026'}</div>
+                      <div className="text-[12px] font-bold text-[#0A0A0A] mt-0.5">{wo.start_date || 'Not configured'}</div>
                     </div>
                     <div>
                       <div className="text-[9px] font-bold tracking-wider uppercase text-[#A3A39F]">End</div>
-                      <div className="text-[12px] font-bold text-[#0A0A0A] mt-0.5">{wo.end_date || '25 Feb 2027'}</div>
+                      <div className="text-[12px] font-bold text-[#0A0A0A] mt-0.5">{wo.end_date || 'Not configured'}</div>
                     </div>
                     <div>
                       <div className="text-[9px] font-bold tracking-wider uppercase text-[#A3A39F]">Location</div>
-                      <div className="text-[12px] font-bold text-[#0A0A0A] mt-0.5">{wo.location || 'Bangalore'}</div>
+                      <div className="text-[12px] font-bold text-[#0A0A0A] mt-0.5">{wo.location || 'Not configured'}</div>
                     </div>
                     <div>
                       <div className="text-[9px] font-bold tracking-wider uppercase text-[#A3A39F]">Manager</div>
-                      <div className="text-[12px] font-bold text-[#0A0A0A] mt-0.5">{wo.reporting_manager || 'Arun Deshpande'}</div>
+                      <div className="text-[12px] font-bold text-[#0A0A0A] mt-0.5">{wo.reporting_manager || 'Not configured'}</div>
                     </div>
                   </div>
                 </div>
@@ -2768,7 +2701,7 @@ export default function CandidatePortal() {
                     <div className="flex items-center justify-between text-[12px] pt-1">
                       <div>
                         <span className="text-[#8A8A85] block text-[10px] uppercase font-bold">Start Date</span>
-                        <span className="font-bold text-[#0A0A0A]">{wo.start_date || '25 Aug 2026'}</span>
+                        <span className="font-bold text-[#0A0A0A]">{wo.start_date || 'Not configured'}</span>
                       </div>
                       <div className="text-center">
                         <span className="text-[#8A8A85] block text-[10px] uppercase font-bold">Current State</span>
@@ -2776,7 +2709,7 @@ export default function CandidatePortal() {
                       </div>
                       <div className="text-right">
                         <span className="text-[#8A8A85] block text-[10px] uppercase font-bold">End Date</span>
-                        <span className="font-bold text-[#0A0A0A]">{wo.end_date || '25 Feb 2027'}</span>
+                        <span className="font-bold text-[#0A0A0A]">{wo.end_date || 'Not configured'}</span>
                       </div>
                     </div>
                   </div>
@@ -2893,29 +2826,18 @@ export default function CandidatePortal() {
               }}
               className="p-6 md:p-8 space-y-6 bento-card-hover"
             >
-              {/* Month Tabs Bar */}
-              <div className="flex items-center gap-6 border-b border-[#E5E5E0]">
-                <button
-                  onClick={() => setSelectedMonth('2026-08')}
-                  style={{
-                    color: selectedMonth === '2026-08' ? '#0A0A0A' : '#737373',
-                    borderBottom: selectedMonth === '2026-08' ? '2px solid #0A0A0A' : '2px solid transparent',
-                  }}
-                  className="pb-3 text-[13.5px] font-bold transition-all -mb-[1px]"
-                >
-                  August 2026
-                </button>
-                <button
-                  onClick={() => setSelectedMonth('2026-07')}
-                  style={{
-                    color: selectedMonth === '2026-07' ? '#0A0A0A' : '#737373',
-                    borderBottom: selectedMonth === '2026-07' ? '2px solid #0A0A0A' : '2px solid transparent',
-                  }}
-                  className="pb-3 text-[13.5px] font-medium transition-all -mb-[1px] hover:text-[#0A0A0A]"
-                >
-                  July 2026
-                </button>
+              <div className="flex flex-wrap gap-6 border-b border-[#E5E5E0]" aria-label="Attendance month">
+                {(attendanceData.available_months?.length ? attendanceData.available_months : [{ value: selectedMonth, label: new Date(`${selectedMonth}-01T00:00:00`).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }) }]).map(month => (
+                  <button key={month.value} onClick={() => setSelectedMonth(month.value)}
+                    aria-pressed={selectedMonth === month.value}
+                    className={`pb-3 text-sm border-b-2 ${selectedMonth === month.value ? 'border-black font-bold' : 'border-transparent text-neutral-500'}`}>
+                    {month.label}
+                  </button>
+                ))}
               </div>
+              {attendanceLoading && <p role="status">Loading attendance…</p>}
+              {attendanceError && <p role="alert" className="text-sm text-red-700">{attendanceError}</p>}
+              {!attendanceLoading && !attendanceError && !attendanceData.has_records && <p role="status" className="rounded-xl bg-neutral-100 p-4 text-sm text-neutral-600">No attendance has been recorded for this month. Summary counts reflect recorded timesheets only.</p>}
 
               {/* 4 Metric Cards Grid (WITH LEFT-TO-RIGHT EXPANDING UNDERLINE HOVER EFFECT) */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
