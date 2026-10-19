@@ -1710,6 +1710,7 @@ def list_requisitions(
         return result
 
 
+@app.get("/requisitions/overview-metrics")
 @app.get("/api/requisitions/overview-metrics")
 def get_requisitions_overview_metrics(current_user: User = Depends(get_current_user)) -> dict:
     """Return real live metrics for the requisition dashboard cards."""
@@ -1754,8 +1755,7 @@ def get_requisitions_overview_metrics(current_user: User = Depends(get_current_u
         except Exception as e:
             logger.warning(f"Failed to query candidates for overview metrics: {e}")
 
-        from modules.interview.domain.applicants import attended_applicants
-        total_applicants = len(attended_applicants(db, cands))
+        total_applicants = len(cands)
         shortlisted = sum(1 for c in cands if (c.get("status") or "").lower() == "shortlisted")
         hired = sum(
             1 for c in cands if (c.get("status") or "").lower() in ("accepted", "hired", "offer extended", "offer accepted", "completed")
@@ -1767,12 +1767,22 @@ def get_requisitions_overview_metrics(current_user: User = Depends(get_current_u
         try:
             from modules.interview.domain.models import InterviewRound
             round_query = session.query(InterviewRound)
-            if current_user.tenant_id and current_user.role != "Super Admin":
+            if req_ids:
+                round_query = round_query.filter(InterviewRound.requisition_id.in_(req_ids))
+            elif current_user.tenant_id and current_user.role != "Super Admin":
                 round_query = round_query.filter(InterviewRound.tenant_id == current_user.tenant_id)
             all_rounds = round_query.all()
             active_rounds = [r for r in all_rounds if getattr(r, "status", "") in ("Scheduled", "In Progress", "Pending Feedback")]
             if len(active_rounds) > in_interview:
                 in_interview = len(active_rounds)
+
+            # Also check Mongo interview_rounds for active rounds
+            mongo_rounds = list(db["interview_rounds"].find({
+                "requisition_id": {"$in": req_ids},
+                "status": {"$in": ["Scheduled", "In Progress", "Pending Feedback"]}
+            })) if req_ids else []
+            if len(mongo_rounds) > in_interview:
+                in_interview = len(mongo_rounds)
         except Exception:
             pass
 
@@ -2253,6 +2263,23 @@ async def apply_to_requisition(
     from modules.candidate.telegram_service import get_telegram_bot_username
     tg_bot_username = get_telegram_bot_username()
 
+    outreach_res = {}
+    try:
+        from modules.candidate.outreach_service import create_candidate_application_outreach
+        outreach_res = create_candidate_application_outreach(
+            requisition_id=requisition_id,
+            candidate_data={
+                "id": sub_id,
+                "candidate_name": name.strip(),
+                "candidate_email": email.strip().lower(),
+                "candidate_phone": phone,
+                "match_score": score,
+                "matched_skills": matched,
+            }
+        )
+    except Exception as out_err:
+        print(f"[APPLICATION OUTREACH ERROR] {out_err}")
+
     return {
         "status": "success",
         "candidate_id": sub_id,
@@ -2267,6 +2294,9 @@ async def apply_to_requisition(
         "message": f"Thank you, {name}! Your application for '{req.title}' at {comp_name} has been successfully received.",
         "telegram_bot_username": tg_bot_username,
         "telegram_bot_url": f"https://t.me/{tg_bot_username}?start={sub_id}",
+        "outreach_token": outreach_res.get("token"),
+        "outreach_status": outreach_res.get("status"),
+        "telegram_sent": outreach_res.get("telegram_sent", False),
     }
 
 
@@ -3129,11 +3159,13 @@ except Exception as bus_err:
 
 
 
-@app.get("/api/public/outreach/{token}/respond", response_class=HTMLResponse)
+@app.get("/api/public/outreach/{token}/respond")
+@app.post("/api/public/outreach/{token}/respond")
 def candidate_outreach_respond(request: Request, token: str, action: str = "interested"):
     """
     Public interactive response endpoint triggered when a candidate clicks
-    [Available & Interested] or [Not Available] in their email or outreach.
+    [Available & Interested] or [Not Available] in their email, telegram, or in-app notification.
+    Supports both HTML landing pages and JSON responses for in-app React integration.
     """
     from modules.candidate.outreach_service import handle_candidate_rsvp
 
@@ -3147,6 +3179,13 @@ def candidate_outreach_respond(request: Request, token: str, action: str = "inte
                 origin = f"{parts[0]}://{domain_part}"
 
     res = handle_candidate_rsvp(token, action, origin=origin)
+
+    # Return JSON if requested by React frontend
+    accept = request.headers.get("accept", "")
+    if "application/json" in accept or request.method == "POST" or request.query_params.get("format") == "json":
+        status_code = 200 if res.get("success") else 400
+        return JSONResponse(content=res, status_code=status_code)
+
     if res.get("error"):
         return HTMLResponse(
             status_code=400,

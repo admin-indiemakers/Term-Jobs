@@ -19,12 +19,41 @@ export function InterviewMeetingRoomPage() {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
   const [candidateLeft, setCandidateLeft] = useState(false);
-  const { token: accountToken, loading: authLoading } = useAuth();
+  const { token: accountToken, loading: authLoading, user } = useAuth();
   const [joinIdentity, setJoinIdentity] = useState(null);
 
-  const queryRole = joinIdentity?.role || searchParams.get('role') || 'candidate';
-  const queryName = joinIdentity?.name || searchParams.get('name') || (queryRole === 'candidate' ? 'Candidate' : 'Interviewer');
+  const loggedInUser = user || (() => {
+    try {
+      const s = localStorage.getItem('auth_user');
+      return s ? JSON.parse(s) : null;
+    } catch {
+      return null;
+    }
+  })();
+
+  const queryRole = joinIdentity?.role || searchParams.get('role') || (loggedInUser?.role ? 'interviewer' : 'candidate');
+  const queryName =
+    joinIdentity?.name ||
+    searchParams.get('name') ||
+    (queryRole === 'candidate'
+      ? round?.candidate_name || 'Candidate'
+      : loggedInUser?.name || round?.interviewer_name || 'Interviewer');
   const invitationToken = searchParams.get('token') || '';
+
+  useEffect(() => {
+    const isAi =
+      window.location.pathname.startsWith('/interview/ai') ||
+      isAiInterviewRound(round) ||
+      round?.round_type === 'AI' ||
+      /AI/i.test(String(round?.round_name || ''));
+    if (round?.status === 'Completed' || candidateLeft) {
+      document.title = isAi ? 'AI Interview Completed · TermJobs' : 'Interview Completed · TermJobs';
+    } else if (isAi) {
+      document.title = 'AI Interview · TermJobs';
+    } else {
+      document.title = 'Interview Room · TermJobs';
+    }
+  }, [round, candidateLeft]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -144,7 +173,9 @@ export function InterviewMeetingRoomPage() {
     );
   }
 
-  const Room = isAiInterviewRound(round) ? AiInterviewRoom : InterviewRoom;
+  const isAiRoute = window.location.pathname.startsWith('/interview/ai');
+  const isPeerRoute = window.location.pathname.startsWith('/interview/room');
+  const Room = isAiRoute ? AiInterviewRoom : isPeerRoute ? InterviewRoom : (isAiInterviewRound(round) ? AiInterviewRoom : InterviewRoom);
   return (
     <Room
       round={round}

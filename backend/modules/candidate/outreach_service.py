@@ -779,3 +779,152 @@ def get_requisition_outreach_details(requisition_id: str) -> Dict[str, Any]:
         "total_ranked": len(ranked),
         "dispatched_count": len(outreach_records),
     })
+
+
+def create_candidate_application_outreach(
+    requisition_id: str,
+    candidate_data: dict,
+    force_resend: bool = False
+) -> dict:
+    """
+    Called when a candidate applies directly to a requisition.
+    Ensures an interactive outreach notification record exists with an RSVP token.
+    If the candidate is connected to Telegram, immediately dispatches the Telegram alert
+    with interactive inline buttons:
+      [ ✅ Yes, I am Available & Interested ]
+      [ ❌ No Longer Available / Placed ]
+    Returns the created or existing outreach doc.
+    """
+    cand_email = (candidate_data.get("candidate_email") or candidate_data.get("email") or "").strip().lower()
+    if not cand_email or not requisition_id:
+        return {}
+
+    existing = db["candidate_outreach"].find_one({
+        "requisition_id": requisition_id,
+        "candidate_email": cand_email
+    })
+    if existing and not force_resend:
+        return clean_bson(existing)
+
+    # Fetch requisition title & company
+    req_data = None
+    try:
+        from modules.requisition.domain.models import Requisition, CompanyProfile
+        from modules.shared.db import get_session
+        with get_session() as session:
+            req_obj = session.get(Requisition, requisition_id)
+            if req_obj:
+                comp_name = "Enterprise Partner"
+                if req_obj.company_profile_id:
+                    cp = session.get(CompanyProfile, req_obj.company_profile_id)
+                    if cp and cp.name:
+                        comp_name = cp.name
+                req_data = {
+                    "id": req_obj.id,
+                    "title": req_obj.title,
+                    "company_name": comp_name,
+                    "skills": (req_obj.structured_role or {}).get("must_have_skills", [])
+                }
+    except Exception as e:
+        logger.warning(f"Error fetching requisition for application outreach: {e}")
+
+    if not req_data:
+        req_doc = db["requisitions"].find_one({"id": requisition_id}) or {}
+        req_data = {
+            "id": requisition_id,
+            "title": req_doc.get("title") or "Open Requisition",
+            "company_name": req_doc.get("company_name") or "Enterprise Partner",
+            "skills": req_doc.get("skills") or []
+        }
+
+    token = secrets.token_urlsafe(24)
+    now = _utcnow_iso()
+    cand_name = candidate_data.get("candidate_name") or candidate_data.get("name") or "Candidate"
+    match_score = candidate_data.get("match_score") or 90.0
+
+    # Check Telegram connection
+    telegram_chat_id = candidate_data.get("telegram_chat_id")
+    telegram_username = candidate_data.get("telegram_username")
+    if not telegram_chat_id:
+        c_doc = db["candidates"].find_one({
+            "$or": [
+                {"id": candidate_data.get("id") or candidate_data.get("candidate_id")},
+                {"candidate_email": cand_email}
+            ]
+        })
+        if c_doc:
+            telegram_chat_id = c_doc.get("telegram_chat_id")
+            telegram_username = c_doc.get("telegram_username")
+
+    if not telegram_chat_id:
+        t_doc = db["telegram_links"].find_one({
+            "$or": [
+                {"candidate_email": cand_email},
+                {"candidate_id": candidate_data.get("id") or candidate_data.get("candidate_id")}
+            ]
+        })
+        if t_doc:
+            telegram_chat_id = t_doc.get("chat_id")
+            telegram_username = t_doc.get("username")
+
+    telegram_sent = False
+    telegram_result = None
+
+    if telegram_chat_id:
+        try:
+            from modules.candidate.telegram_service import send_candidate_requisition_alert
+            import asyncio
+            coro = send_candidate_requisition_alert(
+                chat_id=telegram_chat_id,
+                requisition=req_data,
+                candidate={
+                    "candidate_name": cand_name,
+                    "candidate_email": cand_email,
+                    "id": candidate_data.get("id") or candidate_data.get("candidate_id") or ""
+                },
+                outreach_token=token,
+                match_score=float(match_score),
+            )
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(coro)
+                telegram_result = {"status": "dispatched", "chat_id": telegram_chat_id}
+                telegram_sent = True
+            except RuntimeError:
+                telegram_result = asyncio.run(coro)
+                telegram_sent = bool(telegram_result.get("ok"))
+        except Exception as tg_err:
+            logger.warning(f"Error dispatching application outreach to Telegram: {tg_err}")
+            telegram_result = {"status": "error", "error": str(tg_err)}
+
+    outreach_doc = {
+        "token": token,
+        "requisition_id": requisition_id,
+        "requisition_title": req_data["title"],
+        "company_name": req_data["company_name"],
+        "candidate_id": candidate_data.get("id") or candidate_data.get("candidate_id") or "",
+        "candidate_name": cand_name,
+        "candidate_email": cand_email,
+        "candidate_phone": candidate_data.get("candidate_phone") or candidate_data.get("phone") or "",
+        "match_score": match_score,
+        "matched_skills": candidate_data.get("matched_skills", []),
+        "status": "pending",
+        "telegram_chat_id": str(telegram_chat_id) if telegram_chat_id else None,
+        "telegram_username": telegram_username or None,
+        "telegram_sent": telegram_sent,
+        "telegram_delivery_result": telegram_result,
+        "channels": ["telegram"] if telegram_sent else ["web"],
+        "created_at": now,
+        "sent_at": now,
+        "responded_at": None,
+        "response": None,
+    }
+
+    db["candidate_outreach"].update_one(
+        {"requisition_id": requisition_id, "candidate_email": cand_email},
+        {"$set": outreach_doc},
+        upsert=True
+    )
+
+    return clean_bson(outreach_doc)
+

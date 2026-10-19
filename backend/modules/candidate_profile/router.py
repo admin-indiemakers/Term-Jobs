@@ -699,7 +699,7 @@ async def get_my_candidate_profile(candidate: dict = Depends(get_current_candida
     outreach_records = list(
         db["candidate_outreach"].find(
             {"candidate_email": email},
-            {"_id": 0, "token": 0}
+            {"_id": 0}
         ).sort("sent_at", -1)
     )
 

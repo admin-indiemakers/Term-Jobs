@@ -430,13 +430,13 @@ export default function HiringManagerChat() {
       {/* ── MAIN CONTENT GRID: LEFT (7 cols) & RIGHT (5 cols) ────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 sm:gap-4 items-stretch min-h-0 pt-2 sm:pt-4">
         {/* ── LEFT COLUMN (7 cols): 4 Stat Metric Cards + Dedicated Recent Requisitions ── */}
-        <div className="lg:col-span-7 flex flex-col justify-between gap-2.5 sm:gap-3 h-[520px] sm:h-[500px] min-h-0 pt-1 sm:pt-2">
+        <div className="lg:col-span-7 flex flex-col justify-between gap-2.5 sm:gap-3 h-auto lg:h-[500px] min-h-0 pt-1 sm:pt-2">
           {/* 3 Glassmorphic Stat Metric Cards Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-2.5 shrink-0">
+          <div className="flex flex-row sm:grid sm:grid-cols-3 gap-2 sm:gap-2.5 overflow-x-auto sm:overflow-visible pb-1 sm:pb-0 snap-x no-scrollbar shrink-0">
             {/* Stat Card 1: Active Requisitions */}
             <div
               onClick={() => navigate('/dashboard/requisitions')}
-              className="bg-white/80 hover:bg-white/95 backdrop-blur-2xl border border-white/85 hover:border-white rounded-2xl p-2.5 sm:p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.04),inset_0_1px_1px_rgba(255,255,255,0.95)] hover:shadow-[0_12px_36px_0_rgba(0,0,0,0.06)] transition-all duration-300 flex flex-col justify-between group cursor-pointer"
+              className="w-[140px] sm:w-auto shrink-0 snap-start bg-white/80 hover:bg-white/95 backdrop-blur-2xl border border-white/85 hover:border-white rounded-2xl p-2.5 sm:p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.04),inset_0_1px_1px_rgba(255,255,255,0.95)] hover:shadow-[0_12px_36px_0_rgba(0,0,0,0.06)] active:scale-95 transition-all duration-300 flex flex-col justify-between group cursor-pointer"
             >
               <div className="flex items-center justify-between mb-1.5">
                 <div className="w-7 h-7 rounded-xl bg-white/70 backdrop-blur-md border border-white flex items-center justify-center text-gray-700 shadow-3xs group-hover:scale-105 transition-transform">
@@ -459,7 +459,7 @@ export default function HiringManagerChat() {
             {/* Stat Card 2: Candidates in Review */}
             <div
               onClick={() => navigate('/dashboard/candidates')}
-              className="bg-white/80 hover:bg-white/95 backdrop-blur-2xl border border-white/85 hover:border-white rounded-2xl p-2.5 sm:p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.04),inset_0_1px_1px_rgba(255,255,255,0.95)] hover:shadow-[0_12px_36px_0_rgba(0,0,0,0.06)] transition-all duration-300 flex flex-col justify-between group cursor-pointer"
+              className="w-[140px] sm:w-auto shrink-0 snap-start bg-white/80 hover:bg-white/95 backdrop-blur-2xl border border-white/85 hover:border-white rounded-2xl p-2.5 sm:p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.04),inset_0_1px_1px_rgba(255,255,255,0.95)] hover:shadow-[0_12px_36px_0_rgba(0,0,0,0.06)] active:scale-95 transition-all duration-300 flex flex-col justify-between group cursor-pointer"
             >
               <div className="flex items-center justify-between mb-1.5">
                 <div className="w-7 h-7 rounded-xl bg-white/70 backdrop-blur-md border border-white flex items-center justify-center text-gray-700 shadow-3xs group-hover:scale-105 transition-transform">
@@ -482,7 +482,7 @@ export default function HiringManagerChat() {
             {/* Stat Card 3: Timesheet Approvals Pending */}
             <div
               onClick={() => navigate('/dashboard/workforce/timesheets')}
-              className="bg-white/80 hover:bg-white/95 backdrop-blur-2xl border border-white/85 hover:border-white rounded-2xl p-2.5 sm:p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.04),inset_0_1px_1px_rgba(255,255,255,0.95)] hover:shadow-[0_12px_36px_0_rgba(0,0,0,0.06)] transition-all duration-300 flex flex-col justify-between group cursor-pointer"
+              className="w-[140px] sm:w-auto shrink-0 snap-start bg-white/80 hover:bg-white/95 backdrop-blur-2xl border border-white/85 hover:border-white rounded-2xl p-2.5 sm:p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.04),inset_0_1px_1px_rgba(255,255,255,0.95)] hover:shadow-[0_12px_36px_0_rgba(0,0,0,0.06)] active:scale-95 transition-all duration-300 flex flex-col justify-between group cursor-pointer"
             >
               <div className="flex items-center justify-between mb-1.5">
                 <div className="w-7 h-7 rounded-xl bg-white/70 backdrop-blur-md border border-white flex items-center justify-center text-gray-700 shadow-3xs group-hover:scale-105 transition-transform">
@@ -566,8 +566,8 @@ export default function HiringManagerChat() {
               </div>
             </div>
 
-            {/* Requisitions Table with Hidden Scroller */}
-            <div className="overflow-x-auto overflow-y-auto flex-1 min-h-0 mt-2 no-scrollbar">
+            {/* Desktop Requisitions Table */}
+            <div className="hidden md:block overflow-x-auto overflow-y-auto flex-1 min-h-0 mt-2 no-scrollbar">
               <table className="w-full text-left text-xs border-collapse">
                 <thead className="sticky top-0 bg-transparent border-b border-black/[0.04] z-10">
                   <tr className="text-[9.5px] font-bold text-gray-400 uppercase tracking-wider">
@@ -646,11 +646,51 @@ export default function HiringManagerChat() {
                 </tbody>
               </table>
             </div>
+
+            {/* Mobile Requisitions Cards List */}
+            <div className="block md:hidden overflow-y-auto flex-1 min-h-0 mt-2 space-y-2 no-scrollbar pb-1">
+              {loading ? (
+                [1, 2, 3].map((i) => (
+                  <div key={i} className="p-3 rounded-xl bg-white/40 animate-pulse space-y-2">
+                    <div className="h-3.5 w-32 bg-gray-200/70 rounded"></div>
+                    <div className="h-2.5 w-20 bg-gray-200/50 rounded"></div>
+                  </div>
+                ))
+              ) : filteredRequisitions.length === 0 ? (
+                <div className="py-6 text-center text-gray-400">
+                  <span className="text-xs font-medium">No requisitions found</span>
+                </div>
+              ) : (
+                filteredRequisitions.slice(0, 6).map((r) => (
+                  <div
+                    key={`mobile-${r.id || r.title}`}
+                    onClick={() => navigate('/dashboard/requisitions')}
+                    className="p-3 rounded-xl bg-white/50 border border-white/70 shadow-3xs hover:bg-white/80 transition-all flex flex-col gap-2 cursor-pointer"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <h4 className="font-bold text-gray-900 text-xs truncate">{r.title}</h4>
+                        <p className="text-[10px] text-gray-400 truncate mt-0.5">
+                          {r.department || 'Engineering'} • {r.primary_location || r.location || 'Remote'}
+                        </p>
+                      </div>
+                      <StatusBadge status={r.status || 'Active'} />
+                    </div>
+                    <div className="flex items-center justify-between text-[10px] text-gray-400 pt-1.5 border-t border-black/[0.04]">
+                      <span>{formatDate(r.created_at)}</span>
+                      <span className="font-semibold text-gray-600">
+                        REQ #{r.id ? String(r.id).slice(0, 6) : '8329'}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
 
         {/* ── RIGHT COLUMN (5 cols): Upcoming Interviews + Recent Activity Feed ── */}
-        <div className="lg:col-span-5 flex flex-col justify-between gap-2.5 sm:gap-3 h-[520px] sm:h-[500px] min-h-0 pt-1 sm:pt-2">
+        <div className="lg:col-span-5 flex flex-col justify-between gap-2.5 sm:gap-3 h-auto lg:h-[500px] min-h-0 pt-1 sm:pt-2">
           {/* Card 1: Upcoming Interviews & Pipeline Preview */}
           <div className="flex-1 min-h-0 bg-white/80 backdrop-blur-2xl border border-white/85 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.04),inset_0_1px_1px_rgba(255,255,255,0.95)] flex flex-col justify-between">
             <div className="flex items-center justify-between pb-2 border-b border-black/[0.04] shrink-0">

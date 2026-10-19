@@ -1260,7 +1260,8 @@ def get_candidate_rounds_by_token(token_or_email: str) -> List[dict]:
                 rdoc["is_expired"] = exp_info["is_expired"]
                 rdoc["expires_at"] = exp_info["expires_at"]
                 rdoc["remaining_seconds"] = exp_info["remaining_seconds"]
-                rdoc["meeting_link"] = f"{domain}/interview/room/{r.id}"
+                from modules.interview.domain.links import candidate_interview_link
+                rdoc["meeting_link"] = candidate_interview_link(rdoc, domain)
                 rdoc.pop('interviewer_token', None)
                 matched.append(rdoc)
         matched.sort(key=lambda x: (x.get("scheduled_date") or "", x.get("scheduled_time") or ""), reverse=True)

@@ -33,6 +33,212 @@ import { interviewApi } from '../services/interviewApi';
 import { useAuth } from '../../context/AuthContext';
 import termjobsLogo from '../../assets/termjobs-logo.png';
 
+function RemoteParticipantTile({ peer, isInterviewer, round, fallbackStream }) {
+  const videoRef = useRef(null);
+  const audioRef = useRef(null);
+  const stream = peer?.stream || fallbackStream;
+  const [, setTrackVersion] = useState(0);
+
+  // Monitor tracks to re-evaluate video/audio state dynamically
+  useEffect(() => {
+    if (!stream) return;
+    const update = () => setTrackVersion((v) => v + 1);
+    stream.addEventListener('addtrack', update);
+    stream.addEventListener('removetrack', update);
+    const videoTracks = stream.getVideoTracks();
+    videoTracks.forEach((track) => {
+      track.addEventListener('mute', update);
+      track.addEventListener('unmute', update);
+      track.addEventListener('ended', update);
+    });
+    return () => {
+      stream.removeEventListener('addtrack', update);
+      stream.removeEventListener('removetrack', update);
+      videoTracks.forEach((track) => {
+        track.removeEventListener('mute', update);
+        track.removeEventListener('unmute', update);
+        track.removeEventListener('ended', update);
+      });
+    };
+  }, [stream]);
+
+  // Attach stream to video element
+  const setVideoNode = useCallback(
+    (node) => {
+      videoRef.current = node;
+      if (node && stream) {
+        if (node.srcObject !== stream) {
+          node.srcObject = stream;
+        }
+        node.play?.().catch(() => {});
+      }
+    },
+    [stream]
+  );
+
+  useEffect(() => {
+    const el = videoRef.current;
+    if (el && stream) {
+      if (el.srcObject !== stream) {
+        el.srcObject = stream;
+      }
+      el.play?.().catch(() => {});
+    }
+  }, [stream]);
+
+  // Attach stream to audio element so remote voice is always heard even if video is off
+  const setAudioNode = useCallback(
+    (node) => {
+      audioRef.current = node;
+      if (node && stream) {
+        if (node.srcObject !== stream) {
+          node.srcObject = stream;
+        }
+        node.play?.().catch(() => {});
+      }
+    },
+    [stream]
+  );
+
+  useEffect(() => {
+    const aEl = audioRef.current;
+    if (aEl && stream) {
+      if (aEl.srcObject !== stream) {
+        aEl.srcObject = stream;
+      }
+      aEl.play?.().catch(() => {});
+    }
+  }, [stream]);
+
+  const hasVideo = Boolean(
+    stream &&
+    stream.getVideoTracks().some((t) => t.enabled && t.readyState === 'live')
+  );
+  const hasAudio = Boolean(
+    stream &&
+    stream.getAudioTracks().some((t) => t.enabled && t.readyState === 'live')
+  );
+
+  // Determine role & name accurately
+  const peerRawRole = (peer?.role || '').toLowerCase();
+  const peerIsCandidate =
+    peerRawRole === 'candidate' ||
+    (peer?.name && round?.candidate_name && peer.name.toLowerCase() === round.candidate_name.toLowerCase());
+  const peerIsHM =
+    peerRawRole === 'hiring manager' ||
+    peerRawRole === 'hm' ||
+    (peer?.name && (peer.name.toLowerCase().includes('hiring manager') || peer.name.toLowerCase().includes('hm')));
+  const peerIsStaff =
+    peerRawRole === 'interviewer' ||
+    peerRawRole === 'admin' ||
+    peerRawRole === 'hr' ||
+    peerRawRole === 'director' ||
+    peerRawRole === 'recruiter';
+
+  let roleLabel = 'Participant';
+  if (peerIsHM) {
+    roleLabel = 'Hiring Manager';
+  } else if (peerIsCandidate) {
+    roleLabel = 'Candidate';
+  } else if (peerIsStaff) {
+    if (peerRawRole === 'interviewer') roleLabel = 'Interviewer';
+    else if (peer?.role) roleLabel = peer.role;
+    else roleLabel = 'Interviewer';
+  } else {
+    roleLabel = isInterviewer ? 'Candidate' : (round?.interviewer_role || 'Interviewer');
+  }
+
+  let displayName = peer?.name;
+  if (!displayName || displayName === 'Interviewer' || displayName === 'Candidate') {
+    if (roleLabel === 'Candidate') {
+      displayName = round?.candidate_name || 'Candidate';
+    } else if (roleLabel === 'Hiring Manager') {
+      displayName = round?.interviewer_role === 'Hiring Manager' ? (round?.interviewer_name || 'Hiring Manager') : 'Hiring Manager';
+    } else {
+      displayName = round?.interviewer_name || 'Interviewer';
+    }
+  }
+
+  let roleDescription = '';
+  if (roleLabel === 'Candidate') {
+    roleDescription = round?.requisition_title || 'Candidate';
+  } else if (roleLabel === 'Hiring Manager') {
+    roleDescription = 'Hiring Manager';
+  } else {
+    roleDescription = round?.interviewer_role || 'Interviewer';
+  }
+
+  const initials =
+    (displayName || 'P')
+      .split(' ')
+      .filter(Boolean)
+      .map((w) => w[0])
+      .join('')
+      .slice(0, 2)
+      .toUpperCase() || 'P';
+
+  return (
+    <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden bg-[#11141D] border border-white/[0.08] shadow-2xl flex items-center justify-center group min-h-[220px]">
+      {/* Background audio element for remote participant audio */}
+      {stream && (
+        <audio ref={setAudioNode} autoPlay playsInline />
+      )}
+
+      {hasVideo ? (
+        <video ref={setVideoNode} autoPlay playsInline className="w-full h-full object-cover" />
+      ) : (
+        /* Camera Off Fallback */
+        <div className="w-full h-full flex flex-col items-center justify-center p-6 bg-gradient-to-b from-[#141824] to-[#0D1018] text-center select-none relative overflow-hidden">
+          <div className="absolute w-64 h-64 rounded-full bg-emerald-500/5 blur-3xl pointer-events-none" />
+
+          <div className="relative mb-4">
+            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-zinc-800 to-zinc-900 border-2 border-white/15 flex items-center justify-center shadow-2xl text-white text-2xl sm:text-3xl font-black">
+              {initials}
+            </div>
+            <span className="absolute bottom-0 right-0 w-5 h-5 rounded-full bg-emerald-500 border-2 border-[#141824] flex items-center justify-center">
+              <span className="w-2 h-2 rounded-full bg-emerald-300" />
+            </span>
+          </div>
+
+          <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
+            {displayName}
+          </h3>
+          <p className="text-xs text-zinc-400 font-medium mt-0.5">
+            {roleDescription} &bull; {roleLabel}
+          </p>
+
+          <div className="flex items-center gap-1.5 mt-3 px-3 py-1 rounded-full bg-white/[0.05] border border-white/10 text-xs text-zinc-400">
+            <VideoOff size={13} className="text-rose-400" />
+            <span>Camera is off</span>
+          </div>
+        </div>
+      )}
+
+      {/* Top-left: Mic Status Indicator */}
+      <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-black/60 backdrop-blur-md border border-white/10 text-white shadow text-xs">
+        {hasAudio || stream ? (
+          <>
+            <Mic size={13} className="text-emerald-400" />
+            <span className="text-[10.5px] font-medium text-zinc-300">Connected</span>
+          </>
+        ) : (
+          <>
+            <MicOff size={13} className="text-zinc-500" />
+            <span className="text-[10.5px] font-medium text-zinc-400">Connected</span>
+          </>
+        )}
+      </div>
+
+      {/* Bottom-left: Participant Label Pill */}
+      <div className="absolute bottom-3 left-3 flex items-center gap-2 px-3 py-1.5 rounded-xl bg-black/75 backdrop-blur-md border border-white/10 text-xs font-bold text-white shadow">
+        <span>{displayName}</span>
+        <span className="text-[10.5px] text-zinc-400 font-normal">&bull; {roleLabel}</span>
+        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+      </div>
+    </div>
+  );
+}
+
 export function InterviewRoom({
   round,
   currentUserRole = 'interviewer',
@@ -119,6 +325,38 @@ export function InterviewRoom({
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Real Dynamic Metadata derived from actual round and user props
+  const isInterviewer = currentUserRole === 'interviewer' || currentUserRole === 'Hiring Manager';
+
+  // Role Display: check authenticated user role first (e.g. "Hiring Manager" for Arjun)
+  const { user } = useAuth() || {};
+  let activeUser = user;
+  if (!activeUser) {
+    try {
+      const saved = localStorage.getItem('auth_user');
+      if (saved) activeUser = JSON.parse(saved);
+    } catch {}
+  }
+  const loggedInRole = activeUser?.role;
+  const myRole = isInterviewer
+    ? (loggedInRole || round?.interviewer_role || 'Hiring Manager')
+    : 'Candidate';
+
+  const myName =
+    (currentUserName && currentUserName !== 'Interviewer' && currentUserName !== 'Candidate')
+      ? currentUserName
+      : (isInterviewer
+        ? (activeUser?.name || round?.interviewer_name || 'Interviewer')
+        : round?.candidate_name || 'Candidate');
+  const myInitials =
+    (myName || 'U')
+      .split(' ')
+      .filter(Boolean)
+      .map((w) => w[0])
+      .join('')
+      .slice(0, 2)
+      .toUpperCase() || 'U';
+
   // LiveKit WebRTC lifecycle hook
   const {
     participants,
@@ -126,8 +364,8 @@ export function InterviewRoom({
     disconnect,
   } = useInterviewRoom({
     roundId: round?.id,
-    participantName: currentUserName,
-    role: currentUserRole,
+    participantName: myName,
+    role: myRole || currentUserRole,
     livekitToken,
     livekitUrl,
     isAiInterview: false,
@@ -136,8 +374,8 @@ export function InterviewRoom({
   // Chat hook
   const { messages, sendMessage } = useInterviewChat({
     roundId: round?.id,
-    senderName: currentUserName,
-    senderRole: currentUserRole,
+    senderName: myName,
+    senderRole: myRole || currentUserRole,
     isChatDrawerOpen: isSidebarOpen && activeSideTab === 'chat',
     isAiInterview: false,
   });
@@ -276,50 +514,82 @@ export function InterviewRoom({
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
-  // Real Dynamic Metadata derived from actual round and user props
-  const isInterviewer = currentUserRole === 'interviewer';
+  // Dynamic remote participant detection & deduplication (prevents duplicate tiles on reload or multiple tabs)
+  const uniqueParticipants = [];
+  const seenKeys = new Set();
+  for (const p of participants || []) {
+    const pName = (p.name || '').trim().toLowerCase();
+    const pRole = (p.role || '').trim().toLowerCase();
+    const isLocal = (pName && myName && pName === myName.trim().toLowerCase()) &&
+      (!pRole || !myRole || pRole === myRole.trim().toLowerCase());
+    if (isLocal) continue;
 
-  // Role Display: check authenticated user role first (e.g. "Hiring Manager" for Arjun)
-  const { user } = useAuth() || {};
-  let activeUser = user;
-  if (!activeUser) {
-    try {
-      const saved = localStorage.getItem('auth_user');
-      if (saved) activeUser = JSON.parse(saved);
-    } catch {}
+    // A candidate is always unique in an interview room; staff are unique by name
+    const dedupKey = pRole === 'candidate' ? 'candidate_slot' : (pName ? `${pName}_${pRole}` : p.identity);
+    if (!seenKeys.has(dedupKey)) {
+      seenKeys.add(dedupKey);
+      uniqueParticipants.push(p);
+    }
   }
-  const loggedInRole = activeUser?.role;
-  const myRole = isInterviewer
-    ? (loggedInRole || round?.interviewer_role || 'Hiring Manager')
-    : 'Candidate';
 
-  const myName =
-    currentUserName ||
-    (isInterviewer
-      ? (activeUser?.name || round?.interviewer_name || 'Interviewer')
-      : round?.candidate_name || 'Candidate');
-  const myInitials =
-    (myName || 'U')
-      .split(' ')
-      .filter(Boolean)
-      .map((w) => w[0])
-      .join('')
-      .slice(0, 2)
-      .toUpperCase() || 'U';
+  const effectiveParticipants = uniqueParticipants.length > 0
+    ? uniqueParticipants
+    : (remoteStream ? [{
+        identity: 'remote_peer_default',
+        name: isInterviewer ? round?.candidate_name : round?.interviewer_name,
+        role: isInterviewer ? 'candidate' : (round?.interviewer_role || 'interviewer'),
+        stream: remoteStream,
+      }] : []);
 
-  // Dynamic remote participant detection
-  const hasRemoteParticipant = Boolean(remoteStream || (participants && participants.length > 0));
-  const remotePeer = participants && participants.length > 0 ? participants[0] : null;
+  const totalPeopleCount = effectiveParticipants.length + 1;
+  const hasRemoteParticipant = effectiveParticipants.length > 0;
+  const primaryRemotePeer = effectiveParticipants[0] || null;
 
-  const otherPersonName = remotePeer?.name || (isInterviewer
-    ? round?.candidate_name || 'Candidate'
-    : round?.interviewer_name || 'Interviewer');
-  const otherPersonRole = isInterviewer
-    ? round?.requisition_title || 'Candidate'
-    : (remotePeer?.role === 'Hiring Manager' ? 'Hiring Manager' : round?.interviewer_role || 'Hiring Manager');
-  const otherPersonRoleLabel = isInterviewer
-    ? 'Candidate'
-    : (remotePeer?.role === 'Hiring Manager' ? 'Hiring Manager' : 'Interviewer');
+  // Accurately determine the primary remote peer's role and label (for sidebar fallback)
+  const peerRawRole = (primaryRemotePeer?.role || '').toLowerCase();
+  const peerIsCandidate =
+    peerRawRole === 'candidate' ||
+    (primaryRemotePeer?.name && round?.candidate_name && primaryRemotePeer.name.toLowerCase() === round.candidate_name.toLowerCase());
+  const peerIsHM =
+    peerRawRole === 'hiring manager' ||
+    peerRawRole === 'hm' ||
+    (primaryRemotePeer?.name && (primaryRemotePeer.name.toLowerCase().includes('hiring manager') || primaryRemotePeer.name.toLowerCase().includes('hm')));
+  const peerIsStaff =
+    peerRawRole === 'interviewer' ||
+    peerRawRole === 'admin' ||
+    peerRawRole === 'hr' ||
+    peerRawRole === 'director' ||
+    peerRawRole === 'recruiter';
+
+  let otherPersonRoleLabel = 'Participant';
+  if (peerIsHM) {
+    otherPersonRoleLabel = 'Hiring Manager';
+  } else if (peerIsCandidate) {
+    otherPersonRoleLabel = 'Candidate';
+  } else if (peerIsStaff) {
+    if (peerRawRole === 'interviewer') otherPersonRoleLabel = 'Interviewer';
+    else if (primaryRemotePeer?.role) otherPersonRoleLabel = primaryRemotePeer.role;
+    else otherPersonRoleLabel = 'Interviewer';
+  } else {
+    otherPersonRoleLabel = isInterviewer ? 'Candidate' : (round?.interviewer_role || 'Interviewer');
+  }
+
+  let otherPersonName = primaryRemotePeer?.name;
+  if (!otherPersonName || otherPersonName === 'Interviewer' || otherPersonName === 'Candidate') {
+    if (otherPersonRoleLabel === 'Candidate') {
+      otherPersonName = round?.candidate_name || 'Candidate';
+    } else if (otherPersonRoleLabel === 'Hiring Manager') {
+      otherPersonName = round?.interviewer_role === 'Hiring Manager' ? (round?.interviewer_name || 'Hiring Manager') : 'Hiring Manager';
+    } else {
+      otherPersonName = round?.interviewer_name || 'Interviewer';
+    }
+  }
+
+  let otherPersonRole = round?.requisition_title || 'Candidate';
+  if (otherPersonRoleLabel !== 'Candidate') {
+    otherPersonRole = round?.interviewer_role || otherPersonRoleLabel;
+  }
+
   const otherPersonInitials =
     (otherPersonName || 'C')
       .split(' ')
@@ -352,7 +622,7 @@ export function InterviewRoom({
     ? `${round.duration_minutes} Mins Session`
     : 'Live Session';
 
-  const participantCount = hasRemoteParticipant ? 2 : 1;
+  const participantCount = totalPeopleCount;
 
   return (
     <div className="relative w-full h-screen h-[100dvh] bg-[#090B10] text-zinc-100 flex flex-col overflow-hidden font-sans select-none">
@@ -418,7 +688,7 @@ export function InterviewRoom({
             <Users size={14} className="text-zinc-400" />
             <span className="hidden sm:inline">People</span>
             <span className="px-1.5 py-0.2 rounded-full bg-white/10 text-[10.5px] font-bold text-emerald-400">
-              {participantCount}/2
+              {participantCount}
             </span>
           </button>
 
@@ -465,81 +735,36 @@ export function InterviewRoom({
       </header>
 
       {/* ─────────────────────────────────────────────────────────────────
-          MAIN WORKSPACE LAYOUT: Clean 2-Card Video Stage + Optional Sidebar
+          MAIN WORKSPACE LAYOUT: Clean Multi-Tile Stage + Optional Sidebar
           ───────────────────────────────────────────────────────────────── */}
       <div className="relative z-10 flex-1 min-h-0 flex flex-row p-3 sm:p-4 gap-3 sm:gap-4 overflow-hidden">
         {/* ============================================================== */}
-        {/* LEFT COLUMN: 2-TILE CLEAN VIDEO GRID + FLOATING CONTROL DOCK   */}
+        {/* LEFT COLUMN: MULTI-TILE VIDEO GRID + FLOATING CONTROL DOCK    */}
         {/* ============================================================== */}
         <div className="flex-1 min-w-0 h-full flex flex-col gap-3 overflow-hidden">
-          {/* VIDEO GRID AREA: Dynamic 1-Person or 2-Person Grid */}
-          <div className={`flex-1 min-h-0 grid gap-3 sm:gap-4 overflow-hidden ${
-            hasRemoteParticipant ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 max-w-4xl mx-auto w-full'
+          {/* VIDEO GRID AREA: Dynamic Multi-Participant Grid */}
+          <div className={`flex-1 min-h-0 grid gap-3 sm:gap-4 overflow-y-auto [scrollbar-width:thin] ${
+            totalPeopleCount === 1
+              ? 'grid-cols-1 max-w-4xl mx-auto w-full'
+              : totalPeopleCount === 2
+              ? 'grid-cols-1 md:grid-cols-2'
+              : totalPeopleCount === 3
+              ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
+              : 'grid-cols-2 md:grid-cols-2'
           }`}>
-            {/* ─────────────────────────────────────────────────────────────
-                TILE 1: REMOTE PARTICIPANT (Interviewer or Candidate)
-                Only shown when another participant is in the room
-                ───────────────────────────────────────────────────────────── */}
-            {hasRemoteParticipant && (
-              <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden bg-[#11141D] border border-white/[0.08] shadow-2xl flex items-center justify-center group">
-                {remoteStream ? (
-                  <video ref={setRemoteVideo} autoPlay playsInline className="w-full h-full object-cover" />
-                ) : (
-                  /* Active Remote Participant with Camera Off */
-                  <div className="w-full h-full flex flex-col items-center justify-center p-6 bg-gradient-to-b from-[#141824] to-[#0D1018] text-center select-none relative overflow-hidden">
-                    <div className="absolute w-64 h-64 rounded-full bg-emerald-500/5 blur-3xl pointer-events-none" />
+            {/* Remote Participants */}
+            {effectiveParticipants.map((peer) => (
+              <RemoteParticipantTile
+                key={peer.identity}
+                peer={peer}
+                isInterviewer={isInterviewer}
+                round={round}
+                fallbackStream={remoteStream}
+              />
+            ))}
 
-                    <div className="relative mb-4">
-                      <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-zinc-800 to-zinc-900 border-2 border-white/15 flex items-center justify-center shadow-2xl text-white text-2xl sm:text-3xl font-black">
-                        {otherPersonInitials}
-                      </div>
-                      <span className="absolute bottom-0 right-0 w-5 h-5 rounded-full bg-emerald-500 border-2 border-[#141824] flex items-center justify-center">
-                        <span className="w-2 h-2 rounded-full bg-emerald-300" />
-                      </span>
-                    </div>
-
-                    <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
-                      {otherPersonName}
-                    </h3>
-                    <p className="text-xs text-zinc-400 font-medium mt-0.5">
-                      {otherPersonRole} &bull; {otherPersonRoleLabel}
-                    </p>
-
-                    <div className="flex items-center gap-1.5 mt-3 px-3 py-1 rounded-full bg-white/[0.05] border border-white/10 text-xs text-zinc-400">
-                      <VideoOff size={13} className="text-rose-400" />
-                      <span>Camera is off</span>
-                    </div>
-                  </div>
-                )}
-
-                {/* Top-left: Mic Status Indicator */}
-                <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-black/60 backdrop-blur-md border border-white/10 text-white shadow text-xs">
-                  {remoteStream ? (
-                    <>
-                      <Mic size={13} className="text-emerald-400" />
-                      <span className="text-[10.5px] font-medium text-zinc-300">Connected</span>
-                    </>
-                  ) : (
-                    <>
-                      <MicOff size={13} className="text-zinc-500" />
-                      <span className="text-[10.5px] font-medium text-zinc-400">Connected</span>
-                    </>
-                  )}
-                </div>
-
-                {/* Bottom-left: Participant Label Pill */}
-                <div className="absolute bottom-3 left-3 flex items-center gap-2 px-3 py-1.5 rounded-xl bg-black/75 backdrop-blur-md border border-white/10 text-xs font-bold text-white shadow">
-                  <span>{otherPersonName}</span>
-                  <span className="text-[10.5px] text-zinc-400 font-normal">&bull; {otherPersonRoleLabel}</span>
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                </div>
-              </div>
-            )}
-
-            {/* ─────────────────────────────────────────────────────────────
-                TILE 2: LOCAL PARTICIPANT (You)
-                ───────────────────────────────────────────────────────────── */}
-            <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden bg-[#11141D] border border-white/[0.08] shadow-2xl flex items-center justify-center group">
+            {/* Local Participant (You) */}
+            <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden bg-[#11141D] border border-white/[0.08] shadow-2xl flex items-center justify-center group min-h-[220px]">
               {isCameraOn && localStream ? (
                 <video
                   ref={setLocalVideo}
@@ -1180,7 +1405,7 @@ CANDIDATE DETAILS:
                 <X size={16} />
               </button>
             </div>
-            <div className="space-y-2.5 text-xs">
+            <div className="space-y-2.5 text-xs max-h-80 overflow-y-auto [scrollbar-width:thin]">
               <div className="p-3 rounded-xl bg-black/40 border border-white/10 flex items-center justify-between">
                 <div>
                   <div className="font-bold text-white">{myName} (You)</div>
@@ -1191,21 +1416,41 @@ CANDIDATE DETAILS:
                 </span>
               </div>
 
-              <div className="p-3 rounded-xl bg-black/40 border border-white/10 flex items-center justify-between">
-                <div>
-                  <div className="font-bold text-white">{otherPersonName}</div>
-                  <div className="text-[10.5px] text-zinc-400">{otherPersonRole} &bull; {otherPersonRoleLabel}</div>
+              {effectiveParticipants.length === 0 ? (
+                <div className="p-3 rounded-xl bg-black/20 border border-white/5 text-zinc-500 text-center text-xs">
+                  Waiting for other participants to join...
                 </div>
-                <span
-                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                    remoteStream
-                      ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                      : 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
-                  }`}
-                >
-                  {remoteStream ? 'Active' : 'Waiting'}
-                </span>
-              </div>
+              ) : (
+                effectiveParticipants.map((p) => {
+                  const pRawRole = (p.role || '').toLowerCase();
+                  const pIsHM = pRawRole === 'hiring manager' || pRawRole === 'hm' || (p.name && (p.name.toLowerCase().includes('hiring manager') || p.name.toLowerCase().includes('hm')));
+                  const pIsCand = pRawRole === 'candidate' || (p.name && round?.candidate_name && p.name.toLowerCase() === round.candidate_name.toLowerCase());
+                  const pRoleLabel = pIsHM ? 'Hiring Manager' : (pIsCand ? 'Candidate' : (p.role || 'Interviewer'));
+                  let pName = p.name;
+                  if (!pName || pName === 'Interviewer' || pName === 'Candidate') {
+                    pName = pIsCand ? (round?.candidate_name || 'Candidate') : (round?.interviewer_name || pRoleLabel);
+                  }
+                  const hasStream = Boolean(p.stream);
+
+                  return (
+                    <div key={p.identity || pName} className="p-3 rounded-xl bg-black/40 border border-white/10 flex items-center justify-between">
+                      <div>
+                        <div className="font-bold text-white">{pName}</div>
+                        <div className="text-[10.5px] text-zinc-400">{pRoleLabel}</div>
+                      </div>
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          hasStream
+                            ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                            : 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                        }`}
+                      >
+                        {hasStream ? 'Active' : 'Connecting'}
+                      </span>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
         </div>

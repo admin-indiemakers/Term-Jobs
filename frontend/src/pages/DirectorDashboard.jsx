@@ -893,9 +893,9 @@ export default function DirectorDashboard({ view = 'overview' }) {
       )}
 
       {/* Main Content Area: Left Active Section Card(s) + Right Vertical Stat Cards */}
-      <div className="flex-1 flex flex-col lg:flex-row gap-3.5 items-start pt-1">
+      <div className="flex-1 flex flex-col lg:flex-row gap-3.5 items-stretch pt-1">
         {/* Left Column: Active Content Section */}
-        <div className="flex-1 min-w-0 w-full space-y-4">
+        <div className="order-2 lg:order-1 flex-1 min-w-0 w-full space-y-4">
 
 
 
@@ -1196,8 +1196,10 @@ export default function DirectorDashboard({ view = 'overview' }) {
                   )}
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[880px] text-left text-xs border-collapse">
+                <>
+                  {/* Desktop Table View */}
+                  <div className="hidden md:block overflow-x-auto">
+                    <table className="w-full min-w-[880px] text-left text-xs border-collapse">
                     <thead>
                       <tr className="border-b border-gray-100 text-[10px] font-extrabold text-gray-400 uppercase tracking-wider">
                         <th className="w-[22%] py-3 px-3.5 text-left">Requisition Title</th>
@@ -1373,38 +1375,133 @@ export default function DirectorDashboard({ view = 'overview' }) {
                     </tbody>
                   </table>
                 </div>
+
+                  {/* Mobile Card List View */}
+                  <div className="block md:hidden space-y-2.5 pb-2">
+                    {filteredRequisitions.map((r) => {
+                      const disp = getRequisitionDisplayInfo(r);
+                      const isDeletedByHm = disp.isDeleted;
+
+                      return (
+                        <div
+                          key={`mobile-${r.id}`}
+                          onClick={() => handleViewRequisition(r)}
+                          className={`p-3.5 rounded-2xl border transition-all cursor-pointer ${
+                            isDeletedByHm
+                              ? 'bg-rose-50/30 border-rose-200/80'
+                              : 'bg-white/70 border-white/80 shadow-3xs hover:bg-white/90'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <h4 className="font-bold text-gray-900 text-xs sm:text-sm truncate">
+                                {r.title || 'Untitled Requisition'}
+                              </h4>
+                              <div className="text-[10px] text-gray-400 font-mono mt-0.5">
+                                {r.ref || `REQ #${r.id.slice(0, 8)}`} • {r.department || 'Engineering'}
+                              </div>
+                            </div>
+                            {isDeletedByHm ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-rose-50 text-rose-800 border border-rose-300 shrink-0">
+                                <Trash2 size={10} className="text-rose-600" />
+                                Deleted
+                              </span>
+                            ) : (
+                              <StatusBadge status={disp.isRejected ? 'Restructuring' : disp.isPending ? 'Pending Approval' : disp.status} />
+                            )}
+                          </div>
+
+                          {/* Sign-off badge & stats */}
+                          <div className="flex items-center justify-between text-[11px] text-gray-500 mt-2.5 pt-2 border-t border-black/[0.04]">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {disp.isApproved ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                  <CheckCircle2 size={10} className="text-emerald-600" />
+                                  Approved
+                                </span>
+                              ) : disp.isPending ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-900 border border-amber-200">
+                                  <Clock size={10} className="text-amber-600" />
+                                  Sign-off Pending
+                                </span>
+                              ) : disp.isRejected ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-800 border border-rose-200">
+                                  <X size={10} className="text-rose-600" />
+                                  Revision Required
+                                </span>
+                              ) : null}
+                              <span>•</span>
+                              <span>{candidatesByRequisition[r.id] || 0} candidate(s)</span>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                              {disp.isPending && !isDeletedByHm ? (
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => handleOpenRejectModal(r, e)}
+                                    disabled={approvingId === r.id}
+                                    className="px-2 py-1 rounded-lg bg-white hover:bg-red-50 border border-red-200 text-red-600 text-[10px] font-bold transition-colors cursor-pointer disabled:opacity-50"
+                                  >
+                                    Reject
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => handleApproveRequisition(r.id, e)}
+                                    disabled={approvingId === r.id}
+                                    className="px-2.5 py-1 rounded-lg bg-black hover:bg-gray-900 text-white text-[10px] font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                                  >
+                                    {approvingId === r.id ? '...' : 'Approve'}
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleViewRequisition(r, e)}
+                                  className="text-[11px] font-semibold text-gray-500 hover:text-black cursor-pointer"
+                                >
+                                  View →
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
               )}
             </div>
           )}
         </div>
 
-        {/* Right Column: 4 Metric Stat Cards Stacked Vertically (Matches Company Admin ManageHiringManagers) */}
-        <div className="w-full lg:w-44 xl:w-48 shrink-0 flex flex-col gap-2.5 lg:sticky lg:top-4 self-start">
+        {/* Right Column: 4 Metric Stat Cards */}
+        <div className="order-1 lg:order-2 w-full lg:w-44 xl:w-48 shrink-0 flex flex-row lg:flex-col gap-2 sm:gap-2.5 overflow-x-auto lg:overflow-visible pb-1.5 lg:pb-0 snap-x no-scrollbar lg:sticky lg:top-4 self-start">
           {/* Stat Card 1: Total Requisitions */}
           <div
             onClick={() => {
               setActiveTab('requisitions');
               setStatusFilter('ALL');
             }}
-            className={`backdrop-blur-2xl border rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between h-[102px] cursor-pointer transition-all ${activeTab === 'requisitions' && statusFilter === 'ALL'
+            className={`backdrop-blur-2xl border rounded-2xl p-2.5 sm:p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between h-[66px] sm:h-[72px] lg:h-[102px] w-[122px] sm:w-[136px] lg:w-full shrink-0 snap-start cursor-pointer active:scale-95 transition-all ${activeTab === 'requisitions' && statusFilter === 'ALL'
                 ? 'bg-white/85 border-black/40 ring-1 ring-black/15 shadow-sm'
                 : 'bg-white/40 border-white/70 hover:bg-white/60'
               }`}
             title="View All Requisitions"
           >
             <div className="flex items-center justify-between">
-              <div className="w-7.5 h-7.5 rounded-xl bg-white/60 backdrop-blur-md border border-white/70 flex items-center justify-center text-gray-700 shadow-2xs shrink-0">
-                <Briefcase size={15} />
+              <div className="w-6 h-6 sm:w-7.5 sm:h-7.5 rounded-xl bg-white/60 backdrop-blur-md border border-white/70 flex items-center justify-center text-gray-700 shadow-2xs shrink-0">
+                <Briefcase size={14} className="sm:w-[15px] sm:h-[15px]" />
               </div>
-              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-gray-100 text-gray-700 border border-gray-200/80">
+              <span className="hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-gray-100 text-gray-700 border border-gray-200/80">
                 Total
               </span>
             </div>
             <div>
-              <div className="text-xl sm:text-[22px] font-black text-gray-900 tracking-tight leading-none">
+              <div className="text-base sm:text-lg lg:text-[22px] font-black text-gray-900 tracking-tight leading-none">
                 {requisitions.length}
               </div>
-              <div className="text-[10px] font-semibold text-gray-500 mt-0.5">
+              <div className="text-[9.5px] sm:text-[10px] font-semibold text-gray-500 mt-0.5">
                 Total Requisitions
               </div>
             </div>
@@ -1416,7 +1513,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
               setActiveTab('requisitions');
               setStatusFilter('PENDING');
             }}
-            className={`backdrop-blur-2xl border rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between h-[102px] cursor-pointer transition-all ${statusFilter === 'PENDING'
+            className={`backdrop-blur-2xl border rounded-2xl p-2.5 sm:p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between h-[66px] sm:h-[72px] lg:h-[102px] w-[122px] sm:w-[136px] lg:w-full shrink-0 snap-start cursor-pointer active:scale-95 transition-all ${statusFilter === 'PENDING'
                 ? 'bg-white/85 border-amber-400/60 ring-1 ring-amber-400/30 shadow-sm'
                 : pendingApprovalsList.length > 0
                   ? 'bg-white/40 border-amber-300/80 ring-1 ring-amber-400/20 hover:bg-white/60'
@@ -1425,25 +1522,25 @@ export default function DirectorDashboard({ view = 'overview' }) {
             title="Filter by Pending Sign-off"
           >
             <div className="flex items-center justify-between">
-              <div className="w-7.5 h-7.5 rounded-xl bg-amber-50/80 border border-amber-200/60 flex items-center justify-center text-amber-700 shadow-2xs shrink-0">
-                <Clock size={15} />
+              <div className="w-6 h-6 sm:w-7.5 sm:h-7.5 rounded-xl bg-amber-50/80 border border-amber-200/60 flex items-center justify-center text-amber-700 shadow-2xs shrink-0">
+                <Clock size={14} className="sm:w-[15px] sm:h-[15px]" />
               </div>
               {pendingApprovalsList.length > 0 ? (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                <span className="inline-flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-full text-[9px] sm:text-[9.5px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
                   <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
                   Sign-off
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-gray-100 text-gray-500 border border-gray-200/80">
+                <span className="hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-gray-100 text-gray-500 border border-gray-200/80">
                   Clear
                 </span>
               )}
             </div>
             <div>
-              <div className="text-xl sm:text-[22px] font-black text-gray-900 tracking-tight leading-none">
+              <div className="text-base sm:text-lg lg:text-[22px] font-black text-gray-900 tracking-tight leading-none">
                 {pendingApprovalsList.length}
               </div>
-              <div className="text-[10px] font-semibold text-gray-500 mt-0.5">
+              <div className="text-[9.5px] sm:text-[10px] font-semibold text-gray-500 mt-0.5">
                 Pending Sign-off
               </div>
             </div>
@@ -1455,48 +1552,48 @@ export default function DirectorDashboard({ view = 'overview' }) {
               setActiveTab('requisitions');
               setStatusFilter('APPROVED');
             }}
-            className={`backdrop-blur-2xl border rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between h-[102px] cursor-pointer transition-all ${statusFilter === 'APPROVED'
+            className={`backdrop-blur-2xl border rounded-2xl p-2.5 sm:p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between h-[66px] sm:h-[72px] lg:h-[102px] w-[122px] sm:w-[136px] lg:w-full shrink-0 snap-start cursor-pointer active:scale-95 transition-all ${statusFilter === 'APPROVED'
                 ? 'bg-white/85 border-emerald-400/60 ring-1 ring-emerald-400/30 shadow-sm'
                 : 'bg-white/40 border-white/70 hover:bg-white/60'
               }`}
             title="Filter by Approved Requisitions"
           >
             <div className="flex items-center justify-between">
-              <div className="w-7.5 h-7.5 rounded-xl bg-emerald-50/80 border border-emerald-200/60 flex items-center justify-center text-emerald-700 shadow-2xs shrink-0">
-                <CheckCircle2 size={15} />
+              <div className="w-6 h-6 sm:w-7.5 sm:h-7.5 rounded-xl bg-emerald-50/80 border border-emerald-200/60 flex items-center justify-center text-emerald-700 shadow-2xs shrink-0">
+                <CheckCircle2 size={14} className="sm:w-[15px] sm:h-[15px]" />
               </div>
-              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/80">
+              <span className="hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/80">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                 Live
               </span>
             </div>
             <div>
-              <div className="text-xl sm:text-[22px] font-black text-gray-900 tracking-tight leading-none">
+              <div className="text-base sm:text-lg lg:text-[22px] font-black text-gray-900 tracking-tight leading-none">
                 {approvedList.length}
               </div>
-              <div className="text-[10px] font-semibold text-gray-500 mt-0.5">
-                Approved Requisitions
+              <div className="text-[9.5px] sm:text-[10px] font-semibold text-gray-500 mt-0.5">
+                Approved
               </div>
             </div>
           </div>
 
           {/* Stat Card 4: Shortlisted Candidates */}
           <div
-            className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between h-[102px]"
+            className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-2.5 sm:p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between h-[66px] sm:h-[72px] lg:h-[102px] w-[122px] sm:w-[136px] lg:w-full shrink-0 snap-start"
           >
             <div className="flex items-center justify-between">
-              <div className="w-7.5 h-7.5 rounded-xl bg-white/60 backdrop-blur-md border border-white/70 flex items-center justify-center text-gray-700 shadow-2xs shrink-0">
-                <Users size={15} />
+              <div className="w-6 h-6 sm:w-7.5 sm:h-7.5 rounded-xl bg-white/60 backdrop-blur-md border border-white/70 flex items-center justify-center text-gray-700 shadow-2xs shrink-0">
+                <Users size={14} className="sm:w-[15px] sm:h-[15px]" />
               </div>
-              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-blue-50 text-blue-700 border border-blue-200/80">
+              <span className="hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-blue-50 text-blue-700 border border-blue-200/80">
                 Profiles
               </span>
             </div>
             <div>
-              <div className="text-xl sm:text-[22px] font-black text-gray-900 tracking-tight leading-none">
+              <div className="text-base sm:text-lg lg:text-[22px] font-black text-gray-900 tracking-tight leading-none">
                 {candidates.length}
               </div>
-              <div className="text-[10px] font-semibold text-gray-500 mt-0.5">
+              <div className="text-[9.5px] sm:text-[10px] font-semibold text-gray-500 mt-0.5">
                 Shortlisted
               </div>
             </div>

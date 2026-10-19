@@ -339,7 +339,7 @@ export default function ManageHiringManagers() {
 
   return (
     <div
-      className="w-full min-w-0 h-full flex-1 flex flex-col justify-between gap-3 text-left overflow-hidden pb-1"
+      className="w-full min-w-0 h-full flex-1 flex flex-col justify-between gap-3 text-left overflow-y-auto lg:overflow-hidden pb-1"
       style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}
     >
       {/* Top Header Area (shrink-0) */}
@@ -385,9 +385,9 @@ export default function ManageHiringManagers() {
       )}
 
       {/* Main Content Area: Left Table Card + Right Vertical Stat Cards */}
-      <div className="flex-1 min-h-[calc(100vh-260px)] flex flex-col lg:flex-row gap-3.5 items-stretch overflow-hidden pt-2.5 sm:pt-4">
+      <div className="flex-1 min-h-[calc(100vh-260px)] flex flex-col lg:flex-row gap-3.5 items-stretch overflow-visible lg:overflow-hidden pt-2.5 sm:pt-4">
         {/* Left: Main Glassmorphic Table Card */}
-        <div className="flex-1 min-w-0 h-full min-h-[calc(100vh-260px)] bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between overflow-hidden">
+        <div className="order-2 lg:order-1 flex-1 min-w-0 h-full min-h-[calc(100vh-260px)] bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between overflow-hidden">
           {/* Table Top Controls Row: Search Input Bar + Department Filter + Filter Action */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-black/[0.04] shrink-0">
             {/* Search Input Bar with OS-aware shortcut badge or clear button */}
@@ -492,94 +492,198 @@ export default function ManageHiringManagers() {
               No hiring manager accounts found.
             </div>
           ) : (
-            <div className="overflow-x-auto overflow-y-auto no-scrollbar flex-1 min-h-0 mt-1">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead className="sticky top-0 bg-transparent border-b border-black/[0.04] z-10">
-                  <tr className="text-[9.5px] font-bold text-gray-400 uppercase tracking-wider">
-                    <th className="py-2.5 px-3">NAME</th>
-                    <th className="py-2.5 px-3">EMAIL</th>
-                    <th className="py-2.5 px-3">DEPARTMENT</th>
-                    <th className="py-2.5 px-3">STATUS</th>
-                    <th className="py-2.5 px-3">JOINED</th>
-                    <th className="py-2.5 px-3 text-right">ACTIONS</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-black/[0.03]">
-                  {filteredManagers.map((u) => {
-                    const firstLetter = (u.name || u.email || 'M').slice(0, 1).toUpperCase();
+            <>
+              {/* Desktop Table View */}
+              <div className="hidden md:block overflow-x-auto overflow-y-auto no-scrollbar flex-1 min-h-0 mt-1">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead className="sticky top-0 bg-transparent border-b border-black/[0.04] z-10">
+                    <tr className="text-[9.5px] font-bold text-gray-400 uppercase tracking-wider">
+                      <th className="py-2.5 px-3">NAME</th>
+                      <th className="py-2.5 px-3">EMAIL</th>
+                      <th className="py-2.5 px-3">DEPARTMENT</th>
+                      <th className="py-2.5 px-3">STATUS</th>
+                      <th className="py-2.5 px-3">JOINED</th>
+                      <th className="py-2.5 px-3 text-right">ACTIONS</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-black/[0.03]">
+                    {filteredManagers.map((u) => {
+                      const firstLetter = (u.name || u.email || 'M').slice(0, 1).toUpperCase();
 
-                    return (
-                      <tr
-                        key={u.id}
-                        className="bg-transparent hover:bg-white/35 transition-colors relative"
-                      >
-                        {/* Name Column with Black Square Rounded Avatar */}
-                        <td className="py-3 px-3">
-                          <div
-                            onClick={() => setViewProfile(u)}
-                            className="flex items-center gap-2.5 cursor-pointer group"
-                            title="Click to view profile"
-                          >
-                            <div className="w-7.5 h-7.5 rounded-xl bg-black text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-3xs group-hover:scale-105 transition-transform">
-                              {firstLetter}
+                      return (
+                        <tr
+                          key={u.id}
+                          className="bg-transparent hover:bg-white/35 transition-colors relative"
+                        >
+                          {/* Name Column with Black Square Rounded Avatar */}
+                          <td className="py-3 px-3">
+                            <div
+                              onClick={() => setViewProfile(u)}
+                              className="flex items-center gap-2.5 cursor-pointer group"
+                              title="Click to view profile"
+                            >
+                              <div className="w-7.5 h-7.5 rounded-xl bg-black text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-3xs group-hover:scale-105 transition-transform">
+                                {firstLetter}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="font-bold text-gray-900 text-xs sm:text-[13px] leading-tight truncate group-hover:text-blue-600 transition-colors">
+                                  {u.name || 'Team Member'}
+                                </div>
+                                <div className="text-[10px] text-gray-400 truncate">
+                                  Hiring Manager
+                                </div>
+                              </div>
                             </div>
-                            <div className="min-w-0">
-                              <div className="font-bold text-gray-900 text-xs sm:text-[13px] leading-tight truncate group-hover:text-blue-600 transition-colors">
-                                {u.name || 'Team Member'}
+                          </td>
+
+                          {/* Email Column */}
+                          <td className="py-3 px-3 text-gray-600 font-normal text-xs sm:text-[12.5px]">
+                            {u.email}
+                          </td>
+
+                          {/* Department Column */}
+                          <td className="py-3 px-3">
+                            {u.department && u.department.trim() ? (
+                              <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100/90 text-gray-700 border border-gray-200/70">
+                                {u.department}
+                              </span>
+                            ) : (
+                              <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-gray-50 text-gray-400 border border-gray-200/60 italic">
+                                Unassigned
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Status Column */}
+                          <td className="py-3 px-3">
+                            {u.is_active !== false ? (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/80">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                Active
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                                Pending Approval
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Joined Date */}
+                          <td className="py-3 px-3 text-gray-600 font-normal text-xs sm:text-[12.5px]">
+                            {formatDate(u.created_at)}
+                          </td>
+
+                          {/* Actions Column (Direct Edit & Remove Buttons) */}
+                          <td className="py-3 px-3 text-right">
+                            {u.is_active === false ? (
+                              <div className="inline-flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleApproveManager(u)}
+                                  className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] flex items-center gap-1 shadow-2xs transition-colors cursor-pointer"
+                                >
+                                  <Check size={11} />
+                                  <span>Approve</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmDelete(u)}
+                                  className="font-bold text-red-500 hover:text-red-700 text-[10px] transition-colors cursor-pointer"
+                                >
+                                  Reject
+                                </button>
                               </div>
-                              <div className="text-[10px] text-gray-400 truncate">
-                                Hiring Manager
+                            ) : (
+                              <div className="inline-flex items-center gap-3">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEdit({ ...u, password: '' });
+                                    setEditOriginal({ ...u });
+                                  }}
+                                  className="font-bold text-gray-700 hover:text-black text-[10px] transition-colors cursor-pointer"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmDelete(u)}
+                                  className="font-bold text-red-500 hover:text-red-700 text-[10px] transition-colors cursor-pointer"
+                                >
+                                  Remove
+                                </button>
                               </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Card List View */}
+              <div className="block md:hidden overflow-y-auto no-scrollbar flex-1 min-h-0 mt-2 space-y-2 pb-2">
+                {filteredManagers.map((u) => {
+                  const firstLetter = (u.name || u.email || 'M').slice(0, 1).toUpperCase();
+                  return (
+                    <div
+                      key={`mobile-${u.id}`}
+                      className="p-3 rounded-2xl bg-white/70 border border-white/80 shadow-3xs hover:bg-white/90 transition-all flex flex-col gap-2.5"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div
+                          onClick={() => setViewProfile(u)}
+                          className="flex items-center gap-2.5 cursor-pointer flex-1 min-w-0"
+                        >
+                          <div className="w-8 h-8 rounded-xl bg-black text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-3xs">
+                            {firstLetter}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <h4 className="font-bold text-gray-900 text-xs truncate">{u.name || 'Team Member'}</h4>
+                            <div className="text-[11px] text-gray-500 truncate flex items-center gap-1.5 mt-0.5">
+                              <Mail size={11} className="text-gray-400 shrink-0" />
+                              <span className="truncate">{u.email}</span>
                             </div>
                           </div>
-                        </td>
+                        </div>
 
-                        {/* Email Column */}
-                        <td className="py-3 px-3 text-gray-600 font-normal text-xs sm:text-[12.5px]">
-                          {u.email}
-                        </td>
+                        {u.is_active !== false ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/80 shrink-0">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            Active
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-amber-50 text-amber-700 border border-amber-200 shrink-0">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                            Pending
+                          </span>
+                        )}
+                      </div>
 
-                        {/* Department Column */}
-                        <td className="py-3 px-3">
+                      <div className="flex items-center justify-between gap-2 pt-2 border-t border-black/[0.04] text-[11px] text-gray-500">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           {u.department && u.department.trim() ? (
-                            <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100/90 text-gray-700 border border-gray-200/70">
+                            <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-700 border border-gray-200/70">
                               {u.department}
                             </span>
                           ) : (
-                            <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-gray-50 text-gray-400 border border-gray-200/60 italic">
+                            <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-50 text-gray-400 border border-gray-200/60 italic">
                               Unassigned
                             </span>
                           )}
-                        </td>
+                          <span>•</span>
+                          <span>{formatDate(u.created_at)}</span>
+                        </div>
 
-                        {/* Status Column */}
-                        <td className="py-3 px-3">
-                          {u.is_active !== false ? (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/80">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                              Active
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                              Pending Approval
-                            </span>
-                          )}
-                        </td>
-
-                        {/* Joined Date */}
-                        <td className="py-3 px-3 text-gray-600 font-normal text-xs sm:text-[12.5px]">
-                          {formatDate(u.created_at)}
-                        </td>
-
-                        {/* Actions Column (Direct Edit & Remove Buttons) */}
-                        <td className="py-3 px-3 text-right">
+                        <div className="flex items-center gap-1.5 shrink-0">
                           {u.is_active === false ? (
-                            <div className="inline-flex items-center gap-2">
+                            <>
                               <button
                                 type="button"
                                 onClick={() => handleApproveManager(u)}
-                                className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] flex items-center gap-1 shadow-2xs transition-colors cursor-pointer"
+                                className="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] flex items-center gap-1 shadow-2xs transition-colors cursor-pointer"
                               >
                                 <Check size={11} />
                                 <span>Approve</span>
@@ -587,105 +691,115 @@ export default function ManageHiringManagers() {
                               <button
                                 type="button"
                                 onClick={() => setConfirmDelete(u)}
-                                className="font-bold text-red-500 hover:text-red-700 text-[10px] transition-colors cursor-pointer"
+                                className="font-bold text-red-500 hover:text-red-700 text-[10px] px-1.5 py-1 transition-colors cursor-pointer"
                               >
                                 Reject
                               </button>
-                            </div>
+                            </>
                           ) : (
-                            <div className="inline-flex items-center gap-3">
+                            <>
                               <button
                                 type="button"
                                 onClick={() => {
                                   setEdit({ ...u, password: '' });
                                   setEditOriginal({ ...u });
                                 }}
-                                className="font-bold text-gray-700 hover:text-black text-[10px] transition-colors cursor-pointer"
+                                className="px-2 py-1 rounded-lg font-bold text-gray-700 hover:text-black hover:bg-black/5 text-[10px] transition-colors cursor-pointer"
                               >
                                 Edit
                               </button>
                               <button
                                 type="button"
                                 onClick={() => setConfirmDelete(u)}
-                                className="font-bold text-red-500 hover:text-red-700 text-[10px] transition-colors cursor-pointer"
+                                className="px-2 py-1 rounded-lg font-bold text-red-500 hover:text-red-700 hover:bg-red-50 text-[10px] transition-colors cursor-pointer"
                               >
                                 Remove
                               </button>
-                            </div>
+                            </>
                           )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
           )}
         </div>
 
         {/* Right: 3 Metric Stat Cards Stacked Vertically Down by Down (Compact Height) */}
-        <div className="w-full lg:w-44 xl:w-48 shrink-0 flex flex-col gap-2.5">
+        <div className="order-1 lg:order-2 w-full lg:w-44 xl:w-48 shrink-0 flex flex-row lg:flex-col gap-2 sm:gap-2.5 overflow-x-auto lg:overflow-visible pb-1.5 lg:pb-0 snap-x no-scrollbar">
           {/* Stat Card 1: Total Managers */}
-          <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between h-[102px]">
+          <div
+            onClick={() => {
+              setSelectedDept('All Departments');
+              setSearchQuery('');
+            }}
+            className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-2.5 sm:p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between h-[66px] sm:h-[72px] lg:h-[102px] w-[122px] sm:w-[136px] lg:w-full shrink-0 snap-start active:scale-95 transition-transform cursor-pointer"
+          >
             <div className="flex items-center justify-between">
-              <div className="w-7.5 h-7.5 rounded-xl bg-white/60 backdrop-blur-md border border-white/70 flex items-center justify-center text-gray-700 shadow-2xs shrink-0">
-                <Users size={15} />
+              <div className="w-6 h-6 sm:w-7.5 sm:h-7.5 rounded-xl bg-white/60 backdrop-blur-md border border-white/70 flex items-center justify-center text-gray-700 shadow-2xs shrink-0">
+                <Users size={14} className="sm:w-[15px] sm:h-[15px]" />
               </div>
-              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/80">
+              <span className="hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/80">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                 Active
               </span>
             </div>
             <div>
-              <div className="text-xl sm:text-[22px] font-black text-gray-900 tracking-tight leading-none">
+              <div className="text-base sm:text-lg lg:text-[22px] font-black text-gray-900 tracking-tight leading-none">
                 {managers.length}
               </div>
-              <div className="text-[10px] font-semibold text-gray-500 mt-0.5">
+              <div className="text-[9.5px] sm:text-[10px] font-semibold text-gray-500 mt-0.5">
                 Total Managers
               </div>
             </div>
           </div>
 
           {/* Stat Card 2: Active Accounts */}
-          <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between h-[102px]">
+          <div
+            onClick={() => {
+              setSelectedDept('All Departments');
+            }}
+            className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-2.5 sm:p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between h-[66px] sm:h-[72px] lg:h-[102px] w-[122px] sm:w-[136px] lg:w-full shrink-0 snap-start active:scale-95 transition-transform cursor-pointer"
+          >
             <div className="flex items-center justify-between">
-              <div className="w-7.5 h-7.5 rounded-xl bg-white/60 backdrop-blur-md border border-white/70 flex items-center justify-center text-gray-700 shadow-2xs shrink-0">
-                <FileText size={15} />
+              <div className="w-6 h-6 sm:w-7.5 sm:h-7.5 rounded-xl bg-white/60 backdrop-blur-md border border-white/70 flex items-center justify-center text-gray-700 shadow-2xs shrink-0">
+                <FileText size={14} className="sm:w-[15px] sm:h-[15px]" />
               </div>
             </div>
             <div>
-              <div className="text-xl sm:text-[22px] font-black text-gray-900 tracking-tight leading-none">
+              <div className="text-base sm:text-lg lg:text-[22px] font-black text-gray-900 tracking-tight leading-none">
                 {activeCount}
               </div>
-              <div className="text-[10px] font-semibold text-gray-500 mt-0.5">
+              <div className="text-[9.5px] sm:text-[10px] font-semibold text-gray-500 mt-0.5">
                 Active Accounts
               </div>
             </div>
           </div>
 
           {/* Stat Card 3: Departments */}
-          <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between h-[102px]">
+          <div
+            onClick={() => {
+              const nextDept = departmentsList.find((d) => d !== selectedDept) || 'All Departments';
+              setSelectedDept(nextDept);
+            }}
+            className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-2.5 sm:p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between h-[66px] sm:h-[72px] lg:h-[102px] w-[122px] sm:w-[136px] lg:w-full shrink-0 snap-start active:scale-95 transition-transform cursor-pointer"
+          >
             <div className="flex items-center justify-between">
-              <div className="w-7.5 h-7.5 rounded-xl bg-white/60 backdrop-blur-md border border-white/70 flex items-center justify-center text-gray-700 shadow-2xs shrink-0">
-                <Building2 size={15} />
+              <div className="w-6 h-6 sm:w-7.5 sm:h-7.5 rounded-xl bg-white/60 backdrop-blur-md border border-white/70 flex items-center justify-center text-gray-700 shadow-2xs shrink-0">
+                <Building2 size={14} className="sm:w-[15px] sm:h-[15px]" />
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  const nextDept = departmentsList.find((d) => d !== selectedDept) || 'All Departments';
-                  setSelectedDept(nextDept);
-                }}
-                className="w-7 h-7 rounded-full bg-white/50 hover:bg-white border border-white/70 flex items-center justify-center text-gray-400 hover:text-black transition-all cursor-pointer shadow-3xs"
-              >
+              <div className="w-5 h-5 sm:w-7 sm:h-7 rounded-full bg-white/50 hover:bg-white border border-white/70 flex items-center justify-center text-gray-400 hover:text-black transition-all shadow-3xs">
                 <ChevronRight size={12} />
-              </button>
+              </div>
             </div>
             <div>
-              <div className="text-xl sm:text-[22px] font-black text-gray-900 tracking-tight leading-none">
+              <div className="text-base sm:text-lg lg:text-[22px] font-black text-gray-900 tracking-tight leading-none">
                 {deptCount}
               </div>
-              <div className="text-[10px] font-semibold text-gray-500 mt-0.5">
-                Departments
+              <div className="text-[9.5px] sm:text-[10px] font-semibold text-gray-500 mt-0.5 truncate">
+                {selectedDept === 'All Departments' ? 'Departments' : selectedDept}
               </div>
             </div>
           </div>

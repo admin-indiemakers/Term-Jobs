@@ -40,6 +40,7 @@ import {
   Copy,
   MoreVertical,
   Code2,
+  Bell,
 } from 'lucide-react';
 import { API_BASE_URL, request } from '../api/client';
 import { marked } from 'marked';
@@ -73,6 +74,7 @@ export default function OpenRolesPage({ enabled = true }) {
   const candidateAuth = useCandidateAuth();
   const candidateUser = candidateAuth?.candidateUser;
   const applications = candidateAuth?.applications || [];
+  const outreachHistory = candidateAuth?.outreachHistory || [];
   const logout = candidateAuth?.logout;
   const refreshProfile = candidateAuth?.refreshProfile;
   const setupProfile = candidateAuth?.setupProfile;
@@ -83,6 +85,62 @@ export default function OpenRolesPage({ enabled = true }) {
   const isCandidateAuthenticated = Boolean(candidateAuth?.candidateToken && candidateUser);
   const candidateEmail = (candidateUser?.candidate_email || candidateUser?.email || '').trim().toLowerCase();
   const appliedStorageKey = candidateEmail ? `tj_applied_jobs_${candidateEmail}` : null;
+
+  // Candidate in-app outreach & interview notifications
+  const [showNotificationDrawer, setShowNotificationDrawer] = useState(false);
+  const [respondingOutreachToken, setRespondingOutreachToken] = useState(null);
+  const [outreachActionStatus, setOutreachActionStatus] = useState({});
+
+  const handleOutreachRsvp = useCallback(async (token, action = 'interested') => {
+    if (!token) return;
+    setRespondingOutreachToken(token);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/public/outreach/${token}/respond?action=${action}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success !== false) {
+        setOutreachActionStatus((prev) => ({
+          ...prev,
+          [token]: {
+            action,
+            meeting_link: data.meeting_link,
+            passcode: data.candidate_passcode || 'TJ-FAST-TRACK',
+            success: true,
+          },
+        }));
+        if (refreshProfile) refreshProfile();
+        if (typeof loadCandidateInterviews === 'function') loadCandidateInterviews();
+      } else {
+        setOutreachActionStatus((prev) => ({
+          ...prev,
+          [token]: { error: data.error || 'Failed to record response.' },
+        }));
+      }
+    } catch (err) {
+      console.error('Error submitting outreach RSVP:', err);
+      setOutreachActionStatus((prev) => ({
+        ...prev,
+        [token]: { error: 'Network error submitting response.' },
+      }));
+    } finally {
+      setRespondingOutreachToken(null);
+    }
+  }, [refreshProfile]);
+
+  const unreadNotificationCount = useMemo(() => {
+    const pendingOutreach = (outreachHistory || []).filter((o) => {
+      const token = o.token || o._id;
+      const localAct = outreachActionStatus[token];
+      if (localAct) return false;
+      return o.status === 'pending' || o.status === 'sent';
+    });
+    return pendingOutreach.length;
+  }, [outreachHistory, outreachActionStatus]);
 
   // Job search & filters - hydrate instantly from session cache if available (0ms render)
   const [requisitions, setRequisitions] = useState(() => {
@@ -208,8 +266,9 @@ export default function OpenRolesPage({ enabled = true }) {
     const name = encodeURIComponent(
       candidateUser?.candidate_name || round.candidate_name || 'Candidate'
     );
-    const token = encodeURIComponent(round.candidate_token || '');
-    const link = round.meeting_link || `${window.location.origin}/interview/room/${round.id}?role=candidate&name=${name}&token=${token}`;
+    const isAi = round.round_type === 'AI' || (round.round_name && round.round_name.toLowerCase().includes('ai'));
+    const path = isAi ? 'ai' : 'room';
+    const link = round.meeting_link || `${window.location.origin}/interview/${path}/${round.id}?role=candidate&name=${name}&token=${token}`;
     navigator.clipboard.writeText(link);
     setCopiedRoundId(round.id);
     setTimeout(() => setCopiedRoundId(null), 2500);
@@ -1839,46 +1898,270 @@ export default function OpenRolesPage({ enabled = true }) {
             {/* Right Action Buttons */}
             <div className="flex items-center gap-1.5 sm:gap-2.5 ml-auto shrink-0">
               {candidateUser ? (
-                <div className="flex items-center gap-1.5 sm:gap-2 p-0.5 pl-2 pr-1.5 rounded-full bg-paper/[0.06] border border-paper/15 backdrop-blur-md">
-                  <div className="w-5.5 h-5.5 rounded-full bg-white/10 text-white font-bold text-[9.5px] flex items-center justify-center border border-white/20">
-                    {(candidateUser.candidate_name || 'C').slice(0, 1).toUpperCase()}
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  {/* Modern Monochrome Notification Bell */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowNotificationDrawer((prev) => !prev)}
+                      className={`relative p-1.5 sm:p-2 rounded-full transition-all cursor-pointer flex items-center justify-center border ${
+                        showNotificationDrawer
+                          ? 'bg-white text-black border-white shadow-lg'
+                          : 'bg-white/[0.06] hover:bg-white/[0.12] border-white/15 text-white/90 hover:text-white'
+                      }`}
+                      title="Interview & Match Notifications"
+                    >
+                      <Bell size={13} className={showNotificationDrawer ? 'text-black' : 'text-white'} />
+                      {unreadNotificationCount > 0 && (
+                        <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-0.5 rounded-full bg-white text-black font-black text-[8.5px] flex items-center justify-center border border-black/30 shadow-md">
+                          {unreadNotificationCount}
+                        </span>
+                      )}
+                    </button>
+
+                    {/* Modern Monochrome Notifications Dropdown */}
+                    {showNotificationDrawer && (
+                      <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 max-h-[82vh] overflow-y-auto rounded-2xl bg-[#090a0e]/95 border border-white/15 backdrop-blur-2xl shadow-[0_24px_60px_rgba(0,0,0,0.85),inset_0_1px_1px_rgba(255,255,255,0.12)] p-4 z-50 text-white">
+                        <div className="flex items-center justify-between pb-3 mb-3 border-b border-white/10">
+                          <div className="flex items-center gap-2">
+                            <Bell size={13} className="text-white" />
+                            <span className="text-[11px] font-extrabold text-white tracking-widest uppercase">Notifications & Alerts</span>
+                            {unreadNotificationCount > 0 && (
+                              <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-white text-black">
+                                {unreadNotificationCount} New
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setShowNotificationDrawer(false)}
+                            className="p-1 rounded-md text-white/40 hover:text-white hover:bg-white/10 transition cursor-pointer"
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+
+                        {/* List of Outreach Notifications & Match Alerts */}
+                        {outreachHistory.length === 0 && (allCandidateInterviewRounds || []).length === 0 ? (
+                          <div className="py-7 text-center">
+                            <Sparkles size={20} className="text-white/20 mx-auto mb-2" />
+                            <p className="text-xs font-semibold text-white/70">No notifications yet</p>
+                            <p className="text-[10.5px] text-white/40 mt-1 max-w-[240px] mx-auto">
+                              When you apply for a job or get fast-tracked, interactive Telegram & interview alerts will appear here.
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            {outreachHistory.map((item, idx) => {
+                              const token = item.token || item._id;
+                              const actionState = outreachActionStatus[token];
+
+                              // Match corresponding interview round to detect completion
+                              const matchingRound = (allCandidateInterviewRounds || []).find(
+                                (r) => (item.round_id && String(r.id) === String(item.round_id)) ||
+                                       (item.requisition_id && String(r.requisition_id) === String(item.requisition_id)) ||
+                                       (item.requisition_title && r.requisition_title && item.requisition_title.toLowerCase() === r.requisition_title.toLowerCase())
+                              );
+                              const matchingApp = (applications || []).find(
+                                (app) => (item.requisition_id && String(app.requisition_id) === String(item.requisition_id)) ||
+                                         (item.requisition_title && app.requisition_title && item.requisition_title.toLowerCase() === app.requisition_title.toLowerCase())
+                              );
+
+                              // Precise check for whether AI interview is completed
+                              const isCompleted = Boolean(
+                                matchingRound?.status === 'Completed' ||
+                                matchingRound?.status === 'Evaluated' ||
+                                matchingRound?.evaluation?.overall_score !== undefined ||
+                                (matchingRound?.evaluation && Object.keys(matchingRound.evaluation).length > 0) ||
+                                matchingApp?.status === 'Completed' ||
+                                matchingApp?.interview_status === 'Completed' ||
+                                item.status === 'completed' ||
+                                item.interview_status === 'Completed'
+                              );
+
+                              const isInterested = (actionState && actionState.action === 'interested') || item.status === 'interested';
+                              const isUnavailable = (actionState && actionState.action === 'unavailable') || item.status === 'unavailable';
+                              const meetingLink = actionState?.meeting_link || item.meeting_link;
+                              const passcode = actionState?.passcode || item.candidate_passcode || 'TJ-FAST-TRACK';
+
+                              return (
+                                <div
+                                  key={token || idx}
+                                  className="p-3.5 rounded-2xl bg-white/[0.03] hover:bg-white/[0.05] border border-white/10 transition-all flex flex-col gap-2.5"
+                                >
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div>
+                                      <div className="text-xs font-bold text-white leading-tight">
+                                        {item.requisition_title || 'Position Match Alert'}
+                                      </div>
+                                      <div className="text-[10.5px] text-white/50 mt-0.5">
+                                        {item.company_name || 'Enterprise Partner'}
+                                      </div>
+                                    </div>
+                                    {item.telegram_chat_id || item.telegram_sent ? (
+                                      <span className="shrink-0 px-2 py-0.5 rounded-full text-[9px] font-semibold bg-white/[0.06] text-white/80 border border-white/15 flex items-center gap-1.5">
+                                        <Send size={9} className="text-white/60" />
+                                        <span>Telegram Synced</span>
+                                      </span>
+                                    ) : null}
+                                  </div>
+
+                                  {/* Render state: Completed vs Interested vs Pending Question */}
+                                  {isCompleted ? (
+                                    <div className="p-3 rounded-xl bg-white/[0.04] border border-white/15 flex flex-col gap-2">
+                                      <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-1.5 text-xs font-bold text-white">
+                                          <CheckCircle2 size={13} className="text-white" />
+                                          <span>AI Interview Completed</span>
+                                        </div>
+                                        <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-white text-black tracking-wide uppercase">
+                                          Completed
+                                        </span>
+                                      </div>
+                                      <p className="text-[11px] text-white/50 leading-relaxed">
+                                        Your voice responses and autonomous screening have been submitted for recruiter review.
+                                      </p>
+                                      <div className="flex items-center gap-2 pt-1 border-t border-white/5">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setShowNotificationDrawer(false);
+                                            setIsInterviewViewOpen(true);
+                                            setActiveNavTab('interview');
+                                          }}
+                                          className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-[10.5px] font-semibold transition cursor-pointer flex items-center gap-1.5"
+                                        >
+                                          <Eye size={11} className="text-white/70" />
+                                          <span>View in Interviews</span>
+                                          <ArrowRight size={10} className="text-white/50" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : isInterested ? (
+                                    <div className="p-3 rounded-xl bg-white/[0.04] border border-white/15 flex flex-col gap-2">
+                                      <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-1.5 text-xs font-bold text-white">
+                                          <CheckCircle2 size={12} className="text-white" />
+                                          <span>Status Confirmed: Available & Interested</span>
+                                        </div>
+                                        <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-white/10 text-white border border-white/15">
+                                          Ready
+                                        </span>
+                                      </div>
+                                      <p className="text-[11px] text-white/60 leading-relaxed">
+                                        Your AI Interview is ready. You can attend immediately with your camera & mic.
+                                      </p>
+                                      <div className="flex items-center gap-2 pt-1">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setShowNotificationDrawer(false);
+                                            if (meetingLink && meetingLink.startsWith('http')) {
+                                              window.open(meetingLink, '_blank');
+                                            } else if (item.round_id) {
+                                              navigate(`/interview/ai/${item.round_id}?role=candidate&name=${encodeURIComponent(candidateUser?.candidate_name || 'Candidate')}&token=${encodeURIComponent(item.token || '')}`);
+                                            } else {
+                                              setIsInterviewViewOpen(true);
+                                              setActiveNavTab('interview');
+                                            }
+                                          }}
+                                          className="px-3 py-1.5 rounded-xl bg-white hover:bg-neutral-200 text-black font-extrabold text-[11px] flex items-center gap-1.5 shadow transition active:scale-95 cursor-pointer"
+                                        >
+                                          <Sparkles size={11} className="text-black" />
+                                          <span>Start AI Interview</span>
+                                        </button>
+                                        <span className="text-[10px] text-white/70 font-mono bg-white/[0.06] px-2.5 py-1 rounded-xl border border-white/15">
+                                          Passcode: {passcode}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  ) : isUnavailable ? (
+                                    <div className="text-[10.5px] text-white/40 italic py-1">
+                                      Marked as unavailable for this requisition.
+                                    </div>
+                                  ) : (
+                                    <>
+                                      <p className="text-[11.5px] text-white/80 leading-relaxed">
+                                        Are you currently available & interested in exploring this role and taking the AI Interview?
+                                      </p>
+                                      <div className="flex items-center gap-2 pt-1">
+                                        <button
+                                          type="button"
+                                          disabled={respondingOutreachToken === token}
+                                          onClick={() => handleOutreachRsvp(token, 'interested')}
+                                          className="flex-1 py-1.5 px-3 rounded-xl bg-white hover:bg-neutral-200 text-black text-[11px] font-extrabold flex items-center justify-center gap-1.5 shadow transition active:scale-95 cursor-pointer disabled:opacity-50"
+                                        >
+                                          {respondingOutreachToken === token ? (
+                                            <span>Fast-Tracking...</span>
+                                          ) : (
+                                            <>
+                                              <Check size={12} className="text-black" />
+                                              <span>Yes, I am Interested</span>
+                                            </>
+                                          )}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          disabled={respondingOutreachToken === token}
+                                          onClick={() => handleOutreachRsvp(token, 'unavailable')}
+                                          className="py-1.5 px-3 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] border border-white/15 text-white/70 hover:text-white text-[11px] font-medium transition cursor-pointer disabled:opacity-50"
+                                        >
+                                          No
+                                        </button>
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  <span className="text-[11px] sm:text-xs font-semibold text-white max-w-[90px] sm:max-w-[120px] truncate">
-                    {candidateUser.candidate_name || candidateUser.candidate_email}
-                  </span>
-                  <div className="h-3 w-px bg-paper/20 mx-0.5" />
-                  <button
-                    type="button"
-                    onClick={() => setShowSetupModal(true)}
-                    className="hidden sm:inline-block px-2 py-0.5 text-[10.5px] font-medium text-paper/80 hover:text-white transition rounded-lg hover:bg-paper/10 cursor-pointer"
-                  >
-                    Edit Profile
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowMyAppsModal(true)}
-                    className="px-2 py-0.5 text-[10px] sm:text-[10.5px] font-medium text-paper/80 hover:text-white transition rounded-lg hover:bg-paper/10 cursor-pointer"
-                  >
-                    Apps ({applications.length})
-                  </button>
-                  <a
-                    href={`https://t.me/${TELEGRAM_BOT_USERNAME}?start=${candidateUser.id || candidateUser.candidate_email || ''}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="hidden sm:inline-flex px-2 py-0.5 text-[10.5px] font-medium text-paper/80 hover:text-white transition rounded-lg hover:bg-paper/10 cursor-pointer items-center gap-1.5 text-decoration-none"
-                    title="Connect Telegram for instant interview alerts & notifications"
-                  >
-                    <Send size={11} />
-                    <span>Bot</span>
-                  </a>
-                  <button
-                    type="button"
-                    onClick={handleCandidateLogout}
-                    className="p-1 text-paper/50 hover:text-white transition cursor-pointer"
-                    title="Sign out"
-                  >
-                    <LogOut size={12} />
-                  </button>
+
+                  {/* Candidate Pill */}
+                  <div className="flex items-center gap-1.5 sm:gap-2 p-0.5 pl-2 pr-1.5 rounded-full bg-paper/[0.06] border border-paper/15 backdrop-blur-md">
+                    <div className="w-5.5 h-5.5 rounded-full bg-white/10 text-white font-bold text-[9.5px] flex items-center justify-center border border-white/20">
+                      {(candidateUser.candidate_name || 'C').slice(0, 1).toUpperCase()}
+                    </div>
+                    <span className="text-[11px] sm:text-xs font-semibold text-white max-w-[90px] sm:max-w-[120px] truncate">
+                      {candidateUser.candidate_name || candidateUser.candidate_email}
+                    </span>
+                    <div className="h-3 w-px bg-paper/20 mx-0.5" />
+                    <button
+                      type="button"
+                      onClick={() => setShowSetupModal(true)}
+                      className="hidden sm:inline-block px-2 py-0.5 text-[10.5px] font-medium text-paper/80 hover:text-white transition rounded-lg hover:bg-paper/10 cursor-pointer"
+                    >
+                      Edit Profile
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowMyAppsModal(true)}
+                      className="px-2 py-0.5 text-[10px] sm:text-[10.5px] font-medium text-paper/80 hover:text-white transition rounded-lg hover:bg-paper/10 cursor-pointer"
+                    >
+                      Apps ({applications.length})
+                    </button>
+                    <a
+                      href={`https://t.me/${TELEGRAM_BOT_USERNAME}?start=${candidateUser.id || candidateUser.candidate_email || ''}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="hidden sm:inline-flex px-2 py-0.5 text-[10.5px] font-medium text-paper/80 hover:text-white transition rounded-lg hover:bg-paper/10 cursor-pointer items-center gap-1.5 text-decoration-none"
+                      title="Connect Telegram for instant interview alerts & notifications"
+                    >
+                      <Send size={11} />
+                      <span>Bot</span>
+                    </a>
+                    <button
+                      type="button"
+                      onClick={handleCandidateLogout}
+                      className="p-1 text-paper/50 hover:text-white transition cursor-pointer"
+                      title="Sign out"
+                    >
+                      <LogOut size={12} />
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="flex items-center gap-1.5 sm:gap-2.5">
@@ -2826,14 +3109,20 @@ export default function OpenRolesPage({ enabled = true }) {
                                       candidateUser?.candidate_name || round.candidate_name || 'Candidate'
                                     );
                                     const token = encodeURIComponent(round.candidate_token || '');
+                                    const isAi = round.round_type === 'AI' || (round.round_name && round.round_name.toLowerCase().includes('ai'));
+                                    const path = isAi ? 'ai' : 'room';
                                     navigate(
-                                      `/interview/room/${round.id}?role=candidate&name=${name}&token=${token}`
+                                      `/interview/${path}/${round.id}?role=candidate&name=${name}&token=${token}`
                                     );
                                   }}
                                   className="px-4 py-2 rounded-xl bg-white hover:bg-neutral-100 text-neutral-950 font-bold text-xs transition shadow flex items-center gap-2 cursor-pointer active:scale-95 shrink-0"
                                 >
-                                  <Video size={13} className="text-neutral-950" />
-                                  <span>Enter Interview</span>
+                                  {round.round_type === 'AI' || (round.round_name && round.round_name.toLowerCase().includes('ai')) ? (
+                                    <Sparkles size={13} className="text-emerald-600" />
+                                  ) : (
+                                    <Video size={13} className="text-neutral-950" />
+                                  )}
+                                  <span>{round.round_type === 'AI' || (round.round_name && round.round_name.toLowerCase().includes('ai')) ? 'Start AI Interview' : 'Enter Interview'}</span>
                                   <ArrowRight size={13} className="text-neutral-950" />
                                 </button>
                               ) : (
@@ -3159,14 +3448,20 @@ export default function OpenRolesPage({ enabled = true }) {
                               candidateDisplayName || 'Candidate'
                             );
                             const token = encodeURIComponent(selectedDetailRound.candidate_token || '');
+                            const isAi = selectedDetailRound.round_type === 'AI' || (selectedDetailRound.round_name && selectedDetailRound.round_name.toLowerCase().includes('ai'));
+                            const path = isAi ? 'ai' : 'room';
                             navigate(
-                              `/interview/room/${selectedDetailRound.id}?role=candidate&name=${name}&token=${token}`
+                              `/interview/${path}/${selectedDetailRound.id}?role=candidate&name=${name}&token=${token}`
                             );
                           }}
                           className="px-5 py-2 rounded-xl bg-white hover:bg-neutral-100 text-neutral-950 font-bold text-xs transition shadow flex items-center gap-2 cursor-pointer active:scale-95"
                         >
-                          <Video size={13} />
-                          <span>Join Meeting Room</span>
+                          {selectedDetailRound.round_type === 'AI' || (selectedDetailRound.round_name && selectedDetailRound.round_name.toLowerCase().includes('ai')) ? (
+                            <Sparkles size={13} className="text-emerald-600" />
+                          ) : (
+                            <Video size={13} />
+                          )}
+                          <span>{selectedDetailRound.round_type === 'AI' || (selectedDetailRound.round_name && selectedDetailRound.round_name.toLowerCase().includes('ai')) ? 'Start AI Interview' : 'Join Meeting Room'}</span>
                         </button>
                       )}
                     </div>
@@ -3852,17 +4147,65 @@ export default function OpenRolesPage({ enabled = true }) {
                   You haven't submitted any applications yet.
                 </div>
               ) : (
-                applications.map((app, i) => (
-                  <div key={i} className="p-3.5 rounded-2xl bg-neutral-50 border border-neutral-200 flex items-center justify-between">
-                    <div>
-                      <div className="text-xs font-bold text-neutral-900">{app.requisition_title || 'Contract Position'}</div>
-                      <div className="text-[11px] text-neutral-500">{app.company_name || 'Enterprise Client'}</div>
+                applications.map((app, i) => {
+                  const matchingRound = (allCandidateInterviewRounds || []).find(
+                    (r) => r.requisition_id === app.requisition_id || (r.requisition_title && app.requisition_title && r.requisition_title.toLowerCase() === app.requisition_title.toLowerCase())
+                  );
+                  const matchingOutreach = (outreachHistory || []).find(
+                    (o) => o.requisition_id === app.requisition_id
+                  );
+                  const hasAiInterview = Boolean(
+                    matchingRound || (matchingOutreach?.meeting_link && matchingOutreach?.status === 'interested') || app.status === 'Interested - Fast Track'
+                  );
+                  const aiMeetingLink = matchingRound?.meeting_link || matchingOutreach?.meeting_link;
+                  const isAi = matchingRound ? (matchingRound.round_type === 'AI' || (matchingRound.round_name && matchingRound.round_name.toLowerCase().includes('ai'))) : true;
+
+                  return (
+                    <div key={i} className="p-3.5 rounded-2xl bg-neutral-50 border border-neutral-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                      <div>
+                        <div className="text-xs font-bold text-neutral-900">{app.requisition_title || 'Contract Position'}</div>
+                        <div className="text-[11px] text-neutral-500">{app.company_name || 'Enterprise Client'}</div>
+                        {matchingRound?.candidate_passcode && (
+                          <div className="text-[10px] text-neutral-500 font-mono mt-0.5">
+                            Passcode: {matchingRound.candidate_passcode}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 self-start sm:self-auto">
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${
+                          app.status === 'Interested - Fast Track'
+                            ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                            : 'bg-neutral-200 text-neutral-800 border-neutral-300'
+                        }`}>
+                          {app.status || 'Submitted'}
+                        </span>
+                        {hasAiInterview && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowMyAppsModal(false);
+                              if (matchingRound) {
+                                const name = encodeURIComponent(candidateUser?.candidate_name || 'Candidate');
+                                const token = encodeURIComponent(matchingRound.candidate_token || '');
+                                const path = isAi ? 'ai' : 'room';
+                                navigate(`/interview/${path}/${matchingRound.id}?role=candidate&name=${name}&token=${token}`);
+                              } else if (aiMeetingLink && aiMeetingLink.startsWith('http')) {
+                                window.open(aiMeetingLink, '_blank');
+                              } else {
+                                setIsInterviewViewOpen(true);
+                                setActiveNavTab('interview');
+                              }
+                            }}
+                            className="px-2.5 py-1 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] flex items-center gap-1 shadow-sm transition cursor-pointer"
+                          >
+                            <Sparkles size={11} />
+                            <span>{isAi ? 'Start AI Interview' : 'Enter Interview'}</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-neutral-200 text-neutral-800 border border-neutral-300">
-                      {app.status || 'Submitted'}
-                    </span>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
@@ -4502,12 +4845,18 @@ export default function OpenRolesPage({ enabled = true }) {
                           onClick={() => {
                             const name = encodeURIComponent(candidateUser?.name || round.candidate_name || 'Candidate');
                             const token = encodeURIComponent(round.candidate_token || '');
-                            navigate(`/interview/room/${round.id}?role=candidate&name=${name}&token=${token}`);
+                            const isAi = round.round_type === 'AI' || (round.round_name && round.round_name.toLowerCase().includes('ai'));
+                            const path = isAi ? 'ai' : 'room';
+                            navigate(`/interview/${path}/${round.id}?role=candidate&name=${name}&token=${token}`);
                           }}
                           className="px-5 py-2.5 rounded-xl bg-white hover:bg-zinc-200 text-zinc-950 font-black text-xs transition shadow-lg flex items-center justify-center gap-2 cursor-pointer active:scale-95"
                         >
-                          <Video size={15} />
-                          <span>Enter Interview Room</span>
+                          {round.round_type === 'AI' || (round.round_name && round.round_name.toLowerCase().includes('ai')) ? (
+                            <Sparkles size={15} className="text-emerald-600" />
+                          ) : (
+                            <Video size={15} />
+                          )}
+                          <span>{round.round_type === 'AI' || (round.round_name && round.round_name.toLowerCase().includes('ai')) ? 'Start AI Interview Room' : 'Enter Interview Room'}</span>
                           <ArrowRight size={13} />
                         </button>
 

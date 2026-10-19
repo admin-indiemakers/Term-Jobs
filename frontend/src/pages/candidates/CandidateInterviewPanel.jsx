@@ -852,7 +852,13 @@ export default function CandidateInterviewPanel() {
                             type="button"
                             onClick={() => {
                               if (activeRound.planned) { setScheduling(true); return; }
-                              navigate(`/interview/room/${activeRound.id}?role=interviewer`);
+                              let callerName = '';
+                              try {
+                                const s = localStorage.getItem('auth_user');
+                                if (s) callerName = JSON.parse(s)?.name || '';
+                              } catch {}
+                              const nameParam = callerName ? `&name=${encodeURIComponent(callerName)}` : '';
+                              navigate(`/interview/room/${activeRound.id}?role=interviewer${nameParam}`);
                             }}
                             className="px-6 py-3 rounded-xl bg-black hover:bg-gray-800 text-white text-xs sm:text-sm font-bold flex items-center justify-center gap-2.5 shadow-sm active:scale-[0.98] transition-all cursor-pointer"
                           >
