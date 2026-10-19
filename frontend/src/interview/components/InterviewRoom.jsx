@@ -288,6 +288,24 @@ export function InterviewRoom({
     toggleScreenShare,
   } = useInterviewMedia();
 
+  // Unique identity per browser session & participant to support 3+ concurrent participants without LiveKit collision
+  const [myUniqueIdentity] = useState(() => {
+    let sess = '';
+    try {
+      const k = `tj_ident_${round?.id || ''}_${currentUserName || ''}`;
+      sess = sessionStorage.getItem(k);
+      if (!sess) {
+        sess = Math.random().toString(36).substring(2, 8);
+        sessionStorage.setItem(k, sess);
+      }
+    } catch (_) {
+      sess = Math.random().toString(36).substring(2, 8);
+    }
+    const cleanRole = String(currentUserRole || 'user').toLowerCase().replace(/[^a-z0-9]/g, '_');
+    const cleanName = String(currentUserName || 'member').toLowerCase().replace(/[^a-z0-9]/g, '_');
+    return `${cleanRole}_${cleanName}_${sess}`;
+  });
+
   // Fetch LiveKit Token or graceful WebRTC Direct fallback
   useEffect(() => {
     if (!round?.id) return;
@@ -295,7 +313,7 @@ export function InterviewRoom({
       .getLiveKitToken({
         round_id: round.id,
         participant_name: currentUserName,
-        participant_identity: `${currentUserRole}_${round.id.slice(0, 6)}`,
+        participant_identity: myUniqueIdentity,
         role: currentUserRole,
       })
       .then((res) => {
@@ -309,7 +327,7 @@ export function InterviewRoom({
         setLivekitToken(`webrtc_direct_${round.id}`);
         setLivekitUrl('');
       });
-  }, [round?.id, currentUserName, currentUserRole]);
+  }, [round?.id, currentUserName, currentUserRole, myUniqueIdentity]);
 
   // Call timer counter
   useEffect(() => {
@@ -522,11 +540,11 @@ export function InterviewRoom({
     const pRole = (p.role || '').trim().toLowerCase();
     const pIdent = (p.identity || '').trim().toLowerCase();
 
-    // Never treat a remote candidate as local if we are the interviewer
-    const isLocal = isInterviewer
+    const isSelfByIdentity = pIdent && myUniqueIdentity && pIdent === myUniqueIdentity.toLowerCase();
+    const isLocal = isSelfByIdentity || (isInterviewer
       ? (pRole !== 'candidate' && !pIdent.startsWith('candidate') && pName && myName && pName === myName.trim().toLowerCase())
-      : (pRole === 'candidate' || pIdent.startsWith('candidate') || (pName && myName && pName === myName.trim().toLowerCase()));
-    if (isLocal && (!pRole || !myRole || pRole === myRole.trim().toLowerCase())) continue;
+      : (pRole === 'candidate' && pName && myName && pName === myName.trim().toLowerCase()));
+    if (isLocal && (isSelfByIdentity || !pRole || !myRole || pRole === myRole.trim().toLowerCase())) continue;
 
     // A candidate is always unique in an interview room; staff are unique by name
     const dedupKey = (pRole === 'candidate' || pIdent.startsWith('candidate'))

@@ -282,7 +282,7 @@ export class LiveKitService {
     this.myName = participantName;
 
     // Use stable peer ID per session and participant identity so reloads reuse the same ID
-    const storageKey = `termjobs_peer_id_${roundId}_${role}`;
+    const storageKey = `termjobs_peer_id_${roundId}_${role}_${participantName}`;
     let savedId = null;
     try {
       savedId = sessionStorage.getItem(storageKey);
@@ -291,7 +291,7 @@ export class LiveKitService {
     if (!savedId) {
       const cleanRole = String(role || 'participant').toLowerCase().replace(/[^a-z0-9]/g, '_');
       const cleanName = String(participantName || 'user').toLowerCase().replace(/[^a-z0-9]/g, '_');
-      savedId = `p_${cleanRole}_${cleanName}`;
+      savedId = `p_${cleanRole}_${cleanName}_${Math.random().toString(36).substring(2, 7)}`;
       try {
         sessionStorage.setItem(storageKey, savedId);
       } catch (_) {}
