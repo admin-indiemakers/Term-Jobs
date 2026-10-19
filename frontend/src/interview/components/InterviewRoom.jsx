@@ -24,6 +24,11 @@ import {
   Volume2,
   ChevronDown,
   Sparkles,
+  Pin,
+  PinOff,
+  Maximize2,
+  Minimize2,
+  LayoutGrid,
 } from 'lucide-react';
 import { useInterviewMedia } from '../hooks/useInterviewMedia';
 import { useInterviewRoom } from '../hooks/useInterviewRoom';
@@ -33,7 +38,106 @@ import { interviewApi } from '../services/interviewApi';
 import { useAuth } from '../../context/AuthContext';
 import termjobsLogo from '../../assets/termjobs-logo.png';
 
-function RemoteParticipantTile({ peer, isInterviewer, round, fallbackStream }) {
+/**
+ * Real-time Speech / Audio Activity Analyzer
+ * Safely monitors audio stream volume and detects speaking activity
+ */
+function useAudioActivity(stream, isEnabled = true) {
+  const [isSpeaking, setIsSpeaking] = useState(false);
+
+  useEffect(() => {
+    if (!isEnabled || !stream) {
+      setIsSpeaking(false);
+      return;
+    }
+
+    const audioTracks = stream.getAudioTracks ? stream.getAudioTracks() : [];
+    if (audioTracks.length === 0 || !audioTracks.some((t) => t.enabled && t.readyState === 'live')) {
+      setIsSpeaking(false);
+      return;
+    }
+
+    let audioCtx = null;
+    let analyser = null;
+    let source = null;
+    let animId = null;
+    let speakingTimer = null;
+    let isCancelled = false;
+
+    try {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) return;
+
+      audioCtx = new AudioContextClass();
+      if (audioCtx.state === 'suspended') {
+        const resume = () => {
+          if (audioCtx && audioCtx.state === 'suspended') {
+            audioCtx.resume().catch(() => {});
+          }
+        };
+        window.addEventListener('click', resume, { once: true });
+      }
+
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 128;
+      analyser.smoothingTimeConstant = 0.4;
+
+      source = audioCtx.createMediaStreamSource(stream);
+      source.connect(analyser);
+
+      const bufferLength = analyser.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+
+      const checkVolume = () => {
+        if (isCancelled) return;
+        analyser.getByteFrequencyData(dataArray);
+        let sum = 0;
+        for (let i = 0; i < bufferLength; i++) {
+          sum += dataArray[i];
+        }
+        const avg = sum / bufferLength;
+
+        // If audio level exceeds human speech threshold
+        if (avg > 14) {
+          setIsSpeaking(true);
+          if (speakingTimer) clearTimeout(speakingTimer);
+          speakingTimer = setTimeout(() => {
+            if (!isCancelled) setIsSpeaking(false);
+          }, 850);
+        }
+
+        animId = requestAnimationFrame(checkVolume);
+      };
+
+      animId = requestAnimationFrame(checkVolume);
+    } catch (_) {
+      // AudioContext safe fallback
+    }
+
+    return () => {
+      isCancelled = true;
+      if (animId) cancelAnimationFrame(animId);
+      if (speakingTimer) clearTimeout(speakingTimer);
+      try { source?.disconnect(); } catch (_) {}
+      try { analyser?.disconnect(); } catch (_) {}
+      try { audioCtx?.close(); } catch (_) {}
+    };
+  }, [stream, isEnabled]);
+
+  return isSpeaking;
+}
+
+function RemoteParticipantTile({
+  peer,
+  isInterviewer,
+  round,
+  fallbackStream,
+  isPinned,
+  onTogglePin,
+  isMini = false,
+  isActiveSpeaker = false,
+  onSpeakingChange,
+}) {
   const videoRef = useRef(null);
   const audioRef = useRef(null);
   const stream = peer?.stream || fallbackStream;
@@ -119,6 +223,14 @@ function RemoteParticipantTile({ peer, isInterviewer, round, fallbackStream }) {
     stream.getAudioTracks().some((t) => t.enabled && t.readyState === 'live')
   );
 
+  // Real-time audio activity detection
+  const isAudioSpeaking = useAudioActivity(stream, hasAudio);
+  const isSpeaking = isActiveSpeaker || isAudioSpeaking || Boolean(peer?.isSpeaking);
+
+  useEffect(() => {
+    onSpeakingChange?.(isSpeaking);
+  }, [isSpeaking, onSpeakingChange]);
+
   // Determine role & name accurately
   const peerRawRole = (peer?.role || '').toLowerCase();
   const peerIsCandidate =
@@ -178,7 +290,19 @@ function RemoteParticipantTile({ peer, isInterviewer, round, fallbackStream }) {
       .toUpperCase() || 'P';
 
   return (
-    <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden bg-[#11141D] border border-white/[0.08] shadow-2xl flex items-center justify-center group min-h-[220px]">
+    <div
+      className={`relative rounded-2xl overflow-hidden bg-[#11141D] flex items-center justify-center group transition-all duration-200 select-none ${
+        isMini
+          ? 'w-full h-full min-h-0'
+          : 'w-full h-full min-h-[220px] rounded-2xl sm:rounded-3xl shadow-2xl'
+      } ${
+        isSpeaking
+          ? 'ring-2 ring-emerald-500 shadow-[0_0_24px_rgba(16,185,129,0.4)] border-emerald-500/80'
+          : isPinned
+          ? 'ring-2 ring-emerald-400 border-emerald-400/80'
+          : 'border border-white/[0.08]'
+      }`}
+    >
       {/* Background audio element for remote participant audio */}
       {stream && (
         <audio ref={setAudioNode} autoPlay playsInline />
@@ -188,52 +312,245 @@ function RemoteParticipantTile({ peer, isInterviewer, round, fallbackStream }) {
         <video ref={setVideoNode} autoPlay playsInline className="w-full h-full object-cover" />
       ) : (
         /* Camera Off Fallback */
-        <div className="w-full h-full flex flex-col items-center justify-center p-6 bg-gradient-to-b from-[#141824] to-[#0D1018] text-center select-none relative overflow-hidden">
+        <div className={`w-full h-full flex flex-col items-center justify-center bg-gradient-to-b from-[#141824] to-[#0D1018] text-center select-none relative overflow-hidden ${
+          isMini ? 'p-3' : 'p-6'
+        }`}>
           <div className="absolute w-64 h-64 rounded-full bg-emerald-500/5 blur-3xl pointer-events-none" />
 
-          <div className="relative mb-4">
-            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-zinc-800 to-zinc-900 border-2 border-white/15 flex items-center justify-center shadow-2xl text-white text-2xl sm:text-3xl font-black">
+          <div className={`relative ${isMini ? 'mb-2' : 'mb-4'}`}>
+            <div className={`rounded-full bg-gradient-to-br from-zinc-800 to-zinc-900 border-2 border-white/15 flex items-center justify-center shadow-2xl text-white font-black ${
+              isMini ? 'w-10 h-10 text-sm' : 'w-20 h-20 sm:w-24 sm:h-24 text-2xl sm:text-3xl'
+            }`}>
               {initials}
             </div>
-            <span className="absolute bottom-0 right-0 w-5 h-5 rounded-full bg-emerald-500 border-2 border-[#141824] flex items-center justify-center">
-              <span className="w-2 h-2 rounded-full bg-emerald-300" />
+            <span className={`absolute bottom-0 right-0 rounded-full bg-emerald-500 border-2 border-[#141824] flex items-center justify-center ${
+              isMini ? 'w-3 h-3' : 'w-5 h-5'
+            }`}>
+              <span className={`rounded-full bg-emerald-300 ${isMini ? 'w-1.5 h-1.5' : 'w-2 h-2'}`} />
             </span>
           </div>
 
-          <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
+          <h3 className={`font-bold text-white tracking-tight ${isMini ? 'text-xs truncate max-w-[120px]' : 'text-base sm:text-lg'}`}>
             {displayName}
           </h3>
-          <p className="text-xs text-zinc-400 font-medium mt-0.5">
-            {roleDescription} &bull; {roleLabel}
-          </p>
+          {!isMini && (
+            <p className="text-xs text-zinc-400 font-medium mt-0.5">
+              {roleDescription} &bull; {roleLabel}
+            </p>
+          )}
 
-          <div className="flex items-center gap-1.5 mt-3 px-3 py-1 rounded-full bg-white/[0.05] border border-white/10 text-xs text-zinc-400">
-            <VideoOff size={13} className="text-rose-400" />
-            <span>Camera is off</span>
+          <div className={`flex items-center gap-1.5 rounded-full bg-white/[0.05] border border-white/10 text-zinc-400 ${
+            isMini ? 'mt-1 px-2 py-0.5 text-[10px]' : 'mt-3 px-3 py-1 text-xs'
+          }`}>
+            <VideoOff size={isMini ? 11 : 13} className="text-rose-400" />
+            <span>Camera off</span>
           </div>
         </div>
       )}
 
       {/* Top-left: Mic Status Indicator */}
-      <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-black/60 backdrop-blur-md border border-white/10 text-white shadow text-xs">
+      <div className={`absolute top-2.5 left-2.5 flex items-center gap-1.5 rounded-xl bg-black/60 backdrop-blur-md border border-white/10 text-white shadow z-10 ${
+        isMini ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-1 text-xs'
+      }`}>
         {hasAudio ? (
           <>
-            <Mic size={13} className="text-emerald-400" />
-            <span className="text-[10.5px] font-medium text-zinc-300">Connected</span>
+            <Mic size={isMini ? 11 : 13} className="text-emerald-400" />
+            <span className="text-[10px] font-medium text-zinc-300 hidden sm:inline">Connected</span>
           </>
         ) : (
           <>
-            <MicOff size={13} className="text-zinc-500" />
-            <span className="text-[10.5px] font-medium text-zinc-400">Muted</span>
+            <MicOff size={isMini ? 11 : 13} className="text-zinc-500" />
+            <span className="text-[10px] font-medium text-zinc-400 hidden sm:inline">Muted</span>
           </>
         )}
       </div>
 
+      {/* Top-right: Pin / Spotlight button + Speaking Badge */}
+      <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5 z-10">
+        {isSpeaking && (
+          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 text-[10px] font-bold backdrop-blur-md shadow-lg animate-pulse">
+            <Volume2 size={11} className="text-emerald-400 shrink-0" />
+            <span className={isMini ? 'hidden' : 'inline'}>Speaking</span>
+          </div>
+        )}
+        {onTogglePin && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onTogglePin();
+            }}
+            className={`p-1.5 rounded-xl backdrop-blur-md border transition cursor-pointer active:scale-95 flex items-center gap-1.5 ${
+              isPinned
+                ? 'bg-emerald-500 text-white border-emerald-400 shadow-lg shadow-emerald-500/40'
+                : 'bg-black/60 hover:bg-black/80 text-zinc-300 hover:text-white border-white/10 opacity-75 group-hover:opacity-100'
+            }`}
+            title={isPinned ? 'Unpin participant' : 'Pin to spotlight stage'}
+          >
+            {isPinned ? <PinOff size={13} /> : <Pin size={13} />}
+            {!isMini && (
+              <span className="text-[10.5px] font-semibold hidden md:inline">
+                {isPinned ? 'Unpin' : 'Pin'}
+              </span>
+            )}
+          </button>
+        )}
+      </div>
+
       {/* Bottom-left: Participant Label Pill */}
-      <div className="absolute bottom-3 left-3 flex items-center gap-2 px-3 py-1.5 rounded-xl bg-black/75 backdrop-blur-md border border-white/10 text-xs font-bold text-white shadow">
-        <span>{displayName}</span>
-        <span className="text-[10.5px] text-zinc-400 font-normal">&bull; {roleLabel}</span>
-        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+      <div className={`absolute bottom-2.5 left-2.5 flex items-center gap-1.5 rounded-xl bg-black/75 backdrop-blur-md border border-white/10 font-bold text-white shadow z-10 ${
+        isMini ? 'px-2 py-1 text-[11px]' : 'px-3 py-1.5 text-xs'
+      }`}>
+        <span className="truncate max-w-[120px]">{displayName}</span>
+        {!isMini && <span className="text-[10.5px] text-zinc-400 font-normal">&bull; {roleLabel}</span>}
+        <span className={`rounded-full ${isSpeaking ? 'bg-emerald-400 animate-ping' : 'bg-emerald-500'} ${isMini ? 'w-1.5 h-1.5' : 'w-2 h-2'}`} />
+      </div>
+    </div>
+  );
+}
+
+function LocalParticipantTile({
+  isCameraOn,
+  localStream,
+  setLocalVideo,
+  myName,
+  myRole,
+  myInitials,
+  isMicOn,
+  toggleCamera,
+  isPinned,
+  onTogglePin,
+  isMini = false,
+  isActiveSpeaker = false,
+  onSpeakingChange,
+}) {
+  const isAudioSpeaking = useAudioActivity(localStream, isMicOn);
+  const isSpeaking = isActiveSpeaker || isAudioSpeaking;
+
+  useEffect(() => {
+    onSpeakingChange?.(isSpeaking);
+  }, [isSpeaking, onSpeakingChange]);
+
+  return (
+    <div
+      className={`relative rounded-2xl overflow-hidden bg-[#11141D] flex items-center justify-center group transition-all duration-200 select-none ${
+        isMini
+          ? 'w-full h-full min-h-0'
+          : 'w-full h-full min-h-[220px] rounded-2xl sm:rounded-3xl shadow-2xl'
+      } ${
+        isSpeaking
+          ? 'ring-2 ring-emerald-500 shadow-[0_0_24px_rgba(16,185,129,0.4)] border-emerald-500/80'
+          : isPinned
+          ? 'ring-2 ring-emerald-400 border-emerald-400/80'
+          : 'border border-white/[0.08]'
+      }`}
+    >
+      {isCameraOn && localStream ? (
+        <video
+          ref={setLocalVideo}
+          autoPlay
+          playsInline
+          muted
+          className="w-full h-full object-cover transform scale-x-[-1]"
+        />
+      ) : (
+        /* Camera Turned Off Screen */
+        <div className={`w-full h-full flex flex-col items-center justify-center bg-gradient-to-b from-[#141824] to-[#0D1018] text-center select-none relative overflow-hidden ${
+          isMini ? 'p-3' : 'p-6'
+        }`}>
+          <div className="absolute w-64 h-64 rounded-full bg-emerald-500/5 blur-3xl pointer-events-none" />
+
+          <div className={`rounded-full bg-gradient-to-br from-zinc-800 to-zinc-900 border-2 border-white/15 flex items-center justify-center shadow-2xl text-white font-black ${
+            isMini ? 'w-10 h-10 text-sm mb-2' : 'w-20 h-20 sm:w-24 sm:h-24 text-2xl sm:text-3xl mb-3'
+          }`}>
+            {myInitials}
+          </div>
+          <h3 className={`font-bold text-white tracking-tight ${isMini ? 'text-xs truncate max-w-[120px]' : 'text-base sm:text-lg'}`}>
+            {myName} (You)
+          </h3>
+          {!isMini && <p className="text-xs text-zinc-400 font-medium mt-0.5">{myRole}</p>}
+
+          {!isMini ? (
+            <>
+              <div className="flex items-center gap-1.5 mt-3 px-3 py-1 rounded-full bg-white/[0.05] border border-white/10 text-xs text-zinc-400">
+                <VideoOff size={13} className="text-rose-400" />
+                <span>Camera is off</span>
+              </div>
+
+              <button
+                type="button"
+                onClick={toggleCamera}
+                className="mt-4 flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white transition cursor-pointer active:scale-95 shadow-lg shadow-emerald-950/40"
+              >
+                <Video size={13} />
+                <span>Turn On Camera</span>
+              </button>
+            </>
+          ) : (
+            <div className="flex items-center gap-1 mt-1 text-[10px] text-zinc-400">
+              <VideoOff size={10} className="text-rose-400" />
+              <span>Off</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Top-right: Pin / Spotlight button + Speaking Badge */}
+      <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5 z-10">
+        {isSpeaking && (
+          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 text-[10px] font-bold backdrop-blur-md shadow-lg animate-pulse">
+            <Volume2 size={11} className="text-emerald-400 shrink-0" />
+            <span className={isMini ? 'hidden' : 'inline'}>Speaking</span>
+          </div>
+        )}
+        {onTogglePin && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onTogglePin();
+            }}
+            className={`p-1.5 rounded-xl backdrop-blur-md border transition cursor-pointer active:scale-95 flex items-center gap-1.5 ${
+              isPinned
+                ? 'bg-emerald-500 text-white border-emerald-400 shadow-lg shadow-emerald-500/40'
+                : 'bg-black/60 hover:bg-black/80 text-zinc-300 hover:text-white border-white/10 opacity-75 group-hover:opacity-100'
+            }`}
+            title={isPinned ? 'Unpin participant' : 'Pin to spotlight stage'}
+          >
+            {isPinned ? <PinOff size={13} /> : <Pin size={13} />}
+            {!isMini && (
+              <span className="text-[10.5px] font-semibold hidden md:inline">
+                {isPinned ? 'Unpin' : 'Pin'}
+              </span>
+            )}
+          </button>
+        )}
+      </div>
+
+      {/* Bottom-left: Participant Label Pill */}
+      <div className={`absolute bottom-2.5 left-2.5 flex items-center gap-1.5 rounded-xl bg-black/75 backdrop-blur-md border border-white/10 font-bold text-white shadow z-10 ${
+        isMini ? 'px-2 py-1 text-[11px]' : 'px-3 py-1.5 text-xs'
+      }`}>
+        <span className="truncate max-w-[110px]">{myName} (You)</span>
+        {!isMini && <span className="text-[10.5px] text-zinc-400 font-normal">&bull; {myRole}</span>}
+      </div>
+
+      {/* Bottom-right: Audio Visualizer Waves / Mute Indicator */}
+      <div className={`absolute bottom-2.5 right-2.5 flex items-center gap-1.5 rounded-xl bg-black/75 backdrop-blur-md border border-white/10 text-emerald-400 shadow z-10 ${
+        isMini ? 'px-2 py-1 text-[10px]' : 'px-2.5 py-1.5 text-xs'
+      }`}>
+        {isMicOn ? (
+          <div className="flex items-center gap-0.5">
+            <span className="w-1 h-2 bg-emerald-400 rounded-full" />
+            <span className="w-1 h-3.5 bg-emerald-400 rounded-full animate-pulse" />
+            <span className="w-1 h-2 bg-emerald-400 rounded-full" />
+          </div>
+        ) : (
+          <div className="flex items-center gap-1 text-rose-400">
+            <MicOff size={isMini ? 11 : 13} />
+            {!isMini && <span className="text-[10px] font-semibold">Muted</span>}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -379,6 +696,7 @@ export function InterviewRoom({
   const {
     participants,
     remoteStream,
+    activeSpeaker,
     disconnect,
   } = useInterviewRoom({
     roundId: round?.id,
@@ -648,6 +966,80 @@ export function InterviewRoom({
 
   const participantCount = totalPeopleCount;
 
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Spotlight / Pin to Focus / Active Speaker State
+  // ─────────────────────────────────────────────────────────────────────────────
+  const [pinnedPeerId, setPinnedPeerId] = useState(null); // 'local' | peer.identity | null
+  const [autoFocusSpeaker, setAutoFocusSpeaker] = useState(true);
+  const [viewMode, setViewMode] = useState('auto'); // 'auto' | 'grid' | 'spotlight'
+  const [speakingPeerId, setSpeakingPeerId] = useState(null);
+  const speakingTimeoutRef = useRef(null);
+
+  const handleSpeakingChange = useCallback((peerId, isSpk) => {
+    if (isSpk) {
+      if (speakingTimeoutRef.current) clearTimeout(speakingTimeoutRef.current);
+      setSpeakingPeerId(peerId);
+    } else {
+      if (speakingTimeoutRef.current) clearTimeout(speakingTimeoutRef.current);
+      speakingTimeoutRef.current = setTimeout(() => {
+        setSpeakingPeerId((prev) => (prev === peerId ? null : prev));
+      }, 1200);
+    }
+  }, []);
+
+  // Sync LiveKit server active-speaker events
+  useEffect(() => {
+    if (activeSpeaker) {
+      if (activeSpeaker === myUniqueIdentity) {
+        handleSpeakingChange('local', true);
+      } else {
+        handleSpeakingChange(activeSpeaker, true);
+      }
+    }
+  }, [activeSpeaker, myUniqueIdentity, handleSpeakingChange]);
+
+  const handleTogglePin = (peerId) => {
+    setPinnedPeerId((prev) => {
+      if (prev === peerId) {
+        return null;
+      }
+      return peerId;
+    });
+  };
+
+  // Determine which participant is on the Main Stage if in Spotlight mode
+  let focusedId = pinnedPeerId;
+  if (!focusedId && autoFocusSpeaker && speakingPeerId && totalPeopleCount > 1) {
+    focusedId = speakingPeerId;
+  }
+  if (!focusedId && viewMode === 'spotlight' && totalPeopleCount > 1) {
+    focusedId = effectiveParticipants[0]?.identity || 'local';
+  }
+
+  // Active spotlight mode calculation
+  const isSpotlightMode = Boolean(focusedId) && (viewMode !== 'grid' || Boolean(pinnedPeerId));
+  const focusedIsLocal = focusedId === 'local';
+  const focusedPeer = !focusedIsLocal ? (effectiveParticipants.find((p) => p.identity === focusedId) || effectiveParticipants[0] || null) : null;
+
+  let focusedPeerName = 'Participant';
+  if (focusedIsLocal) {
+    focusedPeerName = `${myName} (You)`;
+  } else if (focusedPeer) {
+    focusedPeerName = focusedPeer.name || 'Participant';
+  }
+
+  // Filmstrip list contains all other participants except the focused hero
+  const filmstripList = [];
+  if (isSpotlightMode) {
+    if (!focusedIsLocal) {
+      filmstripList.push({ isLocal: true, key: 'local' });
+    }
+    for (const p of effectiveParticipants) {
+      if (focusedPeer && p.identity === focusedPeer.identity) continue;
+      filmstripList.push({ isLocal: false, peer: p, key: p.identity });
+    }
+  }
+
   return (
     <div className="relative w-full h-screen h-[100dvh] bg-[#090B10] text-zinc-100 flex flex-col overflow-hidden font-sans select-none">
       {/* Ambient background subtle lighting */}
@@ -691,6 +1083,28 @@ export function InterviewRoom({
 
         {/* Right Actions: Clean, Minimal, Highly Functional */}
         <div className="flex items-center gap-2 sm:gap-2.5">
+          {/* Layout Mode Button (Grid vs Spotlight) */}
+          <button
+            type="button"
+            onClick={() => {
+              if (isSpotlightMode) {
+                setViewMode('grid');
+                setPinnedPeerId(null);
+              } else {
+                setViewMode('spotlight');
+              }
+            }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition cursor-pointer active:scale-95 ${
+              isSpotlightMode
+                ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                : 'bg-white/[0.05] hover:bg-white/[0.1] text-zinc-300 border-white/10'
+            }`}
+            title={isSpotlightMode ? 'Switch to equal grid view' : 'Switch to spotlight hero stage'}
+          >
+            {isSpotlightMode ? <LayoutGrid size={13} className="text-emerald-400" /> : <Maximize2 size={13} className="text-zinc-400" />}
+            <span className="hidden sm:inline">{isSpotlightMode ? 'Grid View' : 'Spotlight'}</span>
+          </button>
+
           {/* Copy Meeting Link */}
           <button
             type="button"
@@ -766,87 +1180,195 @@ export function InterviewRoom({
         {/* LEFT COLUMN: MULTI-TILE VIDEO GRID + FLOATING CONTROL DOCK    */}
         {/* ============================================================== */}
         <div className="flex-1 min-w-0 h-full flex flex-col gap-3 overflow-hidden">
-          {/* VIDEO GRID AREA: Dynamic Multi-Participant Grid */}
-          <div className={`flex-1 min-h-0 grid gap-3 sm:gap-4 overflow-y-auto [scrollbar-width:thin] ${
-            totalPeopleCount === 1
-              ? 'grid-cols-1 max-w-4xl mx-auto w-full'
-              : totalPeopleCount === 2
-              ? 'grid-cols-1 md:grid-cols-2'
-              : totalPeopleCount === 3
-              ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
-              : 'grid-cols-2 md:grid-cols-2'
-          }`}>
-            {/* Remote Participants */}
-            {effectiveParticipants.map((peer) => (
-              <RemoteParticipantTile
-                key={peer.identity}
-                peer={peer}
-                isInterviewer={isInterviewer}
-                round={round}
-                fallbackStream={remoteStream}
-              />
-            ))}
-
-            {/* Local Participant (You) */}
-            <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden bg-[#11141D] border border-white/[0.08] shadow-2xl flex items-center justify-center group min-h-[220px]">
-              {isCameraOn && localStream ? (
-                <video
-                  ref={setLocalVideo}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="w-full h-full object-cover transform scale-x-[-1]"
-                />
-              ) : (
-                /* Camera Turned Off Screen */
-                <div className="w-full h-full flex flex-col items-center justify-center p-6 bg-gradient-to-b from-[#141824] to-[#0D1018] text-center select-none">
-                  <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-zinc-800 to-zinc-900 border-2 border-white/15 flex items-center justify-center shadow-2xl text-white text-2xl sm:text-3xl font-black mb-3">
-                    {myInitials}
+          {isSpotlightMode ? (
+            /* ─────────────────────────────────────────────────────────
+               SPOTLIGHT / PINNED STAGE VIEW: Main Hero Stage + Filmstrip Dock
+               ───────────────────────────────────────────────────────── */
+            <div className="flex-1 min-h-0 flex flex-col gap-2.5 sm:gap-3 overflow-hidden">
+              {/* Stage Sub-header bar: Stage status & quick toggles */}
+              <div className="flex items-center justify-between px-1 shrink-0 text-xs text-zinc-400">
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 font-semibold text-[11px] shadow-sm">
+                    <Sparkles size={12} className="text-emerald-400" />
+                    <span>{pinnedPeerId ? 'Pinned Focus' : 'Active Speaker Stage'}</span>
                   </div>
-                  <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
-                    {myName} (You)
-                  </h3>
-                  <p className="text-xs text-zinc-400 font-medium mt-0.5">{myRole}</p>
+                  <span className="text-zinc-600 hidden sm:inline">&bull;</span>
+                  <span className="text-zinc-300 hidden sm:inline text-xs font-medium truncate max-w-[240px]">
+                    {focusedPeerName}
+                  </span>
+                </div>
 
-                  <div className="flex items-center gap-1.5 mt-3 px-3 py-1 rounded-full bg-white/[0.05] border border-white/10 text-xs text-zinc-400">
-                    <VideoOff size={13} className="text-rose-400" />
-                    <span>Camera is off</span>
-                  </div>
-
+                <div className="flex items-center gap-2">
+                  {/* Reset to Grid */}
                   <button
                     type="button"
-                    onClick={toggleCamera}
-                    className="mt-4 flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white transition cursor-pointer active:scale-95 shadow-lg shadow-emerald-950/40"
+                    onClick={() => {
+                      setPinnedPeerId(null);
+                      setViewMode('grid');
+                    }}
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-zinc-300 hover:text-white border border-white/10 text-[11px] font-semibold transition cursor-pointer active:scale-95"
+                    title="Return to equal grid"
                   >
-                    <Video size={13} />
-                    <span>Turn On Camera</span>
+                    <LayoutGrid size={12} />
+                    <span>Equal Grid</span>
+                  </button>
+
+                  {/* Auto-Focus Speaker Toggle */}
+                  <button
+                    type="button"
+                    onClick={() => setAutoFocusSpeaker((prev) => !prev)}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-semibold transition cursor-pointer active:scale-95 border ${
+                      autoFocusSpeaker
+                        ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                        : 'bg-white/[0.06] text-zinc-400 border-white/10'
+                    }`}
+                    title="Automatically spotlight active speaker"
+                  >
+                    <Volume2 size={12} />
+                    <span className="hidden sm:inline">Auto-Focus:</span>
+                    <span>{autoFocusSpeaker ? 'ON' : 'OFF'}</span>
                   </button>
                 </div>
-              )}
-
-              {/* Bottom-left: Participant Label Pill */}
-              <div className="absolute bottom-3 left-3 flex items-center gap-2 px-3 py-1.5 rounded-xl bg-black/75 backdrop-blur-md border border-white/10 text-xs font-bold text-white shadow">
-                <span>{myName} (You)</span>
-                <span className="text-[10.5px] text-zinc-400 font-normal">&bull; {myRole}</span>
               </div>
 
-              {/* Bottom-right: Audio Visualizer Waves / Mute Indicator */}
-              <div className="absolute bottom-3 right-3 flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-black/75 backdrop-blur-md border border-white/10 text-emerald-400 shadow">
-                {isMicOn ? (
-                  <div className="flex items-center gap-0.5">
-                    <span className="w-1 h-2 bg-emerald-400 rounded-full" />
-                    <span className="w-1 h-3.5 bg-emerald-400 rounded-full animate-pulse" />
-                    <span className="w-1 h-2 bg-emerald-400 rounded-full" />
-                  </div>
+              {/* MAIN HERO STAGE: Full height focused hero video card */}
+              <div className="flex-1 min-h-0 relative w-full h-full">
+                {focusedIsLocal ? (
+                  <LocalParticipantTile
+                    isCameraOn={isCameraOn}
+                    localStream={localStream}
+                    setLocalVideo={setLocalVideo}
+                    myName={myName}
+                    myRole={myRole}
+                    myInitials={myInitials}
+                    isMicOn={isMicOn}
+                    toggleCamera={toggleCamera}
+                    isPinned={pinnedPeerId === 'local'}
+                    onTogglePin={() => handleTogglePin('local')}
+                    isMini={false}
+                    isActiveSpeaker={speakingPeerId === 'local'}
+                    onSpeakingChange={(spk) => handleSpeakingChange('local', spk)}
+                  />
                 ) : (
-                  <div className="flex items-center gap-1 text-rose-400">
-                    <MicOff size={13} />
-                    <span className="text-[10px] font-semibold">Muted</span>
-                  </div>
+                  focusedPeer && (
+                    <RemoteParticipantTile
+                      key={focusedPeer.identity}
+                      peer={focusedPeer}
+                      isInterviewer={isInterviewer}
+                      round={round}
+                      fallbackStream={remoteStream}
+                      isPinned={pinnedPeerId === focusedPeer.identity}
+                      onTogglePin={() => handleTogglePin(focusedPeer.identity)}
+                      isMini={false}
+                      isActiveSpeaker={speakingPeerId === focusedPeer.identity}
+                      onSpeakingChange={(spk) => handleSpeakingChange(focusedPeer.identity, spk)}
+                    />
+                  )
                 )}
               </div>
+
+              {/* THUMBNAIL FILMSTRIP DOCK: Compact row of other participants */}
+              {filmstripList.length > 0 && (
+                <div className="h-28 sm:h-32 shrink-0 flex items-center gap-3 overflow-x-auto [scrollbar-width:thin] py-1 px-0.5">
+                  {filmstripList.map((item) => {
+                    if (item.isLocal) {
+                      return (
+                        <div
+                          key="filmstrip_local"
+                          onClick={() => setPinnedPeerId('local')}
+                          className="h-full w-44 sm:w-52 shrink-0 cursor-pointer"
+                          title="Click to spotlight yourself"
+                        >
+                          <LocalParticipantTile
+                            isCameraOn={isCameraOn}
+                            localStream={localStream}
+                            setLocalVideo={setLocalVideo}
+                            myName={myName}
+                            myRole={myRole}
+                            myInitials={myInitials}
+                            isMicOn={isMicOn}
+                            toggleCamera={toggleCamera}
+                            isPinned={pinnedPeerId === 'local'}
+                            onTogglePin={() => handleTogglePin('local')}
+                            isMini={true}
+                            isActiveSpeaker={speakingPeerId === 'local'}
+                            onSpeakingChange={(spk) => handleSpeakingChange('local', spk)}
+                          />
+                        </div>
+                      );
+                    } else {
+                      return (
+                        <div
+                          key={`filmstrip_${item.peer.identity}`}
+                          onClick={() => setPinnedPeerId(item.peer.identity)}
+                          className="h-full w-44 sm:w-52 shrink-0 cursor-pointer"
+                          title={`Click to spotlight ${item.peer.name || 'participant'}`}
+                        >
+                          <RemoteParticipantTile
+                            peer={item.peer}
+                            isInterviewer={isInterviewer}
+                            round={round}
+                            fallbackStream={remoteStream}
+                            isPinned={pinnedPeerId === item.peer.identity}
+                            onTogglePin={() => handleTogglePin(item.peer.identity)}
+                            isMini={true}
+                            isActiveSpeaker={speakingPeerId === item.peer.identity}
+                            onSpeakingChange={(spk) => handleSpeakingChange(item.peer.identity, spk)}
+                          />
+                        </div>
+                      );
+                    }
+                  })}
+                </div>
+              )}
             </div>
-          </div>
+          ) : (
+            /* ─────────────────────────────────────────────────────────
+               EQUAL GRID VIEW: All participants in responsive grid
+               ───────────────────────────────────────────────────────── */
+            <div className={`flex-1 min-h-0 grid gap-3 sm:gap-4 overflow-y-auto [scrollbar-width:thin] ${
+              totalPeopleCount === 1
+                ? 'grid-cols-1 max-w-4xl mx-auto w-full'
+                : totalPeopleCount === 2
+                ? 'grid-cols-1 md:grid-cols-2'
+                : totalPeopleCount === 3
+                ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
+                : 'grid-cols-2 md:grid-cols-2'
+            }`}>
+              {/* Remote Participants */}
+              {effectiveParticipants.map((peer) => (
+                <RemoteParticipantTile
+                  key={peer.identity}
+                  peer={peer}
+                  isInterviewer={isInterviewer}
+                  round={round}
+                  fallbackStream={remoteStream}
+                  isPinned={pinnedPeerId === peer.identity}
+                  onTogglePin={() => handleTogglePin(peer.identity)}
+                  isMini={false}
+                  isActiveSpeaker={speakingPeerId === peer.identity}
+                  onSpeakingChange={(spk) => handleSpeakingChange(peer.identity, spk)}
+                />
+              ))}
+
+              {/* Local Participant (You) */}
+              <LocalParticipantTile
+                isCameraOn={isCameraOn}
+                localStream={localStream}
+                setLocalVideo={setLocalVideo}
+                myName={myName}
+                myRole={myRole}
+                myInitials={myInitials}
+                isMicOn={isMicOn}
+                toggleCamera={toggleCamera}
+                isPinned={pinnedPeerId === 'local'}
+                onTogglePin={() => handleTogglePin('local')}
+                isMini={false}
+                isActiveSpeaker={speakingPeerId === 'local'}
+                onSpeakingChange={(spk) => handleSpeakingChange('local', spk)}
+              />
+            </div>
+          )}
 
           {/* ─────────────────────────────────────────────────────────────
               BOTTOM FLOATING CONTROL BAR: Intuitive, Clean & Modern Dock
