@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 
 def handler():
     path = Path(__file__).parents[1] / 'main.py'
-    tree = ast.parse(path.read_text())
+    tree = ast.parse(path.read_text(encoding='utf-8'))
     function = next(node for node in tree.body if isinstance(node, ast.AsyncFunctionDef) and node.name == 'custom_404_handler')
     function.decorator_list = []
     namespace = {'Request': Request, 'JSONResponse': JSONResponse}

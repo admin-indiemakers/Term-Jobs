@@ -149,55 +149,60 @@ export default function RequisitionDetail() {
     deadline: '',
   });
 
+  const syncEditForm = (data) => {
+    if (!data) return;
+    const structured = data.structured_role || {};
+
+    let skillsStr = '';
+    const rawSkillsList =
+      structured.must_have_skills ||
+      structured.primary_skills ||
+      structured.required_skills ||
+      structured.skills ||
+      data.skills ||
+      (data.intent && data.intent.tech_stack_hint) ||
+      [];
+
+    if (Array.isArray(rawSkillsList) && rawSkillsList.length > 0) {
+      skillsStr = rawSkillsList.join(', ');
+    } else if (typeof rawSkillsList === 'string' && rawSkillsList.trim()) {
+      skillsStr = rawSkillsList.trim();
+    }
+
+    const roleTitle = data.title || structured.title || '';
+    const roleDept = data.department || structured.department || structured.job_family || '';
+    const roleExp = structured.experience || structured.experience_level || structured.experience_years || data.experience || data.experience_range || '';
+    const roleWorkMode = structured.work_mode || structured.workplace_type || data.work_mode || data.workplace_type || 'Hybrid';
+    const roleDuration = structured.duration || structured.contract_duration || data.duration || '6 Months';
+    const roleHeadcount = structured.headcount || data.headcount || 1;
+    const rawDeadline = structured.submission_deadline || data.submission_deadline || structured.shortlist_deadline || data.shortlist_deadline || '';
+    const roleDeadline = rawDeadline ? String(rawDeadline).slice(0, 10) : '';
+    const defaultDesc =
+      structured.summary ||
+      structured.role_overview ||
+      data.description ||
+      (data.intent && data.intent.description) ||
+      (roleTitle && roleDept ? `We are looking for a ${roleTitle} to join our ${roleDept} team and drive high-impact deliverables.` : '');
+
+    setEditForm({
+      title: roleTitle,
+      department: roleDept,
+      experience: roleExp,
+      work_mode: roleWorkMode,
+      duration: roleDuration,
+      headcount: roleHeadcount,
+      skills: skillsStr,
+      deadline: roleDeadline,
+      description: defaultDesc,
+    });
+  };
+
   const load = () => {
     setLoading(true);
     request(`/requisitions/${id}`, { token })
       .then((data) => {
         setReq(data);
-        const structured = data.structured_role || {};
-        
-        let skillsStr = '';
-        const rawSkillsList =
-          structured.must_have_skills ||
-          structured.primary_skills ||
-          structured.required_skills ||
-          structured.skills ||
-          data.skills ||
-          (data.intent && data.intent.tech_stack_hint) ||
-          [];
-
-        if (Array.isArray(rawSkillsList) && rawSkillsList.length > 0) {
-          skillsStr = rawSkillsList.join(', ');
-        } else if (typeof rawSkillsList === 'string' && rawSkillsList.trim()) {
-          skillsStr = rawSkillsList.trim();
-        }
-
-        const roleTitle = data.title || structured.title || 'Untitled Role';
-        const roleDept = data.department || structured.department || structured.job_family || 'Engineering';
-        const defaultDesc = `We are looking for a ${roleTitle} to join our ${roleDept} team and drive high-impact deliverables.`;
-
-        setEditForm({
-          title: roleTitle,
-          department: roleDept,
-          experience: structured.experience || structured.experience_level || structured.experience_years || '3–5 years',
-          work_mode: structured.work_mode || data.work_mode || 'Hybrid',
-          duration: structured.duration || structured.contract_duration || data.duration || '6 Months',
-          headcount: structured.headcount || data.headcount || 1,
-          skills: skillsStr,
-          deadline: (
-            structured.submission_deadline ||
-            data.submission_deadline ||
-            structured.shortlist_deadline ||
-            data.shortlist_deadline ||
-            '').slice(0, 10),
-          description:
-            structured.summary ||
-            structured.role_overview ||
-            data.description ||
-            (data.intent && data.intent.description) ||
-            defaultDesc,
-        });
-
+        syncEditForm(data);
         setError('');
       })
       .catch((err) => setError(err.message))
@@ -265,26 +270,13 @@ export default function RequisitionDetail() {
   const cannotEdit = isPublished && (isHiringManager || user?.role !== 'Super Admin');
 
   const handleEditClick = () => {
-    if (cannotEdit) {
-      setError('');
-      setTimeout(() => {
-        setError('This requisition is already approved, and cannot be edited.');
-      }, 0);
-      setInfo('');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      return;
-    }
+    syncEditForm(req);
     setShowEditModal(true);
   };
 
   // Handle Save Edit Form
   const handleSaveEdit = async (e) => {
     if (e) e.preventDefault();
-    if (cannotEdit) {
-      setError('This requisition is already approved, and cannot be edited.');
-      setShowEditModal(false);
-      return;
-    }
     if (deadlineError(editForm.deadline)) {
       setError(deadlineError(editForm.deadline));
       return;
@@ -293,11 +285,16 @@ export default function RequisitionDetail() {
     setError('');
     setInfo('');
     try {
-      const skillsArr = editForm.skills.split(',').map((s) => s.trim()).filter(Boolean);
+      const skillsArr = editForm.skills
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+
       const updatedRole = {
         ...(req?.structured_role || {}),
         title: editForm.title,
         department: editForm.department,
+        experience: editForm.experience,
         experience_level: editForm.experience,
         work_mode: editForm.work_mode,
         duration: editForm.duration,
@@ -306,23 +303,42 @@ export default function RequisitionDetail() {
         must_have_skills: skillsArr,
         primary_skills: skillsArr,
         required_skills: skillsArr,
+        skills: skillsArr,
         summary: editForm.description,
         role_overview: editForm.description,
       };
 
-      await request(`/requisitions/${id}/approve`, {
-        method: 'POST',
-        body: { edited_role: updatedRole, reviewer: user?.email || user?.name },
-        token,
-      });
+      let updateSuccess = false;
+      try {
+        await request(`/requisitions/${id}`, {
+          method: 'PATCH',
+          body: {
+            title: editForm.title,
+            structured_role: updatedRole,
+          },
+          token,
+        });
+        updateSuccess = true;
+      } catch (patchErr) {
+        console.warn('PATCH requisition fallback:', patchErr);
+      }
 
+      if (!updateSuccess) {
+        await request(`/requisitions/${id}/approve`, {
+          method: 'POST',
+          body: { edited_role: updatedRole, reviewer: user?.email || user?.name },
+          token,
+        });
+      }
+
+      window.dispatchEvent(new CustomEvent('refresh-hm-data'));
+      window.dispatchEvent(new CustomEvent('tj-requisitions-updated'));
       setInfo('Requisition updated successfully.');
       setShowEditModal(false);
       load();
     } catch (err) {
       setError(err.message || 'Failed to update requisition.');
     } finally {
-
       setBusy('');
     }
   };
@@ -869,12 +885,13 @@ export default function RequisitionDetail() {
         >
           <div
             className="relative w-full max-w-2xl bg-white/95 backdrop-blur-2xl rounded-3xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.2),inset_0_1px_1px_rgba(255,255,255,0.9)] border border-white/90 p-6 sm:p-7 text-left space-y-4 max-h-[90vh] overflow-y-auto no-scrollbar"
+            style={{ color: '#111827' }}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-3 border-b border-black/[0.04]">
               <div>
                 <h3 className="text-base font-bold text-gray-900">Edit Requisition</h3>
-                <p className="text-xs text-gray-400 mt-0.5">Modify role details, requirements and criteria.</p>
+                <p className="text-xs text-gray-500 mt-0.5">Modify role details, requirements and criteria.</p>
               </div>
               <button
                 type="button"
@@ -885,82 +902,106 @@ export default function RequisitionDetail() {
               </button>
             </div>
 
-            <form onSubmit={handleSaveEdit} className="space-y-3.5">
+            <form onSubmit={handleSaveEdit} className="space-y-3.5 text-gray-900">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">Job Title</label>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    Job Title <span className="text-red-500">*</span>
+                  </label>
                   <input
                     type="text"
                     required
                     value={editForm.title}
                     onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
-                    className="w-full px-3.5 py-2 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-black"
+                    placeholder="e.g. Senior Backend Engineer"
+                    className="w-full px-3.5 py-2 text-xs !text-gray-900 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-black placeholder:!text-gray-400 font-medium transition-all shadow-3xs"
+                    style={{ color: '#111827', WebkitTextFillColor: '#111827', caretColor: '#111827' }}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">Department</label>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    Department <span className="text-red-500">*</span>
+                  </label>
                   <input
                     type="text"
                     required
                     value={editForm.department}
                     onChange={(e) => setEditForm({ ...editForm, department: e.target.value })}
-                    className="w-full px-3.5 py-2 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-black"
+                    placeholder="e.g. Engineering"
+                    className="w-full px-3.5 py-2 text-xs !text-gray-900 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-black placeholder:!text-gray-400 font-medium transition-all shadow-3xs"
+                    style={{ color: '#111827', WebkitTextFillColor: '#111827', caretColor: '#111827' }}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">Experience</label>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    Experience <span className="text-gray-400 font-normal">(optional)</span>
+                  </label>
                   <input
                     type="text"
                     value={editForm.experience}
                     onChange={(e) => setEditForm({ ...editForm, experience: e.target.value })}
                     placeholder="e.g. 5–8 years"
-                    className="w-full px-3.5 py-2 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-black"
+                    className="w-full px-3.5 py-2 text-xs !text-gray-900 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-black placeholder:!text-gray-400 font-medium transition-all shadow-3xs"
+                    style={{ color: '#111827', WebkitTextFillColor: '#111827', caretColor: '#111827' }}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">Work Mode</label>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    Work Mode <span className="text-gray-400 font-normal">(optional)</span>
+                  </label>
                   <input
                     type="text"
                     value={editForm.work_mode}
                     onChange={(e) => setEditForm({ ...editForm, work_mode: e.target.value })}
                     placeholder="e.g. Hybrid, Remote, Onsite"
-                    className="w-full px-3.5 py-2 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-black"
+                    className="w-full px-3.5 py-2 text-xs !text-gray-900 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-black placeholder:!text-gray-400 font-medium transition-all shadow-3xs"
+                    style={{ color: '#111827', WebkitTextFillColor: '#111827', caretColor: '#111827' }}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">Duration</label>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    Duration <span className="text-gray-400 font-normal">(optional)</span>
+                  </label>
                   <input
                     type="text"
                     value={editForm.duration}
                     onChange={(e) => setEditForm({ ...editForm, duration: e.target.value })}
                     placeholder="e.g. 6 Months"
-                    className="w-full px-3.5 py-2 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-black"
+                    className="w-full px-3.5 py-2 text-xs !text-gray-900 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-black placeholder:!text-gray-400 font-medium transition-all shadow-3xs"
+                    style={{ color: '#111827', WebkitTextFillColor: '#111827', caretColor: '#111827' }}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">Open Positions</label>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    Open Positions <span className="text-gray-400 font-normal">(optional)</span>
+                  </label>
                   <input
                     type="number"
                     min="1"
                     value={editForm.headcount}
                     onChange={(e) => setEditForm({ ...editForm, headcount: e.target.value })}
-                    className="w-full px-3.5 py-2 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-black"
+                    placeholder="1"
+                    className="w-full px-3.5 py-2 text-xs !text-gray-900 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-black placeholder:!text-gray-400 font-medium transition-all shadow-3xs"
+                    style={{ color: '#111827', WebkitTextFillColor: '#111827', caretColor: '#111827' }}
                   />
                 </div>
 
                 <div className="sm:col-span-2">
-                  <label className="block text-xs font-bold text-gray-700 mb-1">Submission Deadline</label>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    Submission Deadline <span className="text-gray-400 font-normal">(optional)</span>
+                  </label>
                   <input
                     type="date"
                     min={todayForDeadline()}
                     value={editForm.deadline}
                     onChange={(e) => setEditForm({ ...editForm, deadline: e.target.value })}
-                    className="w-full px-3.5 py-2 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-black"
+                    className="w-full px-3.5 py-2 text-xs !text-gray-900 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-black font-medium transition-all shadow-3xs cursor-pointer"
+                    style={{ color: '#111827', WebkitTextFillColor: '#111827', caretColor: '#111827' }}
                   />
                 </div>
               </div>
@@ -973,19 +1014,23 @@ export default function RequisitionDetail() {
                   type="text"
                   value={editForm.skills}
                   onChange={(e) => setEditForm({ ...editForm, skills: e.target.value })}
-                  placeholder="Kubernetes, Terraform, AWS, CI/CD, Docker, Vault"
-                  className="w-full px-3.5 py-2 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-black"
+                  placeholder="e.g. Python, FastAPI, Docker, Kubernetes"
+                  className="w-full px-3.5 py-2 text-xs !text-gray-900 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-black placeholder:!text-gray-400 font-medium transition-all shadow-3xs"
+                  style={{ color: '#111827', WebkitTextFillColor: '#111827', caretColor: '#111827' }}
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Role Description</label>
+                <label className="block text-xs font-bold text-gray-700 mb-1">
+                  Role Description <span className="text-gray-400 font-normal">(optional)</span>
+                </label>
                 <textarea
                   rows="4"
                   value={editForm.description}
                   onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                  placeholder="Brief overview of the role..."
-                  className="w-full px-3.5 py-2 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-black leading-relaxed"
+                  placeholder="Brief overview of the role and key responsibilities..."
+                  className="w-full px-3.5 py-2 text-xs !text-gray-900 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-black placeholder:!text-gray-400 font-medium leading-relaxed transition-all shadow-3xs"
+                  style={{ color: '#111827', WebkitTextFillColor: '#111827', caretColor: '#111827' }}
                 />
               </div>
 
@@ -1003,7 +1048,7 @@ export default function RequisitionDetail() {
                   className="px-5 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
                   {busy === 'saving' && <Loader2 size={13} className="animate-spin text-white" />}
-                  <span>Save Changes</span>
+                  <span>{busy === 'saving' ? 'Saving...' : 'Save Changes'}</span>
                 </button>
               </div>
             </form>

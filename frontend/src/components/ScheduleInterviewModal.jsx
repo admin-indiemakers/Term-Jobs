@@ -23,6 +23,7 @@ import {
   MapPin,
   Briefcase,
   AlertCircle,
+  MessageSquare,
 } from 'lucide-react';
 import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
@@ -43,13 +44,313 @@ const TIME_SLOTS = [
   '12:00 PM',
   '12:30 PM',
   '01:00 PM',
+  '01:30 PM',
   '02:00 PM',
   '02:30 PM',
   '03:00 PM',
   '03:30 PM',
   '04:00 PM',
   '04:30 PM',
+  '05:00 PM',
+  '05:30 PM',
+  '06:00 PM',
+  '06:30 PM',
+  '07:00 PM',
+  '07:30 PM',
+  '08:00 PM',
 ];
+
+function parseSlotToMinutes(slotStr) {
+  if (!slotStr) return null;
+  const match12 = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i.exec(slotStr.trim());
+  if (match12) {
+    let hours = parseInt(match12[1], 10) % 12;
+    if (match12[3].toUpperCase() === 'PM') hours += 12;
+    const minutes = parseInt(match12[2], 10);
+    return hours * 60 + minutes;
+  }
+  const match24 = /^(\d{1,2}):(\d{2})$/.exec(slotStr.trim());
+  if (match24) {
+    const hours = parseInt(match24[1], 10);
+    const minutes = parseInt(match24[2], 10);
+    return hours * 60 + minutes;
+  }
+  return null;
+}
+
+function format24to12(timeStr) {
+  if (!timeStr) return '';
+  const match = /^(\d{1,2}):(\d{2})$/.exec(timeStr.trim());
+  if (!match) return timeStr;
+  let hours = parseInt(match[1], 10);
+  const minutes = match[2];
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12 || 12;
+  return `${String(hours).padStart(2, '0')}:${minutes} ${ampm}`;
+}
+
+function format12to24(timeStr) {
+  if (!timeStr) return '';
+  try {
+    return toInterviewTime(timeStr);
+  } catch {
+    return '';
+  }
+}
+
+export function getInterviewerAvailability(
+  interviewer,
+  targetDate,
+  targetTime,
+  durationMinutes = 45,
+  currentRoundIndex = -1,
+  allRounds = [],
+  candidate = null
+) {
+  if (!interviewer || !targetDate || !targetTime) {
+    return { isAvailable: true, conflict: null };
+  }
+
+  const targetMinutes = parseSlotToMinutes(targetTime);
+  if (targetMinutes === null) {
+    return { isAvailable: true, conflict: null };
+  }
+  const targetDuration = parseInt(durationMinutes || 45, 10);
+  const targetEndMinutes = targetMinutes + targetDuration;
+
+  const targetEmail = (interviewer.email || '').trim().toLowerCase();
+  const targetName = (interviewer.name || '').trim().toLowerCase();
+
+  const currentRound = (Array.isArray(allRounds) && currentRoundIndex >= 0) ? allRounds[currentRoundIndex] : null;
+  const currentRoundId = currentRound?.persistedRoundId || currentRound?.id;
+  const currentRoundTitle = (currentRound?.title || currentRound?.round_name || '').toLowerCase().trim();
+  const candName = (candidate?.name || candidate?.candidate_name || currentRound?.candidateName || currentRound?.candidate_name || '').toLowerCase().trim();
+
+  // 1. Check against other rounds within this modal session (intra-modal conflicts across rounds)
+  if (Array.isArray(allRounds)) {
+    for (let i = 0; i < allRounds.length; i++) {
+      if (i === currentRoundIndex) continue;
+      const otherRound = allRounds[i];
+      if (!otherRound?.scheduledDate || !otherRound?.scheduledTime || !otherRound?.interviewer) continue;
+
+      const otherEmail = (otherRound.interviewer.email || '').trim().toLowerCase();
+      const otherName = (otherRound.interviewer.name || '').trim().toLowerCase();
+
+      const matches = (targetEmail && otherEmail && targetEmail === otherEmail) ||
+                      (!targetEmail && targetName && otherName && targetName === otherName);
+
+      if (matches && otherRound.scheduledDate === targetDate) {
+        const otherStartMin = parseSlotToMinutes(otherRound.scheduledTime);
+        if (otherStartMin !== null) {
+          const otherDuration = parseInt(otherRound.duration || 45, 10);
+          const otherEndMin = otherStartMin + otherDuration;
+          if (targetMinutes < otherEndMin && targetEndMinutes > otherStartMin) {
+            return {
+              isAvailable: false,
+              conflict: {
+                source: 'current_session',
+                roundTitle: otherRound.title || `Round ${i + 1}`,
+                timeRange: `${otherRound.scheduledTime} (${otherDuration}m)`,
+                reason: `Already assigned to ${otherRound.title || `Round ${i + 1}`} at ${otherRound.scheduledTime}`,
+              },
+            };
+          }
+        }
+      }
+    }
+  }
+
+  // 2. Check against already booked slots in database (across all candidates, requisitions, and rounds)
+  const bookedSlots = interviewer.booked_slots || [];
+  for (const slot of bookedSlots) {
+    // A) Skip if this slot is the round being evaluated itself
+    if (currentRoundId && slot.round_id && String(slot.round_id).toLowerCase() === String(currentRoundId).toLowerCase()) {
+      continue;
+    }
+    if (slot.round_id && currentRound?.persistedRoundId && String(slot.round_id) === String(currentRound.persistedRoundId)) {
+      continue;
+    }
+
+    // B) Skip if this slot matches this same candidate and round title
+    if (
+      slot.round_name &&
+      currentRoundTitle &&
+      slot.round_name.toLowerCase().trim() === currentRoundTitle &&
+      candName &&
+      slot.candidate_name &&
+      (
+        slot.candidate_name.toLowerCase().trim() === candName ||
+        slot.candidate_name.toLowerCase().includes(candName) ||
+        candName.includes(slot.candidate_name.toLowerCase())
+      )
+    ) {
+      continue;
+    }
+
+    // C) If this round was already scheduled and is unchanged, its slot in database is its own appointment
+    if (
+      currentRound?.isAlreadyScheduled &&
+      slot.scheduled_date === targetDate &&
+      (
+        toInterviewTime(slot.scheduled_time) === toInterviewTime(targetTime) ||
+        toInterviewTime(slot.scheduled_time) === toInterviewTime(currentRound.originalTime)
+      ) &&
+      (
+        !slot.candidate_name ||
+        !candName ||
+        slot.candidate_name.toLowerCase().includes(candName) ||
+        candName.includes(slot.candidate_name.toLowerCase())
+      )
+    ) {
+      continue;
+    }
+
+    if (slot.scheduled_date === targetDate) {
+      const slotStartMin = parseSlotToMinutes(slot.scheduled_time);
+      if (slotStartMin !== null) {
+        const slotDuration = parseInt(slot.duration_minutes || 45, 10);
+        const slotEndMin = slotStartMin + slotDuration;
+        if (targetMinutes < slotEndMin && targetEndMinutes > slotStartMin) {
+          const candInfo = slot.candidate_name ? ` with ${slot.candidate_name}` : '';
+          const reqInfo = slot.requisition_title ? ` for '${slot.requisition_title}'` : '';
+          return {
+            isAvailable: false,
+            conflict: {
+              source: 'database',
+              roundTitle: slot.round_name || 'Interview Round',
+              candidateName: slot.candidate_name,
+              requisitionTitle: slot.requisition_title,
+              timeRange: `${slot.scheduled_time} (${slotDuration}m)`,
+              reason: `Booked for ${slot.round_name || 'Interview'}${candInfo}${reqInfo} at ${slot.scheduled_time}`,
+            },
+          };
+        }
+      }
+    }
+  }
+
+  return { isAvailable: true, conflict: null };
+}
+
+export function getCandidateSlotConflict(
+  targetDate,
+  targetTime,
+  durationMinutes = 45,
+  currentRoundIndex = -1,
+  allRounds = [],
+  candidateBookedRounds = []
+) {
+  if (!targetDate || !targetTime) {
+    return { hasConflict: false, conflict: null };
+  }
+
+  const targetMinutes = parseSlotToMinutes(targetTime);
+  if (targetMinutes === null) {
+    return { hasConflict: false, conflict: null };
+  }
+  const targetDuration = parseInt(durationMinutes || 45, 10);
+  const targetEndMinutes = targetMinutes + targetDuration;
+
+  // 1. Check against candidate's other rounds within this modal session
+  if (Array.isArray(allRounds)) {
+    for (let i = 0; i < allRounds.length; i++) {
+      if (i === currentRoundIndex) continue;
+      const otherRound = allRounds[i];
+      if (!otherRound?.scheduledDate || !otherRound?.scheduledTime) continue;
+
+      if (otherRound.scheduledDate === targetDate) {
+        const otherStartMin = parseSlotToMinutes(otherRound.scheduledTime);
+        if (otherStartMin !== null) {
+          const otherDuration = parseInt(otherRound.duration || 45, 10);
+          const otherEndMin = otherStartMin + otherDuration;
+          if (targetMinutes < otherEndMin && targetEndMinutes > otherStartMin) {
+            const otherTitle = otherRound.title || `Round ${i + 1}`;
+            return {
+              hasConflict: true,
+              conflict: {
+                source: 'current_session',
+                roundIndex: i,
+                roundTitle: otherTitle,
+                scheduledDate: otherRound.scheduledDate,
+                scheduledTime: otherRound.scheduledTime,
+                duration: otherDuration,
+                reason: `Already selected for "${otherTitle}" at ${otherRound.scheduledTime} (${otherDuration}m)`,
+              },
+            };
+          }
+        }
+      }
+    }
+  }
+
+  // 2. Check against already booked rounds in database for this candidate
+  if (Array.isArray(candidateBookedRounds)) {
+    const curRound = allRounds[currentRoundIndex];
+    const curRoundId = curRound?.persistedRoundId || curRound?.id;
+    const curTitle = (curRound?.title || curRound?.round_name || '').toLowerCase().trim();
+
+    for (const bSlot of candidateBookedRounds) {
+      if (curRoundId && (String(bSlot.round_id || bSlot.id) === String(curRoundId) || String(bSlot.round_id || bSlot.id) === String(curRound?.persistedRoundId))) continue;
+      if (curTitle && bSlot.round_name && bSlot.round_name.toLowerCase().trim() === curTitle) continue;
+      if (bSlot.scheduled_date === targetDate && bSlot.scheduled_time) {
+        const bStartMin = parseSlotToMinutes(bSlot.scheduled_time);
+        if (bStartMin !== null) {
+          const bDuration = parseInt(bSlot.duration_minutes || 45, 10);
+          const bEndMin = bStartMin + bDuration;
+          if (targetMinutes < bEndMin && targetEndMinutes > bStartMin) {
+            const bTitle = bSlot.round_name || 'Interview Round';
+            return {
+              hasConflict: true,
+              conflict: {
+                source: 'database',
+                roundTitle: bTitle,
+                scheduledDate: bSlot.scheduled_date,
+                scheduledTime: bSlot.scheduled_time,
+                duration: bDuration,
+                reason: `Candidate already booked for "${bTitle}" at ${bSlot.scheduled_time} (${bDuration}m)`,
+              },
+            };
+          }
+        }
+      }
+    }
+  }
+
+  return { hasConflict: false, conflict: null };
+}
+
+function getNowInKolkata() {
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(now);
+  const get = (type) => parts.find((p) => p.type === type)?.value;
+  const todayStr = `${get('year')}-${get('month')}-${get('day')}`;
+  const currentHour = parseInt(get('hour'), 10) || 0;
+  const currentMinute = parseInt(get('minute'), 10) || 0;
+  const currentMinutes = currentHour * 60 + currentMinute;
+  const minTime24 = `${String(currentHour).padStart(2, '0')}:${String(Math.min(59, currentMinute + 1)).padStart(2, '0')}`;
+  const ampm = currentHour >= 12 ? 'PM' : 'AM';
+  const displayHour = currentHour % 12 || 12;
+  const currentTimeDisplay = `${String(displayHour).padStart(2, '0')}:${String(currentMinute).padStart(2, '0')} ${ampm}`;
+  return { todayStr, currentMinutes, minTime24, currentTimeDisplay };
+}
+
+function isTimeInPast(timeStr, dateStr) {
+  if (!dateStr || !timeStr) return false;
+  const { todayStr, currentMinutes } = getNowInKolkata();
+  if (dateStr < todayStr) return true;
+  if (dateStr > todayStr) return false;
+  const slotMinutes = parseSlotToMinutes(timeStr);
+  if (slotMinutes === null) return false;
+  return slotMinutes <= currentMinutes;
+}
 
 function getCategoryIcon(type) {
   switch (type) {
@@ -112,6 +413,8 @@ export default function ScheduleInterviewModal({
   requisitionId,
   requisitionTitle = '',
   requisitionCode = '',
+  initialSelectedRound = '',
+  existingRounds = null,
   onClose,
   onScheduled,
 }) {
@@ -128,11 +431,14 @@ export default function ScheduleInterviewModal({
 
   // Calendar month state
   const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState('');
+  const [selectedDate, setSelectedDate] = useState(() => todayForDeadline());
   const [selectedTimeSlot, setSelectedTimeSlot] = useState('');
+  const [customTimeInput, setCustomTimeInput] = useState('');
+  const [customTimeError, setCustomTimeError] = useState('');
 
   // Interviewers list & search state
   const [interviewersList, setInterviewersList] = useState([]);
+  const [candidateBookedRounds, setCandidateBookedRounds] = useState([]);
   const [interviewerSearch, setInterviewerSearch] = useState('');
   const [showInterviewerDropdown, setShowInterviewerDropdown] = useState(false);
 
@@ -144,17 +450,169 @@ export default function ScheduleInterviewModal({
 
   useEffect(() => {
     let mounted = true;
+    const candSubId = candidate?.submission_id || candidate?.id || '';
+    const candEmail = candidate?.email || '';
+    const candName = candidate?.name || '';
+
     Promise.all([
       request('/api/interviews/interviewers', { token, noCache: true }),
       request(`/api/interviews/process/template?requisition_id=${encodeURIComponent(requisitionId)}`, { token, noCache: true }),
-    ]).then(([people, process]) => {
+      request(`/api/interviews/candidate/booked-slots?candidate_submission_id=${encodeURIComponent(candSubId)}&candidate_email=${encodeURIComponent(candEmail)}&candidate_name=${encodeURIComponent(candName)}`, { token, noCache: true }).catch(() => ({ booked_slots: [] })),
+      existingRounds
+        ? Promise.resolve(existingRounds)
+        : request(`/api/interviews/rounds?requisition_id=${encodeURIComponent(requisitionId)}&candidate_id=${encodeURIComponent(candSubId)}`, { token, noCache: true }).catch(() => []),
+    ]).then(([people, process, candSlots, candidateRounds]) => {
       if (!mounted) return;
-      setInterviewersList(people.interviewers || []);
-      const configured = process.rounds?.length ? process.rounds : DEFAULT_ROUNDS;
-      setRounds(configured.map(r => ({ ...r, duration: r.duration || 45, scheduledDate: '', scheduledTime: '', interviewer: null })));
+      const allInterviewers = people.interviewers || [];
+      setInterviewersList(allInterviewers);
+      setCandidateBookedRounds(candSlots?.booked_slots || []);
+
+      const knownRounds = Array.isArray(candidateRounds) ? candidateRounds : [];
+      const candPersisted = knownRounds.filter(r =>
+        !candSubId || String(r.candidate_submission_id) === String(candSubId) ||
+        (candEmail && r.candidate_email && r.candidate_email.toLowerCase() === candEmail.toLowerCase())
+      );
+
+      const rawConfigured = process.rounds?.length ? process.rounds : DEFAULT_ROUNDS;
+      // Filter out AI rounds from company LiveKit scheduling modal
+      const configured = rawConfigured.filter(r => r.type !== 'AI' && !String(r.title || '').toLowerCase().includes('ai'));
+      const initialDate = todayForDeadline();
+
+      const mergedRounds = configured.map((r, index) => {
+        // Look for existing scheduled round matching this template round
+        const stored = candPersisted.find(er =>
+          (er.round_name && er.round_name.toLowerCase().trim() === (r.title || '').toLowerCase().trim()) ||
+          (er.round_type && er.round_type.toLowerCase().trim() === (r.type || '').toLowerCase().trim())
+        );
+
+        if (stored) {
+          let assignedInterviewer = null;
+          if (stored.interviewer_email || stored.interviewer_name) {
+            assignedInterviewer = allInterviewers.find(i =>
+              (i.email && stored.interviewer_email && i.email.toLowerCase().trim() === stored.interviewer_email.toLowerCase().trim()) ||
+              (!stored.interviewer_email && i.name && stored.interviewer_name && i.name.toLowerCase().trim() === stored.interviewer_name.toLowerCase().trim())
+            ) || {
+              name: stored.interviewer_name,
+              email: stored.interviewer_email,
+              role: stored.interviewer_role || 'Interviewer',
+              avatar: stored.interviewer_avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(stored.interviewer_name || 'Interviewer')}&background=0f172a&color=fff`,
+            };
+          }
+
+          const formattedTime = stored.scheduled_time ? (format24to12(stored.scheduled_time) || stored.scheduled_time) : '';
+
+          return {
+            ...r,
+            persistedRoundId: stored.id,
+            id: stored.id || r.id,
+            title: stored.round_name || r.title,
+            type: stored.round_type || r.type,
+            duration: stored.duration_minutes || r.duration || 45,
+            scheduledDate: stored.scheduled_date || initialDate,
+            scheduledTime: formattedTime,
+            interviewer: assignedInterviewer,
+            candidateName: candidate?.name || candidate?.candidate_name || candidate?.candidateName || '',
+            instructions: stored.instructions || '',
+            status: stored.status || 'Scheduled',
+            isAlreadyScheduled: Boolean(stored.scheduled_date && stored.scheduled_time),
+            originalDate: stored.scheduled_date,
+            originalTime: stored.scheduled_time,
+            originalInterviewerEmail: stored.interviewer_email,
+            originalInstructions: stored.instructions || '',
+          };
+        }
+
+        return {
+          ...r,
+          id: r.id || `round-${index + 1}`,
+          duration: r.duration || 45,
+          scheduledDate: r.scheduledDate || initialDate,
+          scheduledTime: r.scheduledTime ? (format24to12(r.scheduledTime) || r.scheduledTime) : '',
+          interviewer: r.interviewer || null,
+          candidateName: candidate?.name || candidate?.candidate_name || candidate?.candidateName || '',
+          instructions: '',
+          status: 'Not Scheduled',
+          isAlreadyScheduled: false,
+          originalDate: '',
+          originalTime: '',
+          originalInterviewerEmail: '',
+          originalInstructions: '',
+        };
+      });
+
+      // Also append any non-AI persisted rounds that weren't in the template
+      candPersisted.forEach((stored) => {
+        const isAi = stored.round_type === 'AI' || String(stored.round_name || '').toLowerCase().includes('ai');
+        if (isAi) return;
+        const alreadyIn = mergedRounds.some(mr => mr.persistedRoundId === stored.id || (mr.title && mr.title.toLowerCase().trim() === (stored.round_name || '').toLowerCase().trim()));
+        if (!alreadyIn) {
+          let assignedInterviewer = null;
+          if (stored.interviewer_email || stored.interviewer_name) {
+            assignedInterviewer = allInterviewers.find(i =>
+              (i.email && stored.interviewer_email && i.email.toLowerCase().trim() === stored.interviewer_email.toLowerCase().trim()) ||
+              (!stored.interviewer_email && i.name && stored.interviewer_name && i.name.toLowerCase().trim() === stored.interviewer_name.toLowerCase().trim())
+            ) || {
+              name: stored.interviewer_name,
+              email: stored.interviewer_email,
+              role: stored.interviewer_role || 'Interviewer',
+              avatar: stored.interviewer_avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(stored.interviewer_name || 'Interviewer')}&background=0f172a&color=fff`,
+            };
+          }
+          mergedRounds.push({
+            id: stored.id,
+            persistedRoundId: stored.id,
+            title: stored.round_name || `Round ${mergedRounds.length + 1}`,
+            type: stored.round_type || 'Technical',
+            duration: stored.duration_minutes || 45,
+            scheduledDate: stored.scheduled_date || initialDate,
+            scheduledTime: stored.scheduled_time ? (format24to12(stored.scheduled_time) || stored.scheduled_time) : '',
+            interviewer: assignedInterviewer,
+            candidateName: candidate?.name || candidate?.candidate_name || candidate?.candidateName || '',
+            instructions: stored.instructions || '',
+            status: stored.status || 'Scheduled',
+            isAlreadyScheduled: Boolean(stored.scheduled_date && stored.scheduled_time),
+            originalDate: stored.scheduled_date,
+            originalTime: stored.scheduled_time,
+            originalInterviewerEmail: stored.interviewer_email,
+            originalInstructions: stored.instructions || '',
+          });
+        }
+      });
+
+      setRounds(mergedRounds);
+
+      // Determine initial selected round
+      let targetIdx = 0;
+      if (initialSelectedRound) {
+        const cleanTarget = String(initialSelectedRound).toLowerCase().trim();
+        const foundIdx = mergedRounds.findIndex(r =>
+          (r.title && r.title.toLowerCase().trim() === cleanTarget) ||
+          (r.type && r.type.toLowerCase().trim() === cleanTarget) ||
+          (r.id && String(r.id).toLowerCase() === cleanTarget) ||
+          (cleanTarget.includes('technical') && (r.title.toLowerCase().includes('technical') || r.type?.toLowerCase().includes('technical'))) ||
+          (cleanTarget.includes('hr') && (r.title.toLowerCase().includes('hr') || r.type?.toLowerCase().includes('hr')))
+        );
+        if (foundIdx !== -1) {
+          targetIdx = foundIdx;
+        }
+      } else {
+        const unscheduledIdx = mergedRounds.findIndex(r => !r.scheduledTime);
+        if (unscheduledIdx !== -1) {
+          targetIdx = unscheduledIdx;
+        }
+      }
+
+      setSelectedRoundIndex(targetIdx);
+      const active = mergedRounds[targetIdx] || mergedRounds[0];
+      if (active) {
+        const aDate = active.scheduledDate || initialDate;
+        setSelectedDate(aDate);
+        setSelectedTimeSlot(active.scheduledTime || '');
+        setCustomTimeInput(format12to24(active.scheduledTime));
+      }
     }).catch(err => { if (mounted) setError(err.message || 'Unable to load scheduling data.'); });
     return () => { mounted = false; };
-  }, [token, requisitionId]);
+  }, [token, requisitionId, candidate, initialSelectedRound, existingRounds]);
 
   const activeRound = rounds[selectedRoundIndex] || rounds[0];
 
@@ -192,15 +650,63 @@ export default function ScheduleInterviewModal({
 
   // Handle slot click
   const handleSelectSlot = (slot) => {
+    const effectiveDate = selectedDate || todayForDeadline();
+    if (isTimeInPast(slot, effectiveDate)) return;
+
+    // Check candidate slot conflict with other rounds
+    const candConflict = getCandidateSlotConflict(
+      effectiveDate,
+      slot,
+      activeRound.duration || 45,
+      selectedRoundIndex,
+      rounds,
+      candidateBookedRounds
+    );
+    if (candConflict.hasConflict) {
+      setError(`Cannot select ${slot}: ${candConflict.conflict.reason}. Each round must have a separate, non-conflicting time slot.`);
+      return;
+    }
+
+    if (!selectedDate) {
+      setSelectedDate(effectiveDate);
+    }
+    setError('');
     setAvailability(null);
     setSelectedTimeSlot(slot);
+    setCustomTimeError('');
     setRounds((prev) =>
       prev.map((r, idx) =>
         idx === selectedRoundIndex
-          ? { ...r, scheduledDate: selectedDate, scheduledTime: slot }
+          ? { ...r, scheduledDate: effectiveDate, scheduledTime: slot }
           : r
       )
     );
+  };
+
+  // Handle custom time apply
+  const handleApplyCustomTime = (e) => {
+    e?.preventDefault();
+    if (!customTimeInput) return;
+    const effectiveDate = selectedDate || todayForDeadline();
+    if (isTimeInPast(customTimeInput, effectiveDate)) {
+      setCustomTimeError('Cannot choose a past time for today.');
+      return;
+    }
+    const candConflict = getCandidateSlotConflict(
+      effectiveDate,
+      customTimeInput,
+      activeRound.duration || 45,
+      selectedRoundIndex,
+      rounds,
+      candidateBookedRounds
+    );
+    if (candConflict.hasConflict) {
+      setCustomTimeError(candConflict.conflict.reason);
+      return;
+    }
+    const formatted = format24to12(customTimeInput);
+    setCustomTimeError('');
+    handleSelectSlot(formatted);
   };
 
   // Handle day click
@@ -208,10 +714,47 @@ export default function ScheduleInterviewModal({
     if (!dayObj.isCurrentMonth || dayObj.dateStr < todayForDeadline()) return;
     setAvailability(null);
     setSelectedDate(dayObj.dateStr);
+
+    // If current selected slot is in the past on this new day or conflicts with another round, clear it
+    const isCurrentSlotPast = selectedTimeSlot && isTimeInPast(selectedTimeSlot, dayObj.dateStr);
+    const hasSlotConflict = selectedTimeSlot && getCandidateSlotConflict(
+      dayObj.dateStr,
+      selectedTimeSlot,
+      activeRound.duration || 45,
+      selectedRoundIndex,
+      rounds,
+      candidateBookedRounds
+    ).hasConflict;
+
+    const newSlot = (isCurrentSlotPast || hasSlotConflict) ? '' : selectedTimeSlot;
+    if (isCurrentSlotPast || hasSlotConflict) {
+      setSelectedTimeSlot('');
+    }
+
+    if (customTimeInput) {
+      if (isTimeInPast(customTimeInput, dayObj.dateStr)) {
+        setCustomTimeError('Selected time has already passed for today.');
+      } else {
+        const cConflict = getCandidateSlotConflict(
+          dayObj.dateStr,
+          customTimeInput,
+          activeRound.duration || 45,
+          selectedRoundIndex,
+          rounds,
+          candidateBookedRounds
+        );
+        if (cConflict.hasConflict) {
+          setCustomTimeError(cConflict.conflict.reason);
+        } else {
+          setCustomTimeError('');
+        }
+      }
+    }
+
     setRounds((prev) =>
       prev.map((r, idx) =>
         idx === selectedRoundIndex
-          ? { ...r, scheduledDate: dayObj.dateStr, scheduledTime: selectedTimeSlot }
+          ? { ...r, scheduledDate: dayObj.dateStr, scheduledTime: newSlot }
           : r
       )
     );
@@ -219,6 +762,24 @@ export default function ScheduleInterviewModal({
 
   // Handle interviewer change
   const handleAssignInterviewer = (interviewer) => {
+    const curDate = selectedDate || activeRound.scheduledDate || todayForDeadline();
+    const curTime = selectedTimeSlot || activeRound.scheduledTime;
+    if (interviewer && curDate && curTime) {
+      const avail = getInterviewerAvailability(
+        interviewer,
+        curDate,
+        curTime,
+        activeRound.duration || 45,
+        selectedRoundIndex,
+        rounds,
+        candidate
+      );
+      if (!avail.isAvailable) {
+        setError(`Cannot assign ${interviewer.name}: ${avail.conflict?.reason || 'Interviewer is already booked during this time slot.'}`);
+        return;
+      }
+    }
+    setError('');
     setRounds((prev) =>
       prev.map((r, idx) =>
         idx === selectedRoundIndex ? { ...r, interviewer } : r
@@ -230,16 +791,88 @@ export default function ScheduleInterviewModal({
   // Handle saving new interviewer into DB
   const handleSaveNewInterviewer = async (e) => {
     e?.preventDefault();
-    if (!newInterviewer.name.trim()) {
-      setInterviewerError('Please enter full name');
+    const trimmedName = (newInterviewer.name || '').trim();
+    const trimmedRole = (newInterviewer.role || '').trim();
+    const trimmedEmail = (newInterviewer.email || '').trim();
+
+    // 1. Name validation
+    if (!trimmedName || trimmedName.length < 2) {
+      setInterviewerError('Please enter a valid full name (minimum 2 characters).');
       return;
     }
-    if (!newInterviewer.role.trim()) {
-      setInterviewerError('Please enter role / designation');
+    if (trimmedName.length > 80) {
+      setInterviewerError('Full name must be 80 characters or less.');
       return;
     }
-    if (!newInterviewer.email.trim()) {
-      setInterviewerError('Please enter email address');
+    if (!/^[a-zA-Z\s.'-]+$/.test(trimmedName) || !/[a-zA-Z]/.test(trimmedName)) {
+      setInterviewerError('Full name should only contain letters, spaces, hyphens, and apostrophes.');
+      return;
+    }
+    const lowerName = trimmedName.toLowerCase();
+    const dummyWords = ['test', 'testing', 'fake', 'dummy', 'asdf', 'admin', 'user', 'interviewer', 'none', 'null', 'na', 'qwerty', 'abc', 'xyz', 'xxx'];
+    if (dummyWords.includes(lowerName) || lowerName.split(/\s+/).every((w) => dummyWords.includes(w))) {
+      setInterviewerError('Please enter a valid real name instead of a placeholder.');
+      return;
+    }
+
+    // 2. Role validation
+    if (!trimmedRole || trimmedRole.length < 2) {
+      setInterviewerError('Please enter a valid role / designation (e.g., Lead Architect).');
+      return;
+    }
+    if (trimmedRole.length > 80) {
+      setInterviewerError('Role / designation must be 80 characters or less.');
+      return;
+    }
+    if (!/[a-zA-Z]/.test(trimmedRole)) {
+      setInterviewerError('Role / designation must contain letters.');
+      return;
+    }
+    const lowerRole = trimmedRole.toLowerCase();
+    if (dummyWords.includes(lowerRole)) {
+      setInterviewerError('Please enter a valid role or designation instead of a placeholder.');
+      return;
+    }
+
+    // 3. Email validation
+    if (!trimmedEmail) {
+      setInterviewerError('Please enter an email address.');
+      return;
+    }
+    const emailRegex = /^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)*\.[a-zA-Z]{2,}$/;
+    if (!emailRegex.test(trimmedEmail) || trimmedEmail.includes('..')) {
+      setInterviewerError('Please enter a valid email address format.');
+      return;
+    }
+    const parts = trimmedEmail.toLowerCase().split('@');
+    const localPart = parts[0];
+    const domainPart = parts[1];
+    if (!domainPart || !domainPart.includes('.')) {
+      setInterviewerError('Please enter an email address with a valid domain.');
+      return;
+    }
+    const blockedDomains = [
+      'test.com', 'testing.com', 'fake.com', 'example.com', 'example.org', 'example.net',
+      'sample.com', 'invalid.com', 'nowhere.com', 'dummy.com', 'noemail.com', 'temp.com',
+      'asdf.com', 'abc.com', 'xyz.com', 'fakeemail.com', 'nomail.com', 'null.com',
+      'mailinator.com', 'guerrillamail.com', 'tempmail.com', 'yopmail.com', 'trashmail.com',
+      'sharklasers.com', 'dispostable.com', '10minutemail.com', 'throwawaymail.com',
+    ];
+    if (blockedDomains.includes(domainPart) || blockedDomains.some((bd) => domainPart.endsWith(`.${bd}`))) {
+      setInterviewerError(`Email addresses from "${domainPart}" are not allowed. Please use a valid business or personal email.`);
+      return;
+    }
+    if (dummyWords.includes(localPart) || localPart.length < 2) {
+      setInterviewerError('Please enter a valid, non-placeholder email address.');
+      return;
+    }
+
+    // 4. Duplicate check against current interviewer suggestions (Task 4)
+    const isDuplicate = interviewersList.some(
+      (i) => i.email && i.email.trim().toLowerCase() === trimmedEmail.toLowerCase()
+    );
+    if (isDuplicate) {
+      setInterviewerError('An interviewer with this email address is already registered.');
       return;
     }
 
@@ -247,29 +880,101 @@ export default function ScheduleInterviewModal({
     setInterviewerError('');
 
     try {
-      const res = await request('/api/interviews/interviewers', { method: 'POST', token, body: newInterviewer });
+      const res = await request('/api/interviews/interviewers', {
+        method: 'POST',
+        token,
+        body: {
+          name: trimmedName,
+          role: trimmedRole,
+          email: trimmedEmail,
+        },
+      });
       setInterviewersList(res.interviewers || []);
       handleAssignInterviewer(res.interviewer);
-      setNewInterviewer({ name: '', role: '', email: '' }); setShowAddModal(false);
-    } catch (err) { setInterviewerError(err.message || 'Unable to save interviewer.'); }
-    finally { setIsSavingInterviewer(false); }
+      setNewInterviewer({ name: '', role: '', email: '' });
+      setShowAddModal(false);
+    } catch (err) {
+      setInterviewerError(err.message || 'Unable to save interviewer.');
+    } finally {
+      setIsSavingInterviewer(false);
+    }
   };
 
   // Proceed directly to Review & Confirm (Step 3)
   const handleSaveAndNext = () => {
     setError('');
+    const finalDate = selectedDate || todayForDeadline();
+    const finalSlot = selectedTimeSlot || activeRound.scheduledTime;
+
+    if (finalSlot && isTimeInPast(finalSlot, finalDate)) {
+      setError(`The selected time (${finalSlot}) is in the past for ${finalDate}. Please select a future time.`);
+      return;
+    }
+
+    // Check candidate slot conflict for active round
+    if (finalDate && finalSlot) {
+      const candConflict = getCandidateSlotConflict(
+        finalDate,
+        finalSlot,
+        activeRound.duration || 45,
+        selectedRoundIndex,
+        rounds,
+        candidateBookedRounds
+      );
+      if (candConflict.hasConflict) {
+        setError(`Candidate scheduling conflict: ${candConflict.conflict.reason}. Each round must have a separate, non-conflicting time slot.`);
+        return;
+      }
+    }
+
+    if (activeRound.interviewer && finalDate && finalSlot) {
+      const avail = getInterviewerAvailability(
+        activeRound.interviewer,
+        finalDate,
+        finalSlot,
+        activeRound.duration || 45,
+        selectedRoundIndex,
+        rounds,
+        candidate
+      );
+      if (!avail.isAvailable) {
+        setError(`Scheduling conflict: Interviewer ${activeRound.interviewer.name} is ${avail.conflict?.reason?.toLowerCase() || 'already booked at this time'}. Please select an available interviewer or another time slot before proceeding.`);
+        return;
+      }
+    }
+
     // Sync current active round selections before proceeding
-    setRounds((prev) =>
-      prev.map((r, idx) =>
-        idx === selectedRoundIndex
-          ? {
-              ...r,
-              scheduledDate: selectedDate || r.scheduledDate,
-              scheduledTime: selectedTimeSlot || r.scheduledTime,
-            }
-          : r
-      )
+    const updatedRounds = rounds.map((r, idx) =>
+      idx === selectedRoundIndex
+        ? {
+            ...r,
+            scheduledDate: finalDate,
+            scheduledTime: finalSlot,
+          }
+        : r
     );
+
+    // Cross-validate all scheduled rounds for any candidate overlaps
+    for (let i = 0; i < updatedRounds.length; i++) {
+      for (let j = i + 1; j < updatedRounds.length; j++) {
+        const r1 = updatedRounds[i];
+        const r2 = updatedRounds[j];
+        if (r1.scheduledDate && r1.scheduledTime && r2.scheduledDate && r2.scheduledTime && r1.scheduledDate === r2.scheduledDate) {
+          const s1 = parseSlotToMinutes(r1.scheduledTime);
+          const s2 = parseSlotToMinutes(r2.scheduledTime);
+          if (s1 !== null && s2 !== null) {
+            const e1 = s1 + (r1.duration || 45);
+            const e2 = s2 + (r2.duration || 45);
+            if (s1 < e2 && e1 > s2) {
+              setError(`Scheduling conflict: "${r1.title}" and "${r2.title}" are scheduled at overlapping times (${r1.scheduledTime} and ${r2.scheduledTime}) on ${r1.scheduledDate}. Each round must have a separate, non-conflicting time slot.`);
+              return;
+            }
+          }
+        }
+      }
+    }
+
+    setRounds(updatedRounds);
     // When press Save & Next it goes to Review & Confirm (where all details are shown non-editable)
     setCurrentStep(3);
   };
@@ -288,13 +993,100 @@ export default function ScheduleInterviewModal({
   const handleConfirmAndSchedule = async () => {
     setIsSubmitting(true); setError('');
     try {
-      if (rounds.some(r => !r.scheduledDate || !r.scheduledTime)) throw new Error('Choose a date and time for each round before confirming.');
-      for (const r of rounds) {
+      const scheduledRounds = rounds.filter(r => r.scheduledDate && r.scheduledTime);
+      if (scheduledRounds.length === 0) {
+        throw new Error('Please choose a date and time for at least one interview round before confirming.');
+      }
+      
+      for (const r of scheduledRounds) {
+        if (isTimeInPast(r.scheduledTime, r.scheduledDate)) {
+          throw new Error(`Round "${r.title}" has a past time (${r.scheduledTime} on ${r.scheduledDate}). Please select a future time.`);
+        }
+      }
+
+      // Validate candidate has no overlapping rounds across all scheduled rounds
+      for (let i = 0; i < scheduledRounds.length; i++) {
+        for (let j = i + 1; j < scheduledRounds.length; j++) {
+          const r1 = scheduledRounds[i];
+          const r2 = scheduledRounds[j];
+          if (r1.scheduledDate === r2.scheduledDate) {
+            const s1 = parseSlotToMinutes(r1.scheduledTime);
+            const s2 = parseSlotToMinutes(r2.scheduledTime);
+            if (s1 !== null && s2 !== null) {
+              const e1 = s1 + (r1.duration || 45);
+              const e2 = s2 + (r2.duration || 45);
+              if (s1 < e2 && e1 > s2) {
+                throw new Error(`Candidate scheduling conflict: "${r1.title}" and "${r2.title}" are scheduled at overlapping times (${r1.scheduledTime} and ${r2.scheduledTime}) on ${r1.scheduledDate}. Each round must have a separate, non-conflicting time slot.`);
+              }
+            }
+          }
+        }
+      }
+
+      // Also validate candidate against any database bookings
+      for (let idx = 0; idx < scheduledRounds.length; idx++) {
+        const r = scheduledRounds[idx];
+        const dbConflict = getCandidateSlotConflict(
+          r.scheduledDate,
+          r.scheduledTime,
+          r.duration || 45,
+          idx,
+          scheduledRounds,
+          candidateBookedRounds
+        );
+        if (dbConflict.hasConflict && dbConflict.conflict.source === 'database') {
+          throw new Error(`Candidate scheduling conflict in "${r.title}": ${dbConflict.conflict.reason}.`);
+        }
+      }
+
+      // Validate all interviewers against conflicts across all candidates, requisitions, and rounds
+      for (let idx = 0; idx < scheduledRounds.length; idx++) {
+        const r = scheduledRounds[idx];
+        if (r.interviewer) {
+          const avail = getInterviewerAvailability(
+            r.interviewer,
+            r.scheduledDate,
+            r.scheduledTime,
+            r.duration || 45,
+            idx,
+            scheduledRounds,
+            candidate
+          );
+          if (!avail.isAvailable && !r.isAlreadyScheduled) {
+            throw new Error(`Schedule conflict in "${r.title}": ${r.interviewer.name} is ${avail.conflict?.reason?.toLowerCase() || 'already booked at this time'}. Please edit the schedule.`);
+          }
+        }
+      }
+
+      for (const r of scheduledRounds) {
+        // Only schedule if newly scheduled OR modified
+        const wasScheduled = r.isAlreadyScheduled;
+        const dateChanged = r.scheduledDate !== r.originalDate;
+        const timeChanged = toInterviewTime(r.scheduledTime) !== toInterviewTime(r.originalTime);
+        const interviewerChanged = (r.interviewer?.email || '').toLowerCase().trim() !== (r.originalInterviewerEmail || '').toLowerCase().trim();
+        const instructionsChanged = (r.instructions || '').trim() !== (r.originalInstructions || '').trim();
+
+        // If it was already scheduled and completely unchanged, skip sending duplicate API calls and emails
+        if (wasScheduled && !dateChanged && !timeChanged && !interviewerChanged && !instructionsChanged && r.persistedRoundId) {
+          continue;
+        }
+
+        const roundId = r.persistedRoundId || (r.id && !String(r.id).startsWith('round-') && !String(r.id).startsWith('planned-') ? r.id : (dispatchResults[r.id]?.id || null));
+
         const saved = await request('/api/interviews/company-round', { method: 'POST', token, timeout: 90000, body: {
-          candidate_identifier: candidate.submission_id || candidate.id, requisition_id: requisitionId,
-          round_id: dispatchResults[r.id]?.id || null, round_name: r.title, round_type: r.type,
-          scheduled_date: r.scheduledDate, scheduled_time: toInterviewTime(r.scheduledTime), scheduled_timezone: 'Asia/Kolkata', duration_minutes: r.duration || 45,
-          interviewer_name: r.interviewer?.name || user?.name, interviewer_email: r.interviewer?.email || user?.email,
+          candidate_identifier: candidate.submission_id || candidate.id,
+          requisition_id: requisitionId,
+          round_id: roundId,
+          round_name: r.title,
+          round_type: r.type,
+          scheduled_date: r.scheduledDate,
+          scheduled_time: toInterviewTime(r.scheduledTime),
+          scheduled_timezone: 'Asia/Kolkata',
+          duration_minutes: r.duration || 45,
+          interviewer_name: r.interviewer?.name || user?.name,
+          interviewer_email: r.interviewer?.email || user?.email,
+          interviewer_role: r.interviewer?.role || 'Interviewer',
+          instructions: r.instructions || '',
         }});
         setDispatchResults(prev => ({ ...prev, [r.id]: saved }));
         onScheduled?.(saved);
@@ -313,23 +1105,30 @@ export default function ScheduleInterviewModal({
       (i.email || '').toLowerCase().includes(interviewerSearch.toLowerCase())
   );
 
+  const { todayStr, minTime24, currentTimeDisplay } = getNowInKolkata();
+  const effectiveDate = selectedDate || todayStr;
+  const isTodaySelected = effectiveDate === todayStr;
+  const isCustomSelected = Boolean(
+    selectedTimeSlot && !TIME_SLOTS.includes(selectedTimeSlot)
+  );
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
       <div
-        className="w-full max-w-5xl bg-white border border-black/[0.08] rounded-2xl shadow-2xl flex flex-col overflow-hidden max-h-[94vh] animate-in zoom-in-95 duration-200"
+        className="w-full max-w-5xl bg-white border border-black/[0.08] rounded-2xl shadow-2xl flex flex-col overflow-hidden max-h-[92vh] animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* ── TOP HEADER ── */}
-        <div className="p-5 sm:p-6 flex items-center justify-between border-b border-black/[0.06] bg-white">
-          <div className="flex items-center gap-3.5">
-            <div className="w-10 h-10 rounded-xl bg-gray-50 border border-gray-200/80 flex items-center justify-center text-gray-800 shadow-3xs shrink-0">
-              <Calendar size={18} />
+        <div className="relative z-20 px-5 py-3.5 sm:px-6 sm:py-4 flex items-center justify-between border-b border-black/[0.06] bg-white gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-gray-50 border border-gray-200/80 flex items-center justify-center text-gray-800 shadow-3xs shrink-0">
+              <Calendar size={17} />
             </div>
-            <div>
-              <h2 className="text-base sm:text-lg font-black text-gray-900 tracking-tight leading-tight">
+            <div className="min-w-0">
+              <h2 className="text-base sm:text-lg font-black text-gray-900 tracking-tight leading-tight truncate">
                 {currentStep === 3 ? 'Review & Confirm Interviews' : 'Schedule Interviews'}
               </h2>
-              <p className="text-xs text-gray-500 font-normal mt-0.5">
+              <p className="text-xs text-gray-500 font-normal mt-0.5 truncate">
                 {currentStep === 3
                   ? 'Verify candidate details and assigned interview rounds before finalizing.'
                   : 'Assign date, time and interviewers for each round.'}
@@ -337,23 +1136,31 @@ export default function ScheduleInterviewModal({
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-black flex items-center justify-center transition-colors cursor-pointer shrink-0"
-            title="Close"
-          >
-            <X size={15} />
-          </button>
+          <div className="flex items-center gap-2.5 shrink-0">
+            <GoogleCalendarConnect />
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-black flex items-center justify-center transition-colors cursor-pointer shrink-0"
+              title="Close"
+            >
+              <X size={15} />
+            </button>
+          </div>
         </div>
 
-        <div className="px-6 py-2 border-b border-black/[0.06] bg-white">
-          <GoogleCalendarConnect />
-          {error && <p role="alert" className="mt-2 text-xs text-red-600">{error}</p>}
-          {Object.values(dispatchResults).map(r => <p key={r.id} className="mt-2 text-xs text-gray-600">{r.round_name}: saved · Email: {r.email_delivery?.status || 'Not sent'} · Telegram: {r.telegram_delivery?.status || 'Not sent'} · Google Calendar: {r.calendar_sync?.status || 'Not synced'}</p>)}
-        </div>
+        {(error || Object.values(dispatchResults).length > 0) && (
+          <div className="px-5 py-2 border-b border-black/[0.06] bg-white">
+            {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
+            {Object.values(dispatchResults).map(r => (
+              <p key={r.id} className="mt-1 text-xs text-gray-600">
+                {r.round_name}: saved · Candidate Email: {r.email_delivery?.status || 'Not sent'} · Interviewer Email: {r.interviewer_email_delivery?.status || 'Not sent'} · Telegram: {r.telegram_delivery?.status || 'Not sent'} · Google Calendar: {r.calendar_sync?.status || 'Not synced'}
+              </p>
+            ))}
+          </div>
+        )}
         {/* ── STEPPER BAR (Reflects Active & Completed Steps) ── */}
-        <div className="px-6 py-3.5 border-b border-black/[0.06] bg-gray-50/60 flex items-center justify-center gap-3 sm:gap-6 flex-wrap shrink-0">
+        <div className="px-5 py-2.5 border-b border-black/[0.06] bg-gray-50/60 flex items-center justify-center gap-3 sm:gap-6 flex-wrap shrink-0">
           {/* Step 1: Set Interview Process (COMPLETED with checkmark) */}
           <div className="flex items-center gap-2">
             <div className="w-5 h-5 rounded-full bg-emerald-600 text-white text-[11px] font-bold flex items-center justify-center shadow-3xs">
@@ -407,17 +1214,17 @@ export default function ScheduleInterviewModal({
         </div>
 
         {/* ── MODAL BODY ── */}
-        <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar p-5 sm:p-6 pb-4 sm:pb-5 space-y-4">
+        <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar p-4 sm:p-5 pb-3 sm:pb-4 space-y-3.5">
           {currentStep === 2 ? (
             /* ════════ STEP 2: SCHEDULE INTERVIEWS CONFIGURATION ════════ */
             <>
               {/* SPLIT LAYOUT: ROUNDS + INTERVIEWER (LEFT) | CALENDAR & TIME SLOTS (RIGHT) */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-5 items-start">
                 {/* LEFT COLUMN: Interview Rounds List + Select Interviewer */}
-                <div className="lg:col-span-5 space-y-4">
+                <div className="lg:col-span-5 space-y-3.5">
                   {/* 1. Interview Rounds List */}
-                  <div className="space-y-2.5">
-                    <h4 className="text-sm font-bold text-gray-900 tracking-tight">
+                  <div className="space-y-2">
+                    <h4 className="text-xs sm:text-sm font-bold text-gray-900 tracking-tight">
                       Interview Rounds
                     </h4>
 
@@ -431,10 +1238,17 @@ export default function ScheduleInterviewModal({
                             key={round.id || idx}
                             onClick={() => {
                               setSelectedRoundIndex(idx);
-                              setSelectedDate(round.scheduledDate || '');
+                              const roundDate = round.scheduledDate || todayForDeadline();
+                              setSelectedDate(roundDate);
                               setSelectedTimeSlot(round.scheduledTime || '');
+                              if (round.scheduledTime) {
+                                setCustomTimeInput(format12to24(round.scheduledTime));
+                              } else {
+                                setCustomTimeInput('');
+                              }
+                              setCustomTimeError('');
                             }}
-                            className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center gap-2.5 ${
+                            className={`p-2 rounded-xl border transition-all cursor-pointer flex items-center gap-2.5 ${
                               isSelected
                                 ? 'bg-gray-50/80 border-black/40 shadow-3xs ring-1 ring-black/10'
                                 : 'bg-white hover:bg-gray-50/60 border-gray-200/90'
@@ -442,30 +1256,62 @@ export default function ScheduleInterviewModal({
                           >
                             {/* Round Index / Category Icon Box */}
                             {isSelected ? (
-                              <div className="w-7 h-7 rounded-lg bg-black text-white text-xs font-bold flex items-center justify-center shrink-0 shadow-xs">
+                              <div className="w-6 h-6 rounded-lg bg-black text-white text-[11px] font-bold flex items-center justify-center shrink-0 shadow-xs">
                                 {idx + 1}
                               </div>
                             ) : (
-                              <div className="w-7 h-7 rounded-lg bg-gray-50 border border-gray-200/80 text-gray-700 flex items-center justify-center shrink-0">
+                              <div className="w-6 h-6 rounded-lg bg-gray-50 border border-gray-200/80 text-gray-700 flex items-center justify-center shrink-0">
                                 {getCategoryIcon(round.type)}
                               </div>
                             )}
 
                             {/* Title & Scheduling Status */}
-                            <div className="min-w-0 flex-1">
-                              <div className="text-xs sm:text-[13px] font-bold text-gray-900 tracking-tight truncate">
-                                {round.title}
-                              </div>
-                              <div
-                                className={`text-[10.5px] font-medium truncate ${
-                                  isScheduled ? 'text-emerald-700 font-semibold' : 'text-gray-400'
-                                }`}
-                              >
-                                {isScheduled
-                                  ? `Oct ${round.scheduledDate?.split('-')[2] || '6'}, ${round.scheduledTime}`
-                                  : 'Not Scheduled'}
-                              </div>
-                            </div>
+                            {(() => {
+                              const candConflict = getCandidateSlotConflict(
+                                round.scheduledDate,
+                                round.scheduledTime,
+                                round.duration || 45,
+                                idx,
+                                rounds,
+                                candidateBookedRounds
+                              );
+                              const hasOverlap = candConflict.hasConflict;
+                              return (
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="text-xs sm:text-[13px] font-bold text-gray-900 tracking-tight truncate">
+                                      {round.title}
+                                    </span>
+                                    {hasOverlap && (
+                                      <span className="px-1.5 py-0.2 rounded-md bg-rose-100 text-rose-700 text-[9.5px] font-bold shrink-0">
+                                        Time Conflict
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div
+                                    className={`text-[10px] font-medium truncate ${
+                                      hasOverlap
+                                        ? 'text-rose-600 font-semibold'
+                                        : isScheduled
+                                        ? 'text-emerald-700 font-semibold'
+                                        : 'text-gray-400'
+                                    }`}
+                                  >
+                                    {hasOverlap
+                                      ? candConflict.conflict?.reason || 'Schedule overlaps with another round'
+                                      : isScheduled
+                                      ? `${round.scheduledDate ? new Date(`${round.scheduledDate}T00:00:00`).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }) : 'Scheduled'}, ${round.scheduledTime}`
+                                      : 'Not Scheduled'}
+                                  </div>
+                                  {round.interviewer?.name && (
+                                    <div className="text-[9.5px] text-gray-500 font-medium truncate mt-0.5 flex items-center gap-1">
+                                      <User size={10} className="text-gray-400 shrink-0" />
+                                      <span className="truncate">{round.interviewer.name}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </div>
                         );
                       })}
@@ -473,9 +1319,9 @@ export default function ScheduleInterviewModal({
                   </div>
 
                   {/* 2. SELECT INTERVIEWER SECTION (Left Column, Under Rounds) */}
-                  <div className="space-y-2.5 pt-4 border-t border-black/[0.06]">
+                  <div className="space-y-2 pt-3 border-t border-black/[0.06]">
                     <div className="flex items-center justify-between gap-2">
-                      <h5 className="text-sm font-bold text-gray-900 tracking-tight">
+                      <h5 className="text-xs sm:text-sm font-bold text-gray-900 tracking-tight">
                         Select Interviewer(s)
                       </h5>
 
@@ -485,16 +1331,16 @@ export default function ScheduleInterviewModal({
                           setInterviewerError('');
                           setShowAddModal(true);
                         }}
-                        className="px-3 py-1.5 rounded-xl border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-bold flex items-center gap-1 shadow-3xs transition-all cursor-pointer"
+                        className="px-2.5 py-1 rounded-xl border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-bold flex items-center gap-1 shadow-3xs transition-all cursor-pointer"
                       >
-                        <Plus size={13} />
+                        <Plus size={12} />
                         <span>Add New</span>
                       </button>
                     </div>
 
                     {/* Search Bar / Dropdown to pick interviewer from DB */}
                     <div className="relative">
-                      <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                       <input
                         type="text"
                         value={interviewerSearch}
@@ -504,7 +1350,7 @@ export default function ScheduleInterviewModal({
                         }}
                         onFocus={() => setShowInterviewerDropdown(true)}
                         placeholder="Search interviewer by name or email..."
-                        className="w-full pl-9 pr-3.5 py-2.5 bg-gray-50/60 hover:bg-gray-50 border border-gray-200/90 rounded-xl text-xs sm:text-sm text-gray-900 placeholder:text-gray-400 focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs"
+                        className="w-full pl-8 pr-3 py-2 bg-gray-50/60 hover:bg-gray-50 border border-gray-200/90 rounded-xl text-xs text-gray-900 placeholder:text-gray-400 focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs"
                       />
 
                       {showInterviewerDropdown && (
@@ -538,134 +1384,284 @@ export default function ScheduleInterviewModal({
                               </button>
                             </div>
                           ) : (
-                            filteredInterviewers.map((interviewer) => (
-                              <div
-                                key={interviewer.id || interviewer.email}
-                                onClick={() => handleAssignInterviewer(interviewer)}
-                                className="p-2.5 rounded-xl hover:bg-gray-50 flex items-center justify-between gap-3 cursor-pointer transition-colors"
-                              >
-                                <div className="flex items-center gap-3 min-w-0">
-                                  <img
-                                    src={interviewer.avatar}
-                                    alt={interviewer.name}
-                                    className="w-8 h-8 rounded-full object-cover shrink-0"
-                                  />
-                                  <div className="min-w-0">
-                                    <div className="text-xs sm:text-sm font-bold text-gray-900 truncate">
-                                      {interviewer.name}
+                            filteredInterviewers.map((interviewer) => {
+                              const currentSlotTime = selectedTimeSlot || activeRound.scheduledTime;
+                              const currentSlotDate = selectedDate || activeRound.scheduledDate;
+                              const avail = getInterviewerAvailability(
+                                interviewer,
+                                currentSlotDate,
+                                currentSlotTime,
+                                activeRound.duration || 45,
+                                selectedRoundIndex,
+                                rounds,
+                                candidate
+                              );
+                              const isSelected = activeRound.interviewer?.email === interviewer.email || (!activeRound.interviewer?.email && activeRound.interviewer?.name === interviewer.name);
+
+                              if (!avail.isAvailable) {
+                                return (
+                                  <div
+                                    key={interviewer.id || interviewer.email}
+                                    onClick={() => {
+                                      setError(`Cannot assign ${interviewer.name}: ${avail.conflict?.reason || 'Already booked during this time slot.'}`);
+                                    }}
+                                    className="p-2 rounded-xl bg-gray-50/80 border border-gray-200/70 opacity-60 flex items-center justify-between gap-2.5 cursor-not-allowed select-none transition-all group hover:opacity-75"
+                                    title={avail.conflict?.reason || 'Interviewer is booked at this time'}
+                                  >
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                      <div className="relative shrink-0">
+                                        <img
+                                          src={interviewer.avatar}
+                                          alt={interviewer.name}
+                                          className="w-7 h-7 rounded-full object-cover grayscale"
+                                        />
+                                        <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-rose-500 ring-1 ring-white" />
+                                      </div>
+                                      <div className="min-w-0">
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                          <span className="text-xs font-bold text-gray-700 truncate">{interviewer.name}</span>
+                                          <span className="px-1.5 py-0.2 rounded-md bg-rose-50 border border-rose-200 text-rose-700 text-[9.5px] font-bold shrink-0">
+                                            Unavailable &bull; Booked
+                                          </span>
+                                        </div>
+                                        <div className="text-[10px] text-gray-400 truncate">
+                                          {interviewer.role} &bull; {interviewer.email}
+                                        </div>
+                                        {avail.conflict?.reason && (
+                                          <div className="text-[9.5px] text-rose-600 font-medium truncate mt-0.5">
+                                            {avail.conflict.reason}
+                                          </div>
+                                        )}
+                                      </div>
                                     </div>
-                                    <div className="text-[11px] text-gray-500 truncate">
-                                      {interviewer.role} &bull; {interviewer.email}
+                                    <div className="text-[10px] font-semibold text-rose-600 shrink-0 bg-rose-50/80 px-2 py-0.5 rounded-md border border-rose-200/60">
+                                      Busy
                                     </div>
                                   </div>
+                                );
+                              }
+
+                              return (
+                                <div
+                                  key={interviewer.id || interviewer.email}
+                                  onClick={() => handleAssignInterviewer(interviewer)}
+                                  className="p-2 rounded-xl hover:bg-gray-50 flex items-center justify-between gap-2.5 cursor-pointer transition-colors"
+                                >
+                                  <div className="flex items-center gap-2.5 min-w-0">
+                                    <div className="relative shrink-0">
+                                      <img
+                                        src={interviewer.avatar}
+                                        alt={interviewer.name}
+                                        className="w-7 h-7 rounded-full object-cover shrink-0"
+                                      />
+                                      <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 ring-1 ring-white" />
+                                    </div>
+                                    <div className="min-w-0">
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className="text-xs font-bold text-gray-900 truncate">{interviewer.name}</span>
+                                        <span className="px-1.5 py-0.2 rounded-md bg-emerald-50 border border-emerald-200/80 text-emerald-700 text-[9.5px] font-semibold shrink-0">
+                                          Available
+                                        </span>
+                                      </div>
+                                      <div className="text-[10.5px] text-gray-500 truncate">
+                                        {interviewer.role} &bull; {interviewer.email}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  {isSelected ? (
+                                    <Check size={14} className="text-emerald-600 shrink-0" />
+                                  ) : (
+                                    <span className="text-[10.5px] font-medium text-gray-400 hover:text-black">Select</span>
+                                  )}
                                 </div>
-                                {activeRound.interviewer?.email === interviewer.email && (
-                                  <Check size={15} className="text-emerald-600 shrink-0" />
-                                )}
-                              </div>
-                            ))
+                              );
+                            })
                           )}
                         </div>
                       )}
                     </div>
 
                     {/* Selected Interviewer Card */}
-                    {activeRound.interviewer && (
-                      <div className="bg-white border border-gray-200/90 rounded-2xl p-3.5 flex items-center justify-between gap-3 shadow-3xs">
-                        <div className="flex items-center gap-3.5 min-w-0">
-                          <img
-                            src={activeRound.interviewer.avatar}
-                            alt={activeRound.interviewer.name}
-                            className="w-10 h-10 rounded-full object-cover shrink-0 ring-1 ring-black/5"
-                          />
-                          <div className="min-w-0">
-                            <div className="text-xs sm:text-sm font-bold text-gray-900 tracking-tight truncate">
-                              {activeRound.interviewer.name}
-                            </div>
-                            <div className="text-xs text-gray-500 truncate mt-0.5">
-                              {activeRound.interviewer.role}
-                            </div>
-                            {activeRound.interviewer.email && (
-                              <div className="text-[11px] text-gray-400 truncate">
-                                {activeRound.interviewer.email}
+                    {activeRound.interviewer && (() => {
+                      const curSlotTime = selectedTimeSlot || activeRound.scheduledTime;
+                      const curSlotDate = selectedDate || activeRound.scheduledDate;
+                      const activeConflict = getInterviewerAvailability(
+                        activeRound.interviewer,
+                        curSlotDate,
+                        curSlotTime,
+                        activeRound.duration || 45,
+                        selectedRoundIndex,
+                        rounds,
+                        candidate
+                      );
+                      const isConflicted = !activeConflict.isAvailable && !activeRound.isAlreadyScheduled;
+                      return (
+                        <div className={`border rounded-2xl p-2.5 shadow-3xs transition-all ${
+                          isConflicted ? 'bg-rose-50/40 border-rose-200' : 'bg-white border-gray-200/90'
+                        }`}>
+                          <div className="flex items-center justify-between gap-2.5">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className="relative shrink-0">
+                                <img
+                                  src={activeRound.interviewer.avatar}
+                                  alt={activeRound.interviewer.name}
+                                  className="w-8 h-8 rounded-full object-cover shrink-0 ring-1 ring-black/5"
+                                />
+                                <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full ring-1 ring-white ${
+                                  isConflicted ? 'bg-rose-500' : 'bg-emerald-500'
+                                }`} />
                               </div>
-                            )}
-                          </div>
-                        </div>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="text-xs font-bold text-gray-900 tracking-tight truncate">
+                                    {activeRound.interviewer.name}
+                                  </span>
+                                  {activeRound.isAlreadyScheduled ? (
+                                    <span className="px-1.5 py-0.2 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-700 text-[9.5px] font-bold flex items-center gap-1">
+                                      <Check size={9} className="text-emerald-600" />
+                                      Confirmed
+                                    </span>
+                                  ) : isConflicted ? (
+                                    <span className="px-1.5 py-0.2 rounded-md bg-rose-100 text-rose-700 text-[9.5px] font-bold">
+                                      Conflict
+                                    </span>
+                                  ) : (
+                                    <span className="px-1.5 py-0.2 rounded-md bg-emerald-50 border border-emerald-200/80 text-emerald-700 text-[9.5px] font-semibold">
+                                      Available
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-[11px] text-gray-500 truncate">
+                                  {activeRound.interviewer.role}
+                                </div>
+                                {activeRound.interviewer.email && (
+                                  <div className="text-[10px] text-gray-400 truncate">
+                                    {activeRound.interviewer.email}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
 
-                        <div className="flex items-center gap-1 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setRounds((prev) =>
-                                prev.map((r, idx) =>
-                                  idx === selectedRoundIndex ? { ...r, interviewer: null } : r
-                                )
-                              )
-                            }
-                            className="w-7 h-7 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-black flex items-center justify-center transition-colors cursor-pointer"
-                            title="Remove interviewer"
-                          >
-                            <X size={14} />
-                          </button>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setRounds((prev) =>
+                                    prev.map((r, idx) =>
+                                      idx === selectedRoundIndex ? { ...r, interviewer: null } : r
+                                    )
+                                  )
+                                }
+                                className="w-6 h-6 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-black flex items-center justify-center transition-colors cursor-pointer"
+                                title="Remove interviewer"
+                              >
+                                <X size={13} />
+                              </button>
+                            </div>
+                          </div>
+
+                          {!activeConflict.isAvailable && (
+                            <div className="mt-2 pt-2 border-t border-rose-200/70 text-[10.5px] text-rose-700 flex items-start gap-1.5">
+                              <AlertCircle size={13} className="shrink-0 text-rose-600 mt-0.5" />
+                              <span>
+                                <strong>Schedule Conflict:</strong> {activeConflict.conflict?.reason || 'Interviewer is already booked during this time.'} Choose another interviewer or adjust time.
+                              </span>
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    )}
+                      );
+                    })()}
+
+                    {/* Message / Instructions for Interviewer */}
+                    <div className="space-y-1 pt-1.5 border-t border-gray-100">
+                      <label className="text-[11px] font-bold text-gray-700 flex items-center gap-1">
+                        <MessageSquare size={12} className="text-gray-400" />
+                        <span>Message / Instructions for Interviewer (Optional)</span>
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={activeRound.instructions || ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setRounds((prev) =>
+                            prev.map((r, idx) =>
+                              idx === selectedRoundIndex ? { ...r, instructions: val } : r
+                            )
+                          );
+                        }}
+                        placeholder="Evaluation focus or message (e.g. Focus on technical assessment, system architecture)..."
+                        className="w-full px-2.5 py-1.5 bg-gray-50/60 hover:bg-gray-50 border border-gray-200/90 rounded-xl text-xs text-gray-900 placeholder:text-gray-400 focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs resize-none"
+                      />
+                    </div>
                   </div>
                 </div>
 
-                {/* RIGHT COLUMN: Active Round Date & Time Slots (Enlarged Calendar & Roomy Timesheet) */}
-                <div className="lg:col-span-7 space-y-4">
-                  <div className="flex items-center gap-2 text-xs">
-                    <button type="button" disabled={checking || !selectedDate || !selectedTimeSlot} onClick={checkAvailability} className="rounded-xl border border-gray-200 px-3 py-1.5 disabled:opacity-40">{checking ? 'Checking calendar…' : 'Check Google Calendar availability'}</button>
-                    {availability && <span>{availability.available ? 'Slot free; rechecked on booking' : 'Slot unavailable'}</span>}
-                    <span className="text-gray-500">Asia/Kolkata</span>
+                {/* RIGHT COLUMN: Active Round Date & Time Slots (Ultra-compact Calendar & Timesheet) */}
+                <div className="lg:col-span-7 space-y-2">
+                  <div className="flex items-center justify-between gap-2 text-xs">
+                    <button
+                      type="button"
+                      disabled={checking || !selectedDate || !selectedTimeSlot}
+                      onClick={checkAvailability}
+                      className="rounded-lg border border-gray-200/90 px-2.5 py-0.5 text-[11px] font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-40 transition-colors cursor-pointer"
+                    >
+                      {checking ? 'Checking…' : 'Check Google Calendar'}
+                    </button>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {availability && (
+                        <span className={`text-[10.5px] font-semibold ${availability.available ? 'text-emerald-700' : 'text-rose-600'}`}>
+                          {availability.available ? '✓ Slot free' : '✕ Slot busy'}
+                        </span>
+                      )}
+                      <span className="text-gray-400 text-[10.5px]">Asia/Kolkata</span>
+                    </div>
                   </div>
+
                   {/* Header for Active Round */}
-                  <div className="flex items-center justify-between gap-2 border-b border-black/[0.06] pb-2.5">
+                  <div className="flex items-center justify-between gap-2 border-b border-black/[0.06] pb-1.5">
                     <div>
-                      <h4 className="text-base sm:text-lg font-black text-gray-900 tracking-tight">
+                      <h4 className="text-sm font-bold text-gray-900 tracking-tight leading-tight">
                         {activeRound.title}
                       </h4>
-                      <p className="text-xs text-gray-500 font-normal mt-0.5">
+                      <p className="text-[11px] text-gray-500 font-normal">
                         Select date, time and interviewer for this round.
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 shrink-0">
-                      <Clock size={14} className="text-gray-400" />
-                      <span>Estimated duration: {activeRound.duration || 45} mins</span>
+                    <div className="flex items-center gap-1 text-[11px] font-semibold text-gray-500 shrink-0">
+                      <Clock size={12} className="text-gray-400" />
+                      <span>Duration: {activeRound.duration || 45} mins</span>
                     </div>
                   </div>
 
-                  {/* Calendar & Time Slots Grid (Uncompacted, generous sizing) */}
-                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-5 items-start">
-                    {/* ── ENLARGED CALENDAR ── */}
-                    <div className="sm:col-span-6 bg-white border border-gray-200/90 rounded-2xl p-4 sm:p-4.5 shadow-3xs space-y-3">
+                  {/* Calendar & Time Slots Grid (Compact, balanced layout) */}
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-start">
+                    {/* ── COMPACT CALENDAR ── */}
+                    <div className="sm:col-span-6 bg-white border border-gray-200/90 rounded-xl p-2.5 shadow-3xs space-y-1.5">
                       <div className="flex items-center justify-between">
-                        <span className="text-sm sm:text-base font-bold text-gray-900">{currentMonth.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</span>
-                        <div className="flex items-center gap-1 text-gray-500">
+                        <span className="text-xs font-bold text-gray-900">{currentMonth.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</span>
+                        <div className="flex items-center gap-0.5 text-gray-500">
                           <button
                             type="button"
-                            className="w-7 h-7 rounded-lg hover:bg-gray-100 flex items-center justify-center cursor-pointer transition-colors"
+                            className="w-5 h-5 rounded hover:bg-gray-100 flex items-center justify-center cursor-pointer transition-colors"
                             onClick={() => setCurrentMonth(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
                             title="Previous Month"
                           >
-                            <ChevronLeft size={15} />
+                            <ChevronLeft size={13} />
                           </button>
                           <button
                             type="button"
-                            className="w-7 h-7 rounded-lg hover:bg-gray-100 flex items-center justify-center cursor-pointer transition-colors"
+                            className="w-5 h-5 rounded hover:bg-gray-100 flex items-center justify-center cursor-pointer transition-colors"
                             onClick={() => setCurrentMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
                             title="Next Month"
                           >
-                            <ChevronRight size={15} />
+                            <ChevronRight size={13} />
                           </button>
                         </div>
                       </div>
 
                       {/* Day Names Header */}
-                      <div className="grid grid-cols-7 text-center text-xs font-semibold text-gray-400 py-0.5">
+                      <div className="grid grid-cols-7 text-center text-[10px] font-semibold text-gray-400 py-0">
                         <span>Sun</span>
                         <span>Mon</span>
                         <span>Tue</span>
@@ -675,26 +1671,30 @@ export default function ScheduleInterviewModal({
                         <span>Sat</span>
                       </div>
 
-                      {/* Days Matrix (Roomy cells with pill selection) */}
-                      <div className="grid grid-cols-7 gap-1.5 text-center text-xs sm:text-sm">
+                      {/* Days Matrix */}
+                      <div className="grid grid-cols-7 gap-0.5 text-center text-xs">
                         {calendarDays.map((dObj, i) => {
                           const isChosen = selectedDate === dObj.dateStr && dObj.isCurrentMonth;
+                          const isToday = dObj.dateStr === todayForDeadline() && dObj.isCurrentMonth;
+                          const isPast = !dObj.isCurrentMonth || dObj.dateStr < todayForDeadline();
 
                           return (
                             <div
                               key={i}
                               onClick={() => handleSelectDay(dObj)}
-                              className={`h-8 sm:h-9 rounded-xl flex flex-col items-center justify-center transition-all cursor-pointer relative ${
-                                (!dObj.isCurrentMonth || dObj.dateStr < todayForDeadline())
-                                  ? 'text-gray-300 pointer-events-none'
+                              className={`h-6 rounded-md flex flex-col items-center justify-center transition-all relative ${
+                                isPast
+                                  ? 'text-gray-300 pointer-events-none cursor-not-allowed'
                                   : isChosen
-                                  ? 'bg-black text-white font-bold shadow-xs'
-                                  : 'text-gray-800 hover:bg-gray-100 font-medium'
+                                  ? 'bg-black text-white font-bold shadow-3xs cursor-pointer'
+                                  : isToday
+                                  ? 'text-gray-900 font-bold border border-black/30 hover:bg-gray-100 cursor-pointer'
+                                  : 'text-gray-800 hover:bg-gray-100 font-medium cursor-pointer'
                               }`}
                             >
-                              <span className="leading-none">{dObj.day}</span>
+                              <span className="leading-none text-[11px]">{dObj.day}</span>
                               {dObj.hasSlots && !isChosen && (
-                                <span className="w-1.5 h-1.5 rounded-full bg-sky-500 mt-1" />
+                                <span className="w-1 h-1 rounded-full bg-sky-500 mt-0.5" />
                               )}
                             </div>
                           );
@@ -702,37 +1702,163 @@ export default function ScheduleInterviewModal({
                       </div>
                     </div>
 
-                    {/* ── ENLARGED TIMESHEET (Available Time Slots) ── */}
-                    <div className="sm:col-span-6 space-y-2">
+                    {/* ── COMPACT TIMESHEET & CUSTOM TIME OPTION ── */}
+                    <div className="sm:col-span-6 bg-white border border-gray-200/90 rounded-xl p-2.5 shadow-3xs space-y-2">
                       <div>
-                        <h5 className="text-sm font-bold text-gray-900">
-                          Available Time Slots
-                        </h5>
-                        <span className="text-xs font-normal text-gray-400 block mt-0.5">
-                          {selectedDate ? new Date(`${selectedDate}T00:00:00`).toLocaleDateString('en-IN', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : 'Select a date'}
+                        <div className="flex items-center justify-between gap-1">
+                          <h5 className="text-xs font-bold text-gray-900 whitespace-nowrap">
+                            Available Time Slots
+                          </h5>
+                          <div className="flex items-center gap-1 flex-wrap">
+                            {isTodaySelected && (
+                              <span className="text-[9px] font-semibold text-amber-700 bg-amber-50 border border-amber-200/70 px-1.5 py-0.2 rounded-md shrink-0">
+                                Past disabled
+                              </span>
+                            )}
+                            {TIME_SLOTS.some((s) => getCandidateSlotConflict(effectiveDate, s, activeRound.duration || 45, selectedRoundIndex, rounds, candidateBookedRounds).hasConflict) && (
+                              <span className="text-[9px] font-semibold text-rose-700 bg-rose-50 border border-rose-200/70 px-1.5 py-0.2 rounded-md shrink-0" title="Time slots booked for candidate's other rounds are disabled">
+                                Conflict disabled
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <span className="text-[10px] font-normal text-gray-400 block mt-0.5">
+                          {selectedDate
+                            ? new Date(`${selectedDate}T00:00:00`).toLocaleDateString('en-IN', {
+                                weekday: 'short',
+                                month: 'short',
+                                day: 'numeric',
+                                year: 'numeric',
+                              })
+                            : 'Select a date'}
                         </span>
                       </div>
 
-                      {/* 3 columns roomy pill grid */}
-                      <div className="grid grid-cols-3 gap-2">
-                        {TIME_SLOTS.map((slot) => {
-                          const isSlotChosen = selectedTimeSlot === slot;
+                      {/* Compact Predefined Slots Grid */}
+                      <div className="max-h-[125px] overflow-y-auto pr-0.5 space-y-1 no-scrollbar">
+                        <div className="grid grid-cols-3 gap-1">
+                          {TIME_SLOTS.map((slot) => {
+                            const isPast = isTimeInPast(slot, selectedDate || todayForDeadline());
+                            const candConflict = getCandidateSlotConflict(
+                              selectedDate || todayForDeadline(),
+                              slot,
+                              activeRound.duration || 45,
+                              selectedRoundIndex,
+                              rounds,
+                              candidateBookedRounds
+                            );
+                            const isSlotConflicted = candConflict.hasConflict;
+                            const isSlotDisabled = isPast || isSlotConflicted;
+                            const isSlotChosen = selectedTimeSlot === slot;
 
-                          return (
-                            <button
-                              key={slot}
-                              type="button"
-                              onClick={() => handleSelectSlot(slot)}
-                              className={`py-2.5 px-1.5 text-center rounded-xl text-xs sm:text-[12.5px] transition-all cursor-pointer border ${
-                                isSlotChosen
-                                  ? 'bg-black text-white font-bold border-black shadow-xs'
-                                  : 'bg-white hover:bg-gray-50 text-gray-800 font-semibold border-gray-200/90 hover:border-gray-300'
-                              }`}
-                            >
-                              {slot}
-                            </button>
-                          );
-                        })}
+                            let tooltipText = `Select ${slot}`;
+                            if (isPast) {
+                              tooltipText = `This time (${slot}) has already passed for today`;
+                            } else if (isSlotConflicted) {
+                              tooltipText = `Unavailable: ${candConflict.conflict?.reason}`;
+                            }
+
+                            return (
+                              <button
+                                key={slot}
+                                type="button"
+                                disabled={isSlotDisabled}
+                                onClick={() => handleSelectSlot(slot)}
+                                title={tooltipText}
+                                className={`relative h-6 py-0 px-1 text-center rounded-md text-[10.5px] font-medium leading-none flex items-center justify-center transition-all border ${
+                                  isPast
+                                    ? 'bg-gray-50/70 text-gray-300 border-gray-100 line-through cursor-not-allowed select-none'
+                                    : isSlotConflicted
+                                    ? 'bg-rose-50/70 text-rose-400 border-rose-200/90 line-through cursor-not-allowed select-none'
+                                    : isSlotChosen
+                                    ? 'bg-black text-white font-bold border-black shadow-3xs cursor-pointer'
+                                    : 'bg-white hover:bg-gray-50 text-gray-800 border-gray-200/80 hover:border-gray-300 cursor-pointer'
+                                }`}
+                              >
+                                <span className="truncate">{slot}</span>
+                                {isSlotConflicted && !isPast && (
+                                  <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-rose-500 ring-1 ring-white" />
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* ── CUSTOM TIME OPTION ── */}
+                      <div className="pt-1.5 border-t border-gray-100 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10.5px] font-bold text-gray-700 flex items-center gap-1">
+                            <Clock size={11} className="text-gray-400" />
+                            <span>Custom Time</span>
+                          </span>
+                          {isCustomSelected && (
+                            <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-1.5 py-0.2 rounded flex items-center gap-0.5">
+                              <Check size={9} strokeWidth={3} />
+                              <span>{selectedTimeSlot}</span>
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="time"
+                            value={customTimeInput}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setCustomTimeInput(val);
+                              if (!val) {
+                                setCustomTimeError('');
+                                return;
+                              }
+                              const effectiveDt = selectedDate || todayForDeadline();
+                              if (isTimeInPast(val, effectiveDt)) {
+                                setCustomTimeError('Past time disabled for today.');
+                                return;
+                              }
+                              const cConflict = getCandidateSlotConflict(
+                                effectiveDt,
+                                val,
+                                activeRound.duration || 45,
+                                selectedRoundIndex,
+                                rounds,
+                                candidateBookedRounds
+                              );
+                              if (cConflict.hasConflict) {
+                                setCustomTimeError(cConflict.conflict.reason);
+                              } else {
+                                setCustomTimeError('');
+                              }
+                            }}
+                            min={isTodaySelected ? minTime24 : undefined}
+                            className={`h-6 flex-1 px-1.5 py-0 bg-gray-50/70 border rounded-md text-[11px] font-medium text-gray-900 focus:outline-hidden focus:ring-1 focus:ring-black transition-all ${
+                              customTimeError
+                                ? 'border-rose-300 bg-rose-50/30'
+                                : isCustomSelected
+                                ? 'border-black ring-1 ring-black/10 bg-white'
+                                : 'border-gray-200'
+                            }`}
+                          />
+                          <button
+                            type="button"
+                            onClick={handleApplyCustomTime}
+                            disabled={!customTimeInput || Boolean(customTimeError)}
+                            className="h-6 px-2.5 rounded-md bg-black hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[10.5px] font-bold transition-all shadow-3xs cursor-pointer shrink-0"
+                          >
+                            Set Time
+                          </button>
+                        </div>
+
+                        {customTimeError ? (
+                          <p className="text-[9.5px] text-rose-600 font-medium flex items-center gap-1">
+                            <AlertCircle size={10} className="shrink-0" />
+                            <span>{customTimeError}</span>
+                          </p>
+                        ) : isTodaySelected ? (
+                          <p className="text-[9.5px] text-gray-400">
+                            Current: {currentTimeDisplay}. Backward time disabled.
+                          </p>
+                        ) : null}
                       </div>
                     </div>
                   </div>
@@ -744,12 +1870,12 @@ export default function ScheduleInterviewModal({
                 <button
                   type="button"
                   onClick={handleSaveAndNext}
-                  className="px-7 py-3 rounded-2xl bg-black hover:bg-gray-800 text-white text-xs sm:text-sm font-bold flex items-center gap-2.5 shadow-sm transition-all cursor-pointer"
+                  className="px-6 py-2.5 rounded-xl bg-black hover:bg-gray-800 text-white text-xs sm:text-sm font-bold flex items-center gap-2 shadow-sm transition-all cursor-pointer"
                 >
                   <span>
                     {selectedRoundIndex < rounds.length - 1 ? 'Save & Next' : 'Save & Next'}
                   </span>
-                  <ArrowRight size={16} />
+                  <ArrowRight size={15} />
                 </button>
               </div>
             </>
@@ -818,9 +1944,21 @@ export default function ScheduleInterviewModal({
                           <span className="w-6 h-6 rounded-lg bg-black text-white text-xs font-bold flex items-center justify-center shrink-0">
                             {idx + 1}
                           </span>
-                          <span className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-700 text-[10.5px] font-bold">
-                            {round.duration || 45} mins
-                          </span>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {round.isAlreadyScheduled ? (
+                              <span className="px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-bold flex items-center gap-1">
+                                <Check size={10} className="text-emerald-600" />
+                                Already Scheduled
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-full bg-purple-50 border border-purple-200 text-purple-700 text-[10px] font-bold">
+                                New Booking
+                              </span>
+                            )}
+                            <span className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-700 text-[10.5px] font-bold">
+                              {round.duration || 45} mins
+                            </span>
+                          </div>
                         </div>
 
                         <div className="text-sm font-bold text-gray-900 tracking-tight">
@@ -828,17 +1966,53 @@ export default function ScheduleInterviewModal({
                         </div>
 
                         <div className="mt-2.5 p-2 rounded-xl bg-gray-50 border border-gray-200/60 space-y-1">
-                          <div className="text-[11px] font-bold text-emerald-800 flex items-center gap-1.5">
-                            <Calendar size={12} className="text-emerald-600" />
-                            <span>
-                              {round.scheduledDate
-                                ? new Date(`${round.scheduledDate}T00:00:00`).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })
-                                : 'Not scheduled'}
-                            </span>
-                            <span>&bull;</span>
-                            <Clock size={12} className="text-emerald-600" />
-                            <span>{round.scheduledTime || 'Not selected'}</span>
-                          </div>
+                          {(() => {
+                            const isScheduled = Boolean(round.scheduledDate && round.scheduledTime);
+                            const candConflict = isScheduled
+                              ? getCandidateSlotConflict(
+                                  round.scheduledDate,
+                                  round.scheduledTime,
+                                  round.duration || 45,
+                                  idx,
+                                  rounds,
+                                  candidateBookedRounds
+                                )
+                              : { hasConflict: false };
+                            const hasCandConflict = candConflict.hasConflict;
+                            return (
+                              <>
+                                {isScheduled ? (
+                                  <div className="text-[11px] font-bold text-emerald-800 flex items-center justify-between gap-1 flex-wrap">
+                                    <div className="flex items-center gap-1.5">
+                                      <Calendar size={12} className="text-emerald-600" />
+                                      <span>
+                                        {new Date(`${round.scheduledDate}T00:00:00`).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                      </span>
+                                      <span>&bull;</span>
+                                      <Clock size={12} className="text-emerald-600" />
+                                      <span>{round.scheduledTime}</span>
+                                    </div>
+                                    {hasCandConflict && (
+                                      <span className="px-1.5 py-0.2 rounded-md bg-rose-100 text-rose-700 text-[9.5px] font-bold">
+                                        Conflict
+                                      </span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="text-[11px] font-medium text-gray-500 flex items-center gap-1.5">
+                                    <Clock size={12} className="text-gray-400" />
+                                    <span>Not scheduled</span>
+                                  </div>
+                                )}
+                                {hasCandConflict && (
+                                  <div className="text-[10px] text-rose-600 font-semibold pt-1 border-t border-rose-200/60 flex items-center gap-1">
+                                    <AlertCircle size={11} className="shrink-0 text-rose-600" />
+                                    <span>{candConflict.conflict?.reason}</span>
+                                  </div>
+                                )}
+                              </>
+                            );
+                          })()}
                         </div>
                       </div>
 
@@ -847,28 +2021,69 @@ export default function ScheduleInterviewModal({
                         <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
                           Assigned Interviewer
                         </div>
-                        {round.interviewer ? (
-                          <div className="flex items-center gap-2.5">
-                            <img
-                              src={round.interviewer.avatar}
-                              alt={round.interviewer.name}
-                              className="w-8 h-8 rounded-full object-cover shrink-0 ring-1 ring-black/10"
-                            />
-                            <div className="min-w-0">
-                              <div className="text-xs font-bold text-gray-900 truncate">
-                                {round.interviewer.name}
+                        {round.interviewer ? (() => {
+                          const roundAvail = getInterviewerAvailability(
+                            round.interviewer,
+                            round.scheduledDate,
+                            round.scheduledTime,
+                            round.duration || 45,
+                            idx,
+                            rounds,
+                            candidate
+                          );
+                          const isConflicted = !roundAvail.isAvailable && !round.isAlreadyScheduled;
+                          return (
+                            <div className="space-y-1.5">
+                              <div className="flex items-center gap-2.5">
+                                <img
+                                  src={round.interviewer.avatar}
+                                  alt={round.interviewer.name}
+                                  className="w-8 h-8 rounded-full object-cover shrink-0 ring-1 ring-black/10"
+                                />
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="text-xs font-bold text-gray-900 truncate">
+                                      {round.interviewer.name}
+                                    </span>
+                                    {round.isAlreadyScheduled ? (
+                                      <span className="px-1.5 py-0.2 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-700 text-[9.5px] font-bold flex items-center gap-1">
+                                        <Check size={9} className="text-emerald-600" />
+                                        Confirmed
+                                      </span>
+                                    ) : isConflicted ? (
+                                      <span className="px-1.5 py-0.2 rounded-md bg-rose-50 border border-rose-200 text-rose-700 text-[9.5px] font-bold">
+                                        Conflict
+                                      </span>
+                                    ) : (
+                                      <span className="px-1.5 py-0.2 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-700 text-[9.5px] font-bold">
+                                        Available
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="text-[10px] text-gray-500 truncate">
+                                    {round.interviewer.role}
+                                  </div>
+                                  {round.interviewer.email && (
+                                    <div className="text-[9.5px] text-gray-400 truncate">
+                                      {round.interviewer.email}
+                                    </div>
+                                  )}
+                                </div>
                               </div>
-                              <div className="text-[10px] text-gray-500 truncate">
-                                {round.interviewer.role}
-                              </div>
-                              {round.interviewer.email && (
-                                <div className="text-[9.5px] text-gray-400 truncate">
-                                  {round.interviewer.email}
+                              {round.instructions && (
+                                <div className="p-2 rounded-xl bg-gray-50 border border-gray-200/60 text-[10.5px] text-gray-600 line-clamp-2">
+                                  <span className="font-semibold text-gray-800">Message / Focus:</span> {round.instructions}
+                                </div>
+                              )}
+                              {isConflicted && (
+                                <div className="p-1.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-[10px] font-medium flex items-center gap-1">
+                                  <AlertCircle size={12} className="shrink-0 text-rose-600" />
+                                  <span>Conflict: {roundAvail.conflict?.reason}</span>
                                 </div>
                               )}
                             </div>
-                          </div>
-                        ) : (
+                          );
+                        })() : (
                           <div className="text-xs text-gray-400 italic">Interviewer to be assigned</div>
                         )}
                       </div>
@@ -885,6 +2100,26 @@ export default function ScheduleInterviewModal({
                 </span>
               </div>
 
+              {/* Conflict warning banner if any round has a candidate schedule overlap */}
+              {rounds.some((r, i) => r.scheduledTime && getCandidateSlotConflict(r.scheduledDate, r.scheduledTime, r.duration || 45, i, rounds, candidateBookedRounds).hasConflict) && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs flex items-center gap-2.5">
+                  <AlertCircle size={16} className="text-rose-600 shrink-0" />
+                  <span>
+                    Multiple interview rounds are scheduled at overlapping dates and times for this candidate. Click &ldquo;Back to Edit&rdquo; to assign separate time slots before confirming.
+                  </span>
+                </div>
+              )}
+
+              {/* Conflict warning banner if any round has an interviewer overlap */}
+              {rounds.some((r, i) => !r.isAlreadyScheduled && r.scheduledTime && r.interviewer && !getInterviewerAvailability(r.interviewer, r.scheduledDate, r.scheduledTime, r.duration || 45, i, rounds, candidate).isAvailable) && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs flex items-center gap-2.5">
+                  <AlertCircle size={16} className="text-rose-600 shrink-0" />
+                  <span>
+                    One or more interviewers have conflicting interview schedules. Click &ldquo;Back to Edit&rdquo; to resolve conflicts before confirming.
+                  </span>
+                </div>
+              )}
+
               {/* Actions: Back to edit & Confirm and Schedule */}
               <div className="pt-2 flex items-center justify-between gap-3">
                 <button
@@ -900,8 +2135,15 @@ export default function ScheduleInterviewModal({
                 <button
                   type="button"
                   onClick={scheduledSuccess ? onClose : handleConfirmAndSchedule}
-                  disabled={isSubmitting}
-                  className={`px-7 py-3 rounded-2xl bg-black hover:bg-gray-800 text-white text-xs sm:text-sm font-bold flex items-center gap-2.5 shadow-sm transition-all cursor-pointer ${
+                  disabled={
+                    isSubmitting ||
+                    (!scheduledSuccess && (
+                      !rounds.some(r => r.scheduledDate && r.scheduledTime) ||
+                      rounds.some((r, i) => !r.isAlreadyScheduled && r.scheduledTime && r.interviewer && !getInterviewerAvailability(r.interviewer, r.scheduledDate, r.scheduledTime, r.duration || 45, i, rounds, candidate).isAvailable) ||
+                      rounds.some((r, i) => r.scheduledTime && getCandidateSlotConflict(r.scheduledDate, r.scheduledTime, r.duration || 45, i, rounds, candidateBookedRounds).hasConflict)
+                    ))
+                  }
+                  className={`px-7 py-3 rounded-2xl bg-black hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs sm:text-sm font-bold flex items-center gap-2.5 shadow-sm transition-all cursor-pointer ${
                     scheduledSuccess ? 'bg-emerald-600 hover:bg-emerald-700' : ''
                   }`}
                 >

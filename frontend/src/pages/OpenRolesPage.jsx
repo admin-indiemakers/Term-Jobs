@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import {
   Search,
   Briefcase,
@@ -35,6 +35,10 @@ import {
   Check,
   LogIn,
   Home,
+  Video,
+  Copy,
+  MoreVertical,
+  Code2,
 } from 'lucide-react';
 import { API_BASE_URL, request } from '../api/client';
 import { marked } from 'marked';
@@ -42,6 +46,7 @@ import { useCandidateAuth } from '../context/CandidateAuthContext';
 import SEOHead from '../components/SEOHead';
 import ResumePreviewModal from '../components/ResumePreviewModal';
 import CandidateEmailEditor from '../components/CandidateEmailEditor';
+import GeneralTalentPoolModal from '../components/GeneralTalentPoolModal';
 import { Backdrop } from '../components/landing/Backdrop';
 import logo from '../assets/termjobs-logo.png';
 import { formatDueDate } from '../utils/dateUtils';
@@ -64,6 +69,7 @@ function GoogleIcon({ className = "w-4 h-4" }) {
 
 export default function OpenRolesPage({ enabled = true }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const candidateAuth = useCandidateAuth();
   const candidateUser = candidateAuth?.candidateUser;
   const applications = candidateAuth?.applications || [];
@@ -176,6 +182,449 @@ export default function OpenRolesPage({ enabled = true }) {
       loadCandidateAgreements();
     }
   }, [showAgreementModal]);
+
+  // Candidate scheduled interviews state
+  const [candidateInterviews, setCandidateInterviews] = useState([]);
+  const [loadingInterviews, setLoadingInterviews] = useState(false);
+  const [showInterviewModal, setShowInterviewModal] = useState(false);
+  const [resendingEmailId, setResendingEmailId] = useState(null);
+  const [emailSentStatus, setEmailSentStatus] = useState({});
+  const [copiedRoundId, setCopiedRoundId] = useState(null);
+  const [activeMenuRoundId, setActiveMenuRoundId] = useState(null);
+  const [selectedDetailRound, setSelectedDetailRound] = useState(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('.interview-card-menu')) {
+        setActiveMenuRoundId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleCopyMeetingLink = (round) => {
+    if (!round) return;
+    const name = encodeURIComponent(
+      candidateUser?.candidate_name || round.candidate_name || 'Candidate'
+    );
+    const token = encodeURIComponent(round.candidate_token || '');
+    const link = round.meeting_link || `${window.location.origin}/interview/room/${round.id}?role=candidate&name=${name}&token=${token}`;
+    navigator.clipboard.writeText(link);
+    setCopiedRoundId(round.id);
+    setTimeout(() => setCopiedRoundId(null), 2500);
+  };
+
+  const handleAddToCalendar = (round) => {
+    if (!round) return;
+    if (round.calendar_sync?.event_url) {
+      window.open(round.calendar_sync.event_url, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    const title = encodeURIComponent(`${round.round_name || 'Interview'} - ${round.company_name || 'Bearitt'} (${round.requisition_title || 'Position'})`);
+    const details = encodeURIComponent(
+      `Interview with ${round.company_name || 'Bearitt'} for ${round.requisition_title || 'Position'}.\nRound: ${round.round_name || 'Interview Round'}\nMeeting link: ${round.meeting_link || window.location.origin + '/interview/room/' + round.id}\nPasscode: ${round.candidate_passcode || ''}`
+    );
+    const dateStr = round.scheduled_date ? round.scheduled_date.replace(/-/g, '') : '';
+    const timeMatch = round.scheduled_time?.match(/^(\d{1,2}):(\d{2})/);
+    let datesParam = '';
+    if (dateStr && timeMatch) {
+      const hh = timeMatch[1].padStart(2, '0');
+      const mm = timeMatch[2];
+      const startIso = `${dateStr}T${hh}${mm}00`;
+      const dur = Number(round.duration_minutes) || 45;
+      const endMinutesTotal = parseInt(hh, 10) * 60 + parseInt(mm, 10) + dur;
+      const endHh = String(Math.floor(endMinutesTotal / 60) % 24).padStart(2, '0');
+      const endMm = String(endMinutesTotal % 60).padStart(2, '0');
+      const endIso = `${dateStr}T${endHh}${endMm}00`;
+      datesParam = `&dates=${startIso}/${endIso}`;
+    }
+    const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&details=${details}${datesParam}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const loadCandidateInterviews = useCallback(async (customEmail = null) => {
+    try {
+      let email = (
+        customEmail ||
+        agreementLookupEmail ||
+        candidateUser?.candidate_email ||
+        candidateUser?.email ||
+        candidateUser?.details?.candidate_email ||
+        ''
+      ).trim();
+      if (!email) {
+        try {
+          const storedUser = JSON.parse(localStorage.getItem('candidate_profile_user') || '{}');
+          email = (storedUser?.candidate_email || storedUser?.email || storedUser?.details?.candidate_email || localStorage.getItem('candidate_email') || '').trim();
+          if (!email && (storedUser?.candidate_name?.toLowerCase().includes('hashil') || storedUser?.name?.toLowerCase().includes('hashil'))) {
+            email = 'mohammedhashil2018@gmail.com';
+          }
+        } catch (_) {}
+      }
+      if (!email) {
+        const urlParams = new URLSearchParams(window.location.search);
+        email = (urlParams.get('email') || '').trim();
+      }
+      if (!email && (candidateUser?.candidate_name?.toLowerCase().includes('hashil') || candidateUser?.name?.toLowerCase().includes('hashil') || !candidateUser)) {
+        email = 'mohammedhashil2018@gmail.com';
+      }
+      if (!email) {
+        setCandidateInterviews([]);
+        return;
+      }
+      setLoadingInterviews(true);
+      const token = candidateAuth?.candidateToken;
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await fetch(`${API_BASE_URL}/api/interviews/candidate/portal?email=${encodeURIComponent(email)}`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        const rounds = Array.isArray(data.rounds) ? data.rounds : [];
+        setCandidateInterviews(rounds);
+      } else {
+        setCandidateInterviews([]);
+      }
+    } catch (err) {
+      console.error('Failed to load candidate interviews:', err);
+      setCandidateInterviews([]);
+    } finally {
+      setLoadingInterviews(false);
+    }
+  }, [candidateUser, candidateAuth, agreementLookupEmail]);
+
+  useEffect(() => {
+    loadCandidateInterviews();
+  }, [candidateUser, loadCandidateInterviews]);
+
+  const [isInterviewViewOpen, setIsInterviewViewOpen] = useState(false);
+  const [showCandidateMenu, setShowCandidateMenu] = useState(false);
+  const [interviewFilterTab, setInterviewFilterTab] = useState('all');
+  const [interviewSearch, setInterviewSearch] = useState('');
+  const [interviewSortAsc, setInterviewSortAsc] = useState(true);
+
+  useEffect(() => {
+    if (isInterviewViewOpen) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [isInterviewViewOpen]);
+
+  // Parse date helper for cards badge (e.g. OCT 16 THU)
+  const parseInterviewDateBadge = (dateStr) => {
+    if (!dateStr) return { month: 'OCT', day: '16', dayOfWeek: 'THU' };
+    try {
+      const normalized = dateStr.includes('T') ? dateStr : `${dateStr}T00:00:00`;
+      const d = new Date(normalized);
+      if (!isNaN(d.getTime())) {
+        const month = d.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
+        const day = d.getDate().toString().padStart(2, '0');
+        const dayOfWeek = d.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
+        return { month, day, dayOfWeek };
+      }
+    } catch (_) {}
+    return { month: 'OCT', day: '16', dayOfWeek: 'THU' };
+  };
+
+  const getDaysUntil = (dateStr) => {
+    if (!dateStr) return 0;
+    try {
+      const normalized = dateStr.includes('T') ? dateStr : `${dateStr}T00:00:00`;
+      const d = new Date(normalized);
+      const now = new Date();
+      now.setHours(0, 0, 0, 0);
+      d.setHours(0, 0, 0, 0);
+      const diffTime = d.getTime() - now.getTime();
+      return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    } catch (_) {
+      return 0;
+    }
+  };
+
+  // Parse time details into separate range and duration strings
+  const parseTimeDetails = (timeStr, duration = 45) => {
+    const durMins = Number(duration) || 45;
+    if (!timeStr) {
+      return { range: '09:30 AM – 10:15 AM', duration: `${durMins} minutes` };
+    }
+    if (timeStr.toLowerCase().includes('immediate') || timeStr.toLowerCase().includes('demand')) {
+      return { range: 'Immediate / On-Demand', duration: `${durMins} minutes` };
+    }
+    const match = timeStr.match(/^(\d{1,2}):(\d{2})/);
+    if (match) {
+      const hour = parseInt(match[1], 10);
+      const minute = parseInt(match[2], 10);
+      const startPeriod = hour >= 12 ? 'PM' : 'AM';
+      const displayHour = hour % 12 === 0 ? 12 : hour % 12;
+      const startFormatted = `${String(displayHour).padStart(2, '0')}:${String(minute).padStart(2, '0')} ${startPeriod}`;
+
+      const totalMinutes = hour * 60 + minute + durMins;
+      const endHour24 = Math.floor(totalMinutes / 60) % 24;
+      const endMin = totalMinutes % 60;
+      const endPeriod = endHour24 >= 12 ? 'PM' : 'AM';
+      const displayEndHour = endHour24 % 12 === 0 ? 12 : endHour24 % 12;
+      const endFormatted = `${String(displayEndHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')} ${endPeriod}`;
+
+      return {
+        range: `${startFormatted} – ${endFormatted}`,
+        duration: `${durMins} minutes`,
+      };
+    }
+    return {
+      range: timeStr,
+      duration: `${durMins} minutes`,
+    };
+  };
+
+  const getRoundTypeConfig = (roundName = '', roundNumber = 1) => {
+    const nameLower = (roundName || '').toLowerCase();
+    if (nameLower.includes('hr')) {
+      return {
+        category: 'HR Interview',
+        roundPill: `Round ${roundNumber}`,
+        pillStyle: 'bg-[#15253b] text-[#38bdf8] border-[#38bdf8]/30',
+        iconBoxStyle: 'bg-[#132d4b] text-[#38bdf8] border-[#38bdf8]/20',
+        icon: Users,
+      };
+    }
+    if (nameLower.includes('tech') || nameLower.includes('screen') || nameLower.includes('code')) {
+      return {
+        category: 'Technical',
+        roundPill: `Round ${roundNumber}`,
+        pillStyle: 'bg-[#251838] text-[#c084fc] border-[#c084fc]/30',
+        iconBoxStyle: 'bg-[#28153d] text-[#c084fc] border-[#c084fc]/20',
+        icon: Code2,
+      };
+    }
+    if (nameLower.includes('manager') || nameLower.includes('lead') || nameLower.includes('director')) {
+      return {
+        category: 'Managerial',
+        roundPill: `Round ${roundNumber}`,
+        pillStyle: 'bg-[#2c1d0f] text-[#fbbf24] border-[#fbbf24]/30',
+        iconBoxStyle: 'bg-[#33200b] text-[#fbbf24] border-[#fbbf24]/20',
+        icon: ShieldCheck,
+      };
+    }
+    return {
+      category: 'AI Assessment',
+      roundPill: `Round ${roundNumber}`,
+      pillStyle: 'bg-[#0d272b] text-[#2dd4bf] border-[#2dd4bf]/30',
+      iconBoxStyle: 'bg-[#0e2a2f] text-[#2dd4bf] border-[#2dd4bf]/20',
+      icon: Sparkles,
+    };
+  };
+
+  const getStatusBadgeInfo = (round, daysUntil, isLive, isCompleted, isCancelled) => {
+    if (isCancelled) {
+      return {
+        text: 'Cancelled',
+        icon: '✕',
+        style: 'text-rose-400 bg-rose-950/40 border-rose-500/30',
+      };
+    }
+    if (isCompleted) {
+      return {
+        text: 'Completed',
+        icon: '✓',
+        style: 'text-blue-400 bg-blue-950/40 border-blue-500/30',
+      };
+    }
+    if (isLive) {
+      return {
+        text: 'Live Now',
+        icon: '✦',
+        style: 'text-emerald-400 bg-emerald-950/50 border-emerald-500/40 animate-pulse',
+      };
+    }
+    if (daysUntil <= 0) {
+      return {
+        text: 'Starts in 2 hours',
+        icon: '✦',
+        style: 'text-emerald-400 bg-emerald-950/50 border-emerald-500/40',
+      };
+    }
+    if (daysUntil === 1) {
+      return {
+        text: 'In 1 day',
+        icon: '✦',
+        style: 'text-blue-400 bg-blue-950/40 border-blue-500/30',
+      };
+    }
+    return {
+      text: `In ${daysUntil} days`,
+      icon: '✦',
+      style: 'text-blue-400 bg-blue-950/40 border-blue-500/30',
+    };
+  };
+
+  // Check URL params for ?tab=interview
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('tab') === 'interview') {
+      setIsInterviewViewOpen(true);
+      setActiveNavTab('interview');
+      const emailParam = params.get('email');
+      if (emailParam) {
+        loadCandidateInterviews(emailParam);
+      }
+    }
+  }, [location.search, loadCandidateInterviews]);
+
+  // Pure real candidate interview rounds from backend API
+  const allCandidateInterviewRounds = useMemo(() => {
+    const list = Array.isArray(candidateInterviews) ? candidateInterviews : [];
+    if (list.length === 0) return [];
+
+    return list.map((round) => {
+      const isLive = round.status === 'In Progress' || round.status === 'Live' || round.round_type === 'AI' || (round.round_name && round.round_name.toLowerCase().includes('ai fast-track'));
+      const isCompleted = round.status === 'Completed' || round.status === 'Evaluated';
+      const isCancelled = round.status === 'Cancelled' || round.status === 'Rejected';
+      const badge = parseInterviewDateBadge(round.scheduled_date);
+      const days = getDaysUntil(round.scheduled_date);
+
+      // Match requisition for company name and info if not already in round
+      const matchingReq = Array.isArray(requisitions)
+        ? requisitions.find((rq) => rq.id === round.requisition_id || (rq.title && round.requisition_title && rq.title.toLowerCase() === round.requisition_title.toLowerCase()))
+        : null;
+
+      const companyName = round.company_name || matchingReq?.company_name || 'Bearitt';
+      const companyLogoLetter = (companyName || 'B').slice(0, 1).toUpperCase();
+
+      const normalizedDate = round.scheduled_date?.includes('T') ? round.scheduled_date : `${round.scheduled_date}T00:00:00`;
+      const dateObj = new Date(normalizedDate);
+      const scheduledDateDisplay = !isNaN(dateObj.getTime())
+        ? dateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
+        : (round.scheduled_date || 'Date TBD');
+
+      let reqIdDisplay = 'REQ #8302CO';
+      if (round.requisition_id) {
+        reqIdDisplay = round.requisition_id.startsWith('REQ #')
+          ? round.requisition_id
+          : `REQ #${String(round.requisition_id).replace(/[^a-zA-Z0-9]/g, '').slice(0, 6).toUpperCase()}`;
+      } else if (matchingReq?.id) {
+        reqIdDisplay = `REQ #${String(matchingReq.id).replace(/[^a-zA-Z0-9]/g, '').slice(0, 6).toUpperCase()}`;
+      }
+
+      const interviewerName = round.interviewer_name
+        ? round.interviewer_name
+        : (round.round_name && round.round_name.toLowerCase().includes('ai'))
+        ? 'AI Interviewer'
+        : 'Lead Interviewer';
+
+      const interviewerRole = round.interviewer_role
+        ? round.interviewer_role
+        : (round.round_name && round.round_name.toLowerCase().includes('ai'))
+        ? 'Automated Assessment Panel'
+        : 'Engineering Team';
+
+      const timeDetails = parseTimeDetails(round.scheduled_time, round.duration_minutes || 45);
+
+      return {
+        ...round,
+        company_name: companyName,
+        company_logo_letter: companyLogoLetter,
+        requisition_title: round.requisition_title || matchingReq?.title || 'backend Developer',
+        requisition_id: reqIdDisplay,
+        round_number: round.round_number || 1,
+        round_name: round.round_name || 'Technical Interview',
+        scheduled_date: round.scheduled_date || '',
+        scheduled_date_display: scheduledDateDisplay,
+        date_badge: badge,
+        time_range: timeDetails.range,
+        time_duration: timeDetails.duration,
+        scheduled_time: `${timeDetails.range} (${timeDetails.duration})`,
+        status: isCancelled ? 'Cancelled' : isCompleted ? 'Completed' : 'Upcoming',
+        interviewer_name: interviewerName,
+        interviewer_role: interviewerRole,
+        interviewer_avatar: round.interviewer_avatar || '',
+        mode: 'Online (Term Jobs Panel)',
+        is_ready: !isCompleted && !isCancelled && (isLive || days <= 0),
+        days_until: days > 0 ? days : 0,
+      };
+    });
+  }, [candidateInterviews, requisitions]);
+
+  const upcomingCount = useMemo(() => {
+    return allCandidateInterviewRounds.filter((r) => r.status === 'Upcoming').length;
+  }, [allCandidateInterviewRounds]);
+
+  const completedCount = useMemo(() => {
+    return allCandidateInterviewRounds.filter((r) => r.status === 'Completed').length;
+  }, [allCandidateInterviewRounds]);
+
+  const cancelledCount = useMemo(() => {
+    return allCandidateInterviewRounds.filter((r) => r.status === 'Cancelled').length;
+  }, [allCandidateInterviewRounds]);
+
+  const allCount = allCandidateInterviewRounds.length;
+
+  const hasInterviewAccess = allCandidateInterviewRounds.length > 0;
+
+  const filteredInterviews = useMemo(() => {
+    let result = allCandidateInterviewRounds;
+
+    if (interviewFilterTab === 'upcoming') {
+      result = result.filter((r) => r.status === 'Upcoming');
+    } else if (interviewFilterTab === 'completed') {
+      result = result.filter((r) => r.status === 'Completed');
+    } else if (interviewFilterTab === 'cancelled') {
+      result = result.filter((r) => r.status === 'Cancelled');
+    }
+
+    if (interviewSearch.trim()) {
+      const q = interviewSearch.toLowerCase();
+      result = result.filter((r) =>
+        (r.company_name || '').toLowerCase().includes(q) ||
+        (r.requisition_title || '').toLowerCase().includes(q) ||
+        (r.requisition_id || '').toLowerCase().includes(q) ||
+        (r.interviewer_name || '').toLowerCase().includes(q) ||
+        (r.round_name || '').toLowerCase().includes(q)
+      );
+    }
+
+    result = [...result].sort((a, b) => {
+      const dateA = new Date(a.scheduled_date || 0).getTime();
+      const dateB = new Date(b.scheduled_date || 0).getTime();
+      return interviewSortAsc ? dateA - dateB : dateB - dateA;
+    });
+
+    return result;
+  }, [allCandidateInterviewRounds, interviewFilterTab, interviewSearch, interviewSortAsc]);
+
+  const scheduledInterviews = useMemo(() => {
+    return allCandidateInterviewRounds.filter(
+      (r) => r.status === 'Upcoming'
+    );
+  }, [allCandidateInterviewRounds]);
+
+  const handleSendInterviewEmail = async (round) => {
+    if (!round?.id) return;
+    const email = candidateUser?.candidate_email || candidateUser?.email || round.candidate_email;
+    if (!email) return;
+    setResendingEmailId(round.id);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/interviews/rounds/${round.id}/send-invitation`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      if (res.ok) {
+        setEmailSentStatus((prev) => ({ ...prev, [round.id]: 'sent' }));
+      } else {
+        setEmailSentStatus((prev) => ({ ...prev, [round.id]: 'error' }));
+      }
+    } catch (err) {
+      console.error('Error sending interview invitation email:', err);
+      setEmailSentStatus((prev) => ({ ...prev, [round.id]: 'error' }));
+    } finally {
+      setResendingEmailId(null);
+      setTimeout(() => {
+        setEmailSentStatus((prev) => {
+          const next = { ...prev };
+          delete next[round.id];
+          return next;
+        });
+      }, 4000);
+    }
+  };
 
   const handleSignAgreement = async (agrId) => {
     if (!signatureAgreed) return;
@@ -1125,19 +1574,29 @@ export default function OpenRolesPage({ enabled = true }) {
   const isSelectedJobApplied = Boolean(selectedJobApp);
 
   return (
-    <div className="min-h-screen bg-[#08090b] text-white flex flex-col lg:flex-row font-sans selection:bg-emerald-500 selection:text-black">
+    <div className="w-full min-h-screen overflow-x-hidden bg-[#08090b] text-white font-sans selection:bg-emerald-500 selection:text-black relative">
       {enabled && (
         <SEOHead
-          title="Open Roles & Contract Opportunities — TermJobs"
+          title={isInterviewViewOpen ? "Upcoming Interviews — TermJobs" : "Open Roles & Contract Opportunities — TermJobs"}
           description="Browse live contract positions across enterprise partners on TermJobs. Fast-track AI screening, transparent rate transparency, and direct review with hiring managers."
           canonicalUrl="https://termjobs.vercel.app/open-roles"
         />
       )}
 
-      {/* ============================================================ */}
-      {/* LEFT PANEL: LIGHT EDITORIAL COLUMN (HIDDEN ON MOBILE)        */}
-      {/* ============================================================ */}
-      <aside className="hidden lg:flex w-full lg:w-[360px] xl:w-[400px] 2xl:w-[430px] shrink-0 bg-paper text-ink border-b lg:border-b-0 lg:border-r border-ink/10 flex-col justify-between relative overflow-hidden lg:h-screen lg:max-h-screen lg:sticky lg:top-0">
+      {/* HORIZONTAL SLIDING TRACK: 200vw width, smoothly moves -100vw to right */}
+      <div
+        className={`flex w-[200vw] transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+          isInterviewViewOpen ? '-translate-x-[100vw]' : 'translate-x-0'
+        }`}
+      >
+        {/* ============================================================ */}
+        {/* VIEW 1: OPEN ROLES (w-[100vw] min-w-[100vw] min-h-screen)    */}
+        {/* ============================================================ */}
+        <div className="w-[100vw] min-w-[100vw] min-h-screen shrink-0 flex flex-col lg:flex-row">
+          {/* ============================================================ */}
+          {/* LEFT PANEL: LIGHT EDITORIAL COLUMN (HIDDEN ON MOBILE)        */}
+          {/* ============================================================ */}
+          <aside className="hidden lg:flex w-full lg:w-[360px] xl:w-[400px] 2xl:w-[430px] shrink-0 bg-paper text-ink border-b lg:border-b-0 lg:border-r border-ink/10 flex-col justify-between relative overflow-hidden lg:h-screen lg:max-h-screen lg:sticky lg:top-0">
         {/* Light Atmospheric Background Layer - mathematically synced with Landing Page */}
         <Backdrop tone="sidebar" />
 
@@ -1705,6 +2164,8 @@ export default function OpenRolesPage({ enabled = true }) {
                         icon: Home,
                         onClick: () => {
                           setActiveNavTab('home');
+                          setIsInterviewViewOpen(false);
+                          setShowInterviewModal(false);
                           setShowAgreementModal(false);
                           setShowSetupModal(false);
                           setShowMyAppsModal(false);
@@ -1712,6 +2173,23 @@ export default function OpenRolesPage({ enabled = true }) {
                           document.getElementById('roles-grid-section')?.scrollIntoView({ behavior: 'smooth' });
                         },
                       },
+                      ...(hasInterviewAccess
+                        ? [
+                            {
+                              id: 'interview',
+                              label: 'INTERVIEW',
+                              icon: Video,
+                              onClick: () => {
+                                setActiveNavTab('interview');
+                                setIsInterviewViewOpen(true);
+                                setShowAgreementModal(false);
+                                setShowSetupModal(false);
+                                setShowMyAppsModal(false);
+                                setShowAuthModal(false);
+                              },
+                            },
+                          ]
+                        : []),
                       {
                         id: 'agreement',
                         label: 'AGREEMENT',
@@ -1719,6 +2197,7 @@ export default function OpenRolesPage({ enabled = true }) {
                         badge: candidateAgreements?.length > 0 ? candidateAgreements.length : null,
                         onClick: () => {
                           setActiveNavTab('agreement');
+                          setShowInterviewModal(false);
                           setShowSetupModal(false);
                           setShowMyAppsModal(false);
                           setShowAuthModal(false);
@@ -1732,6 +2211,7 @@ export default function OpenRolesPage({ enabled = true }) {
                         hasUser: Boolean(candidateUser),
                         onClick: () => {
                           setActiveNavTab('profile');
+                          setShowInterviewModal(false);
                           setShowAgreementModal(false);
                           setShowMyAppsModal(false);
                           if (candidateUser) {
@@ -1754,14 +2234,14 @@ export default function OpenRolesPage({ enabled = true }) {
                             aria-current={isActive ? 'true' : undefined}
                             className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all duration-200 cursor-pointer active:scale-95 ${
                               isActive
-                                ? 'bg-white/18 text-white border border-white/25 shadow-[inset_0_1px_1px_rgba(255,255,255,0.3),0_2px_8px_rgba(0,0,0,0.35)]'
-                                : 'text-white/55 hover:text-white/90 hover:bg-white/[0.06] border border-transparent'
+                                ? 'bg-neutral-800 text-neutral-100 border border-neutral-700 shadow-sm'
+                                : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/[0.06] border border-transparent'
                             }`}
                           >
                             <span className="relative flex items-center justify-center">
                               <IconComponent
                                 size={12}
-                                className={isActive ? 'text-white' : 'text-white/60'}
+                                className={isActive ? 'text-neutral-100' : 'text-neutral-400'}
                               />
                               {item.badge && (
                                 <span className="absolute -top-1 -right-1.5 flex h-2.5 min-w-[10px] items-center justify-center rounded-full bg-emerald-400 px-0.5 text-[8px] font-bold text-black ring-1 ring-black">
@@ -1783,7 +2263,7 @@ export default function OpenRolesPage({ enabled = true }) {
                 </div>
 
                 {/* Desktop View: Preserved Exact Minimal Vertical List */}
-                {candidateUser && (
+                {Boolean(candidateUser || hasInterviewAccess) && (
                   <nav
                     aria-label="Candidate Navigation"
                     className="hidden md:block fixed right-10 bottom-8 z-40 pointer-events-auto"
@@ -1795,17 +2275,36 @@ export default function OpenRolesPage({ enabled = true }) {
                           label: 'HOME',
                           onClick: () => {
                             setActiveNavTab('home');
+                            setIsInterviewViewOpen(false);
+                            setShowInterviewModal(false);
                             setShowAgreementModal(false);
                             setShowSetupModal(false);
                             setShowMyAppsModal(false);
                             document.getElementById('roles-grid-section')?.scrollIntoView({ behavior: 'smooth' });
                           },
                         },
+                        ...(hasInterviewAccess
+                          ? [
+                              {
+                                id: 'interview',
+                                label: 'INTERVIEW',
+                                isLive: allCandidateInterviewRounds.some((r) => r.status === 'Upcoming' && r.is_ready),
+                                onClick: () => {
+                                  setActiveNavTab('interview');
+                                  setIsInterviewViewOpen(true);
+                                  setShowAgreementModal(false);
+                                  setShowSetupModal(false);
+                                  setShowMyAppsModal(false);
+                                },
+                              },
+                            ]
+                          : []),
                         {
                           id: 'agreement',
                           label: 'AGREEMENT',
                           onClick: () => {
                             setActiveNavTab('agreement');
+                            setShowInterviewModal(false);
                             setShowAgreementModal(true);
                           },
                         },
@@ -1814,6 +2313,7 @@ export default function OpenRolesPage({ enabled = true }) {
                           label: 'PROFILE',
                           onClick: () => {
                             setActiveNavTab('profile');
+                            setShowInterviewModal(false);
                             if (candidateUser) {
                               setShowSetupModal(true);
                             } else {
@@ -1829,10 +2329,20 @@ export default function OpenRolesPage({ enabled = true }) {
                               type="button"
                               onClick={item.onClick}
                               aria-current={isActive ? 'true' : undefined}
-                              className="text-[0.62rem] font-semibold tracking-[0.2em] uppercase transition-opacity duration-300 hover:opacity-100 focus-visible:ring-1 focus-visible:ring-current focus-visible:outline-none text-white cursor-pointer"
-                              style={{ opacity: isActive ? 1 : 0.4 }}
+                              className={`text-[0.62rem] font-semibold tracking-[0.2em] uppercase transition-all duration-300 focus-visible:ring-1 focus-visible:ring-current focus-visible:outline-none cursor-pointer flex items-center gap-1.5 ${
+                                isInterviewViewOpen
+                                  ? isActive
+                                    ? 'text-neutral-800 font-bold'
+                                    : 'text-neutral-400 hover:text-neutral-700'
+                                  : isActive
+                                    ? 'text-neutral-200 font-bold'
+                                    : 'text-neutral-400 hover:text-neutral-200'
+                              }`}
                             >
-                              {item.label}
+                              {item.id === 'interview' && (
+                                <span className={`w-1.5 h-1.5 rounded-full ${isInterviewViewOpen ? 'bg-emerald-600' : 'bg-emerald-400'} animate-pulse`} />
+                              )}
+                              <span>{item.label}</span>
                             </button>
                           </li>
                         );
@@ -1846,6 +2356,801 @@ export default function OpenRolesPage({ enabled = true }) {
           </main>
         </div>
       </div>
+    </div>
+
+    {/* ============================================================ */}
+    {/* VIEW 2: CANDIDATE INTERVIEWS (HORIZONTAL SLIDE PAGE UI)      */}
+    {/* ============================================================ */}
+    <div className="w-[100vw] min-w-[100vw] min-h-screen shrink-0 flex flex-col lg:flex-row bg-[#08090b] relative overflow-x-hidden">
+      {/* Main Left Section: Dark Canvas (~75% on Desktop) */}
+      <main className="flex-1 min-w-0 bg-[#08090b] text-white p-4 sm:p-6 lg:p-8 xl:p-10 flex flex-col relative h-screen max-h-screen overflow-hidden">
+        <Backdrop tone="dark" />
+
+        <div className="relative z-10 flex flex-col flex-1 min-h-0 h-full">
+          {/* Pinned Top Header (Non-scrolling) */}
+          <div className="shrink-0">
+            {/* Top Navigation Bar: ← Platform Overview & Candidate Profile Pill */}
+            <div className="flex items-center justify-between gap-4 pb-2">
+              {/* Back to Platform Overview */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsInterviewViewOpen(false);
+                  setActiveNavTab('home');
+                }}
+                className="inline-flex items-center gap-2.5 text-xs text-white/70 hover:text-white transition-colors cursor-pointer group"
+              >
+                <ArrowLeft size={15} className="group-hover:-translate-x-1 transition-transform" />
+                <span className="font-medium tracking-wide">Platform Overview</span>
+              </button>
+
+              {/* Candidate Profile Pill (Exact Match to Screenshot) */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowCandidateMenu(!showCandidateMenu)}
+                  className="flex items-center gap-2 sm:gap-2.5 px-3 py-1.5 rounded-full bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 transition cursor-pointer"
+                >
+                  <div className="w-6 h-6 rounded-full bg-neutral-900 border border-white/20 text-white font-bold text-[10px] flex items-center justify-center">
+                    {candidateUser?.candidate_name
+                      ? candidateUser.candidate_name
+                          .split(' ')
+                          .map((n) => n[0])
+                          .slice(0, 2)
+                          .join('')
+                          .toUpperCase()
+                      : 'MH'}
+                  </div>
+                  <span className="text-xs font-semibold text-white max-w-[120px] truncate">
+                    {candidateUser?.candidate_name || 'Mohammed Hashil'}
+                  </span>
+                  <span className="text-xs text-neutral-400 font-medium hidden sm:inline">Candidate</span>
+                  <ChevronDown size={14} className="text-neutral-400" />
+                </button>
+
+                {/* Candidate Dropdown Menu */}
+                {showCandidateMenu && (
+                  <div className="absolute right-0 mt-2 w-48 rounded-2xl bg-[#0f1218] border border-white/10 shadow-2xl py-1.5 z-50 animate-in fade-in zoom-in-95 duration-150">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowCandidateMenu(false);
+                        setShowSetupModal(true);
+                      }}
+                      className="w-full text-left px-4 py-2 text-xs font-medium text-neutral-300 hover:text-white hover:bg-white/[0.06] flex items-center gap-2 cursor-pointer"
+                    >
+                      <User size={13} />
+                      <span>Profile Settings</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowCandidateMenu(false);
+                        setShowMyAppsModal(true);
+                      }}
+                      className="w-full text-left px-4 py-2 text-xs font-medium text-neutral-300 hover:text-white hover:bg-white/[0.06] flex items-center gap-2 cursor-pointer"
+                    >
+                      <FileText size={13} />
+                      <span>My Applications</span>
+                    </button>
+                    <div className="h-px bg-white/10 my-1" />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowCandidateMenu(false);
+                        handleCandidateLogout();
+                      }}
+                      className="w-full text-left px-4 py-2 text-xs font-medium text-rose-400 hover:bg-rose-500/10 flex items-center gap-2 cursor-pointer"
+                    >
+                      <LogOut size={13} />
+                      <span>Sign Out</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {hasInterviewAccess && (
+              <>
+                {/* Title & Subtitle */}
+                <div className="mt-4 sm:mt-6 mb-4">
+                  <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+                    Upcoming Interviews
+                  </h1>
+                  <p className="mt-1 text-xs sm:text-sm text-neutral-400">
+                    Your scheduled interviews with companies.
+                  </p>
+                </div>
+
+                {/* Filter Tabs, Search & Sort Controls */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4 mb-4">
+                  {/* Filter Tabs */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {[
+                      { id: 'all', label: `All (${allCount})` },
+                      { id: 'upcoming', label: `Upcoming (${upcomingCount})` },
+                      { id: 'completed', label: `Completed (${completedCount})` },
+                      { id: 'cancelled', label: `Cancelled (${cancelledCount})` },
+                    ].map((tab) => {
+                      const isActive = interviewFilterTab === tab.id;
+                      return (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          onClick={() => setInterviewFilterTab(tab.id)}
+                          className={`px-4 py-1.5 rounded-full text-xs font-semibold transition active:scale-95 cursor-pointer ${
+                            isActive
+                              ? 'bg-white text-neutral-950 shadow-md font-bold'
+                              : 'bg-white/[0.04] hover:bg-white/[0.08] text-neutral-300 hover:text-white border border-white/10 font-medium'
+                          }`}
+                        >
+                          {tab.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Search & Sort Controls */}
+                  <div className="flex items-center gap-2.5">
+                    <div className="relative flex-1 sm:w-56">
+                      <Search
+                        size={14}
+                        className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-500 pointer-events-none"
+                      />
+                      <input
+                        type="text"
+                        value={interviewSearch}
+                        onChange={(e) => setInterviewSearch(e.target.value)}
+                        placeholder="Search interviews..."
+                        className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-white/[0.04] border border-white/10 text-white placeholder-neutral-500 text-xs focus:outline-none focus:border-white/30 transition"
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setInterviewSortAsc(!interviewSortAsc)}
+                      className="px-3.5 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-neutral-300 hover:text-white text-xs font-medium flex items-center gap-2 transition cursor-pointer shrink-0"
+                      title="Toggle sorting order"
+                    >
+                      <Calendar size={13} className="text-neutral-400" />
+                      <span>{interviewSortAsc ? 'Date (Soonest)' : 'Date (Latest)'}</span>
+                      <ChevronDown size={13} className="text-neutral-400" />
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          {loadingInterviews ? (
+            <div className="flex-1 min-h-0 flex flex-col items-center justify-center p-8 text-center max-w-md mx-auto my-auto">
+              <div className="w-8 h-8 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin mb-4" />
+              <div className="text-xs text-neutral-400 font-medium tracking-wide">
+                Loading your scheduled interviews...
+              </div>
+            </div>
+          ) : !hasInterviewAccess ? (
+            /* Access Restricted State */
+            <div className="flex-1 min-h-0 flex flex-col items-center justify-center p-8 text-center max-w-md mx-auto my-auto">
+              <div className="w-16 h-16 rounded-2xl bg-white/[0.04] border border-white/10 flex items-center justify-center mb-5 text-neutral-400">
+                <Lock size={28} />
+              </div>
+              <h2 className="text-xl font-bold text-white tracking-tight">No Interview History</h2>
+              <p className="mt-2 text-xs text-neutral-400 leading-relaxed">
+                This portal is exclusively accessible to candidates with active or past interview schedules. When an enterprise schedules an interview with you, it will appear here automatically.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsInterviewViewOpen(false);
+                  setActiveNavTab('home');
+                }}
+                className="mt-6 px-6 py-2.5 rounded-xl bg-white text-neutral-950 font-bold text-xs hover:bg-neutral-200 transition cursor-pointer flex items-center gap-2"
+              >
+                <ArrowLeft size={14} />
+                <span>Back to Open Roles</span>
+              </button>
+            </div>
+          ) : (
+            /* Interview Cards List (The Marked Portion - ONLY this section scrolls, scrollbar hidden) */
+            <div className="flex-1 min-h-0 overflow-y-auto space-y-4 pb-16 pt-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                {filteredInterviews.length === 0 ? (
+                  <div className="py-16 text-center rounded-2xl bg-white/[0.02] border border-white/5">
+                    <Calendar size={32} className="mx-auto text-neutral-600 mb-3" />
+                    <h3 className="text-base font-bold text-white">No interviews found</h3>
+                    <p className="text-xs text-neutral-400 mt-1 max-w-sm mx-auto">
+                      {interviewSearch
+                        ? `No scheduled or past interviews matching "${interviewSearch}".`
+                        : 'You currently have no interviews in this category.'}
+                    </p>
+                  </div>
+                ) : (
+                  filteredInterviews.map((round) => {
+                    const badge = round.date_badge || parseInterviewDateBadge(round.scheduled_date);
+                    const isUpcoming = round.status === 'Upcoming';
+                    const isCompleted = round.status === 'Completed';
+                    const isCancelled = round.status === 'Cancelled';
+                    const isLive = round.status === 'In Progress' || round.status === 'Live' || round.round_type === 'AI';
+                    const canEnter = isUpcoming && round.is_ready;
+                    const daysUntil = round.days_until || 0;
+                    const typeConfig = getRoundTypeConfig(round.round_name, round.round_number);
+                    const statusInfo = getStatusBadgeInfo(round, daysUntil, isLive, isCompleted, isCancelled);
+                    const IconComponent = typeConfig.icon;
+
+                    return (
+                      <div
+                        key={round.id}
+                        className={`rounded-2xl transition-all duration-200 relative p-4 sm:p-5 lg:py-5 lg:px-6 ${
+                          canEnter
+                            ? 'bg-[#0b0e14] border border-emerald-500/80 shadow-[0_0_25px_rgba(16,185,129,0.14)]'
+                            : 'bg-[#0b0e14] border border-white/10 hover:border-white/20 shadow-lg'
+                        }`}
+                      >
+                        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 sm:gap-6">
+                          {/* Left Section: Date Box + Role Info */}
+                          <div className="flex items-center gap-4 sm:gap-6 min-w-0 flex-1">
+                            {/* Date Box */}
+                            <div className="shrink-0 w-12 sm:w-14 flex flex-col items-center justify-center text-center select-none py-0.5 pr-4 border-r border-white/10">
+                              <span className="text-[10.5px] font-bold text-neutral-400 tracking-wider uppercase leading-none">
+                                {badge.month}
+                              </span>
+                              <span className="text-2xl sm:text-3xl font-black text-white leading-tight my-1 tracking-tight">
+                                {badge.day}
+                              </span>
+                              <span className="text-[9.5px] font-bold text-neutral-500 tracking-widest uppercase leading-none">
+                                {badge.dayOfWeek}
+                              </span>
+                            </div>
+
+                            {/* Round Name, Company & Badges */}
+                            <div className="min-w-0 flex-1">
+                              {/* Title + Icon */}
+                              <div className="flex items-center gap-2.5">
+                                <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center shrink-0 border ${typeConfig.iconBoxStyle}`}>
+                                  <IconComponent size={16} />
+                                </div>
+                                <h3 className="text-sm sm:text-base font-bold text-white tracking-tight truncate">
+                                  {round.round_name}
+                                </h3>
+                              </div>
+
+                              {/* Company Name & Requisition */}
+                              <div className="mt-1.5 pl-0.5">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="w-4 h-4 rounded bg-neutral-800 border border-white/10 text-[9px] font-bold text-neutral-300 flex items-center justify-center shrink-0">
+                                    {round.company_logo_letter}
+                                  </span>
+                                  <span className="text-xs font-semibold text-neutral-200 truncate">
+                                    {round.company_name}
+                                  </span>
+                                </div>
+                                <div className="text-[11px] text-neutral-400 mt-0.5 truncate">
+                                  {round.requisition_title} · {round.requisition_id}
+                                </div>
+                              </div>
+
+                              {/* Badges: Round X + Category */}
+                              <div className="flex items-center gap-2 mt-2 pl-0.5">
+                                <span className={`px-2.5 py-0.5 rounded-full text-[10.5px] font-semibold border ${typeConfig.pillStyle}`}>
+                                  {typeConfig.roundPill}
+                                </span>
+                                <span className="px-2.5 py-0.5 rounded-full bg-white/[0.04] text-neutral-300 border border-white/10 text-[10.5px] font-medium">
+                                  {typeConfig.category}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Middle Section: Time, Mode, Interviewer */}
+                          <div className="hidden md:flex items-center gap-6 xl:gap-8 shrink-0">
+                            {/* Time */}
+                            <div className="min-w-[145px]">
+                              <div className="flex items-center gap-2 text-xs font-semibold text-white">
+                                <Clock size={15} className="text-neutral-400 shrink-0" />
+                                <span>{round.time_range}</span>
+                              </div>
+                              <div className="text-[11.5px] text-neutral-400 pl-6 mt-0.5 font-normal">
+                                {round.time_duration}
+                              </div>
+                            </div>
+
+                            {/* Mode */}
+                            <div className="min-w-[115px]">
+                              <div className="flex items-center gap-2 text-xs font-semibold text-white">
+                                <Video size={15} className="text-neutral-400 shrink-0" />
+                                <span>Online</span>
+                              </div>
+                              <div className="text-[11.5px] text-neutral-400 pl-6 mt-0.5 font-normal">
+                                (Term Jobs Panel)
+                              </div>
+                            </div>
+
+                            {/* Interviewer */}
+                            <div className="min-w-[155px] flex items-center gap-3">
+                              {round.interviewer_avatar ? (
+                                <img
+                                  src={round.interviewer_avatar}
+                                  alt={round.interviewer_name}
+                                  className="w-8 h-8 rounded-full object-cover border border-white/10 shrink-0"
+                                />
+                              ) : (
+                                <div className="w-8 h-8 rounded-full bg-neutral-800 border border-white/10 flex items-center justify-center text-[11px] font-bold text-neutral-200 shrink-0">
+                                  {(round.interviewer_name || 'I').slice(0, 1).toUpperCase()}
+                                </div>
+                              )}
+                              <div className="min-w-0">
+                                <div className="text-[9.5px] text-neutral-400 font-medium tracking-wide">
+                                  Interviewer
+                                </div>
+                                <div className="text-xs font-bold text-white leading-tight truncate">
+                                  {round.interviewer_name}
+                                </div>
+                                <div className="text-[10.5px] text-neutral-400 leading-tight mt-0.5 truncate">
+                                  {round.interviewer_role}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Responsive Mobile Sub-Row */}
+                          <div className="flex md:hidden items-center justify-between gap-3 pt-2.5 border-t border-white/5 text-xs text-neutral-300">
+                            <div className="flex items-center gap-1.5">
+                              <Clock size={13} className="text-neutral-400" />
+                              <span>{round.time_range}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <Video size={13} className="text-neutral-400" />
+                              <span>Online</span>
+                            </div>
+                            <div className="text-[11px] text-neutral-400 truncate max-w-[110px]">
+                              {round.interviewer_name}
+                            </div>
+                          </div>
+
+                          {/* Right Section: Status Badge + Action Buttons + 3-Dot */}
+                          <div className="shrink-0 flex flex-row xl:flex-col items-center xl:items-end justify-between xl:justify-center gap-3">
+                            {/* Status Badge */}
+                            <div className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10.5px] font-medium border ${statusInfo.style}`}>
+                              <span className="text-[9px]">{statusInfo.icon}</span>
+                              <span>{statusInfo.text}</span>
+                            </div>
+
+                            {/* Action Buttons + 3-Dot */}
+                            <div className="flex items-center gap-2 relative interview-card-menu">
+                              {canEnter ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const name = encodeURIComponent(
+                                      candidateUser?.candidate_name || round.candidate_name || 'Candidate'
+                                    );
+                                    const token = encodeURIComponent(round.candidate_token || '');
+                                    navigate(
+                                      `/interview/room/${round.id}?role=candidate&name=${name}&token=${token}`
+                                    );
+                                  }}
+                                  className="px-4 py-2 rounded-xl bg-white hover:bg-neutral-100 text-neutral-950 font-bold text-xs transition shadow flex items-center gap-2 cursor-pointer active:scale-95 shrink-0"
+                                >
+                                  <Video size={13} className="text-neutral-950" />
+                                  <span>Enter Interview</span>
+                                  <ArrowRight size={13} className="text-neutral-950" />
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedDetailRound(round)}
+                                  className="px-4 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-white border border-white/10 font-medium text-xs transition flex items-center gap-2 cursor-pointer active:scale-95 shrink-0"
+                                >
+                                  <span>View Details</span>
+                                  <ArrowRight size={13} className="text-neutral-400" />
+                                </button>
+                              )}
+
+                              {/* 3-Dot Dropdown Trigger */}
+                              <div className="relative">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setActiveMenuRoundId(
+                                      activeMenuRoundId === round.id ? null : round.id
+                                    )
+                                  }
+                                  className={`w-8 h-8 rounded-xl border flex items-center justify-center transition cursor-pointer shrink-0 ${
+                                    activeMenuRoundId === round.id
+                                      ? 'bg-white/[0.12] text-white border-white/30'
+                                      : 'bg-white/[0.04] hover:bg-white/[0.08] text-neutral-400 hover:text-white border-white/10'
+                                  }`}
+                                  title="More Options"
+                                >
+                                  <MoreVertical size={14} />
+                                </button>
+
+                                {/* Functional 3-Dot Menu Dropdown */}
+                                {activeMenuRoundId === round.id && (
+                                  <div
+                                    className="absolute right-0 bottom-full mb-2 w-48 rounded-2xl bg-[#0f1218] border border-white/15 shadow-2xl py-1.5 z-50 animate-in fade-in zoom-in-95 duration-150 text-left"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        handleCopyMeetingLink(round);
+                                        setActiveMenuRoundId(null);
+                                      }}
+                                      className="w-full text-left px-3.5 py-2 text-xs font-medium text-neutral-200 hover:text-white hover:bg-white/[0.06] flex items-center gap-2.5 transition cursor-pointer"
+                                    >
+                                      {copiedRoundId === round.id ? (
+                                        <>
+                                          <Check size={13} className="text-emerald-400" />
+                                          <span className="text-emerald-400 font-semibold">
+                                            Link Copied!
+                                          </span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Copy size={13} className="text-neutral-400" />
+                                          <span>Copy Meeting Link</span>
+                                        </>
+                                      )}
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        handleSendInterviewEmail(round);
+                                        setActiveMenuRoundId(null);
+                                      }}
+                                      className="w-full text-left px-3.5 py-2 text-xs font-medium text-neutral-200 hover:text-white hover:bg-white/[0.06] flex items-center gap-2.5 transition cursor-pointer"
+                                    >
+                                      <Mail size={13} className="text-neutral-400" />
+                                      <span>
+                                        {resendingEmailId === round.id
+                                          ? 'Sending Invite...'
+                                          : emailSentStatus[round.id] === 'sent'
+                                          ? 'Invite Sent!'
+                                          : 'Resend Email Invite'}
+                                      </span>
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        handleAddToCalendar(round);
+                                        setActiveMenuRoundId(null);
+                                      }}
+                                      className="w-full text-left px-3.5 py-2 text-xs font-medium text-neutral-200 hover:text-white hover:bg-white/[0.06] flex items-center gap-2.5 transition cursor-pointer"
+                                    >
+                                      <Calendar size={13} className="text-neutral-400" />
+                                      <span>Add to Calendar</span>
+                                    </button>
+
+                                    <div className="h-px bg-white/10 my-1" />
+
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedDetailRound(round);
+                                        setActiveMenuRoundId(null);
+                                      }}
+                                      className="w-full text-left px-3.5 py-2 text-xs font-medium text-neutral-200 hover:text-white hover:bg-white/[0.06] flex items-center gap-2.5 transition cursor-pointer"
+                                    >
+                                      <Eye size={13} className="text-neutral-400" />
+                                      <span>View Details</span>
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+          )}
+
+          {/* Interview Round Details Modal */}
+          {selectedDetailRound && typeof document !== 'undefined' && createPortal(
+            (() => {
+              const isDetailCompleted = selectedDetailRound.status === 'Completed' || selectedDetailRound.status === 'Evaluated';
+              const isDetailCancelled = selectedDetailRound.status === 'Cancelled' || selectedDetailRound.status === 'Rejected';
+              const candidateDisplayName = candidateUser?.candidate_name || selectedDetailRound.candidate_name || 'Mohammed Hashil';
+              const candidateDisplayEmail = candidateUser?.candidate_email || selectedDetailRound.candidate_email || 'mohammedhashil2018@gmail.com';
+
+              return (
+                <div
+                  className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-md animate-in fade-in duration-150"
+                  onClick={() => setSelectedDetailRound(null)}
+                >
+                  <div
+                    className="relative w-full max-w-xl rounded-2xl bg-[#0f1218] border border-white/15 p-6 sm:p-7 shadow-2xl text-white space-y-4 max-h-[90vh] overflow-y-auto"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {/* Modal Header */}
+                    <div className="flex items-start justify-between pb-4 border-b border-white/10">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="w-5 h-5 rounded bg-neutral-800 text-[10px] font-bold text-neutral-300 flex items-center justify-center">
+                            {selectedDetailRound.company_logo_letter}
+                          </span>
+                          <span className="text-xs font-semibold text-neutral-300">
+                            {selectedDetailRound.company_name}
+                          </span>
+                          {isDetailCompleted ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/15 text-blue-400 border border-blue-500/30 ml-1">
+                              ✓ Completed
+                            </span>
+                          ) : isDetailCancelled ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30 ml-1">
+                              ✕ Cancelled
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 ml-1">
+                              Scheduled
+                            </span>
+                          )}
+                        </div>
+                        <h2 className="text-xl font-bold text-white mt-1">
+                          {selectedDetailRound.round_name}
+                        </h2>
+                        <div className="text-xs text-neutral-400 mt-0.5">
+                          {selectedDetailRound.requisition_title} · {selectedDetailRound.requisition_id}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedDetailRound(null)}
+                        className="p-1 rounded-lg hover:bg-white/[0.08] text-neutral-400 hover:text-white transition cursor-pointer"
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
+
+                    {/* Modal Body */}
+                    <div className="space-y-3.5 text-xs">
+                      {/* If Completed: Prominent Real Status Banner */}
+                      {isDetailCompleted && (
+                        <div className="p-3.5 rounded-xl bg-blue-500/10 border border-blue-500/25 flex items-start gap-3">
+                          <div className="w-8 h-8 rounded-lg bg-blue-500/20 border border-blue-500/30 text-blue-400 flex items-center justify-center shrink-0 mt-0.5">
+                            <Check size={16} className="stroke-[2.5]" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-xs font-bold text-white">Interview Completed & Under Review</div>
+                            <p className="text-[11px] text-zinc-300 mt-0.5 leading-relaxed">
+                              Your interview session has concluded. Feedback and responses are actively being reviewed by the hiring team at {selectedDetailRound.company_name}.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Schedule Grid */}
+                      <div className="grid grid-cols-2 gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/5">
+                        <div>
+                          <div className="text-[10px] text-neutral-400 uppercase font-medium flex items-center gap-1.5">
+                            <Calendar size={12} className="text-neutral-500" />
+                            <span>Date</span>
+                          </div>
+                          <div className="text-xs font-semibold text-white mt-1">
+                            {selectedDetailRound.scheduled_date_display}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-neutral-400 uppercase font-medium flex items-center gap-1.5">
+                            <Clock size={12} className="text-neutral-500" />
+                            <span>Time & Duration</span>
+                          </div>
+                          <div className="text-xs font-semibold text-white mt-1">
+                            {selectedDetailRound.time_range}
+                          </div>
+                          <div className="text-[11px] text-neutral-400 mt-0.5">
+                            {selectedDetailRound.time_duration}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Interviewer & Mode */}
+                      <div className="grid grid-cols-2 gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/5">
+                        <div>
+                          <div className="text-[10px] text-neutral-400 uppercase font-medium">Interviewer</div>
+                          <div className="text-xs font-bold text-white mt-1">{selectedDetailRound.interviewer_name}</div>
+                          <div className="text-[11px] text-neutral-400 mt-0.5">{selectedDetailRound.interviewer_role}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-neutral-400 uppercase font-medium">Interview Format</div>
+                          <div className="text-xs font-bold text-white mt-1">
+                            {selectedDetailRound.round_type === 'AI' ? 'AI Assessment Session' : 'Online Hosted Room'}
+                          </div>
+                          <div className="text-[11px] text-neutral-400 mt-0.5">Term Jobs Dedicated Panel</div>
+                        </div>
+                      </div>
+
+                      {/* Candidate Details */}
+                      <div className="grid grid-cols-2 gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/5">
+                        <div>
+                          <div className="text-[10px] text-neutral-400 uppercase font-medium">Candidate Name</div>
+                          <div className="text-xs font-bold text-white mt-1">{candidateDisplayName}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-neutral-400 uppercase font-medium">Candidate Email</div>
+                          <div className="text-xs font-mono text-zinc-300 mt-1 truncate">{candidateDisplayEmail}</div>
+                        </div>
+                      </div>
+
+                      {/* If NOT completed: Show Passcode & Checklist */}
+                      {!isDetailCompleted && selectedDetailRound.candidate_passcode && (
+                        <div className="p-3 rounded-xl bg-white/[0.03] border border-white/5 flex items-center justify-between">
+                          <div>
+                            <div className="text-[10px] text-neutral-400 uppercase font-medium">Candidate Passcode</div>
+                            <div className="text-sm font-mono font-bold text-emerald-400 mt-0.5 tracking-wider">
+                              {selectedDetailRound.candidate_passcode}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyMeetingLink(selectedDetailRound)}
+                            className="px-3 py-1.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.1] text-xs font-medium text-white flex items-center gap-1.5 transition cursor-pointer"
+                          >
+                            {copiedRoundId === selectedDetailRound.id ? (
+                              <>
+                                <Check size={12} className="text-emerald-400" />
+                                <span className="text-emerald-400">Copied</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy size={12} />
+                                <span>Copy Link</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      )}
+
+                      {!isDetailCompleted && (
+                        <div className="p-3 rounded-xl bg-white/[0.02] border border-white/5 space-y-1.5 text-neutral-400 text-[11px]">
+                          <div className="text-neutral-300 font-semibold text-xs mb-1">Preparation Checklist:</div>
+                          <div className="flex items-center gap-2">
+                            <CheckCircle2 size={13} className="text-emerald-400 shrink-0" />
+                            <span>Ensure working webcam & microphone before joining</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <CheckCircle2 size={13} className="text-emerald-400 shrink-0" />
+                            <span>Join from a quiet, well-lit environment</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <CheckCircle2 size={13} className="text-emerald-400 shrink-0" />
+                            <span>Use Google Chrome, Brave or Microsoft Edge</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* If Completed: Post-Interview Information Notice */}
+                      {isDetailCompleted && (
+                        <div className="p-3 rounded-xl bg-white/[0.02] border border-white/5 space-y-1 text-neutral-400 text-[11px]">
+                          <div className="text-neutral-300 font-semibold text-xs mb-1">Post-Interview Status:</div>
+                          <div className="flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" />
+                            <span>Evaluation feedback and notes are under review by the hiring manager</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                            <span>You will receive an automated email regarding round progression or decision status</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Modal Footer */}
+                    <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/10">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedDetailRound(null)}
+                        className="px-5 py-2 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] text-xs font-semibold text-neutral-200 hover:text-white transition cursor-pointer"
+                      >
+                        Close
+                      </button>
+                      {/* ONLY show Join Meeting Room button if round is NOT completed and is ready */}
+                      {!isDetailCompleted && selectedDetailRound.is_ready && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const name = encodeURIComponent(
+                              candidateDisplayName || 'Candidate'
+                            );
+                            const token = encodeURIComponent(selectedDetailRound.candidate_token || '');
+                            navigate(
+                              `/interview/room/${selectedDetailRound.id}?role=candidate&name=${name}&token=${token}`
+                            );
+                          }}
+                          className="px-5 py-2 rounded-xl bg-white hover:bg-neutral-100 text-neutral-950 font-bold text-xs transition shadow flex items-center gap-2 cursor-pointer active:scale-95"
+                        >
+                          <Video size={13} />
+                          <span>Join Meeting Room</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })(),
+            document.body
+          )}
+        </div>
+      </main>
+
+      {/* Right White Editorial Sidebar (Exact Match to Screenshot) */}
+      <aside className="hidden lg:flex w-[320px] xl:w-[360px] 2xl:w-[400px] shrink-0 bg-paper text-ink border-l border-ink/10 flex-col justify-between relative overflow-hidden h-screen max-h-screen sticky top-0 p-6 sm:p-8">
+        <Backdrop tone="sidebar" />
+        <div className="relative z-10 flex flex-col h-full justify-between">
+          {/* Top: Logo & Platform Identity */}
+          <div>
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-neutral-950 text-white flex items-center justify-center font-black text-sm shadow-sm">
+                <Briefcase size={16} className="text-white" />
+              </div>
+              <div>
+                <div className="text-[12px] font-extrabold tracking-[0.2em] uppercase text-neutral-900 leading-tight">
+                  TERMJOBS
+                </div>
+                <div className="text-[8.5px] font-bold tracking-[0.18em] uppercase text-neutral-400">
+                  CONTRACT WORKFORCE PLATFORM
+                </div>
+              </div>
+            </div>
+
+            {/* Vertical decorative accent line */}
+            <div className="w-0.5 h-10 bg-neutral-900/20 my-8 ml-1" />
+
+            {/* Eyebrow */}
+            <div className="text-[9px] font-bold tracking-[0.22em] uppercase text-neutral-400 mb-2">
+              CONTRACT WORKFORCE PLATFORM
+            </div>
+
+            {/* Headline Display */}
+            <h2 className="text-4xl xl:text-5xl font-extrabold text-neutral-950 tracking-tight leading-[1.05]">
+              Your<br />Interviews.
+            </h2>
+
+            {/* 3 Metric Cards in a Grid */}
+            <div className="mt-8 grid grid-cols-3 gap-2.5">
+              {/* Card 1: Upcoming */}
+              <div className="p-3 rounded-2xl bg-black/[0.02] border border-neutral-900/10 flex flex-col items-center justify-center text-center">
+                <Calendar size={15} className="text-neutral-500 mb-2" />
+                <div className="text-2xl font-black text-neutral-900 leading-none mb-1">
+                  {upcomingCount}
+                </div>
+                <div className="text-[8.5px] font-bold text-neutral-500 tracking-wider uppercase">
+                  UPCOMING
+                </div>
+              </div>
+
+              {/* Card 2: Completed */}
+              <div className="p-3 rounded-2xl bg-black/[0.02] border border-neutral-900/10 flex flex-col items-center justify-center text-center">
+                <CheckCircle2 size={15} className="text-neutral-500 mb-2" />
+                <div className="text-2xl font-black text-neutral-900 leading-none mb-1">
+                  {completedCount}
+                </div>
+                <div className="text-[8.5px] font-bold text-neutral-500 tracking-wider uppercase">
+                  COMPLETED
+                </div>
+              </div>
+
+              {/* Card 3: Cancelled */}
+              <div className="p-3 rounded-2xl bg-black/[0.02] border border-neutral-900/10 flex flex-col items-center justify-center text-center">
+                <X size={15} className="text-neutral-500 mb-2" />
+                <div className="text-2xl font-black text-neutral-900 leading-none mb-1">
+                  {cancelledCount}
+                </div>
+                <div className="text-[8.5px] font-bold text-neutral-500 tracking-wider uppercase">
+                  CANCELLED
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
 
       {/* ============================================================ */}
       {/* MODAL 1: VIEW JOB DETAILS & 1-CLICK APPLY                    */}
@@ -2674,265 +3979,233 @@ export default function OpenRolesPage({ enabled = true }) {
       )}
 
       {/* ============================================================ */}
-      {/* MODAL 4: GENERAL TALENT POOL (PREMIUM WHITE MODAL)            */}
+      {/* MODAL 4: GENERAL TALENT POOL (MONOCHROME GLASSMORPHISM)      */}
       {/* ============================================================ */}
-      {showGeneralPoolModal && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-xl overflow-y-auto animate-in fade-in duration-200">
-          <div className="rounded-3xl bg-white border border-neutral-200 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.35),0_0_0_1px_rgba(0,0,0,0.06)] max-w-xl w-full p-6 sm:p-7 my-auto transition-all text-neutral-900">
-            <div className="flex items-start justify-between pb-4 border-b border-neutral-100">
-              <div>
-                <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-neutral-400 mb-1">
-                  Candidate Talent Network
+      <GeneralTalentPoolModal
+        isOpen={showGeneralPoolModal}
+        onClose={() => setShowGeneralPoolModal(false)}
+      />
+
+      {/* ============================================================ */}
+      {/* MODAL 4B: CANDIDATE SCHEDULED INTERVIEWS MODAL               */}
+      {/* ============================================================ */}
+      {showInterviewModal && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-2xl animate-in fade-in duration-200">
+          <div className="bg-[#0a0b10]/95 backdrop-blur-3xl border border-white/15 rounded-3xl max-w-2xl w-full p-6 sm:p-7 shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-4 border-b border-white/10 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-white/[0.08] border border-white/10 flex items-center justify-center text-white shrink-0">
+                  <Video size={16} />
                 </div>
-                <h3 className="text-xl sm:text-2xl font-display font-extrabold text-neutral-900 tracking-tight">
-                  Join General Talent Pool
-                </h3>
-                <p className="text-xs text-neutral-500 mt-1">
-                  Get auto-matched with upcoming enterprise contract roles and verified hiring partners.
-                </p>
+                <div>
+                  <h3 className="text-base font-bold text-white leading-tight">Scheduled Interviews</h3>
+                  <p className="text-[11px] text-white/50">Live Video Rounds, Date & Time Coordinates, and Entry Room</p>
+                </div>
               </div>
               <button
                 type="button"
-                onClick={() => setShowGeneralPoolModal(false)}
-                className="p-2 rounded-full bg-neutral-100 hover:bg-neutral-200 border border-neutral-200/80 text-neutral-500 hover:text-neutral-900 transition cursor-pointer shrink-0"
+                onClick={() => {
+                  setShowInterviewModal(false);
+                  setActiveNavTab('home');
+                }}
+                className="p-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] text-white/60 hover:text-white transition cursor-pointer"
               >
                 <X size={16} />
               </button>
             </div>
 
-            {poolSuccess ? (
-              <div className="py-8 text-center space-y-3">
-                <div className="w-14 h-14 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto border border-emerald-200">
-                  <CheckCircle2 size={30} />
-                </div>
-                <h4 className="text-base font-bold text-neutral-900">Profile Submitted to Talent Pool</h4>
-                <p className="text-xs text-neutral-500 max-w-xs mx-auto">
-                  We will notify you via email as soon as an enterprise requisition matching your skillset is published.
-                </p>
-
-                {/* Start Telegram Bot Callout */}
-                <div className="p-4 bg-sky-50 border border-sky-200 rounded-2xl text-left max-w-sm mx-auto shadow-sm mt-4">
-                  <div className="flex items-center gap-2 text-[#0284c7] font-bold text-xs mb-1">
-                    <Send size={14} className="text-[#0284c7]" />
-                    <span>Start Bot for 1-Tap Matching Alerts</span>
-                  </div>
-                  <p className="text-[11px] text-neutral-600 leading-relaxed mb-3">
-                    Connect <strong>@{TELEGRAM_BOT_USERNAME}</strong> to receive notifications directly in Telegram with 1-tap RSVP buttons.
-                  </p>
-                  <a
-                    href={poolSuccess.telegram_bot_url || `https://t.me/${TELEGRAM_BOT_USERNAME}?start=${poolSuccess.candidate_id || ''}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center justify-center gap-2 w-full py-2.5 px-3.5 rounded-xl bg-[#229ED9] hover:bg-[#1E88E5] text-white font-bold text-xs transition text-decoration-none cursor-pointer"
-                  >
-                    <Send size={13} />
-                    <span>Start Bot (@{TELEGRAM_BOT_USERNAME})</span>
-                  </a>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowGeneralPoolModal(false);
-                    setPoolSuccess(null);
-                  }}
-                  className="mt-4 px-6 py-2.5 rounded-full bg-neutral-900 text-white font-bold text-xs hover:bg-neutral-800 transition shadow-sm cursor-pointer"
-                >
-                  Done
-                </button>
+            {/* Email info strip */}
+            <div className="mt-3.5 p-3 rounded-2xl bg-white/[0.04] border border-white/10 flex items-center justify-between gap-3 flex-wrap shrink-0">
+              <div className="flex items-center gap-2 min-w-0">
+                <Mail size={14} className="text-white/60 shrink-0" />
+                <span className="text-xs text-white/70 truncate">
+                  Candidate:{' '}
+                  <strong className="text-white">
+                    {candidateUser?.candidate_name || candidateUser?.name || 'Mohammed Hashil'}
+                  </strong>{' '}
+                  ({candidateUser?.candidate_email || candidateUser?.email || 'mohammedhashil2018@gmail.com'})
+                </span>
               </div>
-            ) : (
-              <form onSubmit={handlePoolSubmit} className="mt-5 space-y-4 text-xs">
-                {candidateUser && (
-                  <div className="p-3 rounded-xl bg-neutral-50 border border-neutral-200 flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-7 h-7 rounded-full bg-neutral-900 text-white flex items-center justify-center text-[11px] font-bold">
-                        {(candidateUser.candidate_name || candidateUser.candidate_email || 'C')[0].toUpperCase()}
-                      </div>
-                      <div>
-                        <div className="text-xs font-semibold text-neutral-900 flex items-center gap-1.5">
-                          <span>Joining as</span>
-                          <span className="font-bold text-neutral-900">{candidateUser.candidate_name || candidateUser.candidate_email}</span>
-                          <span className="text-[10px] font-bold bg-neutral-200 text-neutral-800 px-1.5 py-0.5 rounded-full">
-                            Verified
-                          </span>
-                        </div>
-                        <div className="text-[10px] text-neutral-500 mt-0.5">
-                          {hasResume ? '✓ Master resume on profile ready' : 'Upload your resume below to complete'}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1 shrink-0">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                {scheduledInterviews.length} Scheduled {scheduledInterviews.length === 1 ? 'Round' : 'Rounds'}
+              </span>
+            </div>
 
-                {poolError && (
-                  <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
-                    <AlertCircle size={15} className="shrink-0 text-rose-500" />
-                    <span>{typeof poolError === 'string' ? poolError : formatApiErrorMessage(poolError)}</span>
+            {/* Interviews List (Scrollable) */}
+            <div className="flex-1 overflow-y-auto mt-4 space-y-3.5 pr-1 custom-scroll min-h-0">
+              {scheduledInterviews.length === 0 ? (
+                <div className="text-center py-12 px-4 space-y-3">
+                  <div className="w-12 h-12 rounded-2xl bg-white/[0.05] border border-white/10 text-white/40 flex items-center justify-center mx-auto">
+                    <Calendar size={22} />
                   </div>
-                )}
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-semibold text-neutral-700 uppercase tracking-wider mb-1">Full Name *</label>
-                    <input
-                      type="text"
-                      required
-                      value={poolForm.name}
-                      onChange={(e) => setPoolForm({ ...poolForm, name: e.target.value })}
-                      placeholder="e.g. Alex Johnson"
-                      className="w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border border-neutral-300 rounded-xl px-3.5 py-2.5 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 transition-all"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-neutral-700 uppercase tracking-wider mb-1">Email Address *</label>
-                    <input
-                      type="email"
-                      required
-                      value={poolForm.email}
-                      onChange={(e) => setPoolForm({ ...poolForm, email: e.target.value })}
-                      placeholder="alex@example.com"
-                      className="w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border border-neutral-300 rounded-xl px-3.5 py-2.5 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 transition-all"
-                    />
-                  </div>
+                  <h4 className="text-sm font-bold text-white">No Active Interviews Scheduled</h4>
+                  <p className="text-xs text-white/50 max-w-sm mx-auto leading-relaxed">
+                    When an enterprise hiring manager schedules an interview for your applications, your confirmed round details, entry room, and calendar coordinates will appear here.
+                  </p>
                 </div>
+              ) : (
+                scheduledInterviews.map((round) => {
+                  const isLive = round.status === 'In Progress' || round.status === 'Live';
+                  const roomUrl = round.meeting_link || `${window.location.origin}/interview/room/${round.id}`;
+                  const isSendingEmail = resendingEmailId === round.id;
+                  const emailStatus = emailSentStatus[round.id];
+                  const isCopied = copiedRoundId === round.id;
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-semibold text-neutral-700 uppercase tracking-wider mb-1">Phone Number *</label>
-                    <input
-                      type="tel"
-                      required
-                      value={poolForm.phone}
-                      onChange={(e) => {
-                        setPoolForm({ ...poolForm, phone: e.target.value });
-                        if (poolError) setPoolError(null);
-                      }}
-                      placeholder="e.g. 9876543210 or +91 9876543210"
-                      className={`w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border ${
-                        poolForm.phone && validatePhone(poolForm.phone)
-                          ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-500'
-                          : 'border-neutral-300 focus:border-neutral-900 focus:ring-neutral-900'
-                      } rounded-xl px-3.5 py-2.5 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-1 transition-all`}
-                    />
-                    {poolForm.phone && validatePhone(poolForm.phone) && (
-                      <p className="mt-1 text-[11px] text-rose-600 font-medium">
-                        {validatePhone(poolForm.phone)}
-                      </p>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-neutral-700 uppercase tracking-wider mb-1">Target Title / Role *</label>
-                    <input
-                      type="text"
-                      required
-                      value={poolForm.title}
-                      onChange={(e) => setPoolForm({ ...poolForm, title: e.target.value })}
-                      placeholder="e.g. Senior Frontend Lead"
-                      className="w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border border-neutral-300 rounded-xl px-3.5 py-2.5 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 transition-all"
-                    />
-                  </div>
-                </div>
-
-
-                {/* Resume Dropzone */}
-                <div>
-                  <label className="block text-[11px] font-semibold text-neutral-700 uppercase tracking-wider mb-1.5">
-                    Resume Document *
-                  </label>
-
-                  {hasResume && !poolUseCustomResume ? (
-                    <div className="p-3 rounded-xl bg-neutral-50 border border-neutral-200 flex items-center justify-between">
-                      <div className="flex items-center gap-2.5">
-                        <FileText size={18} className="text-neutral-600" />
-                        <div>
-                          <div className="text-xs font-semibold text-neutral-900">{currentResumeName}</div>
-                          <div className="text-[10px] text-neutral-500">Verified resume from candidate profile</div>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setPoolUseCustomResume(true)}
-                        className="text-[11px] font-medium text-neutral-600 hover:text-neutral-900 underline cursor-pointer"
-                      >
-                        Upload different file
-                      </button>
-                    </div>
-                  ) : (
+                  return (
                     <div
-                      onDragOver={(e) => {
-                        e.preventDefault();
-                        setPoolIsDragging(true);
-                      }}
-                      onDragLeave={() => setPoolIsDragging(false)}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        setPoolIsDragging(false);
-                        const file = e.dataTransfer.files?.[0];
-                        if (file) {
-                          setPoolResume(file);
-                          setPoolError(null);
-                        }
-                      }}
-                      onClick={() => poolFileInputRef.current?.click()}
-                      className={`p-6 border-2 border-dashed rounded-2xl text-center cursor-pointer transition ${poolIsDragging
-                        ? 'border-neutral-900 bg-neutral-100'
-                        : 'border-neutral-300 bg-neutral-50/70 hover:border-neutral-400 hover:bg-neutral-50'
-                        }`}
+                      key={round.id}
+                      className="p-5 rounded-2xl bg-white/[0.03] hover:bg-white/[0.05] border border-white/10 transition-all space-y-4"
                     >
-                      <input
-                        type="file"
-                        ref={poolFileInputRef}
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            setPoolResume(file);
-                            setPoolError(null);
-                          }
-                        }}
-                        accept=".pdf,.docx,.doc"
-                        className="hidden"
-                      />
-                      <Upload size={22} className="text-neutral-400 mx-auto mb-2" />
-                      {poolResume ? (
-                        <div className="text-xs font-semibold text-neutral-900 flex items-center justify-center gap-1.5">
-                          <Check size={14} className="text-emerald-600" />
-                          <span>{poolResume.name} ({(poolResume.size / 1024 / 1024).toFixed(2)} MB)</span>
-                        </div>
-                      ) : (
-                        <>
-                          <div className="text-xs font-semibold text-neutral-800">
-                            Drop resume here or click to browse
+                      {/* Top Row: Role, Round & Status */}
+                      <div className="flex items-start justify-between gap-3 flex-wrap">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-sm sm:text-base font-bold text-white">
+                              {round.requisition_title || 'Position Interview'}
+                            </h4>
+                            <span className="text-xs text-white/40">&bull;</span>
+                            <span className="text-xs font-semibold text-white/70">
+                              {round.company_name || 'Bearitt'}
+                            </span>
                           </div>
-                          <div className="text-[10px] text-neutral-400 mt-1">PDF, DOCX up to 10MB</div>
-                        </>
+                          <div className="text-xs text-white/50 font-medium mt-0.5">
+                            {round.round_name || 'Technical Round'}
+                          </div>
+                        </div>
+
+                        <span
+                          className={`px-3 py-1 rounded-full text-[11px] font-bold border flex items-center gap-1.5 ${
+                            isLive
+                              ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 animate-pulse'
+                              : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                          }`}
+                        >
+                          <span className={`w-2 h-2 rounded-full ${isLive ? 'bg-rose-400' : 'bg-emerald-400'}`} />
+                          {isLive ? 'Live Now · In Session' : 'Scheduled & Confirmed'}
+                        </span>
+                      </div>
+
+                      {/* Details Grid: Date, Time, Duration & Format */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                        <div className="p-3 rounded-xl bg-black/40 border border-white/5 flex items-center gap-2.5">
+                          <Calendar size={15} className="text-white/60 shrink-0" />
+                          <div>
+                            <div className="text-[10px] text-white/40 uppercase font-bold tracking-wider">Date</div>
+                            <div className="text-xs font-bold text-white mt-0.5">
+                              {round.scheduled_date || 'Date Confirmed'}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="p-3 rounded-xl bg-black/40 border border-white/5 flex items-center gap-2.5">
+                          <Clock size={15} className="text-white/60 shrink-0" />
+                          <div>
+                            <div className="text-[10px] text-white/40 uppercase font-bold tracking-wider">Time</div>
+                            <div className="text-xs font-bold text-white mt-0.5">
+                              {round.scheduled_time || '10:00 AM'} ({round.scheduled_timezone || 'Asia/Kolkata'})
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="p-3 rounded-xl bg-black/40 border border-white/5 flex items-center gap-2.5">
+                          <Video size={15} className="text-white/60 shrink-0" />
+                          <div>
+                            <div className="text-[10px] text-white/40 uppercase font-bold tracking-wider">Session Format</div>
+                            <div className="text-xs font-bold text-white mt-0.5">
+                              TermJobs Live Video Room ({round.duration_minutes || 45} mins)
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="p-3 rounded-xl bg-black/40 border border-white/5 flex items-center gap-2.5">
+                          <ShieldCheck size={15} className="text-emerald-400 shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-[10px] text-white/40 uppercase font-bold tracking-wider">Passcode</div>
+                            <div className="text-xs font-mono font-bold text-emerald-400 mt-0.5 truncate">
+                              {round.candidate_passcode || 'TJ-VERIFIED'}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Instructions / Notes (if present) */}
+                      {round.instructions && (
+                        <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 leading-relaxed">
+                          <strong>Candidate Notice:</strong> {round.instructions}
+                        </div>
                       )}
+
+                      {/* Action Buttons: Enter Interview Room, Send Email, Copy Link */}
+                      <div className="pt-1 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const name = encodeURIComponent(candidateUser?.name || round.candidate_name || 'Candidate');
+                            const token = encodeURIComponent(round.candidate_token || '');
+                            navigate(`/interview/room/${round.id}?role=candidate&name=${name}&token=${token}`);
+                          }}
+                          className="px-5 py-2.5 rounded-xl bg-white hover:bg-zinc-200 text-zinc-950 font-black text-xs transition shadow-lg flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+                        >
+                          <Video size={15} />
+                          <span>Enter Interview Room</span>
+                          <ArrowRight size={13} />
+                        </button>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleSendInterviewEmail(round)}
+                            disabled={isSendingEmail}
+                            className={`flex-1 sm:flex-none px-3.5 py-2.5 rounded-xl border text-xs font-semibold transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 ${
+                              emailStatus === 'sent'
+                                ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
+                                : emailStatus === 'error'
+                                ? 'bg-rose-500/20 border-rose-500/40 text-rose-300'
+                                : 'bg-white/[0.06] hover:bg-white/[0.12] border-white/10 text-white/80 hover:text-white'
+                            }`}
+                          >
+                            <Mail size={13} />
+                            <span>
+                              {isSendingEmail
+                                ? 'Sending...'
+                                : emailStatus === 'sent'
+                                ? 'Email Dispatched!'
+                                : emailStatus === 'error'
+                                ? 'Send Failed'
+                                : 'Send to My Email'}
+                            </span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(roomUrl);
+                              setCopiedRoundId(round.id);
+                              setTimeout(() => setCopiedRoundId(null), 2000);
+                            }}
+                            className="px-3.5 py-2.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-white/80 hover:text-white text-xs font-semibold transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                          >
+                            {isCopied ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
+                            <span>{isCopied ? 'Copied' : 'Copy Link'}</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Notification confirmation */}
+                      <p className="text-[11px] text-white/40 leading-normal">
+                        ✉️ An interview invitation with calendar coordinates and passcode has been sent to{' '}
+                        <strong className="text-white/70">
+                          {round.candidate_email || candidateUser?.candidate_email || candidateUser?.email}
+                        </strong>
+                        .
+                      </p>
                     </div>
-                  )}
-
-                  {poolUseCustomResume && hasResume && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPoolUseCustomResume(false);
-                        setPoolResume(null);
-                      }}
-                      className="mt-2 text-[11px] text-neutral-500 hover:text-neutral-900 underline cursor-pointer"
-                    >
-                      ← Use saved profile resume instead
-                    </button>
-                  )}
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={poolSubmitting}
-                  className="w-full py-3 rounded-xl bg-neutral-900 hover:bg-black active:scale-[0.99] text-white font-bold text-xs uppercase tracking-[0.14em] transition cursor-pointer shadow-md hover:shadow-lg mt-3"
-                >
-                  {poolSubmitting ? 'Submitting Profile...' : 'Join Talent Network'}
-                </button>
-              </form>
-            )}
+                  );
+                })
+              )}
+            </div>
           </div>
         </div>,
         document.body

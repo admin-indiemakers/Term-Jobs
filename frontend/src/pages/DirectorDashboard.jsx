@@ -211,6 +211,24 @@ export default function DirectorDashboard({ view = 'overview' }) {
     setActiveTab(currentTab);
   }, [currentTab]);
 
+  // Auto-dismiss template / action notification banner after 2 seconds
+  useEffect(() => {
+    if (!templateMsg) return;
+    const timer = setTimeout(() => {
+      setTemplateMsg('');
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [templateMsg]);
+
+  // Auto-dismiss error banner after 3 seconds
+  useEffect(() => {
+    if (!error) return;
+    const timer = setTimeout(() => {
+      setError('');
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [error]);
+
   const [selectedRequisitionForView, setSelectedRequisitionForView] = useState(null);
   const [viewModalLoading, setViewModalLoading] = useState(false);
 

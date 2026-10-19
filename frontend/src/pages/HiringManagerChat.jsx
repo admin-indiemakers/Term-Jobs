@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { interviewMetrics } from '../interview/utils/interviewMetrics';
 import { upcomingInterviewRounds } from '../interview/utils/upcomingInterviews';
 import { interviewApi } from '../interview/services/interviewApi';
+import { isPublishedStatus } from '../utils/requisitionStatus';
 import {
   Briefcase,
   Users,
@@ -132,7 +133,8 @@ export default function HiringManagerChat() {
 
       const reqList = Array.isArray(reqsData) ? reqsData : reqsData?.requisitions || [];
       setRequisitions(reqList);
-      window.dispatchEvent(new CustomEvent('tj-requisition-count-updated', { detail: { count: reqList.length } }));
+      const activeCount = reqList.filter((r) => !r.is_deleted && r.status !== 'Deleted by HM' && r.status !== 'Deleted' && isPublishedStatus(r?.status)).length;
+      window.dispatchEvent(new CustomEvent('tj-requisition-count-updated', { detail: { count: activeCount } }));
 
       const sList = Array.isArray(shortlistedData) ? shortlistedData : shortlistedData?.shortlisted_candidates || [];
       setShortlistedCandidates(sList);
@@ -415,10 +417,13 @@ export default function HiringManagerChat() {
           </p>
         </div>
 
-        <GoogleCalendarConnect />
-        {/* Date Stamp */}
-        <div className="text-left sm:text-right text-[11px] font-semibold text-gray-400 pt-1 sm:pt-2 shrink-0 pr-1">
-          {currentDateFormatted}
+        {/* Right Header Corner: Google Calendar + Date Stamp beneath */}
+        <div className="flex flex-col items-start sm:items-end gap-1.5 shrink-0 pr-1 pt-1 sm:pt-2">
+          <GoogleCalendarConnect />
+          {/* Date Stamp */}
+          <div className="text-left sm:text-right text-[11px] font-semibold text-gray-400">
+            {currentDateFormatted}
+          </div>
         </div>
       </div>
 

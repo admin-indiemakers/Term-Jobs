@@ -159,6 +159,7 @@ class InterviewRound(Model):
         "google_event_id": "",
         "calendar_sync": dict,
         "email_delivery": dict,
+        "interviewer_email_delivery": dict,
         "duration_minutes": 45,
         "interviewer_name": "",
         "interviewer_email": "",
@@ -200,6 +201,7 @@ class InterviewRound(Model):
     google_event_id = Column("google_event_id")
     calendar_sync = Column("calendar_sync")
     email_delivery = Column("email_delivery")
+    interviewer_email_delivery = Column("interviewer_email_delivery")
     duration_minutes = Column("duration_minutes")
     interviewer_name = Column("interviewer_name")
     interviewer_email = Column("interviewer_email")

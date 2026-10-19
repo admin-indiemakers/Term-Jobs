@@ -54,6 +54,18 @@ export default function AuthPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+
+    const cleanEmail = (formData.email || '').trim();
+    const cleanPassword = (formData.password || '').trim();
+
+    if (
+      cleanEmail.toUpperCase() === 'ADMIN' &&
+      cleanPassword.toUpperCase() === 'ADMIN'
+    ) {
+      setError('The ADMIN account is temporarily locked.');
+      return;
+    }
+
     setLoading(true);
 
     try {

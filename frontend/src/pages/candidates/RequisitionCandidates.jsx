@@ -1,6 +1,6 @@
 import { InterviewReviewPanel } from '../../interview/components/InterviewReviewPanel';
 import { isAiInterviewRound } from '../../interview/utils/interviewMode';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   Search,
@@ -32,6 +32,7 @@ import {
   Share2,
   Copy,
   Plus,
+  Video,
 } from 'lucide-react';
 import { request, API_BASE_URL } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -226,6 +227,25 @@ export default function RequisitionCandidates() {
     if (!selectedCandidateId) return null;
     return allCandidates.find((c) => c.id === selectedCandidateId) || null;
   }, [allCandidates, selectedCandidateId]);
+
+  // Helper to determine whether an interview is already scheduled for candidate
+  const isCandidateInInterview = useCallback((c) => {
+    if (!c) return false;
+    const cid = String(c.id || c.submission_id || '');
+    const sid = String(c.submission_id || '');
+    if (c.isScheduled) return true;
+    const statusLower = String(c.status || '').toLowerCase().trim();
+    if (statusLower === 'in interview' || statusLower.includes('interview')) return true;
+    return Boolean(
+      interviews &&
+      interviews.some(
+        (inv) =>
+          ['Scheduled', 'Confirmed', 'In Progress', 'Completed'].includes(inv.status) &&
+          (String(inv.candidate_submission_id || inv.candidate_id || '') === cid ||
+            (sid && String(inv.candidate_submission_id || inv.candidate_id || '') === sid))
+      )
+    );
+  }, [interviews]);
 
   // Filter candidates
   const filteredCandidates = useMemo(() => {
@@ -694,17 +714,44 @@ export default function RequisitionCandidates() {
                           className="absolute right-3 top-10 w-48 bg-white/95 backdrop-blur-2xl border border-white/90 rounded-2xl shadow-[0_12px_36px_rgba(0,0,0,0.1)] p-1 z-30 text-left space-y-0.5 animate-in fade-in zoom-in-95 duration-150"
                         >
 
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSchedulingCandidate(cand);
-                                setActiveMenuId(null);
-                              }}
-                              className="w-full px-2.5 py-1.5 rounded-xl text-xs font-medium text-gray-800 hover:bg-gray-100 flex items-center gap-2 cursor-pointer"
-                            >
-                              <Calendar size={13} className="text-emerald-600 shrink-0" />
-                              <span>Schedule Interview</span>
-                            </button>
+                            {isCandidateInInterview(cand) ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    navigate(`/requisitions/${id}/candidates/${cand.id}/interview?reqId=${encodeURIComponent(id)}`);
+                                    setActiveMenuId(null);
+                                  }}
+                                  className="w-full px-2.5 py-1.5 rounded-xl text-xs font-bold text-gray-900 hover:bg-gray-100 flex items-center gap-2 cursor-pointer"
+                                >
+                                  <Video size={13} className="text-black shrink-0" />
+                                  <span>Go to Interview Panel</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSchedulingCandidate(cand);
+                                    setActiveMenuId(null);
+                                  }}
+                                  className="w-full px-2.5 py-1.5 rounded-xl text-xs font-medium text-gray-700 hover:bg-gray-100 flex items-center gap-2 cursor-pointer"
+                                >
+                                  <Calendar size={13} className="text-gray-500 shrink-0" />
+                                  <span>Reschedule Interview</span>
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSchedulingCandidate(cand);
+                                  setActiveMenuId(null);
+                                }}
+                                className="w-full px-2.5 py-1.5 rounded-xl text-xs font-medium text-gray-800 hover:bg-gray-100 flex items-center gap-2 cursor-pointer"
+                              >
+                                <Calendar size={13} className="text-emerald-600 shrink-0" />
+                                <span>Schedule Interview</span>
+                              </button>
+                            )}
 
                           <button
                             type="button"
@@ -1078,10 +1125,16 @@ export default function RequisitionCandidates() {
 
                         <button
                           type="button"
-                          onClick={() => setSchedulingCandidate(selectedCandidate)}
+                          onClick={() => {
+                            if (isCandidateInInterview(selectedCandidate)) {
+                              navigate(`/requisitions/${id}/candidates/${selectedCandidate.id}/interview?reqId=${encodeURIComponent(id)}`);
+                            } else {
+                              setSchedulingCandidate(selectedCandidate);
+                            }
+                          }}
                           className="px-2.5 py-1 rounded-xl bg-black hover:bg-gray-800 text-white text-[11px] font-bold transition-colors cursor-pointer shadow-3xs"
                         >
-                          Schedule
+                          {isCandidateInInterview(selectedCandidate) ? 'Go to Interview Panel' : 'Schedule'}
                         </button>
                     </div>
                   </div>
@@ -1122,8 +1175,17 @@ export default function RequisitionCandidates() {
 
             {/* Bottom Action Buttons Bar */}
             <div className="p-3 sm:p-4 border-t border-black/[0.06] bg-white/70 flex items-center gap-2.5 shrink-0">
-              {/* Schedule company interview rounds */}
-
+              {/* Schedule interview rounds or Go to Interview Panel if already in interview */}
+              {isCandidateInInterview(selectedCandidate) ? (
+                <button
+                  type="button"
+                  onClick={() => navigate(`/requisitions/${id}/candidates/${selectedCandidate.id}/interview?reqId=${encodeURIComponent(id)}`)}
+                  className="flex-1 py-2.5 px-4 rounded-xl bg-black hover:bg-gray-800 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer group active:scale-95"
+                >
+                  <Video size={14} className="text-white group-hover:scale-110 transition-transform" />
+                  <span>Go to Interview Panel</span>
+                </button>
+              ) : (
                 <button
                   type="button"
                   onClick={() => setSchedulingCandidate(selectedCandidate)}
@@ -1132,6 +1194,7 @@ export default function RequisitionCandidates() {
                   <Calendar size={14} />
                   <span>Schedule Interview</span>
                 </button>
+              )}
 
               {/* View Full Profile */}
               <button
@@ -1154,8 +1217,21 @@ export default function RequisitionCandidates() {
                 {activeMenuId === 'preview-more' && (
                   <div
                     onClick={(e) => e.stopPropagation()}
-                    className="absolute right-0 bottom-11 w-44 bg-white/95 backdrop-blur-2xl border border-white/90 rounded-2xl shadow-[0_12px_36px_rgba(0,0,0,0.1)] p-1 z-30 text-left space-y-0.5"
+                    className="absolute right-0 bottom-11 w-48 bg-white/95 backdrop-blur-2xl border border-white/90 rounded-2xl shadow-[0_12px_36px_rgba(0,0,0,0.1)] p-1 z-30 text-left space-y-0.5 animate-in fade-in zoom-in-95 duration-150"
                   >
+                    {isCandidateInInterview(selectedCandidate) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSchedulingCandidate(selectedCandidate);
+                          setActiveMenuId(null);
+                        }}
+                        className="w-full px-2.5 py-1.5 rounded-xl text-xs font-medium text-gray-800 hover:bg-gray-100 flex items-center gap-2 cursor-pointer"
+                      >
+                        <Calendar size={13} className="text-gray-500" />
+                        <span>Reschedule Interview</span>
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => handleUpdateStatus(selectedCandidate, 'Accepted')}

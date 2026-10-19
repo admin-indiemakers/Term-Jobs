@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react'
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { request } from '../../api/client';
+import { isPublishedStatus } from '../../utils/requisitionStatus';
 import {
   Plus,
   Search,
@@ -386,7 +387,7 @@ function RequisitionDetailDrawer({
       if (!isNaN(d.getTime())) {
         return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
       }
-    } catch {}
+    } catch { }
     return toSafeString(rawDeadline) || 'Open / Not Set';
   })();
 
@@ -503,15 +504,14 @@ function RequisitionDetailDrawer({
             </div>
 
             <div className="flex items-center gap-2.5">
-              <span className={`px-3 py-1 rounded-full text-xs font-bold tracking-wide border shadow-3xs ${
-                r.status === 'Published'
+              <span className={`px-3 py-1 rounded-full text-xs font-bold tracking-wide border shadow-3xs ${r.status === 'Published'
                   ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                   : r.status === 'Pending Approval' || r.status === 'PendingApproval'
-                  ? 'bg-amber-50 text-amber-700 border-amber-200'
-                  : isDeleted
-                  ? 'bg-rose-50 text-rose-700 border-rose-200'
-                  : 'bg-gray-100 text-gray-700 border-gray-200'
-              }`}>
+                    ? 'bg-amber-50 text-amber-700 border-amber-200'
+                    : isDeleted
+                      ? 'bg-rose-50 text-rose-700 border-rose-200'
+                      : 'bg-gray-100 text-gray-700 border-gray-200'
+                }`}>
                 {toSafeString(r.status, 'Published')}
               </span>
 
@@ -557,11 +557,10 @@ function RequisitionDetailDrawer({
             <button
               type="button"
               onClick={() => setActiveTab('overview')}
-              className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer whitespace-nowrap ${
-                activeTab === 'overview'
+              className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer whitespace-nowrap ${activeTab === 'overview'
                   ? 'bg-black text-white shadow-xs'
                   : 'text-gray-600 hover:text-black hover:bg-gray-100'
-              }`}
+                }`}
             >
               Overview
             </button>
@@ -580,11 +579,10 @@ function RequisitionDetailDrawer({
             <button
               type="button"
               onClick={() => setActiveTab('interviews')}
-              className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer whitespace-nowrap ${
-                activeTab === 'interviews'
+              className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer whitespace-nowrap ${activeTab === 'interviews'
                   ? 'bg-black text-white shadow-xs'
                   : 'text-gray-600 hover:text-black hover:bg-gray-100'
-              }`}
+                }`}
             >
               Interviews ({inInterviewCount})
             </button>
@@ -593,11 +591,10 @@ function RequisitionDetailDrawer({
               <button
                 type="button"
                 onClick={() => setActiveTab('jd')}
-                className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer whitespace-nowrap ${
-                  activeTab === 'jd'
+                className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer whitespace-nowrap ${activeTab === 'jd'
                     ? 'bg-black text-white shadow-xs'
                     : 'text-gray-600 hover:text-black hover:bg-gray-100'
-                }`}
+                  }`}
               >
                 Job Description
               </button>
@@ -606,11 +603,10 @@ function RequisitionDetailDrawer({
             <button
               type="button"
               onClick={() => setActiveTab('timeline')}
-              className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer whitespace-nowrap ${
-                activeTab === 'timeline'
+              className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer whitespace-nowrap ${activeTab === 'timeline'
                   ? 'bg-black text-white shadow-xs'
                   : 'text-gray-600 hover:text-black hover:bg-gray-100'
-              }`}
+                }`}
             >
               Status History
             </button>
@@ -618,11 +614,10 @@ function RequisitionDetailDrawer({
             <button
               type="button"
               onClick={() => setActiveTab('settings')}
-              className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer whitespace-nowrap ${
-                activeTab === 'settings'
+              className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer whitespace-nowrap ${activeTab === 'settings'
                   ? 'bg-black text-white shadow-xs'
                   : 'text-gray-600 hover:text-black hover:bg-gray-100'
-              }`}
+                }`}
             >
               Settings
             </button>
@@ -920,15 +915,14 @@ function RequisitionDetailDrawer({
                           )}
                         </div>
                       </div>
-                      <span className={`px-2.5 py-1 rounded-full text-[10.5px] font-bold border shrink-0 ${
-                        cand.status === 'Shortlisted'
+                      <span className={`px-2.5 py-1 rounded-full text-[10.5px] font-bold border shrink-0 ${cand.status === 'Shortlisted'
                           ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                           : cand.status === 'Rejected'
-                          ? 'bg-rose-50 text-rose-700 border-rose-200'
-                          : ['Interview', 'Interviewing'].includes(cand.status)
-                          ? 'bg-purple-50 text-purple-700 border-purple-200'
-                          : 'bg-gray-100 text-gray-700 border-gray-200'
-                      }`}>
+                            ? 'bg-rose-50 text-rose-700 border-rose-200'
+                            : ['Interview', 'Interviewing'].includes(cand.status)
+                              ? 'bg-purple-50 text-purple-700 border-purple-200'
+                              : 'bg-gray-100 text-gray-700 border-gray-200'
+                        }`}>
                         {cand.status || 'Screened'}
                       </span>
                     </div>
@@ -1267,7 +1261,8 @@ export default function RequisitionOverview({ section }) {
       hasLoadedRef.current = true;
       prevTokenRef.current = token;
 
-      window.dispatchEvent(new CustomEvent('tj-requisition-count-updated', { detail: { count: reqList.length } }));
+      const activeCount = reqList.filter((r) => !r.is_deleted && r.status !== 'Deleted by HM' && r.status !== 'Deleted' && isPublishedStatus(r?.status)).length;
+      window.dispatchEvent(new CustomEvent('tj-requisition-count-updated', { detail: { count: activeCount } }));
 
       // Fetch live real overview metrics for right stat cards
       request('/api/requisitions/overview-metrics', { token, forceRefresh: force })
@@ -1276,7 +1271,7 @@ export default function RequisitionOverview({ section }) {
             setOverviewMetrics(m);
           }
         })
-        .catch(() => {});
+        .catch(() => { });
 
       request('/api/company-profiles', { token }).then((profiles) => {
         if (Array.isArray(profiles) && profiles.length > 0) {
@@ -1288,7 +1283,7 @@ export default function RequisitionOverview({ section }) {
             }))
           );
         }
-      }).catch(() => {});
+      }).catch(() => { });
     } catch (err) {
       console.error('Failed to load requisitions:', err);
       setError(err.message || 'Unable to load requisitions.');
@@ -1311,9 +1306,10 @@ export default function RequisitionOverview({ section }) {
 
   useEffect(() => {
     if (hasLoadedRef.current) {
-      window.dispatchEvent(new CustomEvent('tj-requisition-count-updated', { detail: { count: requisitions.length } }));
+      const activeCount = requisitions.filter((r) => !r.is_deleted && r.status !== 'Deleted by HM' && r.status !== 'Deleted' && isPublishedStatus(r?.status)).length;
+      window.dispatchEvent(new CustomEvent('tj-requisition-count-updated', { detail: { count: activeCount } }));
     }
-  }, [requisitions.length]);
+  }, [requisitions]);
 
   const handleDeleteRequisition = async () => {
     if (!confirmDelete) return;
@@ -1484,7 +1480,7 @@ export default function RequisitionOverview({ section }) {
             className="px-4 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
           >
             <Plus size={14} />
-            <span>+ New Requisition</span>
+            <span>New Requisition</span>
           </button>
         </div>
       </div>
@@ -1559,11 +1555,10 @@ export default function RequisitionOverview({ section }) {
                           setShowSectionDropdown(false);
                           navigate(config.to);
                         }}
-                        className={`w-full text-left px-3 py-1.5 rounded-xl text-xs font-medium transition-colors cursor-pointer flex items-center justify-between ${
-                          activeTab === key
+                        className={`w-full text-left px-3 py-1.5 rounded-xl text-xs font-medium transition-colors cursor-pointer flex items-center justify-between ${activeTab === key
                             ? 'bg-black text-white font-bold'
                             : 'text-gray-700 hover:bg-gray-100/80'
-                        }`}
+                          }`}
                       >
                         <span>{config.title}</span>
                         {activeTab === key && <Check size={12} />}
@@ -1602,11 +1597,10 @@ export default function RequisitionOverview({ section }) {
                           setSelectedDept(dept);
                           setShowDeptDropdown(false);
                         }}
-                        className={`w-full text-left px-3 py-1.5 rounded-xl text-xs font-medium transition-colors cursor-pointer flex items-center justify-between ${
-                          selectedDept === dept
+                        className={`w-full text-left px-3 py-1.5 rounded-xl text-xs font-medium transition-colors cursor-pointer flex items-center justify-between ${selectedDept === dept
                             ? 'bg-black text-white font-bold'
                             : 'text-gray-700 hover:bg-gray-100/80'
-                        }`}
+                          }`}
                       >
                         <span>{dept}</span>
                         {selectedDept === dept && <Check size={12} />}
@@ -1675,18 +1669,16 @@ export default function RequisitionOverview({ section }) {
                     return (
                       <tr
                         key={r.id}
-                        className={`transition-colors relative ${
-                          isDeleted
+                        className={`transition-colors relative ${isDeleted
                             ? 'bg-rose-50/25 hover:bg-rose-50/45'
                             : 'bg-transparent hover:bg-white/35'
-                        }`}
+                          }`}
                       >
                         {/* 1. Job Title */}
                         <td className="py-3 px-3">
                           <div className="flex items-center gap-3">
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 shadow-2xs ${
-                              isDeleted ? 'bg-rose-950 text-rose-300' : 'bg-slate-900 text-white'
-                            }`}>
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 shadow-2xs ${isDeleted ? 'bg-rose-950 text-rose-300' : 'bg-slate-900 text-white'
+                              }`}>
                               {isDeleted ? (
                                 <Trash2 size={13} className="text-rose-300" />
                               ) : (
@@ -1846,11 +1838,10 @@ export default function RequisitionOverview({ section }) {
                       key={pg}
                       type="button"
                       onClick={() => setCurrentPage(pg)}
-                      className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs shadow-3xs cursor-pointer ${
-                        currentPage === pg
+                      className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs shadow-3xs cursor-pointer ${currentPage === pg
                           ? 'bg-black text-white'
                           : 'bg-white/60 hover:bg-white text-gray-700 border border-white/80'
-                      }`}
+                        }`}
                     >
                       {pg}
                     </button>
@@ -1874,21 +1865,19 @@ export default function RequisitionOverview({ section }) {
                   setActiveTab((prev) => (prev === 'deleted' ? 'history' : 'deleted'));
                 }}
                 title={activeTab === 'deleted' ? 'Switch back to active requisitions' : 'View deleted requisitions history'}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer shadow-3xs ${
-                  activeTab === 'deleted'
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer shadow-3xs ${activeTab === 'deleted'
                     ? 'bg-black text-white shadow-xs font-bold'
                     : 'bg-white/60 hover:bg-white text-gray-700 hover:text-black border border-white/80'
-                }`}
+                  }`}
               >
                 <History size={13} className={activeTab === 'deleted' ? 'text-white' : 'text-gray-500'} />
                 <span>History</span>
                 {counts.deleted > 0 && (
                   <span
-                    className={`px-1.5 py-0.2 rounded-full text-[9.5px] font-bold ${
-                      activeTab === 'deleted'
+                    className={`px-1.5 py-0.2 rounded-full text-[9.5px] font-bold ${activeTab === 'deleted'
                         ? 'bg-white/20 text-white'
                         : 'bg-rose-50 text-rose-700 border border-rose-200'
-                    }`}
+                      }`}
                   >
                     {counts.deleted}
                   </span>
@@ -1906,11 +1895,10 @@ export default function RequisitionOverview({ section }) {
               setActiveTab('history');
               navigate('/dashboard/requisitions/history');
             }}
-            className={`backdrop-blur-2xl border rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between h-[102px] cursor-pointer transition-all ${
-              activeTab === 'history'
+            className={`backdrop-blur-2xl border rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between h-[102px] cursor-pointer transition-all ${activeTab === 'history'
                 ? 'bg-white/85 border-black/40 ring-1 ring-black/15 shadow-sm'
                 : 'bg-white/40 border-white/70 hover:bg-white/60'
-            }`}
+              }`}
           >
             <div className="w-7.5 h-7.5 rounded-xl bg-white/60 backdrop-blur-md border border-white/70 flex items-center justify-center text-gray-700 shadow-2xs shrink-0">
               <Layers size={15} />

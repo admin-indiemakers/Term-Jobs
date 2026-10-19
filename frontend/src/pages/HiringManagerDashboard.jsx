@@ -3,6 +3,7 @@ import { loadHiringConversations, hiringConversationStorageKey } from '../utils/
 import GoogleCalendarConnect from '../components/GoogleCalendarConnect';
 import CompanyInterviewScheduleCard from '../interview/components/CompanyInterviewScheduleCard';
 import { upcomingInterviewRounds } from '../interview/utils/upcomingInterviews';
+import { isPublishedStatus } from '../utils/requisitionStatus';
 import { useEffect, useLayoutEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { request, API_BASE_URL } from '../api/client';
@@ -488,7 +489,8 @@ function HiringManagerDashboardContent() {
 
       const reqList = Array.isArray(reqsData) ? reqsData : reqsData?.requisitions || [];
       setRequisitions(reqList);
-      window.dispatchEvent(new CustomEvent('tj-requisition-count-updated', { detail: { count: reqList.length } }));
+      const activeCount = reqList.filter((r) => !r.is_deleted && r.status !== 'Deleted by HM' && r.status !== 'Deleted' && isPublishedStatus(r?.status)).length;
+      window.dispatchEvent(new CustomEvent('tj-requisition-count-updated', { detail: { count: activeCount } }));
 
       const sList = Array.isArray(shortlistedData) ? shortlistedData : shortlistedData?.shortlisted_candidates || [];
       setShortlistedCandidates(sList);
@@ -1859,107 +1861,118 @@ function HiringManagerDashboardContent() {
       )}
 
       {/* Top-Right Icon Toolbar (Desktop only) */}
-      <div className="hidden lg:flex absolute top-1.5 sm:top-2 right-2 sm:right-2.5 z-20 items-center gap-1">
-        <GoogleCalendarConnect onStatus={setGoogleCalendar} onConnected={data => setMessages(previous => [...previous, { sender: 'ai', text: `Google Calendar connected: ${data.email}. Calendar: primary. Timezone: ${data.timezone}. Company interviews can be scheduled or rescheduled using editable date and time fields.` }])} />
-        {/* + Icon: Opens a New Chat */}
-        <button
-          type="button"
-          onClick={handleStartNewChat}
-          className="w-7 h-7 sm:w-7.5 sm:h-7.5 rounded-lg bg-white hover:bg-[#F7F7F5] border border-[#E5E5E5] text-[#111111] shadow-2xs hover:shadow-xs flex items-center justify-center transition-all cursor-pointer active:scale-95"
-          title="New Chat (+)"
-        >
-          <Plus size={12.5} strokeWidth={2.4} />
-        </button>
+      <div className="hidden lg:flex absolute top-1 sm:top-1.5 right-1.5 sm:right-2 z-20 items-center gap-1.5">
+        <GoogleCalendarConnect
+          variant="compact"
+          onStatus={setGoogleCalendar}
+          onConnected={data => setMessages(previous => [...previous, { sender: 'ai', text: `Google Calendar connected: ${data.email}. Calendar: primary. Timezone: ${data.timezone}. Company interviews can be scheduled or rescheduled using editable date and time fields.` }])}
+        />
 
-        {/* History / Previous Chat History Icon */}
-        <button
-          type="button"
-          onClick={() => {
-            setConversationsSearchQuery('');
-            setIsConversationsDrawerOpen((prev) => !prev);
-          }}
-          className={`w-7 h-7 sm:w-7.5 sm:h-7.5 rounded-lg border transition-all cursor-pointer active:scale-95 flex items-center justify-center ${
-            isConversationsDrawerOpen
-              ? 'bg-[#111111] text-white border-[#111111] shadow-xs'
-              : 'bg-white hover:bg-[#F7F7F5] border-[#E5E5E5] text-[#111111] shadow-2xs hover:shadow-xs'
-          }`}
-          title="Previous Chat History / Conversations"
-        >
-          <History size={12.5} strokeWidth={2} />
-        </button>
+        {/* Action Buttons */}
+        <div className="flex items-center gap-1">
+          {/* + Icon: Opens a New Chat */}
+          <button
+            type="button"
+            onClick={handleStartNewChat}
+            className="w-7.5 h-7.5 rounded-xl bg-white hover:bg-gray-100 text-gray-800 border border-gray-200/70 shadow-3xs hover:shadow-2xs flex items-center justify-center transition-all cursor-pointer active:scale-95"
+            title="New Chat (+)"
+          >
+            <Plus size={13} strokeWidth={2.4} />
+          </button>
 
-        {/* Telegram Bot Icon (Replaced Candidate Icon) */}
-        <button
-          type="button"
-          onClick={handleOpenTelegramBot}
-          className="w-7 h-7 sm:w-7.5 sm:h-7.5 rounded-lg bg-white hover:bg-[#F7F7F5] border border-[#E5E5E5] text-[#111111] shadow-2xs hover:shadow-xs flex items-center justify-center transition-all cursor-pointer active:scale-95"
-          title={
-            botStatus?.telegram?.is_linked
-              ? `Open Telegram Bot (@${botStatus.telegram.bot_username || 'TermJobsBot'})`
-              : 'Open Telegram Bot / Connect on Telegram'
-          }
-        >
-          <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current text-[#111111]" aria-hidden="true">
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.75-.55 2.92-1.27 4.86-2.11 5.83-2.52 2.77-1.16 3.35-1.36 3.73-1.37.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z" />
-          </svg>
-        </button>
+          {/* History / Previous Chat History Icon */}
+          <button
+            type="button"
+            onClick={() => {
+              setConversationsSearchQuery('');
+              setIsConversationsDrawerOpen((prev) => !prev);
+            }}
+            className={`w-7.5 h-7.5 rounded-xl transition-all cursor-pointer active:scale-95 flex items-center justify-center ${
+              isConversationsDrawerOpen
+                ? 'bg-black text-white shadow-3xs'
+                : 'bg-white hover:bg-gray-100 text-gray-800 border border-gray-200/70 shadow-3xs hover:shadow-2xs'
+            }`}
+            title="Previous Chat History / Conversations"
+          >
+            <History size={13} strokeWidth={2} />
+          </button>
 
-        {/* Team Chat Drawer Icon */}
-        <button
-          type="button"
-          onClick={() => setIsTeamChatDrawerOpen((prev) => !prev)}
-          className={`relative w-7 h-7 sm:w-7.5 sm:h-7.5 rounded-lg border transition-all cursor-pointer active:scale-95 flex items-center justify-center ${
-            isTeamChatDrawerOpen
-              ? 'bg-[#111111] text-white border-[#111111] shadow-xs'
-              : 'bg-white hover:bg-[#F7F7F5] border-[#E5E5E5] text-[#111111] shadow-2xs hover:shadow-xs'
-          }`}
-          title="Team Messages (Chat with Company Admin & Hiring Managers)"
-        >
-          <MessageSquare size={12.5} strokeWidth={2} />
-          {unreadChatCount > 0 && (
-            <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 rounded-full bg-black text-white text-[8.5px] font-bold flex items-center justify-center font-mono">
-              {unreadChatCount}
-            </span>
-          )}
-        </button>
+          {/* Telegram Bot Icon */}
+          <button
+            type="button"
+            onClick={handleOpenTelegramBot}
+            className="w-7.5 h-7.5 rounded-xl bg-white hover:bg-gray-100 text-gray-800 border border-gray-200/70 shadow-3xs hover:shadow-2xs flex items-center justify-center transition-all cursor-pointer active:scale-95"
+            title={
+              botStatus?.telegram?.is_linked
+                ? `Open Telegram Bot (@${botStatus.telegram.bot_username || 'TermJobsBot'})`
+                : 'Open Telegram Bot / Connect on Telegram'
+            }
+          >
+            <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current text-gray-800" aria-hidden="true">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.75-.55 2.92-1.27 4.86-2.11 5.83-2.52 2.77-1.16 3.35-1.36 3.73-1.37.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z" />
+            </svg>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setIsCalendarModalOpen(true)}
-          className={`w-7 h-7 sm:w-7.5 sm:h-7.5 rounded-lg border transition-all cursor-pointer active:scale-95 flex items-center justify-center ${
-            isCalendarModalOpen
-              ? 'bg-[#111111] text-white border-[#111111] shadow-xs'
-              : 'bg-white hover:bg-[#F7F7F5] border-[#E5E5E5] text-[#111111] shadow-2xs hover:shadow-xs'
-          }`}
-          title="Interviews & Calendar"
-        >
-          <Calendar size={12.5} strokeWidth={2} />
-        </button>
+          {/* Team Chat Drawer Icon */}
+          <button
+            type="button"
+            onClick={() => setIsTeamChatDrawerOpen((prev) => !prev)}
+            className={`relative w-7.5 h-7.5 rounded-xl transition-all cursor-pointer active:scale-95 flex items-center justify-center ${
+              isTeamChatDrawerOpen
+                ? 'bg-black text-white shadow-3xs'
+                : 'bg-white hover:bg-gray-100 text-gray-800 border border-gray-200/70 shadow-3xs hover:shadow-2xs'
+            }`}
+            title="Team Messages (Chat with Company Admin & Hiring Managers)"
+          >
+            <MessageSquare size={13} strokeWidth={2} />
+            {unreadChatCount > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 rounded-full bg-black text-white text-[8.5px] font-bold flex items-center justify-center font-mono">
+                {unreadChatCount}
+              </span>
+            )}
+          </button>
 
-        <button
-          type="button"
-          onClick={() => {
-            setToolsSearchQuery('');
-            setIsToolsDrawerOpen((prev) => !prev);
-          }}
-          className={`w-7 h-7 sm:w-7.5 sm:h-7.5 rounded-lg border transition-all cursor-pointer active:scale-95 flex items-center justify-center ${
-            isToolsDrawerOpen
-              ? 'bg-[#111111] text-white border-[#111111] shadow-xs'
-              : 'bg-white hover:bg-[#F7F7F5] border-[#E5E5E5] text-[#111111] shadow-2xs hover:shadow-xs'
-          }`}
-          title="Tools & Actions"
-        >
-          <MoreHorizontal size={12.5} strokeWidth={2} />
-        </button>
+          {/* Calendar Modal Icon */}
+          <button
+            type="button"
+            onClick={() => setIsCalendarModalOpen(true)}
+            className={`w-7.5 h-7.5 rounded-xl transition-all cursor-pointer active:scale-95 flex items-center justify-center ${
+              isCalendarModalOpen
+                ? 'bg-black text-white shadow-3xs'
+                : 'bg-white hover:bg-gray-100 text-gray-800 border border-gray-200/70 shadow-3xs hover:shadow-2xs'
+            }`}
+            title="Interviews & Calendar"
+          >
+            <Calendar size={13} strokeWidth={2} />
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setShowProfileModal(true)}
-          className="w-7 h-7 sm:w-7.5 sm:h-7.5 rounded-lg bg-[#000000] text-white text-[9px] font-bold shadow-2xs hover:bg-[#111111] flex items-center justify-center transition-all cursor-pointer active:scale-95 uppercase tracking-tight"
-          title="Hiring Manager Profile & Account Settings"
-        >
-          {userInitials || 'HM'}
-        </button>
+          {/* Tools & Actions Icon */}
+          <button
+            type="button"
+            onClick={() => {
+              setToolsSearchQuery('');
+              setIsToolsDrawerOpen((prev) => !prev);
+            }}
+            className={`w-7.5 h-7.5 rounded-xl transition-all cursor-pointer active:scale-95 flex items-center justify-center ${
+              isToolsDrawerOpen
+                ? 'bg-black text-white shadow-3xs'
+                : 'bg-white hover:bg-gray-100 text-gray-800 border border-gray-200/70 shadow-3xs hover:shadow-2xs'
+            }`}
+            title="Tools & Actions"
+          >
+            <MoreHorizontal size={13} strokeWidth={2} />
+          </button>
+
+          {/* User Profile Avatar */}
+          <button
+            type="button"
+            onClick={() => setShowProfileModal(true)}
+            className="w-7.5 h-7.5 rounded-xl bg-gradient-to-br from-black to-gray-800 text-white text-[10px] font-bold shadow-3xs hover:ring-2 hover:ring-black/20 flex items-center justify-center transition-all cursor-pointer active:scale-95 uppercase tracking-tight ml-0.5"
+            title="Hiring Manager Profile & Account Settings"
+          >
+            {userInitials || 'HM'}
+          </button>
+        </div>
       </div>
 
       {messages.length === 0 ? (
@@ -2054,26 +2067,6 @@ function HiringManagerDashboardContent() {
             >
               <FileText size={12} className="text-gray-600 shrink-0" />
               <span>Create requisition</span>
-            </button>
-
-            <button
-              type="button"
-              disabled={isAiTyping}
-              onClick={() => handleSendPrompt('Also suggest 5 potential candidates from our candidate pool')}
-              className="px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl bg-white hover:bg-gray-50 border-0 text-[10.5px] sm:text-xs font-semibold text-gray-700 shadow-xs hover:shadow-sm transition-all cursor-pointer flex items-center gap-1 sm:gap-1.5 active:scale-95 disabled:opacity-50 whitespace-nowrap"
-            >
-              <Users size={12} className="text-gray-600 shrink-0" />
-              <span>Screen candidates</span>
-            </button>
-
-            <button
-              type="button"
-              disabled={isAiTyping}
-              onClick={() => handleSendPrompt('Compare top shortlisted candidates and their match scores')}
-              className="px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl bg-white hover:bg-gray-50 border-0 text-[10.5px] sm:text-xs font-semibold text-gray-700 shadow-xs hover:shadow-sm transition-all cursor-pointer flex items-center gap-1 sm:gap-1.5 active:scale-95 disabled:opacity-50 whitespace-nowrap"
-            >
-              <BarChart2 size={12} className="text-gray-600 shrink-0" />
-              <span>Compare candidates</span>
             </button>
 
             <button
@@ -2878,17 +2871,8 @@ function HiringManagerDashboardContent() {
                 <button
                   type="button"
                   disabled={isAiTyping}
-                  onClick={() => handleSendPrompt('Also suggest 5 potential candidates from our candidate pool')}
-                  className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-gray-50 border border-gray-200/80 text-[11px] font-medium text-gray-700 shadow-2xs transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
-                  title="Show me candidates for DevSecOps"
-                >
-                  DevSecOps candidates
-                </button>
-                <button
-                  type="button"
-                  disabled={isAiTyping}
                   onClick={() => handleSendPrompt('Schedule an interview')}
-                  className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-gray-50 border border-gray-200/80 text-[11px] font-medium text-gray-700 shadow-2xs transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                  className="hidden sm:inline-flex px-3.5 py-1.5 rounded-xl bg-white hover:bg-gray-50 border border-gray-200/80 text-[11px] font-medium text-gray-700 shadow-2xs transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
                   title="Schedule an interview"
                 >
                   Schedule interview
@@ -2897,7 +2881,7 @@ function HiringManagerDashboardContent() {
                   type="button"
                   disabled={isAiTyping}
                   onClick={() => handleSendPrompt('Help me create a new requisition for a DevSecOps Engineer')}
-                  className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-gray-50 border border-gray-200/80 text-[11px] font-medium text-gray-700 shadow-2xs transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                  className="hidden sm:inline-flex px-3.5 py-1.5 rounded-xl bg-white hover:bg-gray-50 border border-gray-200/80 text-[11px] font-medium text-gray-700 shadow-2xs transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
                   title="Draft a new requisition"
                 >
                   Draft requisition
