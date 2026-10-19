@@ -3988,7 +3988,7 @@ export default function OpenRolesPage({ enabled = true }) {
                           </div>
                         </div>
                         {candidateAuth?.candidateToken && (
-                          <button type="button" onClick={() => setShowResumePreview(true)}
+                          <button type="button" onClick={() => setShowResumePreview(true)} aria-haspopup="dialog"
                             className="px-3 py-1.5 rounded-xl bg-white hover:bg-neutral-100 border border-neutral-300 text-[11px] font-semibold text-neutral-800 transition flex items-center gap-1.5 shrink-0 cursor-pointer shadow-sm"
                             title="Preview your master resume">
                             <FileText size={12} />

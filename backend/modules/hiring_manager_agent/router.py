@@ -8,7 +8,7 @@ from typing import Optional, Dict, Any
 
 from modules.identity.domain.models import User, Tenant
 from modules.identity.router import get_current_user
-from .agent import run_hiring_manager_agent_chat
+from .agent import run_hiring_manager_agent_chat, model_available
 from .chat_scope import is_hiring_request_in_scope, scope_response
 
 router = APIRouter(prefix="/api/hiring-manager/agent", tags=["Hiring Manager Agent"])
@@ -33,7 +33,7 @@ def hiring_manager_agent_chat(
         raise HTTPException(status_code=403, detail='Company hiring staff access required')
     if not data.prompt.strip():
         raise HTTPException(status_code=400, detail="Prompt is required.")
-    if not is_hiring_request_in_scope(data.prompt, data.history):
+    if not model_available() and not is_hiring_request_in_scope(data.prompt, data.history):
         return {**scope_response(), 'status': 'success'}
     from modules.calendar.services.google_calendar import connection_status
     user_data = {'id': str(current_user.id), 'tenant_id': current_user.tenant_id, 'role': current_user.role,
@@ -46,8 +46,8 @@ def hiring_manager_agent_chat(
     if not data.prompt.strip():
         raise HTTPException(status_code=400, detail="Prompt is required.")
     from modules.calendar.services.assistant import handle_calendar_query
-    calendar_result = handle_calendar_query(data.prompt, current_user, data.history)
-    if calendar_result is not None:
+    calendar_result = None if model_available() else handle_calendar_query(data.prompt, current_user, data.history)
+    if not model_available() and calendar_result is not None:
         return {**calendar_result, 'status': 'success'}
 
     result = run_hiring_manager_agent_chat(
@@ -59,7 +59,8 @@ def hiring_manager_agent_chat(
     return {
         "reply": result.get("reply", ""),
         "executed_actions": result.get("executed_actions", []),
-        "status": "success"
+        "status": "success",
+        **{key: result[key] for key in ("out_of_scope", "ai_unavailable") if key in result}
     }
 
 

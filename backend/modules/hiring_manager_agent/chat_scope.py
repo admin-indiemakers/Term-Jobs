@@ -2,6 +2,7 @@
 import re
 
 from modules.company_admin_agent.scope import is_admin_request_in_scope
+from .role_intent import requested_hiring_role
 
 SCOPE_REPLY = (
     "I can help with hiring tasks in TermJobs: requisitions, candidates, "
@@ -16,6 +17,8 @@ def is_hiring_request_in_scope(prompt, history=None):
          "content": item.get("content") or item.get("text") or ""}
         for item in history or [] if isinstance(item, dict)
     ]
+    if requested_hiring_role(prompt) and not re.search(r"\b(jokes?|poems?|recipes?|code|snippet)\b", prompt, re.I):
+        return True
     if is_admin_request_in_scope(prompt, normalized):
         return True
     if re.search(

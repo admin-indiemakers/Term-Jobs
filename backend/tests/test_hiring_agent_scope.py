@@ -83,14 +83,14 @@ def test_sandbox_blocks_ownership_changes_unscoped_reads_and_bulk_methods():
     assert 'title' not in raw.requisitions.find_one({'id': 'other'})
 
 
-def test_scope_is_cleared_after_exception_and_old_assistant_history_is_dropped():
+def test_scope_is_cleared_after_exception_and_conversation_context_is_preserved():
     import pytest
     raw = mongomock.MongoClient()['exception-scope']
     raw.requisitions.insert_one({'id': 'mine', 'tenant_id': 'a', 'created_by': 'manager'})
     scoped = ScopedDatabase(raw)
     @authorized_chat(raw)
     def operation(prompt, history, current_user):
-        assert len(history) == 1 and history[0]['role'] == 'user'
+        assert [item['role'] for item in history] == ['assistant', 'user']
         assert scoped['requisitions'].find_one({})['id'] == 'mine'
         raise RuntimeError('test')
     with pytest.raises(RuntimeError):

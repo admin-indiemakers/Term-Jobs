@@ -1,9 +1,10 @@
+import './HiringManagerDashboard.css';
 import { loadHiringConversations, hiringConversationStorageKey } from '../utils/hiringConversations';
 import GoogleCalendarConnect from '../components/GoogleCalendarConnect';
 import CompanyInterviewScheduleCard from '../interview/components/CompanyInterviewScheduleCard';
 import { upcomingInterviewRounds } from '../interview/utils/upcomingInterviews';
 import { isPublishedStatus } from '../utils/requisitionStatus';
-import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
+import { useEffect, useLayoutEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { request, API_BASE_URL } from '../api/client';
 import { useAuth } from '../context/AuthContext';
@@ -180,7 +181,8 @@ function HiringManagerDashboardContent() {
   const [promptInput, setPromptInput] = useState('');
   const searchInputRef = useRef(null);
   const promptInputRef = useRef(null);
-  const chatBottomRef = useRef(null);
+  const latestMessageRef = useRef(null);
+  const scrolledMessageCountRef = useRef(0);
   const chatContainerRef = useRef(null);
 
   // Real AI Chat States
@@ -1001,14 +1003,19 @@ function HiringManagerDashboardContent() {
   const userName = user?.name || 'r';
   const userInitial = (user?.name || 'R').trim().charAt(0).toUpperCase();
 
-  // Auto-scroll inside chat container only (prevents the browser window from scrolling down)
-  useEffect(() => {
-    if (messages.length > 1 || isAiTyping) {
-      if (chatContainerRef.current) {
-        chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
-      }
-    }
-  }, [messages, isAiTyping]);
+  // Reveal the start of each new message; preserve reading position on card updates.
+  useLayoutEffect(() => {
+    const count = messages.length;
+    const previousCount = scrolledMessageCountRef.current;
+    scrolledMessageCountRef.current = count;
+    if (count === 0 || count === previousCount) return;
+    const container = chatContainerRef.current;
+    const message = latestMessageRef.current;
+    if (!container || !message) return;
+    const top = container.scrollTop + message.getBoundingClientRect().top
+      - container.getBoundingClientRect().top - container.clientTop;
+    container.scrollTo({ top: Math.max(0, top - 8), behavior: 'instant' });
+  }, [messages]);
 
   // Reset conversation to initial state
   const handleResetChat = useCallback(() => {
@@ -1223,116 +1230,6 @@ function HiringManagerDashboardContent() {
     setMessages((prev) => [...prev, userMsg]);
     setIsAiTyping(true);
 
-    const textLower = text.toLowerCase();
-
-    // 1. Natural greeting detection (No robotic fallback)
-    const isGreeting = /^(hi|hello|hey|greetings|good\s+(morning|afternoon|evening)|howdy|sup|yo|hi\s+there|hello\s+there)[\s!.]*$/i.test(text.trim());
-    if (isGreeting) {
-      setTimeout(() => {
-        const aiMsg = {
-          id: `ai-${Date.now()}`,
-          sender: 'ai',
-          text: `Hello! 👋 How can I assist you today with your hiring needs? Whether you'd like to draft a new job requisition, review candidates in your candidate pool, or schedule interviews, just let me know!`,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        };
-        setMessages((prev) => [...prev, aiMsg]);
-        setIsAiTyping(false);
-      }, 300);
-      return;
-    }
-
-    // 2. Open / View Specific Requisition intent (Directly opens and navigates to the requisition)
-    const isOpenReq =
-      (textLower.startsWith('open') || textLower.startsWith('view') || textLower.startsWith('show details') || textLower.startsWith('inspect')) &&
-      !textLower.includes('candidate') &&
-      !textLower.includes('pool') &&
-      !textLower.includes('timesheet') &&
-      !textLower.includes('expense') &&
-      !textLower.includes('issue');
-
-    if (isOpenReq) {
-      setTimeout(async () => {
-        let pool = requisitions;
-        if (!pool || pool.length === 0) {
-          try {
-            const fresh = await request('/api/requisitions', { token }).catch(() => []);
-            pool = Array.isArray(fresh) ? fresh : (fresh?.requisitions || []);
-            setRequisitions(pool);
-          } catch (e) {
-            console.error('Fetch requisitions error:', e);
-          }
-        }
-
-        const cleanSearch = textLower
-          .replace(/^(open|view|show|inspect)\s+/i, '')
-          .replace(/\b(the|requisition|requsisition|requsisiton|requsition|req|role|position|details|of|page|all|list|s)\b/gi, '')
-          .trim();
-
-        // Check if generic "open requisitions" / "open requisition list"
-        const isGenericRequisitionsList =
-          !cleanSearch ||
-          textLower === 'open requisitions' ||
-          textLower === 'open requisition' ||
-          textLower === 'open all requisitions' ||
-          textLower === 'open requisition list' ||
-          textLower === 'view requisitions';
-
-        if (isGenericRequisitionsList) {
-          const aiMsg = {
-            id: `ai-${Date.now()}`,
-            sender: 'ai',
-            text: `Opening your **Job Requisitions** directory...`,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          };
-          setMessages((prev) => [...prev, aiMsg]);
-          setIsAiTyping(false);
-          setTimeout(() => navigate('/dashboard/requisitions'), 200);
-          return;
-        }
-
-        const matched =
-          pool.find((r) => {
-            const rTitle = (r.title || '').toLowerCase();
-            return (cleanSearch && rTitle.includes(cleanSearch)) || (cleanSearch && cleanSearch.includes(rTitle));
-          }) ||
-          pool.find((r) => {
-            const rTitle = (r.title || '').toLowerCase();
-            if (textLower.includes('python') && rTitle.includes('python')) return true;
-            if (textLower.includes('qa') && rTitle.includes('qa')) return true;
-            if (textLower.includes('devsecops') && rTitle.includes('devsecops')) return true;
-            if (textLower.includes('devops') && rTitle.includes('devops')) return true;
-            if (textLower.includes('backend') && rTitle.includes('backend')) return true;
-            if (textLower.includes('frontend') && rTitle.includes('frontend')) return true;
-            return false;
-          }) ||
-          pool[0];
-
-        if (matched && matched.id) {
-          const aiMsg = {
-            id: `ai-${Date.now()}`,
-            sender: 'ai',
-            text: `Opening the **${matched.title}** requisition...`,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          };
-          setMessages((prev) => [...prev, aiMsg]);
-          setIsAiTyping(false);
-          setTimeout(() => navigate(`/dashboard/requisitions/${matched.id}`), 250);
-          return;
-        } else {
-          const aiMsg = {
-            id: `ai-${Date.now()}`,
-            sender: 'ai',
-            text: `Could not find an active requisition matching "${cleanSearch}". Would you like me to draft a new requisition for this role?`,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          };
-          setMessages((prev) => [...prev, aiMsg]);
-          setIsAiTyping(false);
-          return;
-        }
-      }, 200);
-      return;
-    }
-
     try {
       const response = await request('/api/hiring-manager/agent/chat', {
         method: 'POST',
@@ -1342,7 +1239,7 @@ function HiringManagerDashboardContent() {
           prompt: text,
           history: messages.slice(-10).map((m) => ({
             role: m.sender === 'user' ? 'user' : 'assistant',
-            content: m.text,
+            content: m.text + (m.requisitionDraft ? `\nDraft context: ${JSON.stringify(m.requisitionDraft)}` : ''),
             ...(m.interviewProposal ? { interview_proposal: m.interviewProposal } : {}),
           })),
           user_name: userName,
@@ -1397,26 +1294,6 @@ function HiringManagerDashboardContent() {
         }
       }
 
-      const isCandQuery = /candidate|candiates|shortlist|pool|applicant/i.test(textLower);
-
-      // Fallback candidate extraction from dashboard state if candCards is still empty
-      if (isCandQuery && (!candCards || candCards.length === 0)) {
-        const roleCandidatePool = (shortlistedCandidates.length > 0 ? shortlistedCandidates : allCandidates) || [];
-        if (roleCandidatePool.length > 0) {
-          // Check if specific role is requested
-          const matchedForRole = roleCandidatePool.filter((c) => {
-            const reqTitle = (c.requisition_title || c.role || c.job_title || '').toLowerCase();
-            const candSkills = (Array.isArray(c.skills) ? c.skills.join(' ') : (c.skills || '')).toLowerCase();
-            const words = textLower.replace(/show|list|view|candidates?|for|in|the|me|all|my/g, '').trim().split(/\s+/).filter((w) => w.length > 2);
-            return words.some((w) => reqTitle.includes(w) || candSkills.includes(w));
-          });
-          const poolToDisplay = matchedForRole.length > 0 ? matchedForRole : (textLower.includes('shortlist') ? shortlistedCandidates : roleCandidatePool);
-          if (poolToDisplay.length > 0) {
-            candCards = poolToDisplay.slice(0, 5).map((c, idx) => formatCandidateCard(c, idx));
-          }
-        }
-      }
-
       // 1b. Interview Proposal extraction from schedule_candidate_interview
       let interviewProposal = null;
       const schedAction = executedActions.find((a) => a.tool === 'schedule_candidate_interview');
@@ -1434,193 +1311,25 @@ function HiringManagerDashboardContent() {
         scheduledInterviews = meetAction.result;
       }
 
-      // 2. Draft requisition cards from backend tool or context
+      // Cards reflect validated backend tool results; conversation meaning belongs to the model.
       let reqDraft = null;
-      // Check if user is updating draft openings
-      let explicitOpenings = null;
-      const openMatch =
-        text.match(/(?:openings?|headcount|positions?|seats?)\s*(?:to|as|is|be)?\s*[:=]?\s*(\d+)/i) ||
-        text.match(/(?:to|as|is|be)\s+(\d+)\s*(?:openings?|headcount|positions?|seats?)/i) ||
-        text.match(/(?:change|set|update|make)\s+(?:the\s+)?(?:number\s+of\s+)?openings?\s+(?:to|as|is|be)?\s*(\d+)/i) ||
-        text.match(/number\s+of\s+openings?\s*(?:to|as|is|be)?\s*[:=]?\s*(\d+)/i);
-      if (openMatch && openMatch[1]) {
-        explicitOpenings = parseInt(openMatch[1], 10);
-      }
-
-      const prevDraft = [...messages].reverse().find((m) => m.requisitionDraft)?.requisitionDraft;
-      const isOpeningsUpdate = /opening|openings|headcount|vacanc|positions|seats/i.test(textLower);
-      const isSkillUpdate = textLower.includes('skill') || textLower.includes('tech stack');
-      const isSummaryUpdate = textLower.includes('role summary') || textLower.includes('summary') || textLower.includes('job description') || textLower.includes('description');
-      const isDraftIntent = textLower.includes('draft') || textLower.includes('create req') || replyContent.toLowerCase().includes('drafted the requisition') || replyContent.toLowerCase().includes('draft details below');
-
-      const draftAction = executedActions.find((a) => a.tool === 'draft_hiring_requisition');
-      if (draftAction && draftAction.result) {
+      const draftAction = executedActions.find(action => action.tool === 'draft_hiring_requisition');
+      if (draftAction?.result) {
         const r = draftAction.result;
-        const resolvedOpenings = explicitOpenings || parseInt(r.openings || r.headcount, 10) || prevDraft?.openings || 1;
-        let cleanSummary = r.job_description || prevDraft?.summary || `We are seeking a talented ${r.title || 'professional'} to join our engineering team.`;
-        cleanSummary = cleanSummary.replace(/\b(?:number\s+of\s+)?openings?\s*[:=]?\s*\d+\.?/gi, '').trim();
-
         reqDraft = {
-          id: prevDraft?.id || `draft-${Date.now()}`,
-          title: r.title || prevDraft?.title || 'Job Requisition',
-          department: r.department || prevDraft?.department || 'Engineering',
-          location: r.location || prevDraft?.location || 'Bangalore, India (Hybrid)',
-          experience: r.experience_level || prevDraft?.experience || 'Mid (2-4 yrs)',
-          employment_type: r.employment_type || prevDraft?.employment_type || 'Contract',
-          hiring_model: (r.location && r.location.toLowerCase().includes('remote')) ? 'Remote' : (prevDraft?.hiring_model || 'Hybrid'),
-          openings: resolvedOpenings,
-          target_start_date: prevDraft?.target_start_date || 'Flexible',
-          skills: Array.isArray(r.skills)
-            ? r.skills
-            : typeof r.skills === 'string'
-            ? r.skills.split(',').map((s) => s.trim()).filter(Boolean)
-            : (prevDraft?.skills || ['Python', 'FastAPI', 'PostgreSQL', 'Docker']),
-          summary: cleanSummary,
-        };
-
-        if (prevDraft) {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.requisitionDraft
-                ? { ...m, requisitionDraft: { ...m.requisitionDraft, ...reqDraft } }
-                : m
-            )
-          );
-        }
-      } else if (prevDraft && (isOpeningsUpdate || isSkillUpdate || isSummaryUpdate || isDraftIntent)) {
-        let updatedSkills = prevDraft.skills;
-        let updatedSummary = prevDraft.summary || prevDraft.job_description;
-        let updatedOpenings = explicitOpenings || prevDraft.openings || 1;
-
-        if (isSkillUpdate) {
-          let skillText = '';
-          const m =
-            text.match(/(?:skills?|tech\s*stack)\s*(?:as|to|should\s*be|are|is|:)?\s*[:=]?\s*([^.!?\n]+)/i) ||
-            text.match(/(?:key\s*skills?)\s*(?:as|to|should\s*be|are|is|:)?\s*[:=]?\s*([^.!?\n]+)/i) ||
-            text.match(/want\s+(?:key\s*)?skills?\s*(?:as|to|is|are)?\s*([^.!?\n]+)/i);
-          if (m && m[1]) {
-            skillText = m[1].replace(/\bonly\b/gi, '').trim();
-          } else if (textLower.includes('python') || textLower.includes('react')) {
-            skillText = text;
-          }
-
-          if (skillText) {
-            const parsed = skillText
-              .split(/,|\band\b|&/i)
-              .map((s) => s.replace(/[^a-zA-Z0-9\.\+#\-]/g, '').trim())
-              .filter((s) => s && !['i', 'want', 'key', 'skill', 'skills', 'as', 'only', 'to', 'the', 'for'].includes(s.toLowerCase()))
-              .map((s) => s.charAt(0).toUpperCase() + s.slice(1));
-            if (parsed.length > 0) {
-              updatedSkills = parsed;
-            }
-          }
-        }
-
-        if (isSummaryUpdate) {
-          const m = text.match(/(?:role\s*summary|summary|job\s*description|description)\s*(?:to|as|is|should\s*be|:)?\s*[:=]?\s*(.+)/i);
-          if (m && m[1] && m[1].trim()) {
-            updatedSummary = m[1].trim();
-          }
-        }
-
-        if (updatedSummary) {
-          updatedSummary = updatedSummary.replace(/\b(?:number\s+of\s+)?openings?\s*[:=]?\s*\d+\.?/gi, '').trim();
-        }
-
-        const updatedDraftObj = {
-          ...prevDraft,
-          openings: updatedOpenings,
-          skills: updatedSkills,
-          summary: updatedSummary,
-          job_description: updatedSummary,
-        };
-
-        reqDraft = updatedDraftObj;
-
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.requisitionDraft
-              ? { ...m, requisitionDraft: { ...m.requisitionDraft, ...updatedDraftObj } }
-              : m
-          )
-        );
-
-        if (isOpeningsUpdate) {
-          replyContent = `Got it! I've updated the number of openings for **${updatedDraftObj.title}** to **${updatedOpenings}**. The draft card above has been updated.`;
-        } else if (replyContent.toLowerCase().includes('requires the skill list') || replyContent.toLowerCase().includes('3-5') || replyContent.toLowerCase().includes('3 to 5')) {
-          replyContent = `Got it! I've updated the draft for **${updatedDraftObj.title}** with key skills: **${Array.isArray(updatedSkills) ? updatedSkills.join(', ') : updatedSkills}**. The draft card above has been updated.`;
-        }
-      } else if (isDraftIntent) {
-        let roleTitle = 'Python Backend Engineer';
-        const match = replyContent.match(/for\s+\*\*?([A-Za-z0-9\s\/\+\#\-]+?)\*\*?(?:\s*\(|\.|\?|$|,)/i) ||
-                      replyContent.match(/requisition for\s+([A-Za-z0-9\s\/\+\#\-]+?)(?:\s*\(|\.|\?|$|,)/i);
-        if (match && match[1] && match[1].trim()) {
-          roleTitle = match[1].trim();
-        }
-        reqDraft = {
-          id: `draft-${Date.now()}`,
-          title: roleTitle,
-          department: 'Engineering',
-          location: 'Bangalore, India (Hybrid)',
-          experience: 'Mid (2-4 yrs)',
-          employment_type: 'Contract',
-          hiring_model: 'Hybrid',
-          openings: explicitOpenings || 1,
-          target_start_date: 'Flexible',
-          skills: roleTitle.toLowerCase().includes('python')
-            ? ['Python', 'FastAPI', 'PostgreSQL', 'Redis', 'Docker']
-            : ['Kubernetes', 'AWS', 'Terraform', 'CI/CD', 'Security'],
-          summary: `We are looking for a ${roleTitle} to help build and maintain secure, scalable systems and robust APIs.`,
+          ...r,
+          id: r.id || `draft-${Date.now()}`,
+          experience: r.experience_level || 'To be confirmed',
+          hiring_model: r.hiring_model || 'To be confirmed',
+          target_start_date: r.target_start_date || 'To be confirmed',
+          skills: Array.isArray(r.skills) ? r.skills : (r.skills || '').split(',').map(skill => skill.trim()).filter(Boolean),
+          summary: r.job_description || '',
         };
       }
 
-      // 3. Requisitions list results from backend tool or query
-      let reqList = null;
-      // CRITICAL: If we have an active draft card, NEVER attach or display published requisitions!
-      if (!reqDraft) {
-        const listAction = executedActions.find((a) => a.tool === 'list_hiring_requisitions');
-        if (listAction && Array.isArray(listAction.result)) {
-          reqList = listAction.result;
-        }
-
-        // Strict word boundary check for requisitions listing query (avoid matching 'open' in 'opening' or 'change')
-        const isReqQuery =
-          !/change|update|set|make|edit|modify/i.test(textLower) &&
-          /\b(requsition|requisition|requstion|requision|recquisition|req|role|job|position)s?\b/i.test(textLower) &&
-          /\b(show|list|all|view|display|what|get|see|active|have|tell|directory)\b/i.test(textLower);
-
-        if (
-          !reqList &&
-          (isReqQuery ||
-            replyContent.toLowerCase().includes('job requisitions directory') ||
-            replyContent.toLowerCase().includes('live requisition') ||
-            replyContent.toLowerCase().includes('total requisitions'))
-        ) {
-          reqList = /\b(closed|completed|filled)\b/i.test(textLower)
-            ? requisitions.filter((r) => ['closed', 'completed', 'filled'].includes((r.status || '').toLowerCase()))
-            : (requisitions.length > 0 ? requisitions : null);
-        }
-
-        // If user specifically asked for requisitions and we have cards, ensure reply text is informative
-        if (isReqQuery && reqList && reqList.length > 0 && (!replyContent || replyContent.includes('0 Total') || replyContent.startsWith('I am here to help'))) {
-          replyContent = `Here are the ${reqList.length} requisitions currently in your active pipeline:`;
-        }
-      }
-
-      // If user asked for candidates and we have cards, ensure reply text is informative
-      if (isCandQuery && candCards && candCards.length > 0 && (!replyContent || replyContent.startsWith('I am here to help'))) {
-        replyContent = `Here are the ${candCards.length} candidates from your candidate pool:`;
-      }
-
-      if (!replyContent) {
-        if (reqList && reqList.length > 0) {
-          replyContent = `Here are your ${reqList.length} active requisitions:`;
-        } else if (candCards && candCards.length > 0) {
-          replyContent = `Here are the candidates from your candidate pool:`;
-        } else {
-          replyContent = `I am here to help you manage your requisitions, candidates, and hiring pipeline. Would you like me to draft a new requisition, review candidates from your pool, or schedule an interview?`;
-        }
-      }
+      const listAction = executedActions.find(action => action.tool === 'list_hiring_requisitions');
+      const reqList = !reqDraft && Array.isArray(listAction?.result) ? listAction.result : null;
+      if (!replyContent) replyContent = 'No response was returned. Please try again.';
 
       const guideAction = executedActions.find((a) => a.tool === 'get_hiring_manager_guide');
       const roleSelectAction = executedActions.find((a) => a.tool === 'show_role_selection_dropdown');
@@ -2080,68 +1789,43 @@ function HiringManagerDashboardContent() {
 
   return (
     <div
-      className="w-full h-full max-h-screen lg:h-[calc(100vh-32px)] overflow-hidden flex flex-col text-left relative selection:bg-black selection:text-white bg-transparent"
+      className="hm-chat w-full h-full max-h-screen lg:h-[calc(100vh-32px)] overflow-hidden flex flex-col text-left relative selection:bg-black selection:text-white bg-transparent"
       style={{
-        fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
+        fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif",
       }}
     >
-      {/* Mobile Top Navigation Bar (< lg) */}
-      <div className="lg:hidden shrink-0 flex items-center justify-between px-3 py-2 mx-2 mt-2 rounded-2xl border border-gray-200/80 bg-white/80 backdrop-blur-md shadow-xs z-30">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => window.dispatchEvent(new CustomEvent('toggle-mobile-sidebar'))}
-            className="p-1.5 rounded-xl bg-gray-100 hover:bg-black hover:text-white text-gray-800 transition-colors cursor-pointer"
-            title="Open menu"
-          >
-            <Menu size={18} />
+      {/* Mobile navigation keeps account details out of the action row. */}
+      <header className="hm-mobile-header lg:hidden shrink-0 z-30">
+        <div className="hm-mobile-nav">
+          <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('toggle-mobile-sidebar'))}
+            className="hm-icon-button" aria-label="Open menu" title="Open menu">
+            <Menu size={20} />
           </button>
-          <div className="flex items-center gap-1.5">
-            <div className="w-5 h-5 flex items-center justify-center">
-              <img src={termjobsLogo} alt="Logo" className="w-4.5 h-4.5 object-contain" />
-            </div>
-            <span className="font-bold text-xs text-gray-900 tracking-tight">Hiring Assistant</span>
+          <div className="hm-mobile-brand">
+            <span>Hiring Assistant</span>
+            <span className="hm-mobile-brand-caption">Your hiring workspace</span>
           </div>
-        </div>
-
-        <div className="flex items-center gap-1.5 sm:gap-2 ml-auto">
-          <GoogleCalendarConnect onStatus={setGoogleCalendar} onConnected={data => setMessages(previous => [...previous, { sender: 'ai', text: `Google Calendar connected: ${data.email}. Calendar: primary. Timezone: ${data.timezone}. Company interview dates, times and durations can now be edited in the interview card and synced on dispatch.` }])} />
-          {/* Mobile compact tool buttons */}
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={handleStartNewChat}
-              className="w-7 h-7 rounded-lg bg-gray-100 hover:bg-black hover:text-white text-gray-800 flex items-center justify-center transition-all cursor-pointer text-xs"
-              title="New Chat"
-            >
-              <Plus size={13} strokeWidth={2.4} />
+          <div className="hm-mobile-actions">
+            <button type="button" onClick={handleStartNewChat} className="hm-icon-button" aria-label="New chat" title="New chat">
+              <Plus size={20} />
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                setConversationsSearchQuery('');
-                setIsConversationsDrawerOpen((prev) => !prev);
-              }}
-              className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
-                isConversationsDrawerOpen ? 'bg-black text-white' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
-              }`}
-              title="Chat History"
-            >
-              <History size={13} strokeWidth={2} />
+            <button type="button" onClick={() => { setConversationsSearchQuery(''); setIsConversationsDrawerOpen(prev => !prev); }}
+              className="hm-icon-button" aria-label="Chat history" title="Chat history" aria-expanded={isConversationsDrawerOpen}>
+              <History size={19} />
             </button>
-            <button
-              type="button"
-              onClick={() => setIsCalendarModalOpen(true)}
-              className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
-                isCalendarModalOpen ? 'bg-black text-white' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
-              }`}
-              title="Calendar"
-            >
-              <Calendar size={13} strokeWidth={2} />
+            <button type="button" onClick={() => { setToolsSearchQuery(''); setIsToolsDrawerOpen(prev => !prev); }}
+              className="hm-icon-button" aria-label="Tools and actions" title="Tools and actions" aria-expanded={isToolsDrawerOpen}>
+              <MoreHorizontal size={21} />
             </button>
           </div>
         </div>
-      </div>
+        <div className="hm-mobile-integrations">
+          <GoogleCalendarConnect compact onStatus={setGoogleCalendar} onConnected={data => setMessages(previous => [...previous, { sender: 'ai', text: `Google Calendar connected: ${data.email}. Calendar: primary. Timezone: ${data.timezone}. Company interview dates, times and durations can now be edited in the interview card and synced on dispatch.` }])} />
+          <button type="button" onClick={() => setIsCalendarModalOpen(true)} className="hm-calendar-link" aria-expanded={isCalendarModalOpen}>
+            <Calendar size={14} /> Interviews <ChevronRight size={13} />
+          </button>
+        </div>
+      </header>
 
       {/* Live Bot Feedback Banner */}
       {botFeedback.text && (
@@ -2295,12 +1979,13 @@ function HiringManagerDashboardContent() {
         /* ========================================================================= */
         /* CLEAN CENTERED AI WORKSPACE (FIXED & NON-SCROLLING, MOBILE OPTIMISED)     */
         /* ========================================================================= */
-        <div className="flex-1 w-full min-h-0 flex flex-col items-center justify-center px-3 sm:px-6 py-2 sm:py-3 max-w-4xl mx-auto overflow-hidden">
+        <div className="hm-welcome flex-1 w-full min-h-0 flex flex-col items-center justify-center px-3 sm:px-6 py-2 sm:py-3 max-w-4xl mx-auto overflow-hidden">
           {/* Centered TermJobs Logo */}
-          <div className="flex items-center justify-center mx-auto mb-1">
+          <div className="hm-welcome-mark flex items-center justify-center mx-auto mb-1">
             <img src={termjobsLogo} alt="TermJobs" className="w-11 h-11 sm:w-14 sm:h-14 object-contain" />
           </div>
 
+          <span className="hm-welcome-eyebrow lg:hidden">A LITTLE LESS ADMIN. MORE GREAT HIRES.</span>
           {/* Heading */}
           <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight text-center px-2">
             {greetingText}, {userName} <span className="inline-block">👋</span>
@@ -2308,7 +1993,7 @@ function HiringManagerDashboardContent() {
 
           {/* Subtitle */}
           <p className="text-xs sm:text-sm font-medium text-gray-500 text-center mt-0.5 sm:mt-1 mb-3 sm:mb-5">
-            I'm your Hiring Assistant.
+            <span className="hidden lg:inline">I'm your Hiring Assistant.</span><span className="lg:hidden">Your next great hire starts here.</span>
           </p>
 
           {/* Centered Main Chat Input Box */}
@@ -2317,7 +2002,7 @@ function HiringManagerDashboardContent() {
               e.preventDefault();
               handleSendPrompt();
             }}
-            className="w-full max-w-2xl sm:max-w-3xl bg-white rounded-2xl sm:rounded-3xl shadow-lg hover:shadow-xl transition-all p-3 sm:p-4.5 flex flex-col justify-between min-h-[105px] sm:min-h-[120px] border-0 focus-within:shadow-xl"
+            className="hm-welcome-composer w-full max-w-2xl sm:max-w-3xl bg-white rounded-2xl sm:rounded-3xl shadow-lg hover:shadow-xl transition-all p-3 sm:p-4.5 flex flex-col justify-between min-h-[105px] sm:min-h-[120px] border-0 focus-within:shadow-xl"
           >
             <textarea
               ref={promptInputRef}
@@ -2330,12 +2015,14 @@ function HiringManagerDashboardContent() {
                   handleSendPrompt();
                 }
               }}
-              placeholder="Ask me anything about requisitions, candidates, interviews, or team..."
+              aria-label="Message Hiring Assistant"
+              placeholder="Ask about requisitions, candidates, interviews…"
               disabled={isAiTyping}
               className="w-full bg-transparent text-xs sm:text-sm text-gray-800 placeholder-gray-400 outline-none resize-none font-normal leading-relaxed disabled:opacity-50"
             />
 
-            <div className="flex items-center justify-end pt-1">
+            <div className="flex items-center justify-between lg:justify-end pt-1">
+              <span className="hm-composer-caption lg:hidden"><Sparkles size={13} /> Make room for better hiring</span>
               <div className="flex items-center gap-1.5 sm:gap-2">
                 <button
                   type="button"
@@ -2361,7 +2048,7 @@ function HiringManagerDashboardContent() {
           </form>
 
           {/* Centered Suggestion Pills */}
-          <div className="flex items-center justify-center gap-1.5 sm:gap-2 mt-3 sm:mt-4 flex-wrap w-full max-w-2xl sm:max-w-3xl py-1">
+          <div className="hm-welcome-suggestions flex items-center justify-center gap-1.5 sm:gap-2 mt-3 sm:mt-4 flex-wrap w-full max-w-2xl sm:max-w-3xl py-1">
             <button
               type="button"
               disabled={isAiTyping}
@@ -2407,7 +2094,7 @@ function HiringManagerDashboardContent() {
         </div>
       ) : (
         /* Conversation Mode */
-        <div className="flex-1 w-full min-h-0 flex flex-col max-w-5xl mx-auto px-2 sm:px-6 pt-1 sm:pt-2 overflow-hidden relative z-10">
+        <div className="hm-conversation flex-1 w-full min-h-0 flex flex-col max-w-5xl mx-auto px-2 sm:px-6 pt-1 sm:pt-2 overflow-hidden relative z-10">
           <div className="w-full flex-1 min-h-0 flex flex-col overflow-hidden">
               {/* TOP HEADER (Desktop only - mobile already has top bar) */}
               <div className="hidden lg:flex items-center justify-between pb-2 mb-1 border-b border-gray-100 shrink-0">
@@ -2425,23 +2112,25 @@ function HiringManagerDashboardContent() {
               {/* CHAT MESSAGES STREAM CONTAINER */}
               <div
                 ref={chatContainerRef}
-                className="flex-1 min-h-0 overflow-y-auto pr-1.5 overscroll-contain flex flex-col gap-4 pt-1 pb-3"
+                className="hm-message-stream flex-1 min-h-0 overflow-y-auto pr-1.5 overscroll-contain flex flex-col gap-4 pt-1 pb-3"
                 style={{ scrollBehavior: 'auto' }}
               >
 
-              {messages.map((msg) => {
+              {messages.map((msg, messageIndex) => {
                 const isUser = msg.sender === 'user';
+                const roleOptions = msg.roleOptions || msg.executedActions?.find(action => action.tool === 'show_role_selection_dropdown')?.result?.roles;
+                const hasRoleOptions = Array.isArray(roleOptions) && roleOptions.length > 0;
                 return (
-                  <div key={msg.id} className="w-full shrink-0">
+                  <div key={msg.id} ref={messageIndex === messages.length - 1 ? latestMessageRef : null} className="w-full shrink-0">
                     {/* User Message Bubble */}
                     {isUser ? (
                       <div className="w-full flex justify-end items-start py-1 px-1 relative isolate select-text">
-                        <div className="bg-[#111417] text-white text-[12.5px] sm:text-[13px] font-medium leading-relaxed max-w-[80%] px-4 py-2.5 rounded-2xl rounded-tr-xs shadow-2xs select-text break-words">
+                        <div className="hm-user-message bg-[#111417] text-white text-[12.5px] sm:text-[13px] font-medium leading-relaxed max-w-[80%] px-4 py-2.5 rounded-2xl rounded-tr-xs shadow-2xs select-text break-words">
                           {msg.text}
                         </div>
                       </div>
                     ) : (!msg.roleOptions && !msg.requisitionDraft && !msg.candidatesList && parseHiringPipelineData(msg.text, msg.executedActions)) ? (
-                      <div className="w-full flex items-start gap-2.5 sm:gap-3 py-1 px-1 relative isolate select-text">
+                      <div className="hm-assistant-row w-full flex items-start gap-2.5 sm:gap-3 py-1 px-1 relative isolate select-text">
                         <div className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center shrink-0 mt-0.5">
                           <img src={termjobsLogo} alt="TermJobs" className="w-full h-full object-contain" />
                         </div>
@@ -2455,16 +2144,16 @@ function HiringManagerDashboardContent() {
                       </div>
                     ) : (
                       /* Assistant Message Bubble - Matching AiChat.jsx Modern Borderless Design */
-                      <div className="w-full flex items-start gap-2.5 sm:gap-3 py-1 px-1 relative isolate select-text">
+                      <div className="hm-assistant-row w-full flex items-start gap-2.5 sm:gap-3 py-1 px-1 relative isolate select-text">
                         {/* Assistant Avatar */}
                         <div className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center shrink-0 mt-0.5">
                           <img src={termjobsLogo} alt="TermJobs" className="w-full h-full object-contain" />
                         </div>
 
                         {/* Message Bubble - BORDERLESS white card with high-end ergonomics */}
-                        <div className="flex-1 min-w-0 bg-white border-0 rounded-2xl rounded-tl-xs p-4 sm:p-5 shadow-xs space-y-3 select-text max-w-3xl xl:max-w-4xl">
+                        <div className="hm-assistant-message flex-1 min-w-0 bg-white border-0 rounded-2xl rounded-tl-xs p-4 sm:p-5 shadow-xs space-y-3 select-text max-w-3xl xl:max-w-4xl">
                           {msg.heading && (
-                            <div className="font-extrabold text-gray-950 text-xs sm:text-[13px] tracking-tight select-text">
+                            <div className={`font-extrabold text-gray-950 text-xs sm:text-[13px] tracking-tight select-text ${hasRoleOptions ? 'hidden lg:block' : ''}`}>
                               {msg.heading}
                             </div>
                           )}
@@ -2472,20 +2161,21 @@ function HiringManagerDashboardContent() {
                           {/* Markdown Body using .chat-markdown-body and formatMarkdownContent */}
                           {msg.text && (
                             <div
-                              className="chat-markdown-body prose prose-sm max-w-none text-gray-800 font-sans text-xs sm:text-[12.5px] leading-relaxed select-text"
+                              className={`chat-markdown-body prose prose-sm max-w-none text-gray-800 font-sans text-xs sm:text-[12.5px] leading-relaxed select-text ${hasRoleOptions ? 'hidden lg:block' : ''}`}
                               dangerouslySetInnerHTML={{
                                 __html: marked.parse(formatMarkdownContent(msg.text || ''))
                               }}
                             />
                           )}
 
+                          {hasRoleOptions && <p className="hm-role-intro lg:hidden">Choose a role to start your requisition, or tell me a custom role.</p>}
                           {/* Predefined Role Selection Options */}
                           {(() => {
                             const activeRoleOptions = msg.roleOptions || msg.executedActions?.find((a) => a.tool === 'show_role_selection_dropdown')?.result?.roles;
                             if (!activeRoleOptions || !Array.isArray(activeRoleOptions) || activeRoleOptions.length === 0) return null;
 
                             return (
-                              <div className="w-full mt-3 pt-3 border-t border-gray-100 space-y-2.5">
+                              <div className="hm-role-options w-full mt-3 pt-3 border-t border-gray-100 space-y-2.5">
                                 <div className="flex items-center justify-between text-[11px] font-semibold text-gray-500 uppercase tracking-wider px-0.5">
                                   <span className="flex items-center gap-1.5 text-gray-700">
                                     <Briefcase size={13} className="text-gray-500" />
@@ -2549,7 +2239,7 @@ function HiringManagerDashboardContent() {
 
                           {/* Inline Requisition Card (Exact Image 2 Match) */}
                           {msg.requisitionDraft && (
-                            <div className="w-full max-w-3xl xl:max-w-4xl bg-white rounded-2xl border border-gray-200/90 shadow-xs p-5 sm:p-6 text-left">
+                            <div className="hm-draft-card w-full max-w-3xl xl:max-w-4xl bg-white rounded-2xl border border-gray-200/90 shadow-xs p-5 sm:p-6 text-left">
                               {/* Card Header */}
                               <div className="flex items-center justify-between border-b border-gray-100 pb-3">
                                 <div className="flex items-center gap-2.5">
@@ -2592,7 +2282,7 @@ function HiringManagerDashboardContent() {
                               </div>
 
                               {/* 2-Column Content */}
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+                              <div className="hm-draft-fields grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
                                 {/* Left Column Parameters */}
                                 <div className="space-y-2.5">
                                   <div className="flex items-center text-xs">
@@ -2703,7 +2393,7 @@ function HiringManagerDashboardContent() {
                               </div>
 
                               {/* Card Action Buttons (Under "What would you like to do next?") */}
-                              <div className="mt-5 pt-3.5 border-t border-gray-100">
+                              <div className="hm-draft-actions mt-5 pt-3.5 border-t border-gray-100">
                                 <p className="text-xs text-gray-600 font-medium mb-2.5">
                                   What would you like to do next?
                                 </p>
@@ -2808,7 +2498,7 @@ function HiringManagerDashboardContent() {
 
                           {/* Inline Scheduled Interviews / Calendar Meetings Card */}
                           {msg.scheduledInterviews && msg.scheduledInterviews.length > 0 && (
-                            <div className="space-y-2 mt-3 w-full max-w-4xl xl:max-w-5xl text-left">
+                            <div className="hm-requisition-results space-y-2 mt-3 w-full max-w-4xl xl:max-w-5xl text-left">
                               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                                 {msg.scheduledInterviews.map((meet, mIdx) => (
                                   <div
@@ -2939,7 +2629,7 @@ function HiringManagerDashboardContent() {
                                   const isDraft = sLower.includes('draft');
 
                                   const badgeColor = isLive
-                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                    ? 'bg-zinc-100 text-zinc-700 border-zinc-200'
                                     : isPending
                                     ? 'bg-amber-50 text-amber-700 border-amber-200'
                                     : isDraft
@@ -2972,7 +2662,7 @@ function HiringManagerDashboardContent() {
                                           </div>
                                           {req.salary_range && (
                                             <div className="flex items-center gap-2 text-gray-800 font-semibold truncate pt-0.5">
-                                              <span className="text-gray-400 text-xs shrink-0">💼</span>
+                                              <Briefcase size={13} className="text-gray-400 shrink-0" />
                                               <span className="truncate">{req.salary_range}</span>
                                             </div>
                                           )}
@@ -3116,11 +2806,10 @@ function HiringManagerDashboardContent() {
                 </div>
               )}
 
-              <div ref={chatBottomRef} />
             </div>
 
             {/* FLOATING / DOCKED BOTTOM ASSISTANT PROMPT BAR */}
-            <div className="pt-2 pb-2 shrink-0 mt-auto">
+            <div className="hm-composer-dock pt-2 pb-2 shrink-0 mt-auto">
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
@@ -3134,7 +2823,8 @@ function HiringManagerDashboardContent() {
                   type="text"
                   value={promptInput}
                   onChange={(e) => setPromptInput(e.target.value)}
-                  placeholder="Ask me anything about requisitions, candidates, interviews, or team..."
+                  aria-label="Message Hiring Assistant"
+              placeholder="Message Hiring Assistant…"
                   disabled={isAiTyping}
                   className="w-full bg-transparent text-xs sm:text-sm text-gray-800 placeholder-gray-400 outline-none font-normal disabled:opacity-50"
                 />
@@ -3158,7 +2848,7 @@ function HiringManagerDashboardContent() {
               </form>
 
               {/* Prompt Suggestion Chips */}
-              <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+              <div className="hm-dock-suggestions flex items-center gap-1.5 mt-2 flex-wrap">
                 <button
                   type="button"
                   disabled={isAiTyping}
@@ -3177,6 +2867,24 @@ function HiringManagerDashboardContent() {
                   title="Summarize my hiring pipeline"
                 >
                   Pipeline summary
+                </button>
+                <button
+                  type="button"
+                  disabled={isAiTyping}
+                  onClick={() => handleSendPrompt('Schedule an interview')}
+                  className="hidden sm:inline-flex px-3.5 py-1.5 rounded-xl bg-white hover:bg-gray-50 border border-gray-200/80 text-[11px] font-medium text-gray-700 shadow-2xs transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                  title="Schedule an interview"
+                >
+                  Schedule interview
+                </button>
+                <button
+                  type="button"
+                  disabled={isAiTyping}
+                  onClick={() => handleSendPrompt('Help me create a new requisition for a DevSecOps Engineer')}
+                  className="hidden sm:inline-flex px-3.5 py-1.5 rounded-xl bg-white hover:bg-gray-50 border border-gray-200/80 text-[11px] font-medium text-gray-700 shadow-2xs transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                  title="Draft a new requisition"
+                >
+                  Draft requisition
                 </button>
                 <button
                   type="button"

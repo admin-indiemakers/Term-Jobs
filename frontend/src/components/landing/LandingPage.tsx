@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { useCallback, useEffect, useState } from "react";
 import { ArrowControl } from "./ArrowControl";
 import { BrandMark } from "./BrandMark";
@@ -87,6 +88,17 @@ export function LandingPage({ enabled = true }: { enabled?: boolean }) {
             <SectionNavigation index={index} dark={dark} onSelect={goTo} />
             <ArrowControl isLast={isLast} dark={dark} onClick={() => (isLast ? goTo(0) : step(1))} />
           </div>
+
+          <footer
+            className="absolute inset-x-0 bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] z-40 flex justify-center px-3 md:bottom-3 md:px-36"
+            style={{ color: dark ? "var(--color-paper)" : "var(--color-ink)" }}
+          >
+            <nav aria-label="Legal" className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-[10px] sm:text-xs">
+              <Link to="/privacy-policy" className="py-2 underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2">Privacy Policy</Link>
+              <Link to="/terms-and-conditions" className="py-2 underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2">Terms & Conditions</Link>
+              <Link to="/platform-rules" className="py-2 underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2">Platform Rules</Link>
+            </nav>
+          </footer>
 
           {/* Mobile Bottom Navigation Capsule */}
           <MobileBottomNav

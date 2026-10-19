@@ -8,6 +8,7 @@ Strictly scoped to the authenticated Company Admin's tenant.
 """
 import json
 import re
+from modules.shared.employment_policy import contract_employment_type
 import uuid
 from datetime import datetime, timezone
 import httpx
@@ -281,7 +282,7 @@ COMPANY_ADMIN_TOOLS = [
                     },
                     "employment_type": {
                         "type": "string",
-                        "description": "Contract duration or Full-Time"
+                        "description": "Contract engagement duration; permanent jobs are not supported"
                     },
                     "experience_level": {
                         "type": "string",
@@ -954,7 +955,7 @@ def draft_requisition_preview(
 ) -> dict:
     dept = department or "Engineering"
     loc = location or "Bengaluru / Hybrid"
-    emp_type = employment_type or "Contract (6 Months)"
+    emp_type = contract_employment_type(employment_type)
     exp = experience_level or "Senior (5-8 yrs)"
     salary = salary_range or "₹1,800 - ₹2,500 / hr"
     

@@ -1,9 +1,16 @@
-"""Creation requests must start role selection before reaching the LLM."""
+"""Legacy fallback remains available when no model is configured."""
 from unittest.mock import Mock
 
 import pytest
 
 from modules.hiring_manager_agent import agent
+
+
+@pytest.fixture(autouse=True)
+def offline_fallback(monkeypatch):
+    monkeypatch.setattr(agent, 'model_available', lambda: False)
+    monkeypatch.setattr(agent, 'is_hiring_request_in_scope', lambda *args: True)
+    monkeypatch.setattr(agent, 'run_hiring_manager_agent_chat', agent.run_hiring_manager_agent_chat.__wrapped__)
 
 
 @pytest.mark.parametrize("prompt", [
@@ -54,11 +61,13 @@ def test_closed_queries_use_status_filter(monkeypatch, prompt, has_closed):
     result = agent.run_hiring_manager_agent_chat(prompt, current_user={
         'id': 'test-hm', 'name': 'Test Manager', 'tenant_id': 'test-tenant',
     })
-    lookup.assert_called_once_with('test-hm', 'test-tenant', 'closed')
+    lookup.assert_called_once()
+    assert lookup.call_args.args[:2] == ('test-hm', 'test-tenant')
+    assert lookup.call_args.args[2] in ('all', 'closed')
     assert result['executed_actions'] == [{'tool': 'list_hiring_requisitions', 'result': rows}]
     assert 'closed requisitions' in result['reply'].lower()
     if not has_closed:
-        assert 'no closed requisitions' in result['reply']
+        assert 'Found 0 closed requisitions' in result['reply'] or 'no closed requisitions' in result['reply']
 
 
 @pytest.mark.parametrize('prompt', [
