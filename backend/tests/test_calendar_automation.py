@@ -228,3 +228,42 @@ def test_followup_today_preserves_draft_candidate_and_time(monkeypatch, prompt, 
 
 def test_followup_without_proposal_does_not_invent_schedule():
     assert assistant.handle_calendar_query('make it today', USER, []) is None
+
+
+@pytest.mark.parametrize('requested', ['hashil', 'Mohammed', 'MOHAMMED HASHIL', 'application-1', 'hashil@example.com'])
+def test_partial_name_resolves_unique_authorized_application(monkeypatch, requested):
+    import importlib
+    from unittest.mock import MagicMock
+    shared = importlib.import_module('modules.shared.db')
+    session = MagicMock()
+    session.query.return_value.filter.return_value.filter.return_value.all.return_value = [
+        SimpleNamespace(id='owned-req', title='Backend Developer')]
+    database = mongomock.MongoClient()['name-resolution']
+    database.candidate_submissions.insert_many([
+        {'id': 'application-1', 'candidate_name': 'Mohammed Hashil', 'candidate_email': 'hashil@example.com', 'requisition_id': 'owned-req'},
+        {'id': 'foreign-app', 'candidate_name': 'Hashil', 'requisition_id': 'other-company-req'},
+    ])
+    monkeypatch.setattr(shared, 'get_session', lambda: nullcontext(session))
+    monkeypatch.setattr(shared, 'db', database)
+    actor = SimpleNamespace(id='manager-1', tenant_id='company-1', role='Hiring Manager')
+    result = assistant.contextual_candidate(f'setup meeting with {requested} at 4', actor, [])
+    assert result['id'] == 'application-1'
+    assert result['candidate_name'] == 'Mohammed Hashil'
+    assert result['requisition_title'] == 'Backend Developer'
+
+
+def test_shared_last_name_requires_disambiguation(monkeypatch):
+    import importlib
+    from unittest.mock import MagicMock
+    shared = importlib.import_module('modules.shared.db')
+    session = MagicMock()
+    session.query.return_value.filter.return_value.filter.return_value.all.return_value = [SimpleNamespace(id='req', title='Developer')]
+    database = mongomock.MongoClient()['ambiguous-names']
+    database.candidate_submissions.insert_many([
+        {'id': 'a', 'candidate_name': 'Mohammed Hashil', 'requisition_id': 'req'},
+        {'id': 'b', 'candidate_name': 'Ahmed Hashil', 'requisition_id': 'req'},
+    ])
+    monkeypatch.setattr(shared, 'get_session', lambda: nullcontext(session))
+    monkeypatch.setattr(shared, 'db', database)
+    actor = SimpleNamespace(id='manager-1', tenant_id='company-1', role='Hiring Manager')
+    assert assistant.contextual_candidate('setup meeting with hashil at 4', actor, []) is None

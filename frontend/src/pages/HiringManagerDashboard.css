@@ -1,0 +1,155 @@
+/* Mobile hiring workspace. Desktop retains the existing layout. */
+@media (max-width: 1023px) {
+  .app-shell.console-hiringmanager.ai-fixed-mode .main-area {
+    height: 100dvh !important; max-height: 100dvh !important;
+  }
+  .app-shell.console-hiringmanager.ai-fixed-mode .content-area {
+    width: 100% !important; max-width: 100% !important;
+    height: 100dvh !important; max-height: 100dvh !important;
+    min-height: 0 !important; margin: 0 !important; border-radius: 0 !important;
+  }
+  .hm-chat { min-width: 0; max-height: 100dvh; background: radial-gradient(ellipse at 75% 26%, #e9e9ed80, transparent 58%), #f8f8fa; }
+  .hm-mobile-header { padding: max(6px, env(safe-area-inset-top)) 12px 0; background: #ffffffd9; backdrop-filter: blur(20px); border-bottom: 1px solid #e5e5e9; }
+  .hm-mobile-nav { display: flex; align-items: center; gap: 8px; min-height: 48px; }
+  .hm-mobile-brand { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 3px; }
+  .hm-mobile-brand > span:first-child { font-size: 14px; font-weight: 700; letter-spacing: -0.4px; color: #202027; }
+  .hm-mobile-brand-caption { display: none; }
+  .hm-mobile-actions { display: flex; gap: 2px; flex-shrink: 0; }
+  .hm-icon-button { width: 44px; height: 44px; flex-shrink: 0; display: grid; place-items: center; border: 1px solid transparent; border-radius: 14px; color: #3f3f48; background: transparent; cursor: pointer; transition: background 160ms, transform 160ms; }
+  .hm-mobile-nav > .hm-icon-button { background: #f0f0f3; margin-right: 2px; }
+  .hm-icon-button:hover, .hm-icon-button[aria-expanded='true'] { background: #e9e9ee; }
+  .hm-icon-button:active { transform: scale(0.95); }
+  .hm-chat button:focus-visible { outline: 2px solid #71717a; outline-offset: 3px; }
+  .hm-mobile-integrations { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 34px; }
+  .hm-calendar-connection { position: relative; min-width: 0; }
+  .hm-calendar-connection > button { display: flex; align-items: center; gap: 7px; min-height: 34px; padding: 0 4px; font-size: 11px; font-weight: 500; color: #666670; cursor: pointer; }
+  .hm-calendar-connection > button:disabled { opacity: 0.6; cursor: wait; }
+  .hm-connection-dot { width: 5px; height: 5px; border-radius: 50%; background: #52525b; box-shadow: 0 0 0 3px #52525b12; }
+  .hm-calendar-connection > p { position: absolute; top: 100%; left: 0; width: min(280px, 80vw); padding: 12px; border: 1px solid #fecaca; border-radius: 12px; background: white; color: #b91c1c; font-size: 12px; box-shadow: 0 8px 24px #20202712; z-index: 40; }
+  .hm-calendar-link { display: flex; align-items: center; gap: 5px; min-height: 34px; font-size: 11px; color: #666670; cursor: pointer; flex-shrink: 0; }
+  .hm-welcome { padding: 32px 22px max(28px, env(safe-area-inset-bottom)); overflow-y: auto; justify-content: safe center; max-width: 640px; }
+  .hm-welcome-mark { width: 68px; height: 68px; min-height: 68px; margin-bottom: 24px; border: 1px solid #fff; border-radius: 22px; background: linear-gradient(145deg, #fff, #eeeef1); box-shadow: 0 8px 24px #27272a10, inset 0 1px 0 white; }
+  .hm-welcome-mark img { width: 35px; height: 35px; }
+  .hm-welcome-eyebrow { font-size: 9px; font-weight: 600; letter-spacing: 1.7px; color: #80808a; text-align: center; margin-bottom: 12px; }
+  .hm-welcome h1 { font-size: clamp(24px, 6.4vw, 32px); line-height: 1.25; font-weight: 650; letter-spacing: -1px; padding: 0; overflow-wrap: anywhere; color: #24242b; }
+  .hm-welcome h1 > span { font-size: 0.8em; }
+  .hm-welcome > p { font-size: 13px; font-weight: 400; line-height: 1.6; color: #797982; margin-top: 9px; margin-bottom: 28px; }
+  .hm-welcome-composer { min-height: 156px; flex-shrink: 0; padding: 17px; border: 1px solid #e1e1e7; border-radius: 24px; box-shadow: 0 12px 32px #27272a10, 0 2px 5px #27272a05; }
+  .hm-welcome-composer:hover { box-shadow: 0 12px 32px #27272a15; }
+  .hm-welcome-composer:focus-within { border-color: #a1a1aa; box-shadow: 0 0 0 3px #71717a12, 0 12px 32px #27272a10; }
+  .hm-welcome-composer textarea { font-size: 16px; line-height: 1.6; min-height: 64px; }
+  .hm-welcome-composer textarea::placeholder { color: #9696a0; }
+  .hm-composer-caption { display: inline-flex; align-items: center; gap: 5px; font-size: 9px; color: #92929d; }
+  .hm-welcome-composer button, .hm-composer-dock form button { min-width: 44px; min-height: 44px; }
+  .hm-welcome-composer button[type='submit'], .hm-composer-dock button[type='submit'] { border-radius: 15px; background: #27272a; }
+  .hm-welcome-suggestions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 20px; padding: 0; flex-shrink: 0; }
+  .hm-welcome-suggestions > button { min-height: 48px; min-width: 0; padding: 10px 12px; justify-content: flex-start; gap: 8px; border: 1px solid #e6e6ec; border-radius: 14px; background: #ffffffa8; box-shadow: 0 2px 4px #27272a03; font-size: 11px; font-weight: 500; color: #52525b; white-space: normal; text-align: left; }
+  .hm-welcome-suggestions > button svg { width: 15px; height: 15px; color: #71717a; }
+  .hm-welcome-suggestions > button:hover { background: white; border-color: #b8b8c2; }
+  .hm-welcome-suggestions > button:nth-child(5), .hm-welcome-suggestions > button:last-child { display: none; }
+  .hm-conversation { padding: 12px 16px 0; }
+  .hm-user-message { font-size: 14px; line-height: 1.65; background: #27272a; padding: 12px 16px; }
+  .hm-assistant-message { padding: 0; box-shadow: none; border: 0; border-radius: 0; background: transparent; }
+  .hm-conversation .chat-markdown-body { font-size: 14px; line-height: 1.65; overflow-wrap: anywhere; }
+  .hm-conversation .chat-markdown-body table { display: block; max-width: 100%; overflow-x: auto; }
+
+  .hm-message-stream { padding-right: 0; gap: 22px; padding-bottom: 20px; }
+  .hm-assistant-row { padding: 0; gap: 0; }
+  .hm-assistant-row > div:first-child { display: none; }
+  .hm-user-message { max-width: 88%; border-radius: 18px 18px 5px 18px; font-weight: 400; }
+  .hm-conversation .chat-markdown-body p { margin-top: 0; margin-bottom: 10px; }
+  .hm-conversation .chat-markdown-body code { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.9em; }
+  .hm-conversation .chat-markdown-body pre { max-width: 100%; overflow-x: auto; }
+  .hm-role-intro { font-size: 14px; line-height: 1.6; color: #52525b; }
+  .hm-role-options { margin-top: 12px; padding-top: 0; border-top: 0; }
+  .hm-role-options > div:first-child { font-size: 10px; letter-spacing: 0.6px; }
+  .hm-role-options > div:first-child > span:last-child { display: none; }
+  .hm-role-options button { padding: 14px; border-radius: 16px; background: white; box-shadow: none; }
+  .hm-role-options button > div:first-child { flex-wrap: wrap; }
+  .hm-role-options button > div:first-child > div { font-size: 14px; -webkit-line-clamp: unset; }
+  .hm-role-options button > div:nth-child(3) { white-space: normal; -webkit-line-clamp: 2; font-family: inherit; line-height: 1.6; }
+  .hm-draft-card { padding: 16px; border-radius: 18px; box-shadow: none; margin-top: 14px; }
+  .hm-draft-card > div:first-child { align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+  .hm-draft-card > div:first-child > div { min-width: 0; flex-wrap: wrap; }
+  .hm-draft-card h3 { overflow-wrap: anywhere; font-size: 16px; }
+  .hm-draft-fields { gap: 20px; }
+  .hm-draft-fields > div:first-child > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; align-items: start; padding: 4px 0; }
+  .hm-draft-fields > div:first-child > div > div { width: auto; min-width: 0; font-size: 11px; }
+  .hm-draft-fields > div:first-child > div > span { white-space: normal; overflow-wrap: anywhere; text-align: right; font-size: 12px; }
+  .hm-draft-actions > p { display: none; }
+  .hm-draft-actions > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .hm-draft-actions button { min-height: 44px; min-width: 0; justify-content: center; padding: 9px; font-size: 11px; border-radius: 12px; box-shadow: none; }
+  .hm-draft-actions button:first-child, .hm-draft-actions button:nth-last-child(2) { grid-column: 1 / -1; }
+  .hm-draft-actions button:last-child { grid-column: 1 / -1; min-height: 36px; }
+
+  .hm-composer-dock { padding: 10px 0 max(10px, env(safe-area-inset-bottom)); background: #f8f8fa; border-top: 1px solid #e6e6eb; }
+  .hm-composer-dock form { gap: 2px; padding: 4px 4px 4px 12px; border-radius: 18px; box-shadow: 0 4px 20px #27272a0a; }
+  .hm-composer-dock input { min-width: 0; font-size: 16px; }
+  .hm-dock-suggestions { display: none; }
+  .hm-dock-suggestions > button { flex-shrink: 0; min-height: 40px; }
+}
+@media (max-width: 359px) {
+  .hm-mobile-header { padding-left: 10px; padding-right: 10px; }
+  .hm-mobile-nav { gap: 4px; }
+  .hm-mobile-brand > span:first-child { font-size: 12px; }
+  .hm-mobile-brand-caption { font-size: 9px; }
+  .hm-welcome { padding-left: 16px; padding-right: 16px; }
+  .hm-composer-caption { max-width: 110px; line-height: 1.4; }
+}
+@media (max-width: 1023px) and (max-height: 650px) {
+  .hm-welcome { padding-top: 20px; padding-bottom: 20px; }
+  .hm-welcome-mark { width: 48px; height: 48px; min-height: 48px; border-radius: 16px; margin-bottom: 14px; }
+  .hm-welcome-mark img { width: 28px; height: 28px; }
+  .hm-welcome-eyebrow { display: none; }
+  .hm-welcome > p { margin-bottom: 16px; }
+  .hm-welcome-suggestions { margin-top: 12px; }
+}
+
+@media (max-width: 1023px) {
+  .hm-chat [class*="text-emerald-"], .hm-chat [class*="text-green-"] { color: #52525b; }
+  .hm-chat [class*="bg-emerald-"], .hm-chat [class*="bg-green-"] { background-color: #f4f4f5; }
+  .hm-chat [class*="border-emerald-"], .hm-chat [class*="border-green-"] { border-color: #e4e4e7; }
+}
+
+/* Shared response typography for desktop and mobile. */
+.hm-chat .chat-markdown-body {
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.8;
+  letter-spacing: -0.012em;
+  color: #45454f;
+  font-weight: 400;
+}
+.hm-chat .chat-markdown-body > :first-child { margin-top: 0; }
+.hm-chat .chat-markdown-body > :last-child { margin-bottom: 0; }
+.hm-chat .chat-markdown-body p { margin: 0 0 14px; }
+.hm-chat .chat-markdown-body strong { font-weight: 650; color: #27272f; }
+.hm-chat .chat-markdown-body :is(h1, h2, h3, h4) {
+  font-family: 'Manrope', system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.45;
+  font-weight: 700;
+  color: #24242b;
+  letter-spacing: -0.035em;
+  margin: 24px 0 10px;
+}
+.hm-chat .chat-markdown-body :is(ul, ol) { margin: 12px 0 16px; padding-left: 22px; }
+.hm-chat .chat-markdown-body li { padding-left: 4px; margin-bottom: 9px; line-height: 1.75; color: #52525d; }
+.hm-chat .chat-markdown-body li::marker { color: #a1a1aa; font-weight: 500; }
+.hm-chat .chat-markdown-body code {
+  background: #f5f5f7; border-color: #ebebef; color: #52525b;
+  font-size: 0.85em; font-weight: 400; padding: 2px 5px;
+}
+.hm-chat .chat-markdown-body blockquote { border-left: 2px solid #d4d4dc; color: #71717a; font-style: normal; padding: 4px 0 4px 16px; }
+.hm-chat .chat-markdown-body a { color: #3f3f46; text-decoration: underline; text-decoration-color: #b8b8c2; text-underline-offset: 4px; }
+.hm-chat .chat-markdown-body table { font-size: 12px; line-height: 1.6; border-color: #e4e4e9; }
+.hm-chat .chat-markdown-body th { color: #71717a; background: #fafafa; font-size: 11px; letter-spacing: 0.03em; font-weight: 600; }
+.hm-chat .chat-markdown-body td { color: #45454f; }
+.hm-requisition-results > div { gap: 14px; }
+.hm-requisition-results > div > div { padding: 20px; box-shadow: none; border-color: #e8e8ee; border-radius: 18px; }
+.hm-requisition-results h4 { font-family: 'Manrope', system-ui, sans-serif; font-size: 15px; line-height: 1.45; letter-spacing: -0.025em; font-weight: 700; -webkit-line-clamp: 2; }
+.hm-requisition-results button { font-size: 11px; font-weight: 600; border-radius: 10px; min-height: 36px; }
+@media (min-width: 1024px) {
+  .hm-assistant-message { padding: 24px 26px; box-shadow: 0 2px 8px #27272a03; }
+  .hm-requisition-results { margin-top: 20px; }
+}

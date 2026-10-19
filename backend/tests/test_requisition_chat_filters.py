@@ -68,6 +68,7 @@ def test_chat_routes_filtered_results_before_model_or_general_directory(agent, e
         'is_hiring_request_in_scope': lambda *args: True,
         'get_company_full_knowledge': Mock(return_value={'requisitions': ROWS}),
         'list_hiring_requisitions': loader,
+        'run_model_hiring_chat': lambda *args: None, 'model_available': lambda: False,
     }
     exec(compile(ast.Module(body=[function], type_ignores=[]), str(path), 'exec'), namespace)
     result = namespace[entry]('Show active requisitions created on 2026-10-16', current_user={'id': 'u', 'tenant_id': 'tenant'})
@@ -94,3 +95,18 @@ def test_hiring_loader_preserves_same_title_records_and_missing_timestamps():
     rows = namespace['list_hiring_requisitions']('u', 'tenant')
     assert [r['id'] for r in rows] == ['a', 'b', 'c']
     assert rows[-1]['created_at'] is None
+
+
+@pytest.mark.parametrize('wording', ['October 14', 'October 14th', '14 October', '14th of October', 'Oct 14, 2026'])
+def test_named_dates_filter_card_results(wording):
+    rows = [
+        {'id': 'wanted', 'status': 'Published', 'created_at': '2026-10-14T09:10:00Z'},
+        {'id': 'unwanted', 'status': 'Pending Approval', 'created_at': '2026-10-17T09:10:00Z'},
+    ]
+    result = filtered_requisition_reply(f'can u show me the requisition i made on {wording}', lambda: rows, 'list', now=NOW)
+    assert [r['id'] for r in result['executed_actions'][0]['result']] == ['wanted']
+
+
+def test_model_resolved_date_filters_followup_without_requisition_keyword():
+    result = filtered_requisition_reply('just the ones from that day', lambda: ROWS, 'list', now=NOW, created_on='2026-10-16')
+    assert [r['id'] for r in result['executed_actions'][0]['result']] == ['start', 'end', 'closed', 'inactive', 'draft']

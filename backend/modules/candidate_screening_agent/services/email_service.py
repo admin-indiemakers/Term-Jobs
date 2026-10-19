@@ -40,29 +40,15 @@ def send_email_via_gmail(
     if not sender or not pw:
         return {"status": "skipped", "reason": "Gmail credentials not configured (GMAIL_SENDER_EMAIL / GMAIL_APP_PASSWORD)"}
 
-    clean_password = pw.replace(" ", "")
-
     msg = MIMEMultipart("alternative")
     msg["From"] = f"Hiring Team <{sender}>"
     msg["To"] = to_email
     msg["Subject"] = subject
-
     msg.attach(MIMEText(html_content, "html"))
 
-    try:
-        server = smtplib.SMTP("smtp.gmail.com", 587, timeout=10)
-        server.starttls()
-        server.login(sender, clean_password)
-        server.send_message(msg)
-        server.quit()
-        
-        return {
-            "status": "success",
-            "message": f"Email successfully delivered to {to_email} via Gmail SMTP"
-        }
-    except Exception as e:
-        print(f"Error sending email via Gmail SMTP: {e}")
-        return {"status": "failed", "error": f"Gmail SMTP error: {str(e)}"}
+    # Share the SMTP transport's explicit provider errors and credential redaction.
+    from modules.identity.mail_transport import deliver_credentials_message
+    return deliver_credentials_message(msg, sender, pw, to_email)
 
 
 def send_shortlist_notification(

@@ -1,4 +1,6 @@
-import { useEffect } from "react";
+import { Link } from "react-router-dom";
+import { WaitlistModal } from './WaitlistModal';
+import { useCallback, useEffect, useState } from "react";
 import { ArrowControl } from "./ArrowControl";
 import { BrandMark } from "./BrandMark";
 import { FeaturesSection } from "./FeaturesSection";
@@ -16,8 +18,14 @@ const TOTAL = 6;
 const DARK_SECTIONS = new Set([1, 5]);
 
 export function LandingPage({ enabled = true }: { enabled?: boolean }) {
-  const { index, goTo, step } = useHorizontalPanels(TOTAL, enabled);
+  const [waitlistOpen, setWaitlistOpen] = useState(false);
+  const [talentOpen, setTalentOpen] = useState(false);
+  const openTalent = useCallback(() => setTalentOpen(true), []);
+  const closeTalent = useCallback(() => setTalentOpen(false), []);
+  const { index, goTo, step } = useHorizontalPanels(TOTAL, enabled && !waitlistOpen && !talentOpen);
   const dark = DARK_SECTIONS.has(index);
+  const openWaitlist = useCallback(() => setWaitlistOpen(true), []);
+  const closeWaitlist = useCallback(() => setWaitlistOpen(false), []);
 
   useEffect(() => {
     if (!enabled) return;
@@ -33,7 +41,7 @@ export function LandingPage({ enabled = true }: { enabled?: boolean }) {
   return (
     <main className="relative h-dvh w-screen max-w-full overflow-hidden bg-paper">
       <HorizontalScroller index={index}>
-        <HeroSection active={index === 0} onNext={() => step(1)} />
+        <HeroSection active={index === 0} onJoinWaitlist={openWaitlist} onJoinTalentPool={openTalent} />
         <StatementSection active={index === 1} />
         <WorkflowSection active={index === 2} />
         <TalentSection active={index === 3} />
@@ -53,7 +61,7 @@ export function LandingPage({ enabled = true }: { enabled?: boolean }) {
             }}
           />
 
-          <BrandMark dark={dark} onHomeClick={() => goTo(0)} />
+          <BrandMark dark={dark} onHomeClick={() => goTo(0)} onJoinWaitlist={openWaitlist} />
 
           {/* Desktop Navigation (completely untouched for md and up) */}
           <div className="hidden md:block">
@@ -61,6 +69,17 @@ export function LandingPage({ enabled = true }: { enabled?: boolean }) {
             <SectionNavigation index={index} dark={dark} onSelect={goTo} />
             <ArrowControl isLast={isLast} dark={dark} onClick={() => (isLast ? goTo(0) : step(1))} />
           </div>
+
+          <footer
+            className="absolute inset-x-0 bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] z-40 flex justify-center px-3 md:bottom-3 md:px-36"
+            style={{ color: dark ? "var(--color-paper)" : "var(--color-ink)" }}
+          >
+            <nav aria-label="Legal" className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-[10px] sm:text-xs">
+              <Link to="/privacy-policy" className="py-2 underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2">Privacy Policy</Link>
+              <Link to="/terms-and-conditions" className="py-2 underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2">Terms & Conditions</Link>
+              <Link to="/platform-rules" className="py-2 underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2">Platform Rules</Link>
+            </nav>
+          </footer>
 
           {/* Mobile Bottom Navigation Capsule */}
           <MobileBottomNav
@@ -74,6 +93,8 @@ export function LandingPage({ enabled = true }: { enabled?: boolean }) {
           />
         </>
       )}
+      {talentOpen && <WaitlistModal onClose={closeTalent} talent /> }
+      {waitlistOpen && <WaitlistModal onClose={closeWaitlist} />}
     </main>
   );
 }

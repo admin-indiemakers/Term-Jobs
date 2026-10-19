@@ -167,7 +167,7 @@ def contextual_candidate(prompt, user, history):
         if len(matches) > 1:
             return None
     if requested and requested.lower() not in ('him', 'her', 'them', 'this candidate'):
-        matches = [c for c in candidates if requested.casefold() in (str(c.get('id') or '').casefold(), str(c.get('candidate_email') or '').casefold()) or (c.get('candidate_name') and c['candidate_name'].casefold().startswith(requested.casefold() + ' '))]
+        matches = [c for c in candidates if requested.casefold() in (str(c.get('id') or '').casefold(), str(c.get('submission_id') or '').casefold(), str(c.get('candidate_email') or '').casefold()) or (c.get('candidate_name') and re.search(r'(?<!\w)' + re.escape(' '.join(requested.casefold().split())) + r'(?!\w)', ' '.join(c['candidate_name'].casefold().split())))]
         if len(matches) == 1:
             return {**matches[0], 'requisition_title': titles.get(matches[0].get('requisition_id'))}
         if len(matches) > 1:

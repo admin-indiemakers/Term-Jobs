@@ -120,7 +120,7 @@ def authorized_chat(database):
             if not actor.get('id') or not actor.get('tenant_id') or actor['tenant_id'] in ('local', 'all'):
                 return {'reply': 'A verified company and hiring manager account is required.', 'executed_actions': []}
             with hiring_scope(database, actor):
-                history = [item for item in history or [] if isinstance(item, dict) and item.get('role') == 'user']
+                history = [item for item in history or [] if isinstance(item, dict) and (item.get('role') or item.get('sender')) in ('user', 'assistant', 'ai')][-12:]
                 return function(prompt, history, current_user)
         return wrapped
     return decorate

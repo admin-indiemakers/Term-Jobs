@@ -289,6 +289,8 @@ app.include_router(hiring_manager_agent_router)
 app.include_router(vendor_billing_router)
 app.include_router(voice_router)
 app.include_router(offboarding_router, tags=["Offboarding"])
+from modules.waitlist.router import router as waitlist_router
+app.include_router(waitlist_router)
 app.include_router(candidate_profile_router)
 app.include_router(zoho_cliq_router)
 app.include_router(integrations_router)
