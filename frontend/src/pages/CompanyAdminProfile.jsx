@@ -575,6 +575,10 @@ export default function CompanyAdminProfile() {
       setError('Admin email cannot be empty');
       return false;
     }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(updatedAdmin.admin_email.trim())) {
+      setError('Enter a valid admin email address');
+      return false;
+    }
     if (updatedAdmin.admin_phone && updatedAdmin.admin_phone.trim()) {
       const phoneErr = validatePhone(updatedAdmin.admin_phone, { required: false });
       if (phoneErr) {
@@ -597,6 +601,9 @@ export default function CompanyAdminProfile() {
         body: payload,
       });
       savedCompanyNameRef.current = savedProfile?.name || nextName;
+      if (savedProfile?.admin_email) {
+        setAdminForm((previous) => ({ ...previous, admin_email: savedProfile.admin_email }));
+      }
 
       setSuccess('Changes saved successfully!');
       if (refreshUser) await refreshUser();

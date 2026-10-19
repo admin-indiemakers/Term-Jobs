@@ -1,3 +1,4 @@
+import re
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, Header, HTTPException, status, File, UploadFile
 from sqlalchemy import func, or_
@@ -773,14 +774,14 @@ def update_company_profile(
         new_email = body.admin_email.strip().lower()
         if new_email != user.email.lower():
             existing_user = db.query(User).filter(
-                func.lower(User.email) == new_email,
+                {"email": {"$regex": "^" + re.escape(new_email) + "$", "$options": "i"}},
                 User.id != user.id,
                 User.is_deleted == False
             ).first()
             if existing_user:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Email '{new_email}' is already registered by another account",
+                    detail="This email address is already used by another account. Please enter a different email address.",
                 )
             user.email = new_email
 
