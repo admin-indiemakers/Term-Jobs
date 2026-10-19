@@ -199,10 +199,12 @@ def sync_interview_event(user, interview):
             access_token = tokens['access_token']
             connections.update_one(identity, {'$set': {'access_token': access_token, 'expires_at': oauth.token_expiry_epoch(tokens)}})
         start, end = schedule_window(interview['scheduled_date'], interview['scheduled_time'], interview['scheduled_timezone'], interview['duration_minutes'])
-        event_id = interview.get('google_event_id') or hashlib.sha256(interview['id'].encode()).hexdigest()[:32]
+        int_token = f"&token={interview['interviewer_token']}" if interview.get('interviewer_token') else ""
+        domain = os.getenv("INTERVIEW_PUBLIC_DOMAIN", "https://termjobs.in").strip().rstrip("/")
+        location_url = f"{domain}/interview/room/{interview['id']}?role=interviewer{int_token}"
         event = {'summary': f"{interview['round_name']} · {interview['candidate_name']}",
-            'description': f"Company interview for {interview['requisition_title']}.\nJoin the TermJobs LiveKit interview: https://termjobs.in/interview/room/{interview['id']}",
-            'location': f"https://termjobs.in/interview/room/{interview['id']}?role=interviewer",
+            'description': f"Company interview for {interview['requisition_title']}.\nJoin the TermJobs LiveKit interview: {location_url}",
+            'location': location_url,
             'start': {'dateTime': start.isoformat(), 'timeZone': interview['scheduled_timezone']},
             'end': {'dateTime': end.isoformat(), 'timeZone': interview['scheduled_timezone']},
             'attendees': [{'email': email} for email in dict.fromkeys([interview.get('candidate_email'), interview.get('interviewer_email')]) if email],

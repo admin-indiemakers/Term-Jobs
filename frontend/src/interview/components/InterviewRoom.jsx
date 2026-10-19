@@ -216,7 +216,7 @@ function RemoteParticipantTile({ peer, isInterviewer, round, fallbackStream }) {
 
       {/* Top-left: Mic Status Indicator */}
       <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-black/60 backdrop-blur-md border border-white/10 text-white shadow text-xs">
-        {hasAudio || stream ? (
+        {hasAudio ? (
           <>
             <Mic size={13} className="text-emerald-400" />
             <span className="text-[10.5px] font-medium text-zinc-300">Connected</span>
@@ -224,7 +224,7 @@ function RemoteParticipantTile({ peer, isInterviewer, round, fallbackStream }) {
         ) : (
           <>
             <MicOff size={13} className="text-zinc-500" />
-            <span className="text-[10.5px] font-medium text-zinc-400">Connected</span>
+            <span className="text-[10.5px] font-medium text-zinc-400">Muted</span>
           </>
         )}
       </div>
@@ -520,12 +520,18 @@ export function InterviewRoom({
   for (const p of participants || []) {
     const pName = (p.name || '').trim().toLowerCase();
     const pRole = (p.role || '').trim().toLowerCase();
-    const isLocal = (pName && myName && pName === myName.trim().toLowerCase()) &&
-      (!pRole || !myRole || pRole === myRole.trim().toLowerCase());
-    if (isLocal) continue;
+    const pIdent = (p.identity || '').trim().toLowerCase();
+
+    // Never treat a remote candidate as local if we are the interviewer
+    const isLocal = isInterviewer
+      ? (pRole !== 'candidate' && !pIdent.startsWith('candidate') && pName && myName && pName === myName.trim().toLowerCase())
+      : (pRole === 'candidate' || pIdent.startsWith('candidate') || (pName && myName && pName === myName.trim().toLowerCase()));
+    if (isLocal && (!pRole || !myRole || pRole === myRole.trim().toLowerCase())) continue;
 
     // A candidate is always unique in an interview room; staff are unique by name
-    const dedupKey = pRole === 'candidate' ? 'candidate_slot' : (pName ? `${pName}_${pRole}` : p.identity);
+    const dedupKey = (pRole === 'candidate' || pIdent.startsWith('candidate'))
+      ? 'candidate_slot'
+      : (pName ? `${pName}_${pRole}` : (p.identity || 'peer'));
     if (!seenKeys.has(dedupKey)) {
       seenKeys.add(dedupKey);
       uniqueParticipants.push(p);
@@ -962,10 +968,17 @@ export function InterviewRoom({
                     <h3 className="font-bold text-sm text-white truncate">
                       {isInterviewer ? candidateName : otherPersonName}
                     </h3>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1 shrink-0">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      In Room
-                    </span>
+                    {hasRemoteParticipant ? (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1 shrink-0">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        In Room
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-zinc-800 text-zinc-400 border border-white/10 flex items-center gap-1 shrink-0">
+                        <span className="w-1.5 h-1.5 rounded-full bg-zinc-500" />
+                        Waiting
+                      </span>
+                    )}
                   </div>
                   <div className="text-xs text-zinc-400 truncate mt-0.5">
                     {isInterviewer ? `${candidateRole} • ${requisitionCode}` : `${companyName} • ${otherPersonRole}`}

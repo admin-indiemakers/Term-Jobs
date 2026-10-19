@@ -136,6 +136,9 @@ export class LiveKitService {
         this.isLiveKitConnected = true;
         this._emit('connectionStateChanged', 'connected');
 
+        // Immediately emit all existing participants already in the room
+        this._syncLiveKitParticipants();
+
         // Enable default camera & mic
         try {
           await this.room.localParticipant.setCameraEnabled(true);
@@ -669,6 +672,49 @@ export class LiveKitService {
     });
   }
 
+  _formatLiveKitParticipant(p) {
+    if (!p) return null;
+    let role = '';
+    let name = p.name || '';
+    if (p.metadata) {
+      try {
+        const meta = typeof p.metadata === 'string' ? JSON.parse(p.metadata) : p.metadata;
+        if (meta.role) role = meta.role;
+        if (meta.name && !name) name = meta.name;
+      } catch (_) {}
+    }
+    const identLower = String(p.identity || '').toLowerCase();
+    if (!role) {
+      if (identLower.startsWith('candidate') || identLower.includes('candidate')) role = 'candidate';
+      else if (identLower.startsWith('interviewer') || identLower.includes('interviewer')) role = 'interviewer';
+      else if (identLower.startsWith('hiring_manager') || identLower.includes('hiring_manager')) role = 'hiring manager';
+    }
+    const stream = this.peerStreams.get(p.identity) || null;
+    return {
+      identity: p.identity,
+      name: name || (role === 'candidate' ? 'Candidate' : 'Interviewer'),
+      role: role || (identLower.includes('candidate') ? 'candidate' : 'interviewer'),
+      isSpeaking: Boolean(p.isSpeaking),
+      metadata: p.metadata,
+      stream,
+      videoTrack: Boolean(stream?.getVideoTracks().some((t) => t.enabled && t.readyState === 'live')),
+      audioTrack: Boolean(stream?.getAudioTracks().some((t) => t.enabled && t.readyState === 'live')),
+      rawParticipant: p,
+    };
+  }
+
+  _syncLiveKitParticipants() {
+    if (!this.room) return;
+    const list = [];
+    if (this.room.remoteParticipants) {
+      for (const p of this.room.remoteParticipants.values()) {
+        const formatted = this._formatLiveKitParticipant(p);
+        if (formatted) list.push(formatted);
+      }
+    }
+    this._emit('participantsUpdated', list);
+  }
+
   _setupRoomListeners() {
     if (!this.room) return;
     this.room.on(RoomEvent.LocalTrackPublished, () => this._emitLocalMedia());
@@ -677,19 +723,57 @@ export class LiveKitService {
     this.room.on(RoomEvent.TrackUnmuted, () => this._emitLocalMedia());
 
     this.room.on(RoomEvent.ParticipantConnected, (participant) => {
-      this._emit('participantConnected', participant);
+      const formatted = this._formatLiveKitParticipant(participant);
+      if (formatted) {
+        this._emit('participantConnected', formatted);
+      }
+      this._syncLiveKitParticipants();
     });
 
     this.room.on(RoomEvent.ParticipantDisconnected, (participant) => {
-      this._emit('participantDisconnected', participant);
+      const formatted = this._formatLiveKitParticipant(participant);
+      if (formatted) {
+        this._emit('participantDisconnected', formatted);
+      }
+      this._syncLiveKitParticipants();
     });
 
     this.room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+      console.log('🎥 LiveKit TrackSubscribed:', track?.kind, participant?.identity);
+      if (track && track.mediaStreamTrack) {
+        const pId = participant?.identity;
+        let stream = this.peerStreams.get(pId);
+        if (!stream) {
+          stream = new MediaStream([track.mediaStreamTrack]);
+          if (pId) this.peerStreams.set(pId, stream);
+        } else if (!stream.getTracks().some((t) => t.id === track.mediaStreamTrack.id)) {
+          stream.addTrack(track.mediaStreamTrack);
+        }
+
+        if (publication?.source === 'screen_share') {
+          this.remoteScreenStream = stream;
+          this._emit('remoteScreenTrackReceived', stream);
+          this._emit('remoteScreenShareChanged', { isSharing: true });
+        } else {
+          this.remoteStream = stream;
+          this._emit('remoteTrackReceived', stream);
+          if (pId) {
+            this._emit('participantStreamChanged', { peerId: pId, stream });
+          }
+        }
+      }
       this._emit('trackSubscribed', { track, publication, participant });
+      this._syncLiveKitParticipants();
     });
 
     this.room.on(RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
+      if (publication?.source === 'screen_share') {
+        this.remoteScreenStream = null;
+        this._emit('remoteScreenTrackReceived', null);
+        this._emit('remoteScreenShareChanged', { isSharing: false });
+      }
       this._emit('trackUnsubscribed', { track, publication, participant });
+      this._syncLiveKitParticipants();
     });
 
     this.room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {

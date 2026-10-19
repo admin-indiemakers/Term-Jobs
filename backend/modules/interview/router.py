@@ -713,7 +713,7 @@ async def resolve_interview_join_identity(round_id: str, request: Request, token
     from inspect import isawaitable
     with get_session() as session:
         interview = session.query(InterviewRound).filter(InterviewRound.id == round_id).first()
-        if not interview: raise HTTPException(status_code=404, detail='Interview not found')
+        authorization = request.headers.get('authorization')
         if authorization:
             try:
                 actor = get_current_user(authorization, session)
