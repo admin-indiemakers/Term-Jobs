@@ -6,10 +6,12 @@ export function BrandMark({
   dark,
   onHomeClick,
   onOpenRolesClick,
+  onJoinWaitlist,
 }: {
   dark: boolean;
   onHomeClick?: () => void;
   onOpenRolesClick?: () => void;
+  onJoinWaitlist?: () => void;
 }) {
   return (
     <header className="absolute top-0 inset-x-0 z-40 px-3.5 py-3.5 sm:px-6 sm:py-5 md:px-12 md:py-6 flex items-center justify-between pointer-events-none">

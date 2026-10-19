@@ -80,6 +80,7 @@ export function LandingPage({ enabled = true }: { enabled?: boolean }) {
             dark={dark}
             onHomeClick={() => goTo(0)}
             onOpenRolesClick={() => setShowComingSoon(true)}
+            onJoinWaitlist={openWaitlist}
           />
 
           {/* Desktop Navigation (completely untouched for md and up) */}
