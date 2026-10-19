@@ -88,24 +88,36 @@ export function HiringManagerInterviews() {
   const [showInstantNotesModal, setShowInstantNotesModal] = useState(false);
   const [instantNotes, setInstantNotes] = useState('');
 
-  // Extract all distinct requisitions from loaded candidates
-  const availableRequisitions = useMemo(() => {
-    const map = new Map();
-    for (const c of candidatesSummary) {
-      if (c.requisition_id && !map.has(c.requisition_id)) {
-        map.set(c.requisition_id, {
-          id: c.requisition_id,
-          title: c.requisition_title || 'Requisition',
-        });
-      }
+  const [availableRequisitions, setAvailableRequisitions] = useState([]);
+  const refreshRequisitions = useCallback(async () => {
+    try {
+      const result = await request('/api/requisitions?dashboard=true&fresh=true', { token, noCache: true });
+      const rows = Array.isArray(result) ? result : result?.requisitions || [];
+      const byId = new Map(rows.filter(row => row.id && !row.is_deleted).map(row => [String(row.id), {
+        id: String(row.id), title: row.title || row.structured_role?.title || 'Untitled requisition',
+      }]));
+      setAvailableRequisitions(Array.from(byId.values()));
+      setSelectedReqId(previous => byId.has(previous) ? previous : '');
+    } catch (error) {
+      setErrorMsg(error?.message || 'Unable to refresh requisitions. Please retry.');
     }
-    return Array.from(map.values());
-  }, [candidatesSummary]);
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) return;
+    const refresh = () => { void refreshRequisitions(); };
+    refresh();
+    window.addEventListener('focus', refresh);
+    window.addEventListener('tj-requisitions-updated', refresh);
+    return () => {
+      window.removeEventListener('focus', refresh);
+      window.removeEventListener('tj-requisitions-updated', refresh);
+    };
+  }, [token, refreshRequisitions]);
 
   // Active requisition ID & title for shortlist operations
   const activeReqId =
     selectedReqId ||
-    selectedCandidate?.requisition_id ||
     (availableRequisitions.length > 0 ? availableRequisitions[0].id : null);
 
   const activeReqTitle =
@@ -245,7 +257,7 @@ export function HiringManagerInterviews() {
     try {
       // The summary already includes the rounds grouped by candidate. Avoid a
       // second full rounds request just to calculate the KPI cards.
-      const summaryRes = await interviewApi.getSummary(token);
+      const [summaryRes] = await Promise.all([interviewApi.getSummary(token), refreshRequisitions()]);
 
       const sumList = Array.isArray(summaryRes) ? summaryRes : [];
       setCandidatesSummary(sumList);
@@ -273,7 +285,7 @@ export function HiringManagerInterviews() {
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, refreshRequisitions]);
 
   useEffect(() => {
     if (token) {
@@ -510,13 +522,14 @@ export function HiringManagerInterviews() {
                   <div className="inline-flex items-center gap-1.5 bg-zinc-900 border border-zinc-700 rounded-xl px-2.5 py-1 text-xs">
                     <span className="text-zinc-400 font-medium">Requisition:</span>
                     <select
-                      value={activeReqId}
+                      value={activeReqId || ''}
+                      onFocus={refreshRequisitions}
                       onChange={(e) => setSelectedReqId(e.target.value)}
                       className="bg-transparent text-white font-bold outline-none cursor-pointer"
                     >
                       {availableRequisitions.map((r) => (
                         <option key={r.id} value={r.id} className="bg-zinc-900 text-white">
-                          {r.title}
+                          {r.title} · {r.id.slice(0, 8)}
                         </option>
                       ))}
                     </select>

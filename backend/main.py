@@ -4301,6 +4301,8 @@ def send_candidate_offer_letter_endpoint(
     current_user: User = Depends(get_current_user),
 ) -> dict:
     """Formally dispatch offer letter to candidate and update hiring pipeline."""
+    if current_user.role != "Super Admin":
+        raise HTTPException(status_code=403, detail="Only TermJobs Super Admin can issue candidate contracts")
     from datetime import datetime, timezone
     import re
     from modules.shared.db import db
@@ -4356,6 +4358,8 @@ def send_candidate_offer_letter_endpoint(
                 "status": "Offer Extended",
                 "agreement_status": "Pending Signature",
                 "sent_at": now_iso,
+                "sent_by_role": current_user.role,
+                "sent_by_id": str(current_user.id),
                 "sent_by": getattr(current_user, "name", None) or getattr(current_user, "email", None) or "HR"
             }}
         )

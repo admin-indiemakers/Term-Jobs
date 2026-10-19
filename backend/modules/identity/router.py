@@ -1847,6 +1847,8 @@ def list_portal_users(
         eff_email = (pu.email if pu and getattr(pu, 'email', None) else (sub.get("candidate_email") or sub.get("email") or "")).strip()
         eff_name = (pu.name if pu and getattr(pu, 'name', None) else (sub.get("candidate_name") or "")).strip()
 
+        from modules.identity.services.contract_access import contract_issued
+        portal_contract_issued = contract_issued(mongo_db, cid, current_user.tenant_id)
         results.append({
             "candidate_id": cid,
             "workorder_id": cid,
@@ -1854,6 +1856,7 @@ def list_portal_users(
             "candidate_email": eff_email,
             "requisition_title": (req_doc or {}).get("title", ""),
             "vendor_name": sub.get("vendor_name", ""),
+            "contract_issued": portal_contract_issued,
             "has_portal_access": pu is not None and getattr(pu, 'is_active', True),
             "portal_user_id": pu.id if pu else None,
             "portal_user_email": eff_email,
@@ -1925,6 +1928,10 @@ def create_or_update_portal_user(
 
     tenant_id = current_user.tenant_id
     from modules.shared.db import db as mongo_db
+
+    if current_user.role == "Hiring Manager":
+        from modules.identity.services.contract_access import require_issued_contract
+        require_issued_contract(mongo_db, candidate_id, current_user.tenant_id)
 
     # 1. Search for existing Candidate user specifically for THIS candidate_id / workorder_id
     existing_user = None
