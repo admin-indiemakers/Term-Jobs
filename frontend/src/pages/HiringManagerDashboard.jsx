@@ -1391,6 +1391,12 @@ function HiringManagerDashboardContent() {
     loadHiringConversations(localStorage, user.id)
   );
 
+  // Multi-select & Batch Delete / Clear History states
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedConvIds, setSelectedConvIds] = useState([]);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [showDeleteSelectedConfirm, setShowDeleteSelectedConfirm] = useState(false);
+
   // Automatically save and sync messages to active conversation in localStorage
   useEffect(() => {
     if (messages.length === 0) return;
@@ -1476,12 +1482,92 @@ function HiringManagerDashboardContent() {
     }, 50);
   }, []);
 
+  // Delete a single conversation
+  const handleDeleteConversation = useCallback((convId, e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    setConversations((prev) => {
+      const updated = prev.filter((c) => c.id !== convId);
+      try {
+        const storageKey = hiringConversationStorageKey(user?.id);
+        if (storageKey) {
+          localStorage.setItem(storageKey, JSON.stringify(updated));
+        }
+      } catch (err) {
+        console.warn('Storage delete error:', err);
+      }
+      return updated;
+    });
+    setSelectedConvIds((prev) => prev.filter((id) => id !== convId));
+    if (activeConversationId === convId) {
+      handleStartNewChat();
+    }
+  }, [user?.id, activeConversationId, handleStartNewChat]);
+
+  // Delete multiple selected conversations
+  const handleDeleteSelectedConversations = useCallback(() => {
+    if (selectedConvIds.length === 0) return;
+    const toDeleteSet = new Set(selectedConvIds);
+    setConversations((prev) => {
+      const updated = prev.filter((c) => !toDeleteSet.has(c.id));
+      try {
+        const storageKey = hiringConversationStorageKey(user?.id);
+        if (storageKey) {
+          localStorage.setItem(storageKey, JSON.stringify(updated));
+        }
+      } catch (err) {
+        console.warn('Storage delete error:', err);
+      }
+      return updated;
+    });
+    if (toDeleteSet.has(activeConversationId)) {
+      handleStartNewChat();
+    }
+    setSelectedConvIds([]);
+    setIsSelectionMode(false);
+    setShowDeleteSelectedConfirm(false);
+  }, [selectedConvIds, user?.id, activeConversationId, handleStartNewChat]);
+
+  // Delete whole conversation history
+  const handleClearAllConversations = useCallback(() => {
+    setConversations([]);
+    try {
+      const storageKey = hiringConversationStorageKey(user?.id);
+      if (storageKey) {
+        localStorage.removeItem(storageKey);
+      }
+    } catch (err) {
+      console.warn('Storage clear error:', err);
+    }
+    handleStartNewChat();
+    setSelectedConvIds([]);
+    setIsSelectionMode(false);
+    setShowClearConfirm(false);
+  }, [user?.id, handleStartNewChat]);
+
+  // Toggle selection for a conversation item
+  const handleToggleSelectConversation = useCallback((convId, e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    setSelectedConvIds((prev) =>
+      prev.includes(convId) ? prev.filter((id) => id !== convId) : [...prev, convId]
+    );
+  }, []);
+
   // Select a previous conversation to view/resume
   const handleSelectConversation = useCallback((conv) => {
+    if (isSelectionMode) {
+      handleToggleSelectConversation(conv.id);
+      return;
+    }
     setActiveConversationId(conv.id);
     setMessages(conv.messages || []);
     setIsConversationsDrawerOpen(false);
-  }, []);
+  }, [isSelectionMode, handleToggleSelectConversation]);
 
   // Grouped conversations for the Drawer
   const filteredConversations = useMemo(() => {
@@ -2903,11 +2989,11 @@ function HiringManagerDashboardContent() {
       {/* Edit Requisition Modal (Inline Card Tweak) */}
       {editingDraftData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 max-w-xl w-full max-h-[90vh] flex flex-col overflow-hidden text-left animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-white text-gray-900 rounded-2xl shadow-2xl border border-gray-200 max-w-xl w-full max-h-[90vh] flex flex-col overflow-hidden text-left animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between p-4 sm:p-5 border-b border-gray-100">
               <div>
                 <h3 className="text-sm sm:text-base font-bold text-gray-900">Edit Requisition Details</h3>
-                <p className="text-xs text-gray-400 mt-0.5">Modify parameters for {editingDraftData.title}</p>
+                <p className="text-xs text-gray-500 mt-0.5">Modify parameters for {editingDraftData.title}</p>
               </div>
               <button
                 type="button"
@@ -2925,7 +3011,7 @@ function HiringManagerDashboardContent() {
                   type="text"
                   value={editingDraftData.title || ''}
                   onChange={(e) => setEditingDraftData((prev) => ({ ...prev, title: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-black/10 outline-none"
+                  className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-gray-900 placeholder:text-gray-400 text-xs focus:ring-2 focus:ring-black/10 focus:border-gray-500 outline-none transition-colors"
                 />
               </div>
 
@@ -2936,7 +3022,7 @@ function HiringManagerDashboardContent() {
                     type="text"
                     value={editingDraftData.department || ''}
                     onChange={(e) => setEditingDraftData((prev) => ({ ...prev, department: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-black/10 outline-none"
+                    className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-gray-900 placeholder:text-gray-400 text-xs focus:ring-2 focus:ring-black/10 focus:border-gray-500 outline-none transition-colors"
                   />
                 </div>
                 <div>
@@ -2945,7 +3031,7 @@ function HiringManagerDashboardContent() {
                     type="text"
                     value={editingDraftData.location || ''}
                     onChange={(e) => setEditingDraftData((prev) => ({ ...prev, location: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-black/10 outline-none"
+                    className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-gray-900 placeholder:text-gray-400 text-xs focus:ring-2 focus:ring-black/10 focus:border-gray-500 outline-none transition-colors"
                   />
                 </div>
               </div>
@@ -2957,7 +3043,7 @@ function HiringManagerDashboardContent() {
                     type="text"
                     value={editingDraftData.experience || ''}
                     onChange={(e) => setEditingDraftData((prev) => ({ ...prev, experience: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-black/10 outline-none"
+                    className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-gray-900 placeholder:text-gray-400 text-xs focus:ring-2 focus:ring-black/10 focus:border-gray-500 outline-none transition-colors"
                   />
                 </div>
                 <div>
@@ -2966,7 +3052,7 @@ function HiringManagerDashboardContent() {
                     type="text"
                     value={editingDraftData.employment_type || ''}
                     onChange={(e) => setEditingDraftData((prev) => ({ ...prev, employment_type: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-black/10 outline-none"
+                    className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-gray-900 placeholder:text-gray-400 text-xs focus:ring-2 focus:ring-black/10 focus:border-gray-500 outline-none transition-colors"
                   />
                 </div>
                 <div>
@@ -2976,7 +3062,7 @@ function HiringManagerDashboardContent() {
                     min="1"
                     value={editingDraftData.openings || 1}
                     onChange={(e) => setEditingDraftData((prev) => ({ ...prev, openings: parseInt(e.target.value, 10) || 1 }))}
-                    className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-black/10 outline-none"
+                    className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-gray-900 placeholder:text-gray-400 text-xs focus:ring-2 focus:ring-black/10 focus:border-gray-500 outline-none transition-colors"
                   />
                 </div>
               </div>
@@ -2993,7 +3079,7 @@ function HiringManagerDashboardContent() {
                     }))
                   }
                   placeholder="e.g. Python, React"
-                  className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-black/10 outline-none"
+                  className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-gray-900 placeholder:text-gray-400 text-xs focus:ring-2 focus:ring-black/10 focus:border-gray-500 outline-none transition-colors"
                 />
               </div>
 
@@ -3004,31 +3090,16 @@ function HiringManagerDashboardContent() {
                   value={editingDraftData.summary !== undefined ? editingDraftData.summary : (editingDraftData.job_description || '')}
                   onChange={(e) => setEditingDraftData((prev) => ({ ...prev, summary: e.target.value, job_description: e.target.value }))}
                   placeholder="Brief summary of the role responsibilities..."
-                  className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-black/10 outline-none resize-none leading-relaxed"
+                  className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-gray-900 placeholder:text-gray-400 text-xs focus:ring-2 focus:ring-black/10 focus:border-gray-500 outline-none resize-none leading-relaxed transition-colors"
                 />
               </div>
             </div>
 
             <div className="flex items-center justify-end gap-2 p-4 sm:p-5 border-t border-gray-100 bg-gray-50/50">
-              {resumeError && <p role="alert" className="text-xs text-red-700">{resumeError}</p>}
-              <button type="button" disabled={resumeLoading} className="px-4 py-2 rounded-xl border border-gray-200 text-xs font-semibold disabled:opacity-50" onClick={async () => {
-                setResumeError(''); setResumeLoading(true);
-                const tab = window.open('', '_blank');
-                if (tab) tab.opener = null;
-                try {
-                  const response = await fetch(`${API_BASE_URL}/api/candidates/manager/${encodeURIComponent(selectedCandidateProfile.id)}/resume`, { headers: { Authorization: `Bearer ${token}` } });
-                  if (!response.ok) { const error = await response.json().catch(() => ({})); throw new Error(error.detail || 'Could not open resume.'); }
-                  const url = URL.createObjectURL(await response.blob());
-                  if (tab) tab.location.href = url;
-                  else { const link = document.createElement('a'); link.href = url; link.download = 'resume'; link.click(); }
-                  setTimeout(() => URL.revokeObjectURL(url), 60000);
-                } catch (error) { tab?.close(); setResumeError(error.message); }
-                finally { setResumeLoading(false); }
-              }}>{resumeLoading ? 'Opening…' : 'Open Resume'}</button>
               <button
                 type="button"
                 onClick={() => setEditingDraftData(null)}
-                className="px-4 py-2 rounded-xl border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
+                className="px-4 py-2 rounded-xl border border-gray-200 bg-white text-xs font-semibold text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
               >
                 Cancel
               </button>
@@ -3120,25 +3191,66 @@ function HiringManagerDashboardContent() {
               )}
             </div>
 
-            <div className="flex items-center justify-end gap-2 p-4 sm:p-5 border-t border-gray-100 bg-gray-50/50">
-              <button
-                type="button"
-                onClick={() => setSelectedCandidateProfile(null)}
-                className="px-4 py-2 rounded-xl border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
-              >
-                Close
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const candName = selectedCandidateProfile.name;
-                  setSelectedCandidateProfile(null);
-                  handleSendPrompt(`Schedule an interview with ${candName}`);
-                }}
-                className="px-4 py-2 rounded-xl bg-black text-white text-xs font-semibold hover:bg-gray-800 transition-colors shadow-xs cursor-pointer"
-              >
-                Schedule Interview
-              </button>
+            <div className="flex items-center justify-between gap-2 p-4 sm:p-5 border-t border-gray-100 bg-gray-50/50">
+              <div className="flex items-center gap-2">
+                {resumeError && <p role="alert" className="text-xs text-red-700">{resumeError}</p>}
+                <button
+                  type="button"
+                  disabled={resumeLoading}
+                  className="px-3.5 py-2 rounded-xl border border-gray-200 bg-white text-xs font-semibold text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50 cursor-pointer"
+                  onClick={async () => {
+                    setResumeError('');
+                    setResumeLoading(true);
+                    const tab = window.open('', '_blank');
+                    if (tab) tab.opener = null;
+                    try {
+                      const response = await fetch(`${API_BASE_URL}/api/candidates/manager/${encodeURIComponent(selectedCandidateProfile.id)}/resume`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                      });
+                      if (!response.ok) {
+                        const error = await response.json().catch(() => ({}));
+                        throw new Error(error.detail || 'Could not open resume.');
+                      }
+                      const url = URL.createObjectURL(await response.blob());
+                      if (tab) tab.location.href = url;
+                      else {
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.download = 'resume';
+                        link.click();
+                      }
+                      setTimeout(() => URL.revokeObjectURL(url), 60000);
+                    } catch (error) {
+                      tab?.close();
+                      setResumeError(error.message);
+                    } finally {
+                      setResumeLoading(false);
+                    }
+                  }}
+                >
+                  {resumeLoading ? 'Opening…' : 'Open Resume'}
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedCandidateProfile(null)}
+                  className="px-4 py-2 rounded-xl border border-gray-200 bg-white text-xs font-semibold text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const candName = selectedCandidateProfile.name;
+                    setSelectedCandidateProfile(null);
+                    handleSendPrompt(`Schedule an interview with ${candName}`);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-black text-white text-xs font-semibold hover:bg-gray-800 transition-colors shadow-xs cursor-pointer"
+                >
+                  Schedule Interview
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -3747,20 +3859,186 @@ function HiringManagerDashboardContent() {
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-              className="absolute top-0 right-0 bottom-0 w-full sm:w-[380px] max-w-[100vw] bg-white border-l border-[#E5E5E5] shadow-2xl flex flex-col z-10 select-none"
+              className="absolute top-0 right-0 bottom-0 w-full sm:w-[400px] max-w-[100vw] bg-white border-l border-[#E5E5E5] shadow-2xl flex flex-col z-10 select-none text-left"
             >
               {/* Drawer Header */}
               <div className="flex items-center justify-between px-5 py-4 border-b border-[#E5E5E5] bg-white shrink-0">
-                <h2 className="text-base font-bold text-[#111111] tracking-tight">Conversations</h2>
-                <button
-                  type="button"
-                  onClick={() => setIsConversationsDrawerOpen(false)}
-                  className="w-8 h-8 rounded-lg hover:bg-[#F7F7F5] text-[#737373] hover:text-[#111111] flex items-center justify-center transition-colors cursor-pointer"
-                  title="Close (Esc)"
-                >
-                  <X size={16} />
-                </button>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-bold text-[#111111] tracking-tight">Conversations</h2>
+                  {conversations.length > 0 && (
+                    <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                      {conversations.length}
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1">
+                  {conversations.length > 0 && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsSelectionMode((prev) => !prev);
+                          setSelectedConvIds([]);
+                          setShowClearConfirm(false);
+                          setShowDeleteSelectedConfirm(false);
+                        }}
+                        className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
+                          isSelectionMode
+                            ? 'bg-black text-white'
+                            : 'text-gray-600 hover:text-black hover:bg-gray-100'
+                        }`}
+                        title={isSelectionMode ? 'Cancel Selection' : 'Select Multiple'}
+                      >
+                        {isSelectionMode ? 'Done' : 'Select'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowClearConfirm(true);
+                          setShowDeleteSelectedConfirm(false);
+                        }}
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                        title="Delete All Conversation History"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsConversationsDrawerOpen(false);
+                      setIsSelectionMode(false);
+                      setSelectedConvIds([]);
+                      setShowClearConfirm(false);
+                      setShowDeleteSelectedConfirm(false);
+                    }}
+                    className="w-8 h-8 rounded-lg hover:bg-[#F7F7F5] text-[#737373] hover:text-[#111111] flex items-center justify-center transition-colors cursor-pointer"
+                    title="Close (Esc)"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
               </div>
+
+              {/* Multi-Select Action Banner */}
+              {isSelectionMode && (
+                <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between text-xs animate-in fade-in slide-in-from-top-2 duration-150">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (selectedConvIds.length === filteredConversations.length && filteredConversations.length > 0) {
+                          setSelectedConvIds([]);
+                        } else {
+                          setSelectedConvIds(filteredConversations.map((c) => c.id));
+                        }
+                      }}
+                      className="text-xs font-semibold text-gray-700 hover:text-black cursor-pointer flex items-center gap-1.5"
+                    >
+                      <span
+                        className={`w-4 h-4 rounded border flex items-center justify-center ${
+                          selectedConvIds.length > 0 && selectedConvIds.length === filteredConversations.length
+                            ? 'bg-black border-black text-white'
+                            : selectedConvIds.length > 0
+                            ? 'bg-gray-300 border-gray-400'
+                            : 'border-gray-300 bg-white'
+                        }`}
+                      >
+                        {selectedConvIds.length > 0 && selectedConvIds.length === filteredConversations.length && (
+                          <Check size={11} strokeWidth={3} />
+                        )}
+                      </span>
+                      <span>
+                        {selectedConvIds.length === filteredConversations.length && filteredConversations.length > 0
+                          ? 'Deselect All'
+                          : 'Select All'}
+                      </span>
+                    </button>
+                    <span className="text-gray-300">|</span>
+                    <span className="text-gray-500 font-medium">
+                      {selectedConvIds.length} of {filteredConversations.length}
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={selectedConvIds.length === 0}
+                    onClick={() => setShowDeleteSelectedConfirm(true)}
+                    className="px-3 py-1 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <Trash2 size={12} />
+                    <span>Delete ({selectedConvIds.length})</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Confirmation Alert: Clear All History */}
+              {showClearConfirm && (
+                <div className="p-3.5 m-4 mb-2 rounded-2xl bg-red-50 border border-red-200 space-y-2.5 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="flex items-start gap-2.5">
+                    <AlertTriangle size={18} className="text-red-600 shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="text-xs font-bold text-red-900">Delete all conversation history?</h4>
+                      <p className="text-[11px] text-red-700 leading-relaxed mt-0.5">
+                        This will permanently delete all {conversations.length} saved chats. This cannot be undone.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowClearConfirm(false)}
+                      className="px-3 py-1 rounded-lg border border-gray-300 bg-white text-xs font-medium text-gray-700 hover:bg-gray-50 cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleClearAllConversations}
+                      className="px-3 py-1 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Trash2 size={12} />
+                      <span>Yes, Delete All</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Confirmation Alert: Delete Selected */}
+              {showDeleteSelectedConfirm && (
+                <div className="p-3.5 m-4 mb-2 rounded-2xl bg-red-50 border border-red-200 space-y-2.5 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="flex items-start gap-2.5">
+                    <AlertTriangle size={18} className="text-red-600 shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="text-xs font-bold text-red-900">
+                        Delete {selectedConvIds.length} conversation{selectedConvIds.length > 1 ? 's' : ''}?
+                      </h4>
+                      <p className="text-[11px] text-red-700 leading-relaxed mt-0.5">
+                        The selected chats will be permanently removed from your history.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowDeleteSelectedConfirm(false)}
+                      className="px-3 py-1 rounded-lg border border-gray-300 bg-white text-xs font-medium text-gray-700 hover:bg-gray-50 cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDeleteSelectedConversations}
+                      className="px-3 py-1 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Trash2 size={12} />
+                      <span>Delete Selected</span>
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Action Bar: + New Chat & Search */}
               <div className="p-4 pb-2.5 bg-white shrink-0 space-y-3">
@@ -3820,26 +4098,44 @@ function HiringManagerDashboardContent() {
                     .filter((group) => group.items.length > 0)
                     .map((group) => (
                       <div key={group.label} className="space-y-1.5">
-                        <div className="text-xs font-bold text-gray-700 tracking-tight px-1 mb-1.5">
-                          {group.label}
+                        <div className="text-xs font-bold text-gray-700 tracking-tight px-1 mb-1.5 flex items-center justify-between">
+                          <span>{group.label}</span>
+                          <span className="text-[10px] text-gray-400 font-normal">
+                            {group.items.length} {group.items.length === 1 ? 'chat' : 'chats'}
+                          </span>
                         </div>
                         <div className="space-y-1">
                           {group.items.map((conv) => {
                             const isActive = conv.id === activeConversationId;
+                            const isSelected = selectedConvIds.includes(conv.id);
                             return (
-                              <button
+                              <div
                                 key={conv.id}
-                                type="button"
                                 onClick={() => handleSelectConversation(conv)}
-                                className={`w-full p-2.5 rounded-xl text-left transition-all cursor-pointer flex items-center gap-3 group active:scale-[0.99] border ${
-                                  isActive
+                                className={`w-full p-2.5 rounded-xl text-left transition-all cursor-pointer flex items-center gap-3 group active:scale-[0.99] border relative ${
+                                  isSelected
+                                    ? 'bg-blue-50/80 border-blue-200 shadow-2xs'
+                                    : isActive
                                     ? 'bg-gray-100/90 border-gray-200 shadow-2xs'
                                     : 'bg-white hover:bg-[#F7F7F5] border-transparent hover:border-[#E5E5E5]'
                                 }`}
                               >
-                                <div className="w-8 h-8 rounded-xl bg-[#F7F7F5] border border-[#E5E5E5] flex items-center justify-center shrink-0 group-hover:bg-white group-hover:shadow-2xs transition-all">
-                                  {getConvIcon(conv.categoryIcon)}
-                                </div>
+                                {isSelectionMode ? (
+                                  <div
+                                    onClick={(e) => handleToggleSelectConversation(conv.id, e)}
+                                    className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors cursor-pointer ${
+                                      isSelected
+                                        ? 'bg-black border-black text-white'
+                                        : 'border-gray-300 bg-white group-hover:border-gray-400'
+                                    }`}
+                                  >
+                                    {isSelected && <Check size={11} strokeWidth={3} />}
+                                  </div>
+                                ) : (
+                                  <div className="w-8 h-8 rounded-xl bg-[#F7F7F5] border border-[#E5E5E5] flex items-center justify-center shrink-0 group-hover:bg-white group-hover:shadow-2xs transition-all">
+                                    {getConvIcon(conv.categoryIcon)}
+                                  </div>
+                                )}
                                 <div className="min-w-0 flex-1">
                                   <div className="text-xs font-bold text-gray-900 leading-snug truncate">
                                     {conv.title}
@@ -3848,10 +4144,22 @@ function HiringManagerDashboardContent() {
                                     {conv.preview}
                                   </div>
                                 </div>
-                                <div className="text-[10px] text-gray-400 font-medium shrink-0 ml-1">
-                                  {formatConvTime(conv.updatedAt || conv.createdAt)}
+                                <div className="flex items-center gap-1 shrink-0 ml-1">
+                                  <span className={`text-[10px] text-gray-400 font-medium ${isSelectionMode ? '' : 'group-hover:hidden'}`}>
+                                    {formatConvTime(conv.updatedAt || conv.createdAt)}
+                                  </span>
+                                  {!isSelectionMode && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => handleDeleteConversation(conv.id, e)}
+                                      className="hidden group-hover:flex w-6 h-6 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 items-center justify-center transition-colors cursor-pointer"
+                                      title="Delete conversation"
+                                    >
+                                      <Trash2 size={13} />
+                                    </button>
+                                  )}
                                 </div>
-                              </button>
+                              </div>
                             );
                           })}
                         </div>
@@ -3859,6 +4167,24 @@ function HiringManagerDashboardContent() {
                     ))
                 )}
               </div>
+
+              {/* Drawer Footer: Clear All History */}
+              {conversations.length > 0 && !isSelectionMode && (
+                <div className="p-3 border-t border-[#E5E5E5] bg-[#FAFAFA] shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowClearConfirm(true);
+                      setShowDeleteSelectedConfirm(false);
+                    }}
+                    className="w-full py-2 px-3 rounded-xl border border-red-200/80 hover:border-red-300 bg-white hover:bg-red-50/70 text-red-600 text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs active:scale-[0.99]"
+                    title="Delete entire chat history"
+                  >
+                    <Trash2 size={13} />
+                    <span>Clear All History ({conversations.length})</span>
+                  </button>
+                </div>
+              )}
             </motion.aside>
           </div>
         )}
