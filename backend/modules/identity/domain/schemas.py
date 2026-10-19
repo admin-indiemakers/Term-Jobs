@@ -187,6 +187,7 @@ class PasswordChange(BaseModel):
     new_password: str = Field(..., min_length=4, max_length=128)
 
 class UserResponse(BaseModel):
+    email_delivery: dict | None = None
     model_config = ConfigDict(from_attributes=True)
 
     id: str
@@ -238,6 +239,7 @@ class CompanyProfileUpdate(BaseModel):
 
 
 class CompanyProfileDetailResponse(BaseModel):
+    email_delivery: dict | None = None
     tenant_id: str
     name: str
     tenant_type: str

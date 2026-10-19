@@ -34,7 +34,8 @@ import {
   Plus,
   Video,
 } from 'lucide-react';
-import { request, API_BASE_URL } from '../../api/client';
+import { request } from '../../api/client';
+import ResumePreviewModal from '../../components/ResumePreviewModal';
 import { useAuth } from '../../context/AuthContext';
 import ScheduleInterviewModal from '../../components/ScheduleInterviewModal';
 import SetInterviewProcessModal from '../../components/SetInterviewProcessModal';
@@ -156,6 +157,7 @@ export default function RequisitionCandidates() {
   const [showSetInterviewModal, setShowSetInterviewModal] = useState(false);
   const [, setActingStatusId] = useState(null);
   const [activeMenuId, setActiveMenuId] = useState(null);
+  const [resumeCandidate, setResumeCandidate] = useState(null);
 
   const [refresh, setRefresh] = useState(0);
   // Notes state
@@ -306,27 +308,10 @@ export default function RequisitionCandidates() {
     setActingStatusId(null);
   };
 
-  // View Resume Handler
-  const handleViewResume = async (cand) => {
+  // Keep the candidate list and its filters in place while previewing the resume.
+  const handleViewResume = (candidate) => {
     setActiveMenuId(null);
-    if (cand.isRealApi) {
-      try {
-        const res = await fetch(`${API_BASE_URL}/candidates/${cand.id}/resume`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) {
-          const blob = await res.blob();
-          const url = URL.createObjectURL(blob);
-          window.open(url, '_blank', 'noopener');
-          setTimeout(() => URL.revokeObjectURL(url), 60000);
-          return;
-        }
-      } catch (err) {
-        console.warn('Resume fetch error:', err);
-      }
-    }
-    setSelectedCandidateId(cand.id);
-    setActivePreviewTab('resume');
+    setResumeCandidate(candidate);
   };
 
   const handleAddNote = async e => {
@@ -1090,7 +1075,7 @@ export default function RequisitionCandidates() {
                       className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold transition-colors cursor-pointer"
                     >
                       <Download size={12} />
-                      <span>Download PDF</span>
+                      <span>View Resume</span>
                     </button>
                   </div>
                   <div className="p-3 bg-gray-50 border border-gray-200/80 rounded-xl font-mono text-[11px] text-gray-700 leading-relaxed max-h-60 overflow-y-auto">
@@ -1343,6 +1328,16 @@ export default function RequisitionCandidates() {
           </div>
         )}
       </div>
+
+      {resumeCandidate && (
+        <ResumePreviewModal
+          token={token}
+          candidateId={resumeCandidate.submission_id || resumeCandidate.id}
+          filename={resumeCandidate.resume_filename || resumeCandidate.filename || `${resumeCandidate.name || 'Candidate'} Resume`}
+          extractedText={resumeCandidate.resume_text || resumeCandidate.extracted_text}
+          onClose={() => setResumeCandidate(null)}
+        />
+      )}
 
       {/* ── SCHEDULE INTERVIEW MODAL ── */}
       {schedulingCandidate && (

@@ -35,6 +35,13 @@ def hiring_manager_agent_chat(
         raise HTTPException(status_code=400, detail="Prompt is required.")
     if not model_available() and not is_hiring_request_in_scope(data.prompt, data.history):
         return {**scope_response(), 'status': 'success'}
+    from modules.shared.db import db as raw_db
+    from .scope import hiring_scope, ScopedDatabase
+    from .applications import application_reply
+    with hiring_scope(raw_db, {'id': str(current_user.id), 'tenant_id': current_user.tenant_id}):
+        applications = application_reply(data.prompt, ScopedDatabase(raw_db))
+    if applications is not None:
+        return {**applications, 'status': 'success'}
     from modules.calendar.services.google_calendar import connection_status
     user_data = {'id': str(current_user.id), 'tenant_id': current_user.tenant_id, 'role': current_user.role,
                  'name': current_user.name, 'email': current_user.email,

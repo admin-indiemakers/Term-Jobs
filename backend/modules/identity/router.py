@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, Header, HTTPException, status, File, UploadFile
 from sqlalchemy import func, or_
 
+from modules.identity.services.account_notifications import send_account_change_email
 from modules.identity.domain.models import Tenant, User, VendorEngagement
 from modules.identity.domain.schemas import (
     PROVISION_MATRIX,
@@ -651,7 +652,9 @@ def change_password(
         current_user.email,
         f"Password changed successfully for account '{current_user.email}'"
     )
-    return {"status": "ok", "message": "Password updated successfully"}
+    email_delivery = send_account_change_email(user, previous_email=user.email, password_changed=True)
+    _cache.invalidate(f"auth_user:{user.id}")
+    return {"status": "ok", "message": "Password updated successfully", "email_delivery": email_delivery}
 
 
 @router.get("/company/profile", response_model=CompanyProfileDetailResponse)
@@ -766,6 +769,7 @@ def update_company_profile(
 
     # 4. Update Admin User details if provided
     user = db.query(User).filter(User.id == current_user.id).first()
+    previous_email = user.email
     if body.admin_name is not None and body.admin_name.strip():
         user.name = body.admin_name.strip()
     if body.admin_phone is not None:
@@ -786,6 +790,8 @@ def update_company_profile(
             user.email = new_email
 
     db.commit()
+    email_delivery = send_account_change_email(user, previous_email=previous_email)
+    _cache.invalidate(f"auth_user:{user.id}")
     _cache.invalidate_prefix("tenants:")
     _cache.invalidate_prefix("users:")
     _cache.invalidate_prefix("me_profile:")
@@ -809,6 +815,7 @@ def update_company_profile(
         tech_stack=comp.tech_stack if comp and comp.tech_stack else [],
         notes=comp.notes if comp else "",
         logo_url=logo_url,
+        email_delivery=email_delivery,
         admin_id=user.id,
         admin_name=user.name,
         admin_email=user.email,
@@ -1208,6 +1215,7 @@ def update_user(
                 detail="The exclusive root Super Admin username 'ADMIN' cannot be modified.",
             )
 
+    previous_email = target.email
     if body.email is not None:
         if body.email != target.email:
             existing = db.query(User).filter(User.email == body.email).first()
@@ -1230,11 +1238,13 @@ def update_user(
 
     db.commit()
     db.refresh(target)
+    email_delivery = send_account_change_email(target, previous_email=previous_email, password_changed=body.password is not None)
     _cache.invalidate_prefix("users:")
     _cache.invalidate(f"auth_user:{target.id}")
 
     comp = _get_company_profile(target.tenant_id, db)
     return UserResponse(
+        email_delivery=email_delivery,
         id=target.id,
         email=target.email,
         name=target.name,

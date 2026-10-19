@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { request } from '../../api/client';
-import { todayForDeadline, deadlineError } from '../../utils/submissionDeadline';
+import { todayForDeadline, deadlineError, startDateError } from '../../utils/submissionDeadline';
 import { useAuth } from '../../context/AuthContext';
 import {
   ArrowLeft,
@@ -530,6 +530,11 @@ export default function NewRequisition() {
       setActiveTab('process');
       return;
     }
+    if (startDateError(prefill.start_date)) {
+      setError(startDateError(prefill.start_date));
+      setActiveTab('engagement');
+      return;
+    }
     if (prefill.start_date && prefill.ends_on && new Date(prefill.ends_on) < new Date(prefill.start_date)) {
       setError('Estimated End Date cannot be earlier than Start Date.');
       setActiveTab('engagement');
@@ -560,7 +565,7 @@ export default function NewRequisition() {
         prefill: {
           ...prefill,
           title: roleTitle.trim(),
-          department: department.trim() || prefill.job_family || 'Engineering',
+          department: department.trim() || prefill.job_family || '',
         },
       };
 
@@ -925,11 +930,13 @@ export default function NewRequisition() {
                     </label>
                     <input
                       type="date"
+                      min={todayForDeadline()}
                       value={prefill.start_date}
                       onChange={(e) => handlePrefillChange('engagement', 'start_date', e.target.value)}
                       className="w-full bg-red-50/40 border border-red-300 rounded-xl px-3.5 py-2 text-xs font-extrabold text-red-900 focus:outline-none focus:border-red-600 focus:ring-1 focus:ring-red-500/20 transition-all"
                       required
                     />
+                    {startDateError(prefill.start_date) && <p role="alert" className="text-xs text-red-600">{startDateError(prefill.start_date)}</p>}
                   </div>
 
                   <div className="space-y-1 min-w-0">
@@ -940,7 +947,7 @@ export default function NewRequisition() {
                     <input
                       type="date"
                       value={prefill.ends_on}
-                      min={prefill.start_date || undefined}
+                      min={prefill.start_date && prefill.start_date > todayForDeadline() ? prefill.start_date : todayForDeadline()}
                       onChange={(e) => handlePrefillChange('engagement', 'ends_on', e.target.value)}
                       className="w-full bg-red-50/40 border border-red-300 rounded-xl px-3.5 py-2 text-xs font-extrabold text-red-900 focus:outline-none focus:border-red-600 focus:ring-1 focus:ring-red-500/20 transition-all"
                       required

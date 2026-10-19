@@ -49,13 +49,19 @@ export default function EditAccountModal({ isOpen, onClose, userAccount, tenant,
         payload.password = password.trim();
       }
 
-      await request(`/api/auth/users/${userAccount.id}`, {
+      const result = await request(`/api/auth/users/${userAccount.id}`, {
         method: 'PATCH',
         token,
         body: payload,
       });
 
-      setSuccess('Account updated successfully!');
+      setPassword('');
+      if (result?.email_delivery?.status === 'failed') {
+        setSuccess('Account updated successfully.');
+        setError(result.email_delivery.reason || 'The notification email could not be sent.');
+        return;
+      }
+      setSuccess(result?.email_delivery?.status === 'success' ? 'Account updated. Notification email sent.' : 'Account updated successfully!');
       if (onSuccess) onSuccess();
       setTimeout(() => {
         onClose();

@@ -47,7 +47,7 @@ from modules.identity.router import router as identity_router
 from modules.notifications.router import router as notifications_router
 from modules.notifications.services.notification_service import notify_requisition_published
 from modules.requisition.domain import models, schemas
-from modules.requisition.domain.deadline import validate_submission_deadline, submission_deadline_passed
+from modules.requisition.domain.deadline import validate_submission_deadline, validate_start_date, submission_deadline_passed
 from modules.requisition.services.deadline_policy import enforce_approval_deadline, DeadlineExpired
 from modules.requisition.domain.state import StateMachine
 from modules.shared.db import get_session, init_db, _utcnow
@@ -386,6 +386,7 @@ class RequisitionIn(BaseModel):
     @classmethod
     def validate_deadline(cls, value):
         validate_submission_deadline((value or {}).get("submission_deadline"))
+        validate_start_date((value or {}).get("start_date"))
         return value
 
 
@@ -3701,6 +3702,8 @@ def director_approve_requisition(
     _require_approval_deadline(requisition_id)
     with get_session() as session:
         db_req = session.get(models.Requisition, requisition_id)
+        if db_req is None:
+            raise HTTPException(status_code=404, detail="Requisition not found")
         if db_req:
             now_dt = _utcnow()
             db_req.status = schemas.RequisitionStatus.PUBLISHED.value
@@ -3714,46 +3717,22 @@ def director_approve_requisition(
             db_req.rejected_at = None
             session.commit()
 
-    try:
-        service.publish(requisition_id, by=current_user.name or current_user.email or "Director")
-    except Exception:
-        pass
-
-    # Sync to MongoDB and clear cache
-    try:
-        from modules.shared.db import db
-        now_iso = _utcnow().isoformat()
-        db["requisitions"].update_one(
-            {"id": requisition_id},
-            {"$set": {
-                "status": schemas.RequisitionStatus.PUBLISHED.value,
-                "director_approved": True,
-                "director_approved_by": current_user.name or current_user.email or "Director",
-                "director_approved_at": now_iso,
-                "approved_by": current_user.name or current_user.email or "Director",
-                "approved_at": now_iso,
-                "rejection_reason": None,
-                "rejected_by": None,
-                "rejected_at": None,
-                "updated_at": now_iso,
-            }}
-        )
-    except Exception:
-        pass
-
-    try:
-        notify_requisition_published(requisition_id)
-    except Exception:
-        pass
+    # Session already persists to MongoDB; no second publish or mirrored write is needed.
+    background_tasks.add_task(notify_requisition_published, requisition_id)
 
     _cache.clear()
     background_tasks.add_task(_async_trigger_top_candidate_outreach, requisition_id)
-    return _requisition_dict(requisition_id)
+    return {"id": db_req.id, "status": db_req.status,
+            "director_approved": True, "director_approved_by": db_req.director_approved_by,
+            "director_approved_at": _format_datetime(db_req.director_approved_at),
+            "approved_by": db_req.approved_by, "approved_at": _format_datetime(db_req.approved_at)}
 
 
 @app.post("/requisitions/{requisition_id}/reject")
 @app.post("/api/requisitions/{requisition_id}/reject")
 def reject_requisition(requisition_id: str, body: RejectIn | None = None, current_user: User = Depends(get_current_user)) -> dict:
+    if current_user.role not in ("Director", "Admin", "Super Admin"):
+        raise HTTPException(status_code=403, detail="Only Directors or Admins can reject requisitions.")
     _require_tenant(_get_requisition(requisition_id), current_user)
 
     reviewer = (body.reviewer if body else None) or current_user.name or current_user.email or "Director"
@@ -3761,6 +3740,8 @@ def reject_requisition(requisition_id: str, body: RejectIn | None = None, curren
 
     with get_session() as session:
         db_req = session.get(models.Requisition, requisition_id)
+        if db_req is None:
+            raise HTTPException(status_code=404, detail="Requisition not found")
         if db_req:
             db_req.status = schemas.RequisitionStatus.STRUCTURING.value
             db_req.director_approved = False
@@ -3771,33 +3752,13 @@ def reject_requisition(requisition_id: str, body: RejectIn | None = None, curren
             db_req.rejected_at = _utcnow()
             session.commit()
 
-    try:
-        service.reject(requisition_id, reviewer=reviewer)
-    except Exception:
-        pass
-
-    # Sync to MongoDB and clear cache
-    try:
-        from modules.shared.db import db
-        now_iso = _utcnow().isoformat()
-        db["requisitions"].update_one(
-            {"id": requisition_id},
-            {"$set": {
-                "status": schemas.RequisitionStatus.STRUCTURING.value,
-                "director_approved": False,
-                "director_approved_by": None,
-                "director_approved_at": None,
-                "rejection_reason": reason,
-                "rejected_by": reviewer,
-                "rejected_at": now_iso,
-                "updated_at": now_iso,
-            }}
-        )
-    except Exception:
-        pass
+    # A director decision must not resume the AI intake graph or regenerate the JD.
+    service._record_review(requisition_id, reviewer, "rejected")
 
     _cache.clear()
-    return _requisition_dict(requisition_id)
+    return {"id": db_req.id, "status": db_req.status, "director_approved": False,
+            "rejection_reason": reason, "rejected_by": reviewer,
+            "rejected_at": _format_datetime(db_req.rejected_at)}
 
 
 @app.post("/requisitions/{requisition_id}/submit-for-approval")

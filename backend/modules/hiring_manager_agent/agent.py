@@ -3310,6 +3310,10 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
     """Main AI Agent executor for Hiring Manager chat requests with Groq API integration and typo-tolerant fuzzy matching."""
     history = history or []
     current_user = current_user or {}
+    from .applications import application_reply
+    applications = application_reply(prompt, db)
+    if applications is not None:
+        return applications
     model_reply = run_model_hiring_chat(prompt, history, current_user)
     if model_reply is not None:
         return model_reply

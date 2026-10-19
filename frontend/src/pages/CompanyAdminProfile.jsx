@@ -606,6 +606,9 @@ export default function CompanyAdminProfile() {
       }
 
       setSuccess('Changes saved successfully!');
+      if (savedProfile?.email_delivery?.status === 'failed') {
+        setError(savedProfile.email_delivery.reason || 'Changes saved, but the notification email could not be sent.');
+      }
       if (refreshUser) await refreshUser();
       return true;
     } catch (err) {
@@ -637,7 +640,7 @@ export default function CompanyAdminProfile() {
 
     setChangingPassword(true);
     try {
-      await request('/api/auth/change-password', {
+      const result = await request('/api/auth/change-password', {
         method: 'POST',
         token,
         body: {
@@ -646,7 +649,10 @@ export default function CompanyAdminProfile() {
         },
       });
 
-      setPasswordSuccess('Password updated successfully! Keep your new credentials secure.');
+      setPasswordSuccess('Password updated successfully!');
+      if (result?.email_delivery?.status === 'failed') {
+        setPasswordError(result.email_delivery.reason || 'Password updated, but the notification email could not be sent.');
+      }
       setPasswordForm({
         current_password: '',
         new_password: '',

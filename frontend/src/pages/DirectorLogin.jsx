@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Navigate, useNavigate, Link } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -8,6 +8,7 @@ export default function DirectorLogin() {
   const { user, login, logout } = useAuth();
   const navigate = useNavigate();
 
+  const passwordInputRef = useRef(null);
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -84,6 +85,12 @@ export default function DirectorLogin() {
                 type="email"
                 id="email"
                 name="email"
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
+                        event.preventDefault();
+                        passwordInputRef.current?.focus();
+                      }
+                    }}
                 autoComplete="off"
                 readOnly
                 onFocus={(e) => { e.target.readOnly = false; }}
@@ -107,7 +114,8 @@ export default function DirectorLogin() {
                 <path d="M8 10V7a4 4 0 0 1 8 0v3" />
               </svg>
               <input
-                type={showPassword ? 'text' : 'password'}
+                ref={passwordInputRef}
+                    type={showPassword ? 'text' : 'password'}
                 id="password"
                 name="password"
                 autoComplete="new-password"
