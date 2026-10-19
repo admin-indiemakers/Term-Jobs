@@ -6611,3 +6611,10 @@ label[data-field-requirement='optional'][data-field-requirement-placement='befor
   text-transform: none;
   letter-spacing: normal;
 }
+
+/* Ensure inputs on light surfaces always render crisp high-contrast dark text */
+.bg-white input:not([class*='text-']),
+.bg-white textarea:not([class*='text-']),
+.bg-white select:not([class*='text-']) {
+  color: #111827;
+}

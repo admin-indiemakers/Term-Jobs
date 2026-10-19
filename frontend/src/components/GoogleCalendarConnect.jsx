@@ -16,7 +16,8 @@ function GoogleCalendarLogo({ size = 26, className = '' }) {
   );
 }
 
-export default function GoogleCalendarConnect({ onStatus, onConnected, variant = 'compact', className = '' }) {
+export default function GoogleCalendarConnect({ onStatus, onConnected, variant, compact = false, className = '' }) {
+  const effectiveVariant = variant || (compact ? 'compact' : 'full');
   const { token } = useAuth();
   const [status, setStatus] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -93,7 +94,7 @@ export default function GoogleCalendarConnect({ onStatus, onConnected, variant =
   const isConnected = Boolean(status?.connected);
 
   // ── 1. COMPACT SMALL TAB (for Header / Top Toolbar) ──
-  if (variant === 'compact') {
+  if (effectiveVariant === 'compact') {
     return (
       <div className={`relative inline-block ${className}`} ref={popoverRef}>
         <button

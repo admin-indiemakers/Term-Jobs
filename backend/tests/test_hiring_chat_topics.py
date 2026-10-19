@@ -22,6 +22,7 @@ def test_bounded_followup_requires_hiring_context():
 
 def test_router_rejects_repeated_unrelated_questions_before_integrations(monkeypatch):
     from modules.hiring_manager_agent import router
+    monkeypatch.setattr(router, 'model_available', lambda: False)
     from modules.identity.domain.models import User
     def unexpected(*args, **kwargs):
         pytest.fail('Unrelated prompt must not reach the agent')

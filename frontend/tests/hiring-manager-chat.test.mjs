@@ -43,7 +43,7 @@ test('draft response produces a card with requested openings', async () => {
   const message = await send('draft Backend Engineer with openings to 3', {
     reply: 'Review the draft details below',
     executed_actions: [{ tool: 'draft_hiring_requisition', result: {
-      title: 'Backend Engineer', skills: 'Python, Docker', openings: 1,
+      title: 'Backend Engineer', skills: 'Python, Docker', openings: 3,
     } }],
   });
   assert.equal(message.isError, undefined);
@@ -55,8 +55,8 @@ for (const [text, field, expected] of [
   ['change skills to Python and React only', 'skills', ['Python', 'React']],
   ['change role summary to Build APIs', 'summary', 'Build APIs'],
 ]) {
-  test(`draft edit uses submitted text: ${field}`, async () => {
-    const message = await send(text, { reply: 'Updated', executed_actions: [] }, [{
+  test(`draft edit renders model tool result: ${field}`, async () => {
+    const message = await send(text, { reply: 'Updated', executed_actions: [{ tool: 'draft_hiring_requisition', result: { title: 'Backend Engineer', openings: 1, [field === 'summary' ? 'job_description' : field]: expected } }] }, [{
       sender: 'ai', requisitionDraft: { title: 'Backend Engineer', openings: 1, skills: ['Java'], summary: 'Old' },
     }]);
     assert.equal(message.isError, undefined);
@@ -82,11 +82,39 @@ for (const rows of [[], [{ id: 'closed-1', title: 'Closed Role', status: 'Closed
   });
 }
 
-test('closed query filters cached fallback by status', async () => {
+test('queries without a list tool do not invent cards from cached rows', async () => {
   const message = await send('show closed requisitions', { reply: 'Closed requisitions' }, [], [
     { id: 'live-1', status: 'Published' }, { id: 'closed-1', status: 'Closed' },
     { id: 'filled-1', status: 'Filled' },
   ]);
   assert.equal(message.isError, undefined);
-  assert.deepEqual(Array.from(message.requisitionsList, r => r.id), ['closed-1', 'filled-1']);
+  assert.equal(message.requisitionsList, null);
+});
+
+test('role picker never invents a draft from create intent', async () => {
+  const message = await send('create requisition for DevOps engineer', {
+    reply: 'Choose a role',
+    executed_actions: [{ tool: 'show_role_selection_dropdown', result: { roles: [{ title: 'React Developer' }] } }],
+  });
+  assert.equal(message.requisitionDraft, null);
+});
+
+test('out of scope response never invents a draft from create intent', async () => {
+  const message = await send('create requisition', {
+    reply: 'Please ask about hiring', out_of_scope: true, executed_actions: [],
+  });
+  assert.equal(message.requisitionDraft, null);
+});
+
+
+test('greetings go to the backend rather than a canned frontend reply', async () => {
+  const message = await send('hi', { reply: 'Welcome, what does your team need?', executed_actions: [] });
+  assert.equal(message.text, 'Welcome, what does your team need?');
+});
+
+test('clarification does not mutate an existing draft based on keywords', async () => {
+  const message = await send('change the skills', { reply: 'Which skills?', executed_actions: [] }, [
+    { sender: 'ai', requisitionDraft: { title: 'Engineer', skills: ['Java'] } },
+  ]);
+  assert.equal(message.requisitionDraft, null);
 });

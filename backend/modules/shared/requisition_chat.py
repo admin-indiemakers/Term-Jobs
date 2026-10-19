@@ -9,7 +9,7 @@ DRAFT = {'draft', 'drafted', 'structuring'}
 PENDING = {'pending', 'pending_approval', 'pendingapproval'}
 
 
-def filtered_requisition_reply(prompt, load_rows, tool_name, timezone_name='Asia/Kolkata', now=None):
+def filtered_requisition_reply(prompt, load_rows, tool_name, timezone_name='Asia/Kolkata', now=None, created_on=None):
     """Return a filtered listing, or None when this is not a supported list query.
 
     Naive database timestamps represent UTC. Calendar days use the user's timezone;
@@ -17,9 +17,10 @@ def filtered_requisition_reply(prompt, load_rows, tool_name, timezone_name='Asia
     A date alone includes every status; status constraints must be explicit.
     """
     text = prompt.lower()
-    if not re.search(r'\b(requisitions?|reqs?|jobs?|roles?|positions?|openings?)\b', text):
+    text = re.sub(r'\b(?:requsitions?|urequsitions?|requstions?|reqisitions?)\b', 'requisition', text)
+    if not created_on and not re.search(r'\b(requisitions?|reqs?|jobs?|roles?|positions?|openings?)\b', text):
         return None
-    if not re.search(r'\b(show|list|view|display|get|fetch|which|what)\b', text):
+    if not created_on and not re.search(r'\b(show|list|view|display|get|fetch|which|what)\b', text):
         return None
     if re.search(r'\b(create|update|edit|delete|publish|approve|close|archive)\b', text):
         return None
@@ -31,7 +32,12 @@ def filtered_requisition_reply(prompt, load_rows, tool_name, timezone_name='Asia
         tz = ZoneInfo('Asia/Kolkata')
     today = (now or datetime.now(timezone.utc)).astimezone(tz).date()
     requested_date = None
-    if re.search(r'\byesterday\b', text):
+    if created_on:
+        try:
+            requested_date = date.fromisoformat(created_on)
+        except (ValueError, TypeError):
+            return {'reply': 'Please provide a valid creation date in YYYY-MM-DD format.', 'executed_actions': []}
+    elif re.search(r'\byesterday\b', text):
         requested_date = today - timedelta(days=1)
     elif re.search(r'\btoday\b', text):
         requested_date = today
@@ -42,6 +48,20 @@ def filtered_requisition_reply(prompt, load_rows, tool_name, timezone_name='Asia
                 requested_date = date.fromisoformat(match.group())
             except ValueError:
                 return {'reply': 'Please provide a valid creation date in YYYY-MM-DD format.', 'executed_actions': []}
+    if requested_date is None:
+        months = {name: number for number, name in enumerate(
+            ('january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'), 1)}
+        months.update({name[:3]: number for name, number in list(months.items())})
+        month_pattern = '|'.join(months)
+        month_first = re.search(rf'\b({month_pattern})\s+(\d{{1,2}})(?:st|nd|rd|th)?(?:,?\s+(\d{{4}}))?\b', text)
+        day_first = re.search(rf'\b(\d{{1,2}})(?:st|nd|rd|th)?\s+(?:of\s+)?({month_pattern})(?:,?\s+(\d{{4}}))?\b', text)
+        match = month_first or day_first
+        if match:
+            month_name, day = (match[1], match[2]) if month_first else (match[2], match[1])
+            try:
+                requested_date = date(int(match[3] or today.year), months[month_name], int(day))
+            except ValueError:
+                return {'reply': 'Please provide a valid creation date.', 'executed_actions': []}
     statuses = set()
     labels = []
     for pattern, values, label in [

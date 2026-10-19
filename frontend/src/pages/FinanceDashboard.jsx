@@ -259,8 +259,18 @@ export default function FinanceDashboard() {
           </h1>
           <label className="inline-flex items-center gap-2 text-sm font-semibold text-gray-800 my-3">
             Billing month
-            <input type="month" aria-label="Billing month" value={selectedMonth}
-              onChange={(e) => { if (e.target.value) { setSelectedMonth(e.target.value); setSelectedCandidateId(null); setWorkOrders([]); setLoading(true); ++loadVersionRef.current; } }}
+            <input type="month" aria-label="Billing month" min="0001-01" max="9999-12" value={selectedMonth}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (!value) return;
+                if (!/^(?!0000)[0-9]{4}-(0[1-9]|1[0-2])$/.test(value)) {
+                  e.target.value = selectedMonth;
+                  setError('Billing month must have a four-digit year (0001–9999).');
+                  return;
+                }
+                setError('');
+                setSelectedMonth(value); setSelectedCandidateId(null); setWorkOrders([]); setLoading(true); ++loadVersionRef.current;
+              }}
               className="bg-white border border-gray-300 rounded-lg px-3 py-2 !text-gray-900" />
           </label>
 

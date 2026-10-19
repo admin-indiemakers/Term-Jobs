@@ -187,6 +187,7 @@ class PasswordChange(BaseModel):
     new_password: str = Field(..., min_length=4, max_length=128)
 
 class UserResponse(BaseModel):
+    email_delivery: dict | None = None
     model_config = ConfigDict(from_attributes=True)
 
     id: str
@@ -226,7 +227,19 @@ class CompanyProfileUpdate(BaseModel):
     admin_email: str | None = Field(None, min_length=3, max_length=255)
     admin_phone: str | None = None
 
+    @field_validator("admin_email")
+    @classmethod
+    def validate_admin_email(cls, value):
+        if value is None:
+            return None
+        value = value.strip().lower()
+        if not _EMAIL_RE.fullmatch(value) or _INVALID_EMAIL_CHARS.search(value) or ".." in value:
+            raise ValueError("Enter a valid admin email address.")
+        return value
+
+
 class CompanyProfileDetailResponse(BaseModel):
+    email_delivery: dict | None = None
     tenant_id: str
     name: str
     tenant_type: str

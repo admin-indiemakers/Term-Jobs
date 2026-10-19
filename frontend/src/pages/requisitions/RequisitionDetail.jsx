@@ -171,9 +171,9 @@ export default function RequisitionDetail() {
 
     const roleTitle = data.title || structured.title || '';
     const roleDept = data.department || structured.department || structured.job_family || '';
-    const roleExp = structured.experience || structured.experience_level || structured.experience_years || data.experience || data.experience_range || '';
-    const roleWorkMode = structured.work_mode || structured.workplace_type || data.work_mode || data.workplace_type || 'Hybrid';
-    const roleDuration = structured.duration || structured.contract_duration || data.duration || '6 Months';
+    const roleExp = structured.experience || structured.experience_band || structured.experience_level || structured.experience_years || data.experience || data.experience_range || '';
+    const roleWorkMode = structured.work_mode || structured.workplace_type || data.work_mode || data.workplace_type || '';
+    const roleDuration = structured.duration || structured.contract_duration || data.duration || '';
     const roleHeadcount = structured.headcount || data.headcount || 1;
     const rawDeadline = structured.submission_deadline || data.submission_deadline || structured.shortlist_deadline || data.shortlist_deadline || '';
     const roleDeadline = rawDeadline ? String(rawDeadline).slice(0, 10) : '';
@@ -452,8 +452,8 @@ export default function RequisitionDetail() {
   }
 
   const reqIdShort = (req.id || id || '').replace(/[^0-9]/g, '').slice(0, 8) || id.slice(0, 8);
-  const titleDisplay = editForm.title || req.title || structuredRole?.title || 'DevSecOps Engineer';
-  const deptDisplay = editForm.department || req.department || structuredRole?.department || 'Engineering';
+  const titleDisplay = editForm.title || req.title || structuredRole?.title || '';
+  const deptDisplay = editForm.department || req.department || structuredRole?.department || '';
   const createdDateDisplay = formatCustomDate(req.created_at, '25 Sept 2026, 6:19 am');
   const isApproved = isPublishedStatus(status) || isCompletedStatus(status) || (Boolean(req.director_approved) && !isPendingApprovalStatus(status) && !isDraftedStatus(status));
   const approvalDateRaw = isApproved ? (req.director_approved_at || req.approved_at || req.updated_at) : null;
@@ -687,7 +687,7 @@ export default function RequisitionDetail() {
                   Experience
                 </div>
                 <div className="text-xs sm:text-[13px] font-bold text-gray-900 leading-tight truncate">
-                  {editForm.experience || '5–8 years'}
+                  {editForm.experience}
                 </div>
               </div>
 
@@ -696,7 +696,7 @@ export default function RequisitionDetail() {
                   Work Mode
                 </div>
                 <div className="text-xs sm:text-[13px] font-bold text-gray-900 leading-tight truncate">
-                  {editForm.work_mode || 'Hybrid'}
+                  {editForm.work_mode}
                 </div>
               </div>
 
@@ -705,7 +705,7 @@ export default function RequisitionDetail() {
                   Duration
                 </div>
                 <div className="text-xs sm:text-[13px] font-bold text-gray-900 leading-tight truncate">
-                  {editForm.duration || '6 Months'}
+                  {editForm.duration}
                 </div>
               </div>
 
@@ -723,7 +723,7 @@ export default function RequisitionDetail() {
                   Deadline
                 </div>
                 <div className="text-xs sm:text-[13px] font-bold text-gray-900 leading-tight truncate">
-                  {editForm.deadline || '28 Sept 2026, 6:00 pm'}
+                  {editForm.deadline}
                 </div>
               </div>
 

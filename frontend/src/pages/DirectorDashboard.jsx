@@ -169,6 +169,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
   const [error, setError] = useState('');
   const [templateMsg, setTemplateMsg] = useState('');
   const [approvingId, setApprovingId] = useState('');
+  const decisionInFlight = useRef(false);
   const [activeTab, setActiveTab] = useState(currentTab);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
@@ -530,6 +531,8 @@ export default function DirectorDashboard({ view = 'overview' }) {
 
   const handleApproveRequisition = async (reqId, e) => {
     if (e) e.stopPropagation();
+    if (decisionInFlight.current) return;
+    decisionInFlight.current = true;
     // Discard dashboard reads started before this decision.
     ++dashboardLoadVersion.current;
     setApprovingId(reqId);
@@ -581,6 +584,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
     } catch (err) {
       setError(err.message || 'Failed to approve requisition');
     } finally {
+      decisionInFlight.current = false;
       setApprovingId('');
     }
   };
@@ -594,11 +598,13 @@ export default function DirectorDashboard({ view = 'overview' }) {
 
   const handleConfirmReject = async (e) => {
     if (e) e.preventDefault();
-    if (!rejectModalReq) return;
+    if (!rejectModalReq || decisionInFlight.current) return;
     if (!rejectReason.trim()) {
       setError('Please provide a reason for rejecting this requisition.');
       return;
     }
+    decisionInFlight.current = true;
+    ++dashboardLoadVersion.current;
     const reqId = rejectModalReq.id;
     setApprovingId(reqId);
     setError('');
@@ -648,6 +654,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
     } catch (err) {
       setError(err.message || 'Failed to reject requisition');
     } finally {
+      decisionInFlight.current = false;
       setApprovingId('');
     }
   };
@@ -682,6 +689,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
     } catch (err) {
       setError(err?.message || 'Failed to approve Work Order.');
     } finally {
+      decisionInFlight.current = false;
       setApprovingId('');
     }
   };
@@ -1342,7 +1350,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
                                   <button
                                     type="button"
                                     onClick={(e) => handleOpenRejectModal(r, e)}
-                                    disabled={approvingId === r.id}
+                                    disabled={Boolean(approvingId)}
                                     className="w-16 py-1.5 rounded-lg bg-white hover:bg-red-50 border border-red-200 text-red-600 text-xs font-bold transition-colors cursor-pointer shadow-2xs disabled:opacity-50 text-center"
                                   >
                                     Reject
@@ -1350,10 +1358,10 @@ export default function DirectorDashboard({ view = 'overview' }) {
                                   <button
                                     type="button"
                                     onClick={(e) => handleApproveRequisition(r.id, e)}
-                                    disabled={approvingId === r.id}
+                                    disabled={Boolean(approvingId)}
                                     className="w-16 py-1.5 rounded-lg bg-black hover:bg-gray-900 border border-black text-white text-xs font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-50 text-center"
                                   >
-                                    {approvingId === r.id ? '...' : 'Approve'}
+                                    {approvingId === r.id ? 'Approving...' : 'Approve'}
                                   </button>
                                 </div>
                               ) : (
@@ -1762,7 +1770,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
                         <button
                           type="button"
                           onClick={(e) => handleOpenRejectModal(selectedRequisitionForView, e)}
-                          disabled={approvingId === selectedRequisitionForView.id}
+                          disabled={Boolean(approvingId)}
                           className="px-3 py-1.5 rounded-xl bg-white hover:bg-red-50 border border-red-200 text-red-600 text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
                         >
                           Reject ✕
@@ -1770,7 +1778,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
                         <button
                           type="button"
                           onClick={(e) => handleApproveRequisition(selectedRequisitionForView.id, e)}
-                          disabled={approvingId === selectedRequisitionForView.id}
+                          disabled={Boolean(approvingId)}
                           className="px-4 py-1.5 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                         >
                           <Check size={13} />
@@ -2015,7 +2023,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
                         <button
                           type="button"
                           onClick={(e) => handleOpenRejectModal(selectedRequisitionForView, e)}
-                          disabled={approvingId === selectedRequisitionForView.id}
+                          disabled={Boolean(approvingId)}
                           className="px-3.5 py-2 rounded-xl bg-white hover:bg-red-50 border border-red-200 text-red-600 text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
                         >
                           Reject ✕
@@ -2023,7 +2031,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
                         <button
                           type="button"
                           onClick={(e) => handleApproveRequisition(selectedRequisitionForView.id, e)}
-                          disabled={approvingId === selectedRequisitionForView.id}
+                          disabled={Boolean(approvingId)}
                           className="px-4 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                         >
                           <Check size={13} />
@@ -2099,7 +2107,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
                 </button>
                 <button
                   type="submit"
-                  disabled={!rejectReason.trim() || approvingId === rejectModalReq.id}
+                  disabled={!rejectReason.trim() || Boolean(approvingId)}
                   className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
                 >
                   <span>{approvingId === rejectModalReq.id ? 'Rejecting...' : 'Confirm Rejection & Send Reason ✕'}</span>

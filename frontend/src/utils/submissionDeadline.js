@@ -14,3 +14,7 @@ export function deadlineError(value, today = todayForDeadline()) {
   }
   return value < today ? 'Submission Deadline cannot be in the past. Choose today or a future date.' : '';
 }
+
+export function startDateError(value, today = todayForDeadline()) {
+  return deadlineError(value, today).replaceAll('Submission Deadline', 'Start Date');
+}

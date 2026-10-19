@@ -1,7 +1,9 @@
+import re
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, Header, HTTPException, status, File, UploadFile
 from sqlalchemy import func, or_
 
+from modules.identity.services.account_notifications import send_account_change_email
 from modules.identity.domain.models import Tenant, User, VendorEngagement
 from modules.identity.domain.schemas import (
     PROVISION_MATRIX,
@@ -650,7 +652,9 @@ def change_password(
         current_user.email,
         f"Password changed successfully for account '{current_user.email}'"
     )
-    return {"status": "ok", "message": "Password updated successfully"}
+    email_delivery = send_account_change_email(user, previous_email=user.email, password_changed=True)
+    _cache.invalidate(f"auth_user:{user.id}")
+    return {"status": "ok", "message": "Password updated successfully", "email_delivery": email_delivery}
 
 
 @router.get("/company/profile", response_model=CompanyProfileDetailResponse)
@@ -765,6 +769,7 @@ def update_company_profile(
 
     # 4. Update Admin User details if provided
     user = db.query(User).filter(User.id == current_user.id).first()
+    previous_email = user.email
     if body.admin_name is not None and body.admin_name.strip():
         user.name = body.admin_name.strip()
     if body.admin_phone is not None:
@@ -773,18 +778,20 @@ def update_company_profile(
         new_email = body.admin_email.strip().lower()
         if new_email != user.email.lower():
             existing_user = db.query(User).filter(
-                func.lower(User.email) == new_email,
+                {"email": {"$regex": "^" + re.escape(new_email) + "$", "$options": "i"}},
                 User.id != user.id,
                 User.is_deleted == False
             ).first()
             if existing_user:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Email '{new_email}' is already registered by another account",
+                    detail="This email address is already used by another account. Please enter a different email address.",
                 )
             user.email = new_email
 
     db.commit()
+    email_delivery = send_account_change_email(user, previous_email=previous_email)
+    _cache.invalidate(f"auth_user:{user.id}")
     _cache.invalidate_prefix("tenants:")
     _cache.invalidate_prefix("users:")
     _cache.invalidate_prefix("me_profile:")
@@ -808,6 +815,7 @@ def update_company_profile(
         tech_stack=comp.tech_stack if comp and comp.tech_stack else [],
         notes=comp.notes if comp else "",
         logo_url=logo_url,
+        email_delivery=email_delivery,
         admin_id=user.id,
         admin_name=user.name,
         admin_email=user.email,
@@ -1207,6 +1215,7 @@ def update_user(
                 detail="The exclusive root Super Admin username 'ADMIN' cannot be modified.",
             )
 
+    previous_email = target.email
     if body.email is not None:
         if body.email != target.email:
             existing = db.query(User).filter(User.email == body.email).first()
@@ -1229,11 +1238,13 @@ def update_user(
 
     db.commit()
     db.refresh(target)
+    email_delivery = send_account_change_email(target, previous_email=previous_email, password_changed=body.password is not None)
     _cache.invalidate_prefix("users:")
     _cache.invalidate(f"auth_user:{target.id}")
 
     comp = _get_company_profile(target.tenant_id, db)
     return UserResponse(
+        email_delivery=email_delivery,
         id=target.id,
         email=target.email,
         name=target.name,
@@ -1836,6 +1847,8 @@ def list_portal_users(
         eff_email = (pu.email if pu and getattr(pu, 'email', None) else (sub.get("candidate_email") or sub.get("email") or "")).strip()
         eff_name = (pu.name if pu and getattr(pu, 'name', None) else (sub.get("candidate_name") or "")).strip()
 
+        from modules.identity.services.contract_access import contract_issued
+        portal_contract_issued = contract_issued(mongo_db, cid, current_user.tenant_id)
         results.append({
             "candidate_id": cid,
             "workorder_id": cid,
@@ -1843,6 +1856,7 @@ def list_portal_users(
             "candidate_email": eff_email,
             "requisition_title": (req_doc or {}).get("title", ""),
             "vendor_name": sub.get("vendor_name", ""),
+            "contract_issued": portal_contract_issued,
             "has_portal_access": pu is not None and getattr(pu, 'is_active', True),
             "portal_user_id": pu.id if pu else None,
             "portal_user_email": eff_email,
@@ -1914,6 +1928,10 @@ def create_or_update_portal_user(
 
     tenant_id = current_user.tenant_id
     from modules.shared.db import db as mongo_db
+
+    if current_user.role == "Hiring Manager":
+        from modules.identity.services.contract_access import require_issued_contract
+        require_issued_contract(mongo_db, candidate_id, current_user.tenant_id)
 
     # 1. Search for existing Candidate user specifically for THIS candidate_id / workorder_id
     existing_user = None

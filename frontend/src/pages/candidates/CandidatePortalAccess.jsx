@@ -366,11 +366,12 @@ export default function CandidatePortalAccess() {
                         <button
                           type="button"
                           onClick={() => handleCreateAccess(cand)}
-                          disabled={creatingId === (cand.candidate_id || cand.workorder_id)}
+                          disabled={creatingId === (cand.candidate_id || cand.workorder_id) || (user?.role === 'Hiring Manager' && !cand.contract_issued)}
+                          title={user?.role === 'Hiring Manager' && !cand.contract_issued ? 'Waiting for TermJobs Super Admin to issue the contract' : 'Create candidate portal access'}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold transition shadow-xs disabled:opacity-50 cursor-pointer"
                         >
                           <UserPlus size={12} />
-                          <span>{creatingId === (cand.candidate_id || cand.workorder_id) ? 'Creating...' : 'Create Access'}</span>
+                          <span>{creatingId === (cand.candidate_id || cand.workorder_id) ? 'Creating...' : user?.role === 'Hiring Manager' && !cand.contract_issued ? 'Awaiting Contract Issuance' : 'Create Access'}</span>
                         </button>
                       ) : (
                         <div className="flex justify-end gap-2"><button type="button" disabled={Boolean(updatingId) || !cand.portal_user_id} onClick={() => resendLogin(cand)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black hover:bg-gray-800 text-white border border-black text-xs font-bold whitespace-nowrap cursor-pointer disabled:bg-gray-200 disabled:text-gray-600 disabled:border-gray-300 disabled:cursor-not-allowed" title="Resets the password and emails new login credentials"><Mail size={12} /><span>{updatingId === (cand.candidate_id || cand.workorder_id) ? 'Sending…' : 'Email New Login'}</span></button>

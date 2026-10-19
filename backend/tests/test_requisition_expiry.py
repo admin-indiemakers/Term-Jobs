@@ -22,7 +22,7 @@ def today():
 
 def handlers(database):
     names = {'list_requisitions', '_auto_close_expired', '_require_approval_deadline', '_get_requisition',
-             'approve_requisition', 'director_approve_requisition', 'submit_requisition_for_director_approval_route', 'publish_requisition'}
+             'approve_requisition', 'director_approve_requisition', 'reject_requisition', 'submit_requisition_for_director_approval_route', 'publish_requisition'}
     tree = ast.parse((Path(__file__).parents[1] / 'main.py').read_text(encoding='utf-8'))
     nodes = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in names]
     for node in nodes:

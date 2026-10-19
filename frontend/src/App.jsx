@@ -6,6 +6,8 @@ import { useAuth } from './context/AuthContext';
 import { CandidateAuthProvider } from './context/CandidateAuthContext';
 import AuthPage from './pages/AuthPage';
 import LandingPage from './pages/LandingPage';
+const CandidatePoolAdded = lazy(() => import('./pages/CandidatePoolAdded'));
+const LegalPage = lazy(() => import('./pages/LegalPage'));
 import OpenRolesPage from './pages/OpenRolesPage';
 import DashboardLayout from './pages/DashboardLayout';
 import { directorRedirect } from './utils/directorAccess';
@@ -243,6 +245,10 @@ export default function App() {
         <FieldRequirementIndicators />
         <Suspense fallback={<FullScreenLoader />}>
           <Routes>
+          <Route path="/candidate-pool/added" element={<CandidatePoolAdded />} />
+          <Route path="/privacy-policy" element={<LegalPage type="privacy" />} />
+          <Route path="/terms-and-conditions" element={<LegalPage type="terms" />} />
+          <Route path="/platform-rules" element={<LegalPage type="rules" />} />
           <Route path="/join/hiring-manager" element={<JoinHiringManager />} />
           <Route path="/invite/hiring-manager" element={<JoinHiringManager />} />
           <Route path="/join/director" element={<JoinDirector />} />

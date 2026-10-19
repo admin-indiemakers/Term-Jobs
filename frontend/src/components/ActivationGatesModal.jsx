@@ -123,6 +123,10 @@ export default function ActivationGatesModal({ candidate, token, onClose, onSucc
 
   // Send / Resend Login Credentials to Candidate
   const handleSendCredentials = async () => {
+    if (credentialsLocked) {
+      setError('Clear all mandatory activation gates before sending credentials.');
+      return;
+    }
     setSendingCreds(true);
     setError('');
     setCredsSuccess('');
@@ -150,6 +154,7 @@ export default function ActivationGatesModal({ candidate, token, onClose, onSucc
   const blockingUncleared = blockingGates.filter((g) => g.status !== 'cleared');
   const blockingOpenCount = blockingUncleared.length;
   const isReadyToActivate = blockingOpenCount === 0;
+  const credentialsLocked = loading || !onboardingData || gates.length === 0 || !isReadyToActivate || activating || Boolean(clearingGateId);
   const isActivated = onboardingData?.activation_status === 'activated' || candidate?.work_order_status === 'ACTIVE';
   const effectiveWoNumber =
     onboardingData?.work_order_number ||
@@ -334,13 +339,14 @@ export default function ActivationGatesModal({ candidate, token, onClose, onSucc
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col items-end gap-2">
+            {credentialsLocked && <p className="text-xs text-gray-600" role="status">Credentials are locked until all mandatory activation gates are cleared.</p>}
             <button
               type="button"
               onClick={handleSendCredentials}
-              disabled={sendingCreds}
+              disabled={sendingCreds || credentialsLocked}
               className="px-4 py-2 text-[0.82rem] font-bold border border-[#e2e2dc] hover:bg-[#f7f7f5] text-[#1a1a1a] rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-2xs disabled:opacity-50"
-              title="Dispatch or resend candidate login credentials via email"
+              title={credentialsLocked ? "Clear all mandatory activation gates before sending credentials" : "Dispatch or resend candidate login credentials via email"}
             >
               {sendingCreds ? (
                 <>

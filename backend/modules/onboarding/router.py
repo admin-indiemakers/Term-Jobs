@@ -637,6 +637,17 @@ def send_candidate_credentials(candidate_id: str, body: dict = None, authorizati
     cid_clean = cid.replace("SDC-", "").replace("SDC -", "").replace("BEAR-", "").replace("BEAR -", "").strip()
 
     doc = _get_or_create_onboarding_doc(candidate_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Onboarding not found")
+    gates = doc.get("activation_gates")
+    if not isinstance(gates, list) or not gates:
+        raise HTTPException(status_code=409, detail="Activation checklist is unavailable. Load and clear the required gates before sending credentials.")
+    blocking_pending = [gate for gate in gates if gate.get("type") == "blocking" and gate.get("status") != "cleared"]
+    if blocking_pending:
+        raise HTTPException(status_code=409, detail=f"Credentials cannot be sent: {len(blocking_pending)} blocking gate(s) still open. Clear all mandatory activation gates first.")
+    if user and user.get("role") == "Hiring Manager":
+        from modules.identity.services.contract_access import require_issued_contract
+        require_issued_contract(db, cid, user.get("tenant_id"))
     cand_email = (body.get("email") or doc.get("candidate_email") or "").strip().lower()
     cand_name = (body.get("name") or doc.get("candidate_name") or "Candidate").strip()
 

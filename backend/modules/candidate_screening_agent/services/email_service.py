@@ -3,6 +3,8 @@ import re
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.utils import formatdate, make_msgid
+from html.parser import HTMLParser
 from typing import Any, Dict, Optional
 
 GMAIL_SENDER_EMAIL = os.getenv("GMAIL_SENDER_EMAIL", "")
@@ -16,6 +18,42 @@ def extract_candidate_email(resume_text: str) -> Optional[str]:
     if match:
         return match.group(0).lower()
     return None
+
+
+class _PlainEmail(HTMLParser):
+    """Keep message content and action links in the plain-text alternative."""
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.parts = []
+        self.hidden = 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ('style', 'script', 'head'):
+            self.hidden += 1
+        if self.hidden:
+            return
+        if tag in ('p', 'div', 'tr', 'br', 'h1', 'h2', 'li'):
+            self.parts.append('\n')
+        if tag == 'a':
+            href = dict(attrs).get('href', '')
+            if href.startswith(('https://', 'http://', 'mailto:')):
+                self.parts.append(' ' + href + ' ')
+
+    def handle_endtag(self, tag):
+        if tag in ('style', 'script', 'head'):
+            self.hidden = max(0, self.hidden - 1)
+        elif not self.hidden and tag in ('p', 'div', 'tr', 'h1', 'h2', 'li'):
+            self.parts.append('\n')
+
+    def handle_data(self, data):
+        if not self.hidden:
+            self.parts.append(data)
+
+
+def _plain_email(html):
+    parser = _PlainEmail()
+    parser.feed(html)
+    return '\n'.join(line for raw in ''.join(parser.parts).splitlines() if (line := ' '.join(raw.split())))
 
 
 def send_email_via_gmail(
@@ -33,36 +71,26 @@ def send_email_via_gmail(
     pw = (app_password or os.getenv("GMAIL_APP_PASSWORD") or GMAIL_APP_PASSWORD or "").strip()
     if not sender or not pw:
         from dotenv import load_dotenv
-        load_dotenv(override=True)
+        load_dotenv(override=not bool(os.getenv("VERCEL")))
         sender = (os.getenv("GMAIL_SENDER_EMAIL") or "").strip()
         pw = (os.getenv("GMAIL_APP_PASSWORD") or "").strip()
 
     if not sender or not pw:
         return {"status": "skipped", "reason": "Gmail credentials not configured (GMAIL_SENDER_EMAIL / GMAIL_APP_PASSWORD)"}
 
-    clean_password = pw.replace(" ", "")
-
     msg = MIMEMultipart("alternative")
     msg["From"] = f"Hiring Team <{sender}>"
     msg["To"] = to_email
     msg["Subject"] = subject
+    msg["Date"] = formatdate(localtime=True)
+    msg["Message-ID"] = make_msgid(domain=sender.rsplit('@', 1)[-1])
+    msg["Reply-To"] = sender
+    msg.attach(MIMEText(_plain_email(html_content), "plain", "utf-8"))
+    msg.attach(MIMEText(html_content, "html", "utf-8"))
 
-    msg.attach(MIMEText(html_content, "html"))
-
-    try:
-        server = smtplib.SMTP("smtp.gmail.com", 587, timeout=10)
-        server.starttls()
-        server.login(sender, clean_password)
-        server.send_message(msg)
-        server.quit()
-        
-        return {
-            "status": "success",
-            "message": f"Email successfully delivered to {to_email} via Gmail SMTP"
-        }
-    except Exception as e:
-        print(f"Error sending email via Gmail SMTP: {e}")
-        return {"status": "failed", "error": f"Gmail SMTP error: {str(e)}"}
+    # Share the SMTP transport's explicit provider errors and credential redaction.
+    from modules.identity.mail_transport import deliver_credentials_message
+    return deliver_credentials_message(msg, sender, pw, to_email)
 
 
 def send_shortlist_notification(

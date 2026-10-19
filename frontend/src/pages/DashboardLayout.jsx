@@ -540,7 +540,6 @@ export default function DashboardLayout() {
               { to: '/dashboard/procurement/finance-approvals', label: 'Finance Approvals', end: false, icon: Icons.Receipt },
               { to: '/dashboard/procurement', label: 'Work Orders', end: true, icon: Icons.Agreements, badge: procurementPendingSows },
               { to: '/dashboard/requisitions', label: 'Requisitions', end: false, icon: Icons.Requisitions },
-              { to: '/dashboard/interviews', label: 'Interviews & AI Scores', end: false, icon: Icons.Interviews },
             ]
             : isFinance
               ? [

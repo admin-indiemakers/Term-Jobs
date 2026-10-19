@@ -15,7 +15,7 @@ from ...shared.db import _utcnow, get_session
 from .. import events
 from ..agent.graph import JobRequirementAgent
 from ..domain import models
-from ..domain.deadline import validate_submission_deadline
+from ..domain.deadline import validate_submission_deadline, validate_start_date
 from .deadline_policy import enforce_approval_deadline
 from ..domain.schemas import (
     RequisitionStatus,
@@ -102,8 +102,9 @@ def _structured_role_from_prefill(intent: RoleIntent, prefill: dict | None) -> d
     if rate_card_cap is None:
         rate_card_cap = _num(prefill.get("cap"))
 
+    experience = str(prefill.get("experience_band", prefill.get("experience")) or "").strip()
     locations = prefill.get("work_locations") or []
-    seniority = prefill.get("seniority") or _seniority_from_experience(str(prefill.get("experience") or ""))
+    seniority = prefill.get("seniority") or _seniority_from_experience(experience)
 
     raw_rate_band = vendor_range or prefill.get("rate_band")
     if isinstance(raw_rate_band, (list, tuple)) and len(raw_rate_band) == 2:
@@ -131,7 +132,7 @@ def _structured_role_from_prefill(intent: RoleIntent, prefill: dict | None) -> d
         certifications=prefill.get("certifications") or [],
         headcount=_num(prefill.get("headcount")) or 1,
         vendor_candidate_limit=_num(prefill.get("vendor_candidate_limit")) or _num(prefill.get("headcount")) or 1,
-        experience=prefill.get("experience") or "",
+        experience=experience,
         engagement_type=prefill.get("engagement_type") or "",
         duration=prefill.get("duration") or prefill.get("contract_duration") or "",
         start_date=prefill.get("start_date") or "",
@@ -193,6 +194,7 @@ class RequisitionService:
     ) -> models.Requisition:
         prefill = dict((intake_meta or {}).get("prefill") or {})
         validate_submission_deadline(prefill.get("submission_deadline"))
+        validate_start_date(prefill.get("start_date"))
         saved_role = _structured_role_from_prefill(intent, prefill)
         with self.session_factory() as session:
             v_limit = saved_role.get("vendor_candidate_limit") if isinstance(saved_role, dict) else getattr(saved_role, "vendor_candidate_limit", 1)

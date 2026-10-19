@@ -575,6 +575,10 @@ export default function CompanyAdminProfile() {
       setError('Admin email cannot be empty');
       return false;
     }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(updatedAdmin.admin_email.trim())) {
+      setError('Enter a valid admin email address');
+      return false;
+    }
     if (updatedAdmin.admin_phone && updatedAdmin.admin_phone.trim()) {
       const phoneErr = validatePhone(updatedAdmin.admin_phone, { required: false });
       if (phoneErr) {
@@ -597,8 +601,14 @@ export default function CompanyAdminProfile() {
         body: payload,
       });
       savedCompanyNameRef.current = savedProfile?.name || nextName;
+      if (savedProfile?.admin_email) {
+        setAdminForm((previous) => ({ ...previous, admin_email: savedProfile.admin_email }));
+      }
 
       setSuccess('Changes saved successfully!');
+      if (savedProfile?.email_delivery?.status === 'failed') {
+        setError(savedProfile.email_delivery.reason || 'Changes saved, but the notification email could not be sent.');
+      }
       if (refreshUser) await refreshUser();
       return true;
     } catch (err) {
@@ -630,7 +640,7 @@ export default function CompanyAdminProfile() {
 
     setChangingPassword(true);
     try {
-      await request('/api/auth/change-password', {
+      const result = await request('/api/auth/change-password', {
         method: 'POST',
         token,
         body: {
@@ -639,7 +649,10 @@ export default function CompanyAdminProfile() {
         },
       });
 
-      setPasswordSuccess('Password updated successfully! Keep your new credentials secure.');
+      setPasswordSuccess('Password updated successfully!');
+      if (result?.email_delivery?.status === 'failed') {
+        setPasswordError(result.email_delivery.reason || 'Password updated, but the notification email could not be sent.');
+      }
       setPasswordForm({
         current_password: '',
         new_password: '',

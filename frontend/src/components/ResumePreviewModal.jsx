@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { API_BASE_URL } from '../api/client';
 
 export default function ResumePreviewModal({ token, filename, extractedText, candidateId, onClose }) {
   const [preview, setPreview] = useState(null);
   const [error, setError] = useState('');
+  const dialogRef = useRef(null);
+  const closeRef = useRef(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -24,8 +26,11 @@ export default function ResumePreviewModal({ token, filename, extractedText, can
         }
         const blob = await response.blob();
         if (controller.signal.aborted) return;
-        objectUrl = URL.createObjectURL(blob);
-        setPreview({ url: objectUrl, isPdf: blob.type === 'application/pdf' || /\.pdf$/i.test(filename) });
+        const isPdf = blob.type.split(';')[0] === 'application/pdf' || /\.pdf$/i.test(filename || '');
+        // Blob previews need the correct MIME type for the browser's inline PDF viewer.
+        objectUrl = URL.createObjectURL(isPdf && blob.type !== 'application/pdf'
+          ? new Blob([blob], { type: 'application/pdf' }) : blob);
+        setPreview({ url: objectUrl, isPdf });
       } catch (err) {
         if (!controller.signal.aborted) setError(err.message);
       }
@@ -38,22 +43,39 @@ export default function ResumePreviewModal({ token, filename, extractedText, can
   }, [token, filename, candidateId]);
 
   useEffect(() => {
-    const closeOnEscape = (event) => { if (event.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', closeOnEscape);
-    return () => document.removeEventListener('keydown', closeOnEscape);
+    const previouslyFocused = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    closeRef.current?.focus();
+    const handleKey = event => {
+      if (event.key === 'Escape') { event.preventDefault(); onClose(); }
+      if (event.key !== 'Tab') return;
+      const controls = dialogRef.current?.querySelectorAll('button, a[href], iframe, [tabindex="0"]');
+      if (!controls?.length) return;
+      const first = controls[0];
+      const last = controls[controls.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('keydown', handleKey);
+      document.body.style.overflow = previousOverflow;
+      if (previouslyFocused?.isConnected) previouslyFocused.focus();
+    };
   }, [onClose]);
 
   return createPortal(
     <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/70 p-3 sm:p-6" onClick={onClose}>
-      <div role="dialog" aria-modal="true" aria-label="Uploaded resume preview"
-        className="flex h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Uploaded resume preview"
+        className="flex h-[90dvh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
         onClick={(event) => event.stopPropagation()}>
         <div className="flex items-center justify-between gap-3 border-b p-4">
           <div className="min-w-0">
             <h2 className="truncate text-sm font-bold text-neutral-900">Uploaded Resume</h2>
             <p className="truncate text-xs text-neutral-500">{filename}</p>
           </div>
-          <button type="button" onClick={onClose} aria-label="Close resume preview"
+          <button ref={closeRef} type="button" onClick={onClose} aria-label="Close resume preview"
             className="rounded-lg px-3 py-1.5 text-sm font-semibold text-neutral-700 hover:bg-neutral-100">Close</button>
         </div>
         <div className="min-h-0 flex-1 bg-neutral-100">

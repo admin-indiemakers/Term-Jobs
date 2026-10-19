@@ -27,3 +27,11 @@ def submission_deadline_passed(role: dict | None, today: date | None = None) -> 
         return date.fromisoformat(str(value)[:10]) < today
     except (ValueError, TypeError):
         return False
+
+
+def validate_start_date(value, today: date | None = None) -> None:
+    """New requisitions may start today or later in the application timezone."""
+    try:
+        validate_submission_deadline(value, today=today)
+    except ValueError as error:
+        raise ValueError(str(error).replace("Submission Deadline", "Start Date")) from None

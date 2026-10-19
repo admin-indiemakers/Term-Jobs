@@ -1,3 +1,4 @@
+import { Link, useNavigate } from "react-router-dom";
 import { useCallback, useEffect, useState } from "react";
 import { ArrowControl } from "./ArrowControl";
 import { BrandMark } from "./BrandMark";
@@ -22,7 +23,8 @@ export function LandingPage({ enabled = true }: { enabled?: boolean }) {
   const [waitlistOpen, setWaitlistOpen] = useState(false);
   const [talentOpen, setTalentOpen] = useState(false);
 
-  const openTalent = useCallback(() => setTalentOpen(true), []);
+  const navigate = useNavigate();
+  const openTalent = useCallback(() => navigate("/open-roles?join=talent-pool&auth=login&source=launchpage"), [navigate]);
   const closeTalent = useCallback(() => setTalentOpen(false), []);
   const openWaitlist = useCallback(() => setWaitlistOpen(true), []);
   const closeWaitlist = useCallback(() => setWaitlistOpen(false), []);
@@ -79,6 +81,7 @@ export function LandingPage({ enabled = true }: { enabled?: boolean }) {
             dark={dark}
             onHomeClick={() => goTo(0)}
             onOpenRolesClick={() => setShowComingSoon(true)}
+            onJoinWaitlist={openWaitlist}
           />
 
           {/* Desktop Navigation (completely untouched for md and up) */}
@@ -87,6 +90,17 @@ export function LandingPage({ enabled = true }: { enabled?: boolean }) {
             <SectionNavigation index={index} dark={dark} onSelect={goTo} />
             <ArrowControl isLast={isLast} dark={dark} onClick={() => (isLast ? goTo(0) : step(1))} />
           </div>
+
+          <footer
+            className="absolute inset-x-0 bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] z-40 flex justify-center px-3 md:bottom-3 md:px-36"
+            style={{ color: dark ? "var(--color-paper)" : "var(--color-ink)" }}
+          >
+            <nav aria-label="Legal" className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-[10px] sm:text-xs">
+              <Link to="/privacy-policy" className="py-2 underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2">Privacy Policy</Link>
+              <Link to="/terms-and-conditions" className="py-2 underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2">Terms & Conditions</Link>
+              <Link to="/platform-rules" className="py-2 underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2">Platform Rules</Link>
+            </nav>
+          </footer>
 
           {/* Mobile Bottom Navigation Capsule */}
           <MobileBottomNav

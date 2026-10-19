@@ -16,26 +16,30 @@ class Notification(Model):
         "id": _uuid,
         "user_id": "",  # recipient user id
         "tenant_id": "",  # recipient tenant id (for context)
+        "target_role": "",  # role targeting if applicable
         "type": "",  # requisition.published | candidate.shortlisted | candidate.rejected
         "title": "",
         "body": "",
         "data": dict,  # {requisition_id, requisition_ref, requisition_title, candidate_id, candidate_name, ...}
         "read": False,
+        "read_by": list,  # list of user IDs who marked this notification as read
         "created_at": _utcnow,
     }
 
     id = Column("id")
     user_id = Column("user_id")
     tenant_id = Column("tenant_id")
+    target_role = Column("target_role")
     type = Column("type")
     title = Column("title")
     body = Column("body")
     data = Column("data")
     read = Column("read")
+    read_by = Column("read_by")
     created_at = Column("created_at")
 
 
-def notification_dict(n: Notification) -> dict:
+def notification_dict(n: Notification, user_id: str = "") -> dict:
     body = n.body or getattr(n, "message", "") or ""
     data = n.data or {}
     if not isinstance(data, dict):
@@ -47,7 +51,14 @@ def notification_dict(n: Notification) -> dict:
     if not data.get("candidate_email") and getattr(n, "candidate_email", None):
         data["candidate_email"] = getattr(n, "candidate_email")
 
+    read_by = getattr(n, "read_by", None) or []
+    if not isinstance(read_by, list):
+        read_by = []
+
     is_read = bool(getattr(n, "read", False)) or getattr(n, "status", "") == "read"
+    if user_id and user_id in read_by:
+        is_read = True
+
     created_at = n.created_at.isoformat() if hasattr(n.created_at, "isoformat") else (n.created_at or "")
 
     return {

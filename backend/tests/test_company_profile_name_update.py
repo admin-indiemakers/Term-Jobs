@@ -69,7 +69,8 @@ def profile_endpoint(other_tenant_exists=True):
         "status": status,
         "func": SimpleNamespace(lower=lambda value: value),
         "_get_company_profile": lambda *_: company,
-        "_cache": SimpleNamespace(invalidate_prefix=Mock()),
+        "_cache": SimpleNamespace(invalidate_prefix=Mock(), invalidate=Mock()),
+        "send_account_change_email": Mock(return_value={"status": "not_requested"}),
         "_log_admin_action": Mock(),
     }
     exec(compile(ast.Module(body=[node], type_ignores=[]), str(path), "exec"), scope)
