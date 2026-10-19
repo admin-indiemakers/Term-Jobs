@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useCallback, useEffect, useState } from "react";
 import { ArrowControl } from "./ArrowControl";
 import { BrandMark } from "./BrandMark";
@@ -23,7 +23,8 @@ export function LandingPage({ enabled = true }: { enabled?: boolean }) {
   const [waitlistOpen, setWaitlistOpen] = useState(false);
   const [talentOpen, setTalentOpen] = useState(false);
 
-  const openTalent = useCallback(() => setTalentOpen(true), []);
+  const navigate = useNavigate();
+  const openTalent = useCallback(() => navigate("/open-roles?join=talent-pool&auth=login&source=launchpage"), [navigate]);
   const closeTalent = useCallback(() => setTalentOpen(false), []);
   const openWaitlist = useCallback(() => setWaitlistOpen(true), []);
   const closeWaitlist = useCallback(() => setWaitlistOpen(false), []);

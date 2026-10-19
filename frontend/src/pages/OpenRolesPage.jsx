@@ -884,6 +884,15 @@ export default function OpenRolesPage({ enabled = true }) {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const path = window.location.pathname.toLowerCase();
+    if (params.get('join') === 'talent-pool') {
+      if (isCandidateAuthenticated) {
+        setShowAuthModal(false);
+        setShowGeneralPoolModal(true);
+      } else {
+        setShowAuthModal(true);
+      }
+      return;
+    }
     if (
       params.get('auth') ||
       params.get('login') ||
@@ -896,7 +905,7 @@ export default function OpenRolesPage({ enabled = true }) {
         setAuthModalTab('register');
       }
     }
-  }, []);
+  }, [location.search, isCandidateAuthenticated]);
 
   // Trigger Google OAuth popup
   const handleGoogleSignIn = async (onSuccess) => {
@@ -1657,6 +1666,13 @@ export default function OpenRolesPage({ enabled = true }) {
       if (!res.ok) {
         const errorText = formatApiErrorMessage(result, `Could not join talent pool (${res.status}).`);
         throw new Error(errorText);
+      }
+      const entryParams = new URLSearchParams(location.search);
+      if (entryParams.get('join') === 'talent-pool' && entryParams.get('source') === 'launchpage') {
+        setShowGeneralPoolModal(false);
+        if (refreshProfile) refreshProfile();
+        navigate('/candidate-pool/added', { replace: true, state: { poolSubmitted: true } });
+        return;
       }
       setPoolSuccess(result);
       if (refreshProfile) {
@@ -5067,7 +5083,7 @@ export default function OpenRolesPage({ enabled = true }) {
                 <span>Candidate Talent Portal</span>
               </div>
               <h3 className="font-display text-xl font-extrabold text-neutral-900 tracking-tight">
-                {authModalTab === 'login' ? 'Sign In to Open Roles' : 'Create Talent Profile'}
+                {authModalTab === 'login' ? (new URLSearchParams(location.search).get('join') === 'talent-pool' ? 'Sign In to Join Talent Pool' : 'Sign In to Open Roles') : 'Create Talent Profile'}
               </h3>
               <p className="text-xs text-neutral-500 mt-1">
                 {authModalTab === 'login'
