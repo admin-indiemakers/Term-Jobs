@@ -24,6 +24,7 @@ def is_hiring_request_in_scope(prompt, history=None):
     if re.search(
         r"\b(pipeline|expenses?|reimbursements?|timecards?|workforce|"
         r"my\s+(?:team|tasks|account)|pending\s+works|how\s+(?:do\s+i\s+)?use\s+this|"
+        r"under\s+me|working\s+under|who\s+is\s+working|working\s+for\s+me|"
         r"urequsition|requsition)\b", prompt, re.I,
     ):
         return True

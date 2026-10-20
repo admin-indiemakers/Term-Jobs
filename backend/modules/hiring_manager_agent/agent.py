@@ -1287,6 +1287,8 @@ def list_accepted_candidates(user_id: str = "", user_name: str = "", tenant_id: 
                 "name": c_name,
                 "role": wo.get("requisition_title") or wo.get("job_title") or "Contractor",
                 "requisition_title": wo.get("requisition_title") or wo.get("job_title") or "Contractor",
+                "department": wo.get("department") or "Engineering",
+                "location": wo.get("location") or wo.get("workplace") or wo.get("work_arrangement") or "Remote",
                 "email": login_email,
                 "work_order_id": wo_num or "WO-ACTIVE",
                 "status": "Accepted & Working",
@@ -1317,6 +1319,8 @@ def list_accepted_candidates(user_id: str = "", user_name: str = "", tenant_id: 
                 "name": c_name,
                 "role": sub.get("requisition_title") or "Engineering Role",
                 "requisition_title": sub.get("requisition_title") or "Engineering Role",
+                "department": sub.get("department") or "Engineering",
+                "location": sub.get("location") or sub.get("workplace") or "Remote",
                 "email": c_email or f"{c_name.lower().replace(' ', '.')}@example.com",
                 "work_order_id": str(sub.get("candidate_id") or sub.get("id") or "WO-PENDING"),
                 "status": "Accepted",
@@ -1610,7 +1614,7 @@ def generate_tailored_interview_questions(role_title: str = "DevSecOps Engineer"
 
     markdown = (
         f"🎯 **TAILORED INTERVIEW QUESTIONS — {role.upper()} ({lvl})**\n"
-        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"-----------------------------------------\n"
         f"🛠 **Core Stack Focus:** `{skills}`\n\n"
         f"### 💻 Technical & Architecture Deep-Dive\n"
         f"{chr(10).join(q_cards)}\n\n"
@@ -2714,7 +2718,8 @@ def reject_candidate_expense(expense_identifier: str = "", reason: str = "", use
 def get_candidate_profile_details(candidate_name: str = "", tenant_id: str = "local"):
     is_scoped_tenant = bool(tenant_id and tenant_id not in ("local", "all", ""))
     t_filter = {"tenant_id": tenant_id} if is_scoped_tenant else {}
-    req_map = {}
+    req_docs: List[Dict[str, Any]] = []
+    req_map: Dict[str, Any] = {}
     try:
         req_docs = list(db["requisitions"].find(t_filter))
         req_map = {r.get("id"): r.get("title") for r in req_docs if r.get("id")}
@@ -2722,32 +2727,45 @@ def get_candidate_profile_details(candidate_name: str = "", tenant_id: str = "lo
         pass
 
     target_name = (candidate_name or "").strip()
-    doc = None
+    doc: Dict[str, Any] = {}
     try:
         if target_name:
             query: Dict[str, Any] = {
                 "$or": [
                     {"candidate_name": {"$regex": re.escape(target_name), "$options": "i"}},
                     {"name": {"$regex": re.escape(target_name), "$options": "i"}},
+                    {"worker_name": {"$regex": re.escape(target_name), "$options": "i"}},
                     {"id": target_name},
                     {"candidate_id": target_name}
                 ]
             }
             if is_scoped_tenant:
                 query["tenant_id"] = tenant_id
-            doc = db["candidate_submissions"].find_one(query) or db["candidates"].find_one(query)
+            found = db["candidate_submissions"].find_one(query) or db["candidates"].find_one(query) or db["work_orders"].find_one(query)
+            if found:
+                doc = found
         
-        if not doc:
+        if not doc and not target_name:
             if is_scoped_tenant:
-                doc = db["candidate_submissions"].find_one({"tenant_id": tenant_id}) or db["candidates"].find_one({"tenant_id": tenant_id}) or {}
+                doc = db["candidate_submissions"].find_one({"tenant_id": tenant_id}) or db["candidates"].find_one({"tenant_id": tenant_id}) or db["work_orders"].find_one({"tenant_id": tenant_id}) or {}
             else:
-                doc = db["candidate_submissions"].find_one() or {}
+                doc = db["candidate_submissions"].find_one() or db["candidates"].find_one() or db["work_orders"].find_one() or {}
     except Exception:
         doc = {}
 
-    c_name = doc.get("candidate_name") or doc.get("name") or target_name or "Candidate"
+    if target_name and not doc:
+        return {
+            "status": "NOT_FOUND",
+            "candidate_name": target_name,
+            "message": f"I couldn't find any information for {target_name}."
+        }
+    
+    if not doc:
+        doc = {}
+
+    c_name = doc.get("candidate_name") or doc.get("name") or doc.get("worker_name") or target_name or "Candidate"
     r_id = doc.get("requisition_id")
-    req_title = req_map.get(r_id) or doc.get("requisition_title") or doc.get("candidate_title") or "Engineering Role"
+    req_title = req_map.get(r_id) or doc.get("requisition_title") or doc.get("candidate_title") or doc.get("role") or doc.get("job_title") or "Engineering Role"
     vendor = doc.get("vendor_name") or doc.get("vendor_company_name") or "Vendorqueue"
     m_score = doc.get("match_score")
     score_str = f"{int(m_score)}%" if m_score is not None else "92%"
@@ -2765,6 +2783,26 @@ def get_candidate_profile_details(candidate_name: str = "", tenant_id: str = "lo
     wo_id = wo_doc.get("work_order_number") or wo_doc.get("workorder_id") or "WO-2026-ACTIVE"
     bill_rate = wo_doc.get("bill_rate")
     bill_rate_str = f"${bill_rate} / hr" if isinstance(bill_rate, (int, float)) else str(bill_rate or "$75.00 / hr")
+
+    req_doc = next((r for r in req_docs if r.get("id") == r_id), {}) if req_docs else {}
+    dept = (
+        doc.get("department")
+        or req_doc.get("department")
+        or (req_doc.get("structured_role", {}).get("department") if isinstance(req_doc.get("structured_role"), dict) else None)
+        or doc.get("job_family")
+        or wo_doc.get("department")
+        or "Engineering & Product"
+    )
+    loc = (
+        doc.get("workplace")
+        or doc.get("location")
+        or doc.get("workplace_name")
+        or req_doc.get("location")
+        or (req_doc.get("structured_role", {}).get("primary_location") if isinstance(req_doc.get("structured_role"), dict) else None)
+        or wo_doc.get("location")
+        or wo_doc.get("workplace")
+        or ""
+    )
 
     # Query real Timesheets from DB
     ts_docs = []
@@ -2833,6 +2871,10 @@ def get_candidate_profile_details(candidate_name: str = "", tenant_id: str = "lo
         "name": c_name,
         "email": email_addr,
         "requisition_title": req_title,
+        "role": req_title,
+        "department": dept,
+        "location": loc,
+        "workplace": loc,
         "vendor_name": vendor,
         "match_score": score_str,
         "status": f"{cand_status} - Onboarding {onboard_doc.get('status', 'Completed')}",
@@ -2846,7 +2888,9 @@ def get_candidate_profile_details(candidate_name: str = "", tenant_id: str = "lo
             "status": wo_doc.get("status", "ACTIVE"),
             "bill_rate": bill_rate_str,
             "start_date": wo_doc.get("start_date", "2026-09-01"),
-            "client": wo_doc.get("company_name", "Client Workspace")
+            "client": wo_doc.get("company_name", "Client Workspace"),
+            "department": dept,
+            "location": loc
         },
         "timesheets": {
             "period": ts_period,
@@ -2865,6 +2909,73 @@ def get_candidate_profile_details(candidate_name: str = "", tenant_id: str = "lo
     }
 
 
+def format_person_workplace_sentence(prof: Dict[str, Any], prompt: str = "") -> str:
+    """Format a natural, direct executive sentence answering the user's question without database jargon.
+
+    Rules from the 'Simplify Manager Copilot Responses' specification:
+    1. Employee job role:
+       Avoid: 'Job role assignment from authoritative records'
+       Prefer: '{Name} works as a {Role}.'
+    2. Employee department and workplace:
+       Avoid: 'Department assignment based on authoritative records'
+       Prefer: '{Name} works in the {Department} department at {Location}.'
+    3. Information not found:
+       Avoid: 'No matching record was returned by the query.'
+       Prefer: 'I couldn't find that information.'
+    4. Start with the direct answer in the very first sentence.
+    """
+    if not prof or prof.get("status") == "NOT_FOUND":
+        target = (prof.get("candidate_name") or "").strip() if prof else ""
+        return f"I couldn't find any information for {target}." if target else "I couldn't find that information."
+
+    name = prof.get("candidate_name") or prof.get("name") or "The candidate"
+    role = prof.get("requisition_title") or prof.get("role") or prof.get("job_title") or prof.get("candidate_title") or ""
+    dept = prof.get("department") or prof.get("job_family") or ""
+    loc = prof.get("location") or prof.get("workplace") or prof.get("workplace_name") or ""
+
+    prompt_lower = (prompt or "").lower()
+    is_role_query = bool(re.search(r"\b(role|job|title|position|what does|work as|cleaner|engineer|developer|designer)\b", prompt_lower))
+    is_place_query = bool(re.search(r"\b(department|dept|where|location|workplace|office|branch|site)\b", prompt_lower))
+
+    def with_article(word: str) -> str:
+        if not word:
+            return ""
+        art = "an" if word[0].lower() in "aeiou" else "a"
+        return f"{art} {word}"
+
+    # Specific query for role only
+    if is_role_query and not is_place_query:
+        if role:
+            return f"{name} works as {with_article(role)}."
+
+    # Specific query for department / workplace only
+    if is_place_query and not is_role_query:
+        if dept and loc:
+            return f"{name} works in the {dept} department at {loc}."
+        elif dept:
+            return f"{name} works in the {dept} department."
+        elif loc:
+            return f"{name} works at {loc}."
+
+    # General query or combined query (role + department/location)
+    if role and dept and loc:
+        return f"{name} works as {with_article(role)} in the {dept} department at {loc}."
+    elif role and dept:
+        return f"{name} works as {with_article(role)} in the {dept} department."
+    elif role and loc:
+        return f"{name} works as {with_article(role)} at {loc}."
+    elif role:
+        return f"{name} works as {with_article(role)}."
+    elif dept and loc:
+        return f"{name} works in the {dept} department at {loc}."
+    elif dept:
+        return f"{name} works in the {dept} department."
+    elif loc:
+        return f"{name} works at {loc}."
+
+    return f"{name} is an active candidate on your team."
+
+
 STOP_WORDS = {
     "candidate", "candidates", "unit", "test", "shortlist", "shortlisted",
     "shotlist", "shotlisted", "shrtlist", "shrtlisted", "sortlist", "sortlisted",
@@ -2878,7 +2989,7 @@ def find_matched_candidate_in_db(prompt_text: str):
     prompt_lower = prompt_text.lower().strip()
 
     # If the user is asking a category or listing query, do NOT match individual candidate names
-    listing_patterns = r"\b(shortlist|shortlisted|shorlist|shorlisted|shotlist|shotlisted|shrtlist|sortlist|onboard|onboarding|onbording|onboarded|onborded|under\s+me|all\s+candidates|working\s+under|accepted\s+candidates|pending\s+candidates|timesheet|expense|requisition|role|stats|dashboard|metrics|overview|list\s+candidates|show\s+candidates)\b"
+    listing_patterns = r"\b(shortlist|shortlisted|shorlist|shorlisted|shotlist|shotlisted|shrtlist|sortlist|onboard|onboarding|onbording|onboarded|onborded|under\s+me|all\s+candidates|working\s+under|accepted\s+candidates|pending\s+candidates|all\s+requisitions|all\s+roles|all\s+timesheets|all\s+expenses|stats|dashboard|metrics|overview|list\s+candidates|show\s+candidates)\b"
     if re.search(listing_patterns, prompt_lower):
         return None
 
@@ -2915,6 +3026,19 @@ def find_matched_candidate_in_db(prompt_text: str):
         for tok in tokens:
             if re.search(r"\b" + re.escape(tok) + r"\b", prompt_lower):
                 return name
+
+    # 3. Dynamic candidate name extraction from direct person questions (e.g. "What is Sreehari PS's job role?")
+    for pat in [
+        r"(?:what\s+is|what\s+does|where\s+does|tell\s+me\s+about|info\s+on|profile\s+of)\s+([A-Za-z][A-Za-z0-9_\s\.\-]{1,35}?)(?:'s|\s+work|\s+department|\s+role|\s+do|\?|$)",
+        r"([A-Za-z][A-Za-z0-9_\s\.\-]{1,35}?)'s\s+(?:role|job|department|workplace|profile|status|timesheet|expense)",
+    ]:
+        m = re.search(pat, prompt_text, re.I)
+        if m:
+            extracted = m.group(1).strip()
+            clean = re.sub(r"^(the|a|an)\s+", "", extracted, flags=re.I).strip()
+            tokens = [t for t in clean.lower().split() if t not in STOP_WORDS and t not in GENERIC_NAMES]
+            if tokens and len(clean) >= 2 and not re.search(listing_patterns, clean):
+                return clean
     return None
 
 
@@ -2957,7 +3081,7 @@ def workforce_chat_reply(prompt):
         query = {'status': {'$regex': '^(?:' + '|'.join(statuses) + ')$', '$options': 'i'}}
     rows = list(db[collection].find(query).sort('created_at', -1).limit(25))
     if not rows:
-        return {'reply': f'No matching {label} were found in your authorized team records.', 'executed_actions': []}
+        return {'reply': f'No matching {label} were found for your team.', 'executed_actions': []}
     reply = f'Your {label}:\n\n| Record | Candidate | Status | Details |\n|---|---|---|---|\n'
     for row in rows:
         detail = f"{row.get('total_hours', '')} hours" if collection == 'timesheets' else str(row.get('amount') or '') if collection == 'candidate_expenses' else str(row.get('description') or row.get('title') or row.get('issue') or '')[:180]
@@ -3011,7 +3135,13 @@ def run_model_hiring_chat(prompt, history, current_user):
             sys_msg = {
                 "role": "system",
                 "content": (
-                    "TIMESHEETS: Use list_hiring_timesheets for all timesheet queries. General requests mean status all, not pending. Approved, rejected, submitted and draft records are supported; never claim only pending timesheets can be retrieved. Use the status actually returned by the tool. "
+                    "EXECUTIVE PLAIN LANGUAGE & DIRECT ANSWER RULES (MANDATORY):\n"
+                    "- Use plain, everyday business English suitable for business owners and hiring managers. Never sound like a database report.\n"
+                    "- Answer the user's question directly in the very first sentence. Put the most important information first (for example: '[Name] works as a [Role].' or '[Name] works in the [Department] department at [Location].').\n"
+                    "- STRICT BAN ON DATABASE TERMINOLOGY: NEVER use phrases such as 'authoritative records', 'records indicate', 'database query', 'returned by query', 'in your authorized records', 'internal ID', 'table', 'column', or backend implementation details.\n"
+                    "- When information is not found or unavailable, state it plainly and directly: say 'I couldn't find that information.' or 'I couldn't find any information for [Subject].' Never guess or mention query failures.\n"
+                    "- Keep answers concise (1 to 3 short sentences for straightforward questions).\n"
+                    "- Format several results as a short, clean, scannable bullet list with each person's name and relevant details. Never output markdown pipe tables (| col |).\n"
                     "RESPONSE STYLE: Write concise, professional prose with a calm, polished tone. No decorative emojis, emoji numbering, celebratory language, repeated greetings, or exclamation marks. "
                     "Lead with the result. Use short paragraphs, descriptive Markdown headings only for longer answers, plain numbered lists, and bold sparingly for essential labels or counts. "
                     "Do not use inline code for statuses, job titles, locations or money; reserve it for technical identifiers. "
@@ -3209,7 +3339,11 @@ def run_model_hiring_chat(prompt, history, current_user):
                             c_target = fn_args.get("candidate_name", "Candidate")
                             res = get_candidate_profile_details(c_target, tenant_id)
                             executed.append({"tool": "get_candidate_profile_details", "result": res})
-                            reply_buf.append(f"Here is the detailed workforce profile for **{res['candidate_name']}**:")
+                            lead = format_person_workplace_sentence(res, prompt_clean)
+                            if res.get("status") == "NOT_FOUND":
+                                reply_buf.append(lead)
+                            else:
+                                reply_buf.append(f"{lead}\n\nHere are the details for **{res['candidate_name']}**:")
                         elif fn_name == "reject_shortlisted_candidate":
                             c_target = fn_args.get("candidate_identifier", "Candidate")
                             r_reason = fn_args.get("reason", "Not aligned with requisition requirements.")
@@ -3332,7 +3466,16 @@ def run_model_hiring_chat(prompt, history, current_user):
                                 })
                             second_msgs.append({
                                 "role": "system",
-                                "content": f"IDENTITY & FORMATTING RULE: The hiring manager is {user_name}. NEVER output markdown pipe tables (| col |). Use concise professional prose, short paragraphs, standard lists and restrained bold text. No emojis or celebratory filler. Requisition and candidate results are rendered as cards: summarize the count and relevant insight without repeating their fields or listing each record. Never invent missing values."
+                                "content": (
+                                    f"IDENTITY & EXECUTIVE PROSE RULE: The hiring manager is {user_name}. "
+                                    "Speak in plain, everyday business English suitable for a business owner or hiring manager. "
+                                    "Answer the user's question directly in the very first sentence (for example, '[Name] works as a [Role] in the [Department] department at [Location].' or '[Name] works as a [Role].'). "
+                                    "STRICT BAN ON DATABASE JARGON: NEVER use technical phrases such as 'authoritative records', 'department assignment based on authoritative records', 'job role assignment from authoritative records', 'no matching record was returned by the query', 'in your authorized records', 'database query', 'internal ID', 'table', or implementation details. "
+                                    "When information is missing or not found, simply state 'I couldn't find that information.' "
+                                    "NEVER output markdown pipe tables (| col |). When presenting several results, provide a short, scannable bullet list with each person's name and relevant details. "
+                                    "Keep answers concise (1 to 3 short sentences for straightforward questions). "
+                                    "Requisition and candidate results are rendered as cards: summarize the count and key insight without repeating every field or dumping full tables. Never invent missing values."
+                                )
                             })
                             second_payload = {
                                 "model": used_model or "openai/gpt-oss-120b",
@@ -3376,9 +3519,11 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
     history = history or []
     current_user = current_user or {}
     from .applications import application_reply
-    applications = application_reply(prompt, db)
-    if applications is not None:
-        return applications
+    _scoped_db = globals().get("db")
+    if _scoped_db is not None:
+        applications = application_reply(prompt, _scoped_db)
+        if applications is not None:
+            return applications
     model_reply = run_model_hiring_chat(prompt, history, current_user)
     if model_reply is not None:
         return model_reply
@@ -3730,21 +3875,19 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
         acc_res = list_accepted_candidates(user_id, user_name, tenant_id)
         if not acc_res:
             return {
-                "reply": f"ℹ️ There are currently no active candidates or contractors working under your requisitions for **{company_name}**.",
+                "reply": f"I couldn't find any active candidates or contractors working on your team for **{company_name}**.",
                 "executed_actions": [{"tool": "list_accepted_candidates", "result": []}]
             }
         lines = []
         for c in acc_res[:8]:
             c_name = c.get("candidate_name") or c.get("name") or "Contractor"
-            c_role = c.get("role") or c.get("requisition_title") or "Engineer"
-            c_st = c.get("status") or "Accepted & Working"
-            c_hrs = c.get("total_hours", 0)
-            c_rate = c.get("rate") or "Standard Rate"
-            lines.append(f"• **{c_name}** — {c_role}\n  📊 **Status:** `{c_st}` | ⏱ **Hours Logged:** {c_hrs}h | 💰 **Rate:** {c_rate}")
+            c_role = c.get("role") or c.get("requisition_title") or "Contractor"
+            c_dept = c.get("department") or ""
+            dept_part = f" in the {c_dept} department" if c_dept else ""
+            lines.append(f"• **{c_name}**: Works as {c_role}{dept_part}")
 
         reply_text = (
-            f"👷 **CANDIDATES WORKING UNDER YOU — {company_name} ({len(acc_res)} Active):**\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"Here are the active candidates working on your team for **{company_name}** ({len(acc_res)}):\n\n"
             f"{chr(10).join(lines)}\n\n"
             f"_You can review their timesheets, approve expenses, or check onboarding details anytime._"
         )
@@ -4362,8 +4505,16 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
     # Specific Candidate Profile Intent (when user asks for or names a particular candidate)
     if matched_candidate_name and not re.search(r"(under\s+me|all\s+candidates|shortlist|shortlisted|open\s+candidates|pending)", prompt_lower):
         prof = get_candidate_profile_details(matched_candidate_name, tenant_id)
+        lead = format_person_workplace_sentence(prof, prompt_clean)
+        if prof.get("status") == "NOT_FOUND":
+            return {
+                "reply": lead,
+                "executed_actions": [{"tool": "get_candidate_profile_details", "result": prof}]
+            }
+        is_direct_q = bool(re.search(r"\b(what|where|who|which|role|job|department|dept|location|workplace)\b", prompt_lower))
+        reply_text = f"{lead}\n\nHere are the profile details for **{prof.get('candidate_name', matched_candidate_name)}**:" if not is_direct_q else lead
         return {
-            "reply": f"Here is the detailed workforce profile for **{matched_candidate_name}**:",
+            "reply": reply_text,
             "executed_actions": [{"tool": "get_candidate_profile_details", "result": prof}]
         }
 
@@ -4463,8 +4614,20 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
     accepted_match_pattern = r"\b(under\s+me|working\s+under|my\s+team|my\s+candidates|active\s+workers?|active\s+contractors?|who\s+is\s+working|started\s+working|active\s+workforce)\b"
     if re.search(accepted_match_pattern, prompt_lower):
         acc_res = list_accepted_candidates(user_id, user_name, tenant_id)
+        if not acc_res:
+            return {
+                "reply": f"I couldn't find any active candidates working on your team for **{company_name}**.",
+                "executed_actions": [{"tool": "list_accepted_candidates", "result": []}]
+            }
+        lines = []
+        for c in acc_res[:8]:
+            c_name = c.get("candidate_name") or c.get("name") or "Contractor"
+            c_role = c.get("role") or c.get("requisition_title") or "Contractor"
+            c_dept = c.get("department") or ""
+            dept_part = f" in the {c_dept} department" if c_dept else ""
+            lines.append(f"• **{c_name}**: Works as {c_role}{dept_part}")
         return {
-            "reply": f"Here are the accepted candidates who have received their portal logins and are actively working under **{company_name}**:",
+            "reply": f"Here are the active candidates working on your team for **{company_name}**:\n\n" + "\n".join(lines),
             "executed_actions": [{"tool": "list_accepted_candidates", "result": acc_res}]
         }
 

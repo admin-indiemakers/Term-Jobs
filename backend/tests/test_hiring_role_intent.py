@@ -30,7 +30,7 @@ def test_other_requests_do_not_create_drafts(prompt):
 
 def test_custom_role_does_not_select_unrelated_company_template():
     path = Path(__file__).parents[1] / 'modules/hiring_manager_agent/agent.py'
-    tree = ast.parse(path.read_text())
+    tree = ast.parse(path.read_text(encoding='utf-8'))
     entry = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'run_hiring_manager_agent_chat')
     branch = next(n for n in entry.body if isinstance(n, ast.If) and 're.search(create_req_pattern' in ast.unparse(n.test))
     wrapper = ast.FunctionDef(name='run', args=ast.arguments(posonlyargs=[], args=[], kwonlyargs=[], kw_defaults=[], defaults=[]), body=[branch], decorator_list=[])
