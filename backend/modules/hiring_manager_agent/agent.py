@@ -4,6 +4,7 @@ Equipped with tool-calling capabilities, multi-turn conversation memory, and fuz
 to manage job requisitions, review candidate shortlists, schedule candidate interviews, track onboarding issues,
 and monitor workforce analytics for Hiring Managers.
 """
+import logging
 import os
 import json
 import re
@@ -13,11 +14,13 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 import httpx
 
+logger = logging.getLogger(__name__)
+
 from modules.shared.config import settings
 from modules.shared.db import db as raw_db, Session, get_session
 from .scope import ScopedDatabase, authorized_chat
 from .chat_scope import is_hiring_request_in_scope, scope_response
-db = ScopedDatabase(raw_db)
+db: Any = ScopedDatabase(raw_db)
 from modules.identity.domain.models import User, Tenant
 from modules.requisition.domain.models import Requisition
 from modules.candidate.domain.models import Candidate
@@ -250,10 +253,10 @@ def get_unique_predefined_roles(tenant_id: str = "") -> List[Dict[str, Any]]:
     guaranteeing zero data leakage across buyer companies.
     """
     tenant_roles = []
-    if tenant_id and str(tenant_id).strip() not in ("local", "platform", ""):
+    if tenant_id and tenant_id.strip() not in ("local", "platform", ""):
         try:
             from modules.shared.db import db as mongo_db
-            clean_tid = str(tenant_id).strip()
+            clean_tid = tenant_id.strip()
             docs = list(mongo_db["role_templates"].find({"tenant_id": clean_tid}))
             if not docs:
                 from modules.shared.db import get_session
@@ -362,7 +365,7 @@ TECH_COMPLEMENT_MAP = {
 }
 
 
-def generate_role_skills(title: str = "", detected_skills: list = None, prompt: str = "") -> list:
+def generate_role_skills(title: str = "", detected_skills: Optional[list] = None, prompt: str = "") -> list:
     """
     Ensure generated skills always contain MINIMUM 3 and MAXIMUM 5 cohesive, relevant skills.
     Preserves any explicitly mentioned user skills at the front, then enriches from domain knowledge.
@@ -842,6 +845,18 @@ TOOLS = [
                 "required": []
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_requisition_guide",
+            "description": "Provide a step-by-step guideline, instructions, and playbook for creating, refining, and submitting job requisitions via chat.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        }
     }
 ]
 
@@ -890,8 +905,8 @@ def get_hiring_manager_stats(user_id: str, tenant_id: str, user_name: str = ""):
         pending_ts = 0
         pending_exp = 0
         try:
-            ts_query = {"status": {"$in": ["SUBMITTED", "PENDING", "Submitted", "Pending"]}}
-            exp_query = {"status": {"$in": ["SUBMITTED", "PENDING", "Submitted", "Pending"]}}
+            ts_query: Dict[str, Any] = {"status": {"$in": ["SUBMITTED", "PENDING", "Submitted", "Pending"]}}
+            exp_query: Dict[str, Any] = {"status": {"$in": ["SUBMITTED", "PENDING", "Submitted", "Pending"]}}
             if is_scoped_tenant:
                 ts_query["tenant_id"] = tenant_id
                 exp_query["tenant_id"] = tenant_id
@@ -903,7 +918,7 @@ def get_hiring_manager_stats(user_id: str, tenant_id: str, user_name: str = ""):
         # Count actual scheduled interviews from database
         scheduled_int_count = 0
         try:
-            int_query = {"status": {"$nin": ["Cancelled", "CANCELLED"]}}
+            int_query: Dict[str, Any] = {"status": {"$nin": ["Cancelled", "CANCELLED"]}}
             if is_scoped_tenant:
                 int_query["$or"] = [{"tenant_id": tenant_id}, {"company_id": tenant_id}]
             scheduled_int_count = db["interview_schedules"].count_documents(int_query)
@@ -947,7 +962,7 @@ def list_hiring_requisitions(user_id: str, tenant_id: str, status_filter: str = 
         if tenant_id and tenant_id not in ("local", "all"):
             query = {"$or": [
                 {"tenant_id": tenant_id},
-                {"tenant_id": {"$regex": f"^{re.escape(str(tenant_id))}$", "$options": "i"}},
+                {"tenant_id": {"$regex": f"^{re.escape(tenant_id)}$", "$options": "i"}},
                 {"created_by": user_id}
             ]}
         docs = list(db["requisitions"].find(query).sort("created_at", -1))
@@ -957,7 +972,7 @@ def list_hiring_requisitions(user_id: str, tenant_id: str, status_filter: str = 
             t_doc = db["tenants"].find_one({"$or": [
                 {"id": tenant_id},
                 {"_id": tenant_id},
-                {"name": {"$regex": f"^{re.escape(str(tenant_id))}$", "$options": "i"}}
+                {"name": {"$regex": f"^{re.escape(tenant_id)}$", "$options": "i"}}
             ]})
             if t_doc:
                 real_tid = str(t_doc.get("id") or t_doc.get("_id"))
@@ -982,7 +997,7 @@ def list_hiring_requisitions(user_id: str, tenant_id: str, status_filter: str = 
                 "open": ACTIVE, "draft": DRAFT, "pending": PENDING,
                 "closed": CLOSED, "inactive": CLOSED | {"inactive", "expired", "archived", "cancelled", "canceled", "rejected"},
             }
-            allowed = filters.get(str(status_filter or "all").lower())
+            allowed = filters.get((status_filter or "all").lower())
             if allowed is not None and status not in allowed:
                 continue
 
@@ -1109,7 +1124,7 @@ def submit_requisition_for_director_approval(
 
     try:
         existing = session.get(Requisition, new_id) if new_id else None
-        if existing and (existing.tenant_id != tenant_id or str(existing.created_by) != str(user_id)):
+        if existing and (existing.tenant_id != tenant_id or str(existing.created_by) != user_id):
             return {'error': 'Requisition is outside your authorized hiring-manager scope.'}
         if existing:
             existing.status = "Pending Approval"
@@ -1208,13 +1223,13 @@ def list_accepted_candidates(user_id: str = "", user_name: str = "", tenant_id: 
         cand_ids, cand_names, req_ids = _get_hm_scoped_candidate_pool(user_id, user_name, tenant_id)
         
         # 1. Fetch active work orders (work orders represent candidates with contracts who started working)
-        wo_query = {"status": {"$in": ["ACTIVE", "Active", "active"]}}
+        wo_query: Dict[str, Any] = {"status": {"$in": ["ACTIVE", "Active", "active"]}}
         if is_scoped_tenant:
             wo_query["tenant_id"] = tenant_id
         all_wos = list(db["work_orders"].find(wo_query))
         
         # Also check accepted submissions
-        sub_query = {"status": {"$in": ["Accepted", "accepted", "Hired", "hired", "ACTIVE"]}}
+        sub_query: Dict[str, Any] = {"status": {"$in": ["Accepted", "accepted", "Hired", "hired", "ACTIVE"]}}
         if is_scoped_tenant:
             sub_query["tenant_id"] = tenant_id
         elif req_ids:
@@ -1250,7 +1265,7 @@ def list_accepted_candidates(user_id: str = "", user_name: str = "", tenant_id: 
             
             # Check timesheet hours to verify they have started working
             wo_num = wo.get("work_order_number") or wo.get("workorder_id") or wo.get("id") or ""
-            ts_filter = {
+            ts_filter: Dict[str, Any] = {
                 "$or": [
                     {"candidate_name": {"$regex": f"^{re.escape(c_name)}$", "$options": "i"}},
                     {"worker_name": {"$regex": f"^{re.escape(c_name)}$", "$options": "i"}},
@@ -1499,7 +1514,7 @@ def reject_shortlisted_candidate(candidate_identifier: str, reason: str = "", us
     }
 
 
-def schedule_candidate_interview(candidate_identifier: str, req_title: str = "", proposed_date: str = "", proposed_time: str = "", interview_type: str = "Technical Round", meeting_notes: str = ""):
+def schedule_candidate_interview(candidate_identifier: str, req_title: str = "", proposed_date: str = "", proposed_time: str = "", interview_type: str = "Technical Round", meeting_notes: str = "") -> Dict[str, Any]:
     dt = proposed_date or ""
     tm = proposed_time or ""
     clock = re.search(r'\b(1[0-2]|0?[1-9])(?::([0-5]\d))?\s*(am|pm)\b', tm, re.I)
@@ -1787,6 +1802,50 @@ def get_hiring_manager_guide(user_name: str = "Hiring Manager", company_name: st
             "company_name": display_company,
             "director_name": display_director,
             "role": "Hiring Manager"
+        }
+    }
+
+
+def get_requisition_guide(company_name: str = "your organization", director_name: str = "Director") -> Dict[str, Any]:
+    """Provide a comprehensive guideline and instructions on how to create, refine, and submit job requisitions using the chat."""
+    display_company = company_name if company_name and company_name.lower() not in ("local", "all", "none") else "your organization"
+    display_director = director_name if director_name and director_name.lower() not in ("none", "") else "the Director"
+
+    markdown = (
+        "📋 **HOW TO CREATE A REQUISITION USING CHAT**\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"In TermJobs, creating a requisition for **{display_company}** is completely conversational and interactive. Here is the step-by-step workflow:\n\n"
+        "**1️⃣ Initiate a Draft**\n"
+        "You have two flexible ways to start:\n"
+        "• **Natural Language (Custom Role):** Just type the role title and any key requirements directly in chat, for example:\n"
+        "  - _\"Draft a requisition for a Senior React Developer with 4 years experience, budget ₹1,200/hr, remote\"_\n"
+        "  - _\"I need to hire a Backend Engineer with Python and PostgreSQL\"_\n"
+        "• **Role Templates:** Ask _\"Show available role templates\"_ to view pre-approved company templates and click **Autofill & Draft** on any card.\n\n"
+        "**2️⃣ Review the Interactive Preview Card**\n"
+        "The assistant will instantly generate an interactive preview card displaying:\n"
+        "• **Title & Department** (e.g. Engineering / Frontend)\n"
+        "• **Headcount / Openings** (default: 1)\n"
+        "• **Required Skills & Tech Stack**\n"
+        "• **Budget & Experience Range**\n"
+        "• **Role Summary & Job Description**\n\n"
+        "**3️⃣ Refine & Adjust in Chat**\n"
+        "You can customize any field conversationally without starting over:\n"
+        "• _\"Change headcount to 2 openings\"_\n"
+        "• _\"Set key skills to React, TypeScript, and Tailwind only\"_\n"
+        "• _\"Update budget to ₹1,400/hr\"_\n\n"
+        "**4️⃣ Submit for Director Approval**\n"
+        f"• In TermJobs, all requisitions require sign-off from **{display_director}** before vendor dispatch.\n"
+        "• When satisfied with your draft, click **Send to Director for Approval** on the preview card, or say _\"Submit for Director approval\"_.\n\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "💡 **READY TO START?**\n"
+        "Simply type the role you want to create (e.g. _\"Draft a requisition for [Role Title]\"_) or say _\"Show available role templates\"_!"
+    )
+    return {
+        "markdown": markdown,
+        "guide": {
+            "type": "requisition_guide",
+            "company_name": display_company,
+            "director_name": display_director
         }
     }
 
@@ -2292,11 +2351,11 @@ def _get_hm_scoped_candidate_pool(user_id: str = "", user_name: str = "", tenant
 
 def list_hiring_timesheets(tenant_id: str, status: str = "all"):
     """Read real records through the authenticated ScopedDatabase boundary."""
-    status = str(status or "all").strip().lower()
+    status = (status or "all").strip().lower()
     allowed = {"all", "approved", "rejected", "pending", "submitted", "draft"}
     if status not in allowed:
         raise ValueError("Unsupported timesheet status")
-    query = {"tenant_id": tenant_id}
+    query: Dict[str, Any] = {"tenant_id": tenant_id}
     if status != "all":
         values = ["pending", "submitted"] if status == "pending" else [status]
         query["status"] = {"$regex": "^(?:" + "|".join(values) + ")$", "$options": "i"}
@@ -2459,7 +2518,7 @@ def approve_contractor_timesheet(timesheet_identifier: str = "", user_name: str 
     try:
         ts = db["timesheets"].find_one(query) if (ident or is_scoped_tenant) else None
         if not ts:
-            fallback_q = {"status": {"$in": ["SUBMITTED", "PENDING", "Active", "ACTIVE"]}}
+            fallback_q: Dict[str, Any] = {"status": {"$in": ["SUBMITTED", "PENDING", "Active", "ACTIVE"]}}
             if is_scoped_tenant:
                 fallback_q["tenant_id"] = tenant_id
             ts = db["timesheets"].find_one(fallback_q)
@@ -2565,7 +2624,7 @@ def approve_candidate_expense(expense_identifier: str = "", user_name: str = "Hi
     try:
         exp = db["candidate_expenses"].find_one(query) if (ident or is_scoped_tenant) else None
         if not exp:
-            fb_exp = {"status": {"$in": ["SUBMITTED", "PENDING"]}}
+            fb_exp: Dict[str, Any] = {"status": {"$in": ["SUBMITTED", "PENDING"]}}
             if is_scoped_tenant:
                 fb_exp["tenant_id"] = tenant_id
             exp = db["candidate_expenses"].find_one(fb_exp)
@@ -2666,7 +2725,7 @@ def get_candidate_profile_details(candidate_name: str = "", tenant_id: str = "lo
     doc = None
     try:
         if target_name:
-            query = {
+            query: Dict[str, Any] = {
                 "$or": [
                     {"candidate_name": {"$regex": re.escape(target_name), "$options": "i"}},
                     {"name": {"$regex": re.escape(target_name), "$options": "i"}},
@@ -2941,6 +3000,7 @@ def run_model_hiring_chat(prompt, history, current_user):
     if greeting_only:
         history = []
     # 1. First Attempt Groq Cloud LLM Completion (Full Natural Language & Dynamic Tech Stacks)
+    executed: List[Any] = []
     if model_available():
         try:
             url = f"{settings.groq_base_url.rstrip('/')}/chat/completions"
@@ -2995,6 +3055,7 @@ def run_model_hiring_chat(prompt, history, current_user):
                     "CRITICAL REQUISITION WORKFLOW RULES:\n"
                     "- DIRECT PUBLICATION IS STRICTLY FORBIDDEN. In TermJobs, Hiring Managers CANNOT publish requisitions directly. ALL requisitions require mandatory Director Approval.\n"
                     "- When the user asks to create, draft, or make a job requisition, provides role requirements, or specifies key skills, ALWAYS call the `draft_hiring_requisition` tool to generate an interactive draft preview card. ALWAYS honor whatever exact skills the user specifies (e.g. 'i want key skill as python and react only', 'skills: python, react'). Never refuse or demand a 3-5 skill minimum when the user specifies skills.\n"
+                    "- If the user asks HOW to create, draft, or make a requisition, or asks for instructions, steps, or guidelines on creating/drafting a requisition (e.g. 'how can i create a requisition', 'how to create a requisition', 'how do i create a requisition', 'how to draft a requisition', 'how can i create a requisition by using the chat', 'guide to create a requisition'), ALWAYS call the `get_requisition_guide` tool.\n"
                     "- If the user asks generally to create a requisition without specifying a role (e.g. 'can u create a requisition', 'create a req', 'new job', 'can u create a requsion'), ALWAYS call `show_role_selection_dropdown`.\n"
                     "- If the user wants to change, set, or edit any field of an active draft (e.g. number of openings/headcount, key skills, role summary, budget, location, experience), ALWAYS call `draft_hiring_requisition` with the updated field and previous draft values. When changing openings (e.g. 'change number of opening to 2', 'set openings to 3'), pass `openings: 2` (or the requested integer) directly to `draft_hiring_requisition`. NEVER append 'Number of openings' into the role summary or job description text.\n"
                     "- When the user asks about 'requisitions', 'active requisitions', 'live requisitions', 'open requisitions', or 'job directory', ALWAYS call the `list_hiring_requisitions` tool.\n"
@@ -3070,10 +3131,10 @@ def run_model_hiring_chat(prompt, history, current_user):
                         elif fn_name == "list_hiring_requisitions":
                             from modules.shared.requisition_chat import filtered_requisition_reply
                             load_rows = lambda: list_hiring_requisitions(user_id, tenant_id, fn_args.get("status", "all"))
-                            filtered = filtered_requisition_reply(prompt, lambda: list_hiring_requisitions(user_id, tenant_id, "all"), "list_hiring_requisitions", current_user.get("timezone") or "Asia/Kolkata", created_on=fn_args.get("created_on"))
+                            filtered: Optional[Dict[str, Any]] = filtered_requisition_reply(prompt, lambda: list_hiring_requisitions(user_id, tenant_id, "all"), "list_hiring_requisitions", current_user.get("timezone") or "Asia/Kolkata", created_on=fn_args.get("created_on"))
                             if filtered is not None and not filtered.get("executed_actions"):
                                 return filtered
-                            res = filtered["executed_actions"][0]["result"] if filtered else load_rows()
+                            res = filtered["executed_actions"][0]["result"] if (filtered and filtered.get("executed_actions")) else load_rows()
                             executed.append({"tool": "list_hiring_requisitions", "result": res})
                             count = len(res)
                             reply_buf.append(
@@ -3104,7 +3165,7 @@ def run_model_hiring_chat(prompt, history, current_user):
                                 clock = re.search(r'\b(?:1[0-2]|0?[1-9])(?::[0-5]\d)?\s*(?:am|pm)\b|\b(?:[01]\d|2[0-3]):[0-5]\d\b', prompt, re.I)
                                 if clock:
                                     fn_args["proposed_time"] = clock.group()
-                            res = schedule_candidate_interview(**fn_args)
+                            interview_proposal: Dict[str, Any] = schedule_candidate_interview(**fn_args)
                             from types import SimpleNamespace
                             from modules.calendar.services.assistant import contextual_candidate
                             candidate = contextual_candidate(
@@ -3112,15 +3173,15 @@ def run_model_hiring_chat(prompt, history, current_user):
                                 SimpleNamespace(id=user_id, tenant_id=tenant_id, role=current_user.get('role') or 'Hiring Manager'), history,
                             )
                             if candidate and not candidate.get('application_required'):
-                                res.update(candidate=candidate['candidate_name'],
+                                interview_proposal.update(candidate=candidate['candidate_name'],
                                            candidate_submission_id=candidate.get('id') or candidate.get('submission_id'),
                                            candidate_email=candidate.get('candidate_email'),
                                            requisition_id=candidate.get('requisition_id'),
-                                           requisition_title=candidate.get('requisition_title') or res['requisition_title'])
+                                           requisition_title=candidate.get('requisition_title') or interview_proposal['requisition_title'])
                             else:
-                                res['application_required'] = True
-                            executed.append({"tool": "schedule_candidate_interview", "result": res})
-                            reply_buf.append(f"Interview proposal ready for **{res['candidate']}**:")
+                                interview_proposal['application_required'] = True
+                            executed.append({"tool": "schedule_candidate_interview", "result": interview_proposal})
+                            reply_buf.append(f"Interview proposal ready for **{interview_proposal['candidate']}**:")
                         elif fn_name == "list_onboarding_issues":
                             res = list_onboarding_issues(user_id, user_name, tenant_id)
                             executed.append({"tool": "list_onboarding_issues", "result": res})
@@ -3242,9 +3303,13 @@ def run_model_hiring_chat(prompt, history, current_user):
                             res = get_hiring_manager_guide(user_name=user_name, company_name=company_name, director_name=director_name)
                             executed.append({"tool": "get_hiring_manager_guide", "result": res})
                             reply_buf.append(res["markdown"])
+                        elif fn_name == "get_requisition_guide":
+                            res = get_requisition_guide(company_name=company_name, director_name=director_name)
+                            executed.append({"tool": "get_requisition_guide", "result": res})
+                            reply_buf.append(res["markdown"])
 
-                    # Listing summaries must agree with the exact records shown as cards.
-                    if executed and all(action["tool"] == "list_hiring_requisitions" for action in executed):
+                    # Listing and guide responses must preserve exact formatting and records.
+                    if executed and all(action["tool"] in ("list_hiring_requisitions", "get_hiring_manager_guide", "get_requisition_guide") for action in executed):
                         return {"reply": "\n\n".join(reply_buf), "executed_actions": executed}
 
                     # 2nd pass LLM synthesis: If tools were purely informational (e.g. requisitions, candidates, stats),
@@ -3299,7 +3364,7 @@ def run_model_hiring_chat(prompt, history, current_user):
         except Exception as groq_err:
             import logging
             logging.getLogger(__name__).warning("Hiring chat tool execution failed (%s)", type(groq_err).__name__)
-            if locals().get("executed"):
+            if executed:
                 return {"reply": "Some actions completed, but I could not finish the entire request. Review the results below.", "executed_actions": executed}
 
     return None
@@ -3436,6 +3501,24 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
         return {
             "reply": guide_res["markdown"],
             "executed_actions": [{"tool": "get_hiring_manager_guide", "result": guide_res}]
+        }
+
+    # Requisition Creation Guide & Playbook Intent (e.g. "how can i create a requisition", "how to create a requisition using the chat", "guide to create a req", "steps to create a requisition")
+    req_terms = r"(?:requisitions?|urequsitions?|requsitions?|requistions?|requsions?|reqisitions?|requstions?|recquisitions?|req|reqs|job|jobs|role|roles|position|positions|opening|openings|job\s*posts?|job\s*postings?)"
+    req_guide_pattern = (
+        r"\b("
+        rf"how\s+(?:can\s+i|do\s+i|to|should\s+i)\s+(?:create|draft|make|post|setup|build|start|add)\s+(?:a\s+)?(?:new\s+)?{req_terms}|"
+        rf"how\s+(?:can\s+i|do\s+i|to|should\s+i)\s+hire\b|"
+        rf"(?:steps?|guide|guideline|guidelines|process|instructions?|workflow|playbook)\s+(?:to|for|on)?\s*(?:create|creating|draft|drafting|make|making|post|posting)\s+(?:a\s+)?(?:new\s+)?{req_terms}|"
+        rf"how\s+(?:can\s+i|to|do\s+i)\s+.*(?:create|draft|make|post).*{req_terms}.*(?:chat|portal|termjobs)|"
+        rf"explain\s+(?:how\s+to\s+)?(?:create|draft|make|post)\s+(?:a\s+)?{req_terms}"
+        r")\b"
+    )
+    if re.search(req_guide_pattern, prompt_lower):
+        req_guide = get_requisition_guide(company_name=company_name, director_name=director_name)
+        return {
+            "reply": req_guide["markdown"],
+            "executed_actions": [{"tool": "get_requisition_guide", "result": req_guide}]
         }
 
     # Intercept explicit confirmation commands
@@ -3890,8 +3973,8 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
         r"\b(?:hire|hiring)\s+(?:a\s+|an\s+)?([a-z0-9\s/]+)\b"
     )
 
-    if (requested_role or re.search(create_req_pattern, prompt_lower)) and not any(k in prompt_lower for k in ["interview plan", "interview rounds", "interview question", "rubric", "rubrics", "assessment plan", "criteria"]):
-        matched_role = None
+    if (requested_role or re.search(create_req_pattern, prompt_lower)) and not any(k in prompt_lower for k in ["interview plan", "interview rounds", "interview question", "rubric", "rubrics", "assessment plan", "criteria"]) and not re.search(r"\b(how\s+(?:can\s+i|do\s+i|to|should\s+i)|guide|guideline|guidelines|steps|process|instructions?)\b", prompt_lower):
+        matched_role: Optional[Dict[str, Any]] = None
         unique_roles = get_unique_predefined_roles(tenant_id)
         for r_entry in unique_roles:
             if r_entry["title"].lower() in prompt_lower:
@@ -3913,7 +3996,7 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
 
         if matched_role:
             exp_match = re.search(r"(\d+)\s*(?:-|to)?\s*(\d+)?\s*(?:yr|yrs|year|years)\b", prompt_lower)
-            exp_val = matched_role["experience_level"]
+            exp_val = str(matched_role.get("experience_level") or "Mid-Level")
             if exp_match:
                 if exp_match.group(2):
                     exp_val = f"{exp_match.group(1)}-{exp_match.group(2)} Years"
@@ -3938,7 +4021,7 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
                     detected_skills.append(proper)
 
             enriched_skills = generate_role_skills(
-                title=matched_role["title"],
+                title=str(matched_role["title"]),
                 detected_skills=detected_skills,
                 prompt=prompt_lower
             )
@@ -3960,12 +4043,12 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
                     init_openings = 1
 
             draft_res = draft_requisition_preview(
-                title=matched_role["title"],
-                department=matched_role.get("department", "Engineering"),
-                location=matched_role.get("location", "Hybrid"),
-                employment_type=matched_role.get("employment_type", "Contract"),
+                title=str(matched_role["title"]),
+                department=str(matched_role.get("department") or "Engineering"),
+                location=str(matched_role.get("location") or "Hybrid"),
+                employment_type=str(matched_role.get("employment_type") or "Contract"),
                 experience_level=exp_val,
-                salary_range=matched_role.get("salary_range", "Competitive"),
+                salary_range=str(matched_role.get("salary_range") or "Competitive"),
                 skills=skills_val,
                 job_description=jd_val,
                 openings=init_openings

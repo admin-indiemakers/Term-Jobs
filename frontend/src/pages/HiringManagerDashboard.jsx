@@ -1332,15 +1332,18 @@ function HiringManagerDashboardContent() {
       if (!replyContent) replyContent = 'No response was returned. Please try again.';
 
       const guideAction = executedActions.find((a) => a.tool === 'get_hiring_manager_guide');
+      const reqGuideAction = executedActions.find((a) => a.tool === 'get_requisition_guide');
       const roleSelectAction = executedActions.find((a) => a.tool === 'show_role_selection_dropdown');
       const roleOptions = roleSelectAction?.result?.roles || null;
 
       const aiMsg = {
         id: `ai-${Date.now()}`,
         sender: 'ai',
-        heading: guideAction
-          ? 'HIRING MANAGER WORKSPACE & PLAYBOOK'
-          : (roleOptions ? 'SELECT A ROLE TO DRAFT' : undefined),
+        heading: reqGuideAction
+          ? 'HOW TO CREATE A REQUISITION'
+          : (guideAction
+            ? 'HIRING MANAGER WORKSPACE & PLAYBOOK'
+            : (roleOptions ? 'SELECT A ROLE TO DRAFT' : undefined)),
         text: replyContent,
         executedActions,
         candidatesList: candCards,
