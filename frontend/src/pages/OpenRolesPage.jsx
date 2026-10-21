@@ -1756,7 +1756,7 @@ export default function OpenRolesPage({ enabled = true }) {
         <SEOHead
           title={isInterviewViewOpen ? "Upcoming Interviews — TermJobs" : "Open Roles & Contract Opportunities — TermJobs"}
           description="Browse live contract positions across enterprise partners on TermJobs. Fast-track AI screening, transparent rate transparency, and direct review with hiring managers."
-          canonicalUrl="https://termjobs.vercel.app/open-roles"
+          canonicalUrl="https://www.termjobs.in/open-roles"
         />
       )}
 

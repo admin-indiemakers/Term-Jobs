@@ -7,7 +7,7 @@ import { useEffect } from 'react';
 export default function SEOHead({
   title = 'TermJobs',
   description = 'Term Jobs connects enterprise teams with verified contract professionals, trusted staffing vendors, automated timesheet tracking, and transparent billing in one unified platform.',
-  canonicalUrl = 'https://termjobs.vercel.app/',
+  canonicalUrl = 'https://www.termjobs.in/',
   noindex = false,
 }) {
   useEffect(() => {

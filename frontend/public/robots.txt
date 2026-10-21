@@ -1,5 +1,5 @@
 # Term Jobs Robots.txt
-# https://termjobs.vercel.app
+# https://www.termjobs.in
 
 User-agent: *
 Allow: /
@@ -7,6 +7,10 @@ Allow: /login
 Allow: /director/login
 Allow: /admin/login
 Allow: /join/
+Allow: /open-roles
+Allow: /privacy-policy
+Allow: /terms-and-conditions
+Allow: /platform-rules
 
 # Restrict authenticated application routes and internal dashboards
 Disallow: /dashboard/
@@ -26,4 +30,5 @@ Disallow: /candidate/attendance
 Disallow: /api/
 
 # Sitemap location
-Sitemap: https://termjobs.vercel.app/sitemap.xml
+Sitemap: https://www.termjobs.in/sitemap.xml
+
