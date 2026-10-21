@@ -78,6 +78,7 @@ export default function NotificationBell() {
   const [items, setItems] = useState([]);
   const [detail, setDetail] = useState(null);
   const [open, setOpen] = useState(false);
+  const [panelPosition, setPanelPosition] = useState({ top: 0, left: 0, width: 380, maxHeight: 490 });
   const [activeTab, setActiveTab] = useState('all'); // 'all' | 'unread'
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -112,21 +113,29 @@ export default function NotificationBell() {
   }, [load]);
 
   useEffect(() => {
-    const onClick = (e) => {
-      if (panelRef.current && !panelRef.current.contains(e.target)) {
-        setOpen(false);
-      }
+    if (!open) return;
+    const close = () => setOpen(false);
+    const onKey = (event) => { if (event.key === 'Escape') close(); };
+    window.addEventListener('resize', close);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('resize', close);
+      document.removeEventListener('keydown', onKey);
     };
-    document.addEventListener('mousedown', onClick);
-    return () => document.removeEventListener('mousedown', onClick);
-  }, []);
+  }, [open]);
 
   const unreadCount = items.filter((n) => !n.read).length;
   const filteredItems = activeTab === 'unread' ? items.filter((n) => !n.read) : items;
 
   const handleOpen = () => {
+    if (!open) {
+      const anchor = panelRef.current.getBoundingClientRect();
+      const width = Math.min(380, window.innerWidth - 24);
+      const top = Math.min(anchor.bottom + 8, Math.max(12, window.innerHeight - 220));
+      setPanelPosition({ top, left: Math.max(12, Math.min(anchor.right - width, window.innerWidth - width - 12)), width, maxHeight: Math.min(490, window.innerHeight - top - 12) });
+      load();
+    }
     setOpen((v) => !v);
-    if (!open) load();
   };
 
   const markRead = async (n) => {
@@ -204,9 +213,14 @@ export default function NotificationBell() {
       )}
 
       {/* Glassmorphic Notification Panel Dropdown */}
-      {open && (
+      {open && createPortal(
+        <div className="fixed inset-0 z-[10000]" onClick={(event) => { event.stopPropagation(); setOpen(false); }} onMouseDown={(event) => event.stopPropagation()}>
         <div
-          className="absolute right-0 top-full mt-2 w-80 sm:w-[380px] bg-white/95 backdrop-blur-2xl border border-white/80 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.14)] overflow-hidden z-50 flex flex-col max-h-[490px] animate-in fade-in zoom-in-95 duration-150 text-left select-none"
+          role="dialog"
+          aria-label="Notifications panel"
+          aria-modal="true"
+          style={{ position: 'fixed', ...panelPosition }}
+          className=" bg-white/95 backdrop-blur-2xl border border-white/80 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.14)] overflow-hidden z-50 flex flex-col max-h-[490px] animate-in fade-in zoom-in-95 duration-150 text-left select-none"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Panel Header */}
@@ -326,10 +340,11 @@ export default function NotificationBell() {
                 const IconComponent = iconMeta.icon;
 
                 return (
-                  <div
+                  <button
+                    type="button"
                     key={n.id}
-                    onClick={() => markRead(n)}
-                    className={`p-3 transition-colors flex items-start gap-2.5 group cursor-pointer ${
+                    onClick={(event) => { event.preventDefault(); event.stopPropagation(); markRead(n); }}
+                    className={`w-full text-left p-3 transition-colors flex items-start gap-2.5 group cursor-pointer ${
                       !n.read ? 'bg-blue-50/25 hover:bg-blue-50/40' : 'bg-transparent hover:bg-black/[0.02]'
                     }`}
                   >
@@ -366,12 +381,13 @@ export default function NotificationBell() {
                         <span>{timeAgo(n.created_at)}</span>
                       </div>
                     </div>
-                  </div>
+                  </button>
                 );
               })
             )}
           </div>
         </div>
+        </div>, document.body
       )}
     </div>
   );
