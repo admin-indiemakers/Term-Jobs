@@ -19,7 +19,7 @@ export default function LandingPage({ defaultRoute = '', enabled = true }) {
         <SEOHead
           title="TermJobs — The future of contract work is flexible"
           description="TermJobs is a contract workforce platform bringing hiring, verified talent, AI screening, onboarding, timesheets, and billing into one connected view."
-          canonicalUrl="https://termjobs.vercel.app/"
+          canonicalUrl="https://www.termjobs.in/"
         />
       )}
       <LaunchpadLanding enabled={enabled} />

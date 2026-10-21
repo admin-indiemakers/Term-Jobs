@@ -1,6 +1,7 @@
 import { currentBillingMonth } from '../utils/billingPeriod';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { billingApprovalState } from '../utils/billingApprovalState';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -51,11 +52,14 @@ function formatCurrency(val) {
 
 export default function DirectorWorkOrders() {
   const loadVersionRef = useRef(0);
-  const [selectedMonth, setSelectedMonth] = useState(() => currentBillingMonth());
+  const [searchParams] = useSearchParams();
+  const requestedPeriod = searchParams.get('period');
+  const requestedCandidate = searchParams.get('candidate');
+  const [selectedMonth, setSelectedMonth] = useState(() => /^\d{4}-(0[1-9]|1[0-2])$/.test(requestedPeriod || '') ? requestedPeriod : currentBillingMonth());
   const { token, user } = useAuth();
   const navigate = useNavigate();
   const [workOrders, setWorkOrders] = useState([]);
-  const [selectedCandidateId, setSelectedCandidateId] = useState(null);
+  const [selectedCandidateId, setSelectedCandidateId] = useState(requestedCandidate);
   const [showSowModal, setShowSowModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -121,6 +125,18 @@ export default function DirectorWorkOrders() {
     }
   }, [token, selectedMonth]);
 
+  const openedReview = useRef('');
+  useEffect(() => {
+    if (!requestedCandidate || loading) return;
+    const reviewKey = `${selectedMonth}:${requestedCandidate}`;
+    if (openedReview.current === reviewKey) return;
+    if (workOrders.some((row) => String(row.candidate_id || row.workorder_id || row._id) === requestedCandidate)) {
+      setSelectedCandidateId(requestedCandidate);
+      setShowSowModal(true);
+      openedReview.current = reviewKey;
+    }
+  }, [requestedCandidate, selectedMonth, loading, workOrders]);
+
   // Active Selected Work Order
   const activeWo = useMemo(() => {
     if (!workOrders.length) return null;
@@ -129,8 +145,8 @@ export default function DirectorWorkOrders() {
 
   const sowData = activeWo?.sow_data || {};
   const rawStatus = (activeWo?.status || sowData?.status || 'Pending Director Approval').trim();
-  const isDirectorApproved = rawStatus === 'Paid' || rawStatus === 'Approved by Director' || rawStatus === 'Approved' || rawStatus === 'ACTIVE' || activeWo?.director_approved === true || sowData?.director_approved === true;
-  const isPendingDirector = !isDirectorApproved && (rawStatus === 'Pending Director Approval' || rawStatus.toLowerCase().includes('approved by procurement') || activeWo?.procurement_authorized === true);
+  const isDirectorApproved = billingApprovalState(activeWo || {}).directorApproved;
+  const isPendingDirector = billingApprovalState(activeWo || {}).pendingDirector;
   const isRevision = rawStatus.toLowerCase().includes('revision');
   const isRejected = rawStatus.toLowerCase().includes('reject');
 
@@ -146,14 +162,14 @@ export default function DirectorWorkOrders() {
     workOrders.forEach((w) => {
       const st = (w.status || w.sow_data?.status || '').trim();
       const d = w.sow_data || {};
-      const isApp = st === 'Paid' || st === 'Approved by Director' || st === 'Approved' || st === 'ACTIVE' || w.director_approved === true || d.director_approved === true;
-      const isPend = !isApp && (st === 'Pending Director Approval' || st.toLowerCase().includes('approved by procurement') || w.procurement_authorized);
+      const isApp = billingApprovalState(w).directorApproved;
+      const isPend = billingApprovalState(w).pendingDirector;
       const isRev = st.toLowerCase().includes('revision');
       const isRej = st.toLowerCase().includes('reject');
 
       if (isPend) pendingCount++;
       if (isApp) approvedCount++;
-      if (w.procurement_authorized || isApp || isPend) procurementClearedCount++;
+      if (billingApprovalState(w).procurementApproved) procurementClearedCount++;
       if (isRev) revisionCount++;
       if (isRej) rejectedCount++;
 
@@ -177,8 +193,8 @@ export default function DirectorWorkOrders() {
     return workOrders.filter((w) => {
       const d = w.sow_data || {};
       const st = (w.status || d.status || '').trim();
-      const isApp = st === 'Paid' || st === 'Approved by Director' || st === 'Approved' || st === 'ACTIVE' || w.director_approved === true || d.director_approved === true;
-      const isPend = !isApp && (st === 'Pending Director Approval' || st.toLowerCase().includes('approved by procurement') || w.procurement_authorized);
+      const isApp = billingApprovalState(w).directorApproved;
+      const isPend = billingApprovalState(w).pendingDirector;
       const isRev = st.toLowerCase().includes('revision');
       const isRej = st.toLowerCase().includes('reject');
 
@@ -360,10 +376,10 @@ export default function DirectorWorkOrders() {
             {activeTenantName} • EXECUTIVE GOVERNANCE
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight leading-none">
-            Director Work Orders & SOW Sign-off
+            Monthly Billing Approvals
           </h1>
           <p className="text-xs sm:text-[13px] text-gray-500 font-normal mt-1 max-w-2xl">
-            Inspect commercial rate schedules, timesheet breakdowns, and grant final executive Director sign-off for Work Orders authorized by Procurement.
+            Approve each monthly bill after Procurement authorization. This single sign-off releases the bill to Finance for payment; Payment Tracking shows its progress.
           </p>
         </div>
 
@@ -444,9 +460,9 @@ export default function DirectorWorkOrders() {
             <div className="pb-3.5 border-b border-gray-100 space-y-3">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <h2 className="text-base font-extrabold text-gray-900">Work Order Approvals</h2>
+                  <h2 className="text-base font-extrabold text-gray-900">Billing Approvals</h2>
                   <p className="text-xs text-gray-500 mt-0.5">
-                    Review commercial terms, deployed personnel SOW, and grant executive Director sign-off.
+                    Review the monthly SOW, approved hours, and expenses. Approve once, then track disbursement in Payment Tracking.
                   </p>
                 </div>
 
@@ -585,8 +601,8 @@ export default function DirectorWorkOrders() {
                     {filteredWorkOrders.map((item) => {
                       const d = item.sow_data || {};
                       const st = (item.status || d.status || 'Pending Director Approval').trim();
-                      const itemIsApproved = st === 'Paid' || st === 'Approved by Director' || st === 'Approved' || st === 'ACTIVE' || item.director_approved === true || d.director_approved === true;
-                      const itemIsPending = !itemIsApproved && (st === 'Pending Director Approval' || st.toLowerCase().includes('approved by procurement') || item.procurement_authorized);
+                      const itemIsApproved = billingApprovalState(item).directorApproved;
+                      const itemIsPending = billingApprovalState(item).pendingDirector;
                       const itemIsRejected = st.toLowerCase().includes('reject');
                       const itemIsRevision = st.toLowerCase().includes('revision');
                       const buyerRate = d.raw_charge_rate || (typeof d.charge_rate === 'string' ? d.charge_rate.replace(/[^\d.]/g, '') : '') || 2200;
@@ -634,7 +650,7 @@ export default function DirectorWorkOrders() {
 
                           {/* Procurement */}
                           <td className="w-[15%] py-3.5 px-3 align-middle">
-                            {item.procurement_authorized || itemIsApproved || itemIsPending || d.procurement_approved_by ? (
+                            {billingApprovalState(item).procurementApproved ? (
                               <div>
                                 <div className="text-gray-900 font-bold flex items-center gap-1 truncate">
                                   <CheckCircle2 size={12} className="text-emerald-600 shrink-0" />
@@ -647,7 +663,7 @@ export default function DirectorWorkOrders() {
                             ) : (
                               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
                                 <Clock size={11} className="shrink-0" />
-                                Pending Verification
+                                Awaiting Procurement
                               </span>
                             )}
                           </td>

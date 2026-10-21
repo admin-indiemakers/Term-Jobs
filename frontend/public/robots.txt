@@ -1,12 +1,21 @@
-# Term Jobs Robots.txt
-# https://termjobs.vercel.app
+# ==============================================================================
+# TermJobs — Flexible Workforce & Contract Hiring Platform
+# Website: https://www.termjobs.in
+# Description: Enterprise Vendor Management System (VMS) & marketplace for contract
+#              talent, staffing agencies, timesheets, and automated billing.
+# ==============================================================================
 
 User-agent: *
 Allow: /
+Allow: /open-roles
 Allow: /login
 Allow: /director/login
 Allow: /admin/login
 Allow: /join/
+Allow: /privacy-policy
+Allow: /terms-and-conditions
+Allow: /platform-rules
+Allow: /llms.txt
 
 # Restrict authenticated application routes and internal dashboards
 Disallow: /dashboard/
@@ -25,5 +34,7 @@ Disallow: /candidate/timesheet
 Disallow: /candidate/attendance
 Disallow: /api/
 
-# Sitemap location
-Sitemap: https://termjobs.vercel.app/sitemap.xml
+# Sitemap & LLM Specification
+Sitemap: https://www.termjobs.in/sitemap.xml
+
+

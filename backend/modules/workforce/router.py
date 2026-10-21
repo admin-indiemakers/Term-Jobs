@@ -20,7 +20,7 @@ from modules.identity.domain.models import User
 from modules.identity.router import get_current_user
 from modules.shared.db import db
 from modules.shared.cache import cache
-from modules.billing.services.billing_periods import billing_period, record_period, period_query, require_editable
+from modules.billing.services.billing_periods import billing_period, record_period, period_query, require_editable, require_resubmittable, update_billing_snapshot
 
 router = APIRouter(prefix="/workforce", tags=["Workforce"])
 
@@ -1461,7 +1461,7 @@ def send_sow_to_procurement(
 
     sow_query = period_query(sow_coll, candidate_id, period)
     monthly_doc = sow_coll.find_one(sow_query)
-    require_editable(monthly_doc)
+    require_resubmittable(monthly_doc)
     if monthly_doc and monthly_doc.get('tenant_id') != current_user.tenant_id and current_user.role != 'Super Admin' and monthly_doc.get('recruiter_id') != current_user.id:
         raise HTTPException(403, 'This billing document belongs to another company')
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -1487,13 +1487,19 @@ def send_sow_to_procurement(
         "recruiter_id": current_user.id,
         "recruiter_name": current_user.name,
         "status": "Sent to Procurement",
+        "procurement_authorized": False,
+        "director_approved": False,
+        "procurement_approved_by": None,
+        "procurement_approved_at": None,
+        "director_approved_by": None,
+        "director_approved_at": None,
         "submitted_at": now_iso,
         "sow_data": sow_payload,
         "updated_at": now_iso,
     }
 
-    sow_coll.update_one(
-        sow_query,
+    update_billing_snapshot(
+        sow_coll, sow_query, monthly_doc,
         {"$set": doc_record},
         upsert=True
     )
@@ -1533,7 +1539,7 @@ def save_sow_draft(
     sow_coll = db["sow_documents"]
     sow_query = period_query(sow_coll, candidate_id, period)
     monthly_doc = sow_coll.find_one(sow_query)
-    require_editable(monthly_doc)
+    require_resubmittable(monthly_doc)
     if monthly_doc and monthly_doc.get('tenant_id') != current_user.tenant_id and current_user.role != 'Super Admin' and monthly_doc.get('recruiter_id') != current_user.id:
         raise HTTPException(403, 'This billing document belongs to another company')
     contract = db['work_orders'].find_one({'$or': [{'candidate_id': candidate_id}, {'workorder_id': candidate_id}, {'id': candidate_id}]}) or {}
@@ -1541,8 +1547,8 @@ def save_sow_draft(
     sow_payload = dict(body.get("sow_data") or body)
     sow_payload["period"] = period
 
-    sow_coll.update_one(
-        sow_query,
+    update_billing_snapshot(
+        sow_coll, sow_query, monthly_doc,
         {"$set": {
             "candidate_id": candidate_id,
             "period": period,
@@ -1803,9 +1809,9 @@ def get_finance_work_orders(period: Optional[str] = None, current_user: User = D
         d["rate_type"] = sow_p.get("billing_basis") or "Hourly / Monthly Fixed"
         d["approved_expenses"] = float(sow_p.get("total_expenses") or 0.0)
 
-        st = d.get("status") or sow_p.get("status") or "Approved by Director"
+        st = d.get("status") or sow_p.get("status") or "Draft"
         d["status"] = st
-        d["ready_for_payment"] = st in ("Approved by Director", "Approved", "ACTIVE") and d.get("payment_status") != "Paid"
+        d["ready_for_payment"] = st in ("Approved by Director", "Approved") and d.get("payment_status") != "Paid"
 
         inv = inv_coll.find_one({"$or": [{"candidate_id": cid}, {"workorder_id": cid}], "period": period})
         if inv:
@@ -1827,12 +1833,12 @@ def get_finance_work_orders(period: Optional[str] = None, current_user: User = D
     }
     cleaned.sort(key=lambda x: priority.get(x.get("status", ""), 7))
 
-    ready_for_payment_count = sum(1 for d in cleaned if d.get("status") in ("Approved by Director", "Approved", "ACTIVE") and d.get("payment_status") != "Paid")
+    ready_for_payment_count = sum(1 for d in cleaned if d.get("status") in ("Approved by Director", "Approved") and d.get("payment_status") != "Paid")
     paid_count = sum(1 for d in cleaned if d.get("status") == "Paid" or d.get("payment_status") == "Paid")
 
     total_payable = sum(
         float(d.get("total_amount") or 0)
-        for d in cleaned if d.get("status") in ("Approved by Director", "Approved", "ACTIVE") and d.get("payment_status") != "Paid"
+        for d in cleaned if d.get("status") in ("Approved by Director", "Approved") and d.get("payment_status") != "Paid"
     )
 
     total_paid = sum(
@@ -1926,20 +1932,34 @@ def process_finance_work_order_payment(
     )
 
     # 4. Insert Notifications
-    notif_coll.insert_one({
-        "id": f"notif_{_uuid.uuid4().hex[:10]}",
-        "candidate_id": cid,
-        "type": "payment_disbursed",
-        "title": "Payment Disbursed by Finance Team!",
-        "message": f"Finance lead {current_user.name} has disbursed payment (Txn Ref: {txn_ref}) for Work Order {cid}.",
-        "is_read": False,
-        "target_tab": "billing",
-        "created_at": now_iso,
-    })
+    try:
+        notif_coll.insert_one({
+            "id": f"notif_{_uuid.uuid4().hex[:10]}",
+            "candidate_id": cid,
+            "type": "payment_disbursed",
+            "tenant_id": doc.get("tenant_id"),
+            "period": period,
+            "transaction_ref": txn_ref,
+            "title": "Payment Disbursed by Finance Team!",
+            "message": f"Finance lead {current_user.name} has disbursed payment (Txn Ref: {txn_ref}) for Work Order {cid}.",
+            "is_read": False,
+            "target_tab": "billing",
+            "created_at": now_iso,
+        })
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception("Payment saved but candidate notification failed for %s", cid)
+
 
     return {
         "status": "success",
         "message": f"Payment successfully processed and disbursed (Ref: {txn_ref}).",
+        "payment": {
+            "payment_status": "Paid", "payment_amount": amount,
+            "transaction_ref": txn_ref, "payment_method": payment_method,
+            "payment_processed_at": now_iso,
+            "payment_processed_by": f"{current_user.name} ({current_user.role})",
+        },
         "transaction_ref": txn_ref,
         "payment_processed_by": current_user.name,
         "payment_processed_at": now_iso
@@ -1964,7 +1984,7 @@ def approve_procurement_sow(
     period = billing_period(period)
     sow_coll = db["sow_documents"]
     wo_coll = db["work_orders"]
-    notif_coll = db["candidate_notifications"]
+    notif_coll = db["notifications"]
     sow_query = period_query(sow_coll, candidate_id, period)
     monthly_doc = sow_coll.find_one(sow_query)
     require_editable(monthly_doc)
@@ -1982,8 +2002,8 @@ def approve_procurement_sow(
     cid = doc.get("candidate_id") or candidate_id
     approver_info = f"{current_user.name} ({current_user.role})"
 
-    sow_coll.update_one(
-        sow_query,
+    update_billing_snapshot(
+        sow_coll, sow_query, monthly_doc,
         {"$set": {
             "status": "Pending Director Approval",
             "procurement_authorized": True,
@@ -2002,6 +2022,8 @@ def approve_procurement_sow(
     notif_coll.insert_one({
         "id": f"notif_{_uuid.uuid4().hex[:10]}",
         "candidate_id": cid,
+        "tenant_id": doc.get("tenant_id"),
+        "target_role": "Director",
         "type": "sow_forwarded_to_director",
         "title": "Work Order Authorized by Procurement — Awaiting Director Sign-off",
         "message": f"Procurement lead {current_user.name} has authorized the Work Order for candidate {cid}. It is now pending final Company Director approval.",
@@ -2035,7 +2057,7 @@ def director_approve_procurement_sow(
     period = billing_period(period)
     sow_coll = db["sow_documents"]
     wo_coll = db["work_orders"]
-    notif_coll = db["candidate_notifications"]
+    notif_coll = db["notifications"]
     sow_query = period_query(sow_coll, candidate_id, period)
     monthly_doc = sow_coll.find_one(sow_query)
     require_editable(monthly_doc)
@@ -2052,8 +2074,8 @@ def director_approve_procurement_sow(
     cid = doc.get("candidate_id") or doc.get("workorder_id") or candidate_id
     director_info = f"{current_user.name} (Director)"
 
-    sow_coll.update_one(
-        sow_query,
+    update_billing_snapshot(
+        sow_coll, sow_query, monthly_doc,
         {"$set": {
             "candidate_id": cid,
             "period": period,
@@ -2103,6 +2125,8 @@ def director_approve_procurement_sow(
             "id": f"notif_{_uuid.uuid4().hex[:10]}",
             "candidate_id": cid,
             "type": "work_order_fully_approved",
+            "tenant_id": doc.get("tenant_id"),
+            "target_role": "Finance",
             "title": "Work Order Fully Approved by Company Director!",
             "message": f"Director {current_user.name} has granted final executive approval for Work Order {cid}. Candidate Portal and billing are fully active.",
             "is_read": False,
@@ -2139,18 +2163,27 @@ def reject_procurement_sow(
     require_editable(monthly_doc)
     if monthly_doc and monthly_doc.get('tenant_id') != current_user.tenant_id and current_user.role != 'Super Admin' and monthly_doc.get('recruiter_id') != current_user.id:
         raise HTTPException(403, 'This billing document belongs to another company')
+    if monthly_doc.get('status') in ('Approved by Director', 'Approved'):
+        raise HTTPException(409, 'Director-approved billing cannot be returned through Procurement.')
+    if not str(body.get('notes') or body.get('revision_notes') or body.get('rejection_notes') or '').strip():
+        raise HTTPException(422, 'Provide a reason so the recruiter knows what must change before reapproval.')
+    if current_user.role == 'Director' and monthly_doc.get('status') not in ('Pending Director Approval', 'Approved by Procurement'):
+        raise HTTPException(409, 'Only Procurement-authorized billing can receive a Director decision.')
+    rejected_status = 'Rejected by Director' if current_user.role == 'Director' else 'Rejected by Procurement'
     now_iso = datetime.now(timezone.utc).isoformat()
     notes = body.get("notes") or body.get("rejection_notes") or "Commercial terms rejected by Procurement."
 
-    sow_coll.update_one(
-        sow_query,
+    update_billing_snapshot(
+        sow_coll, sow_query, monthly_doc,
         {"$set": {
-            "status": "Rejected by Procurement",
+            "status": rejected_status,
             "rejected_by": f"{current_user.name} ({current_user.role})",
             "rejection_notes": notes,
             "rejected_at": now_iso,
             "updated_at": now_iso,
-            "sow_data.status": "Rejected by Procurement"
+            "procurement_authorized": False,
+            "director_approved": False,
+            "sow_data.status": rejected_status
         }}
     )
 
@@ -2185,17 +2218,23 @@ def request_procurement_sow_revision(
     require_editable(monthly_doc)
     if monthly_doc and monthly_doc.get('tenant_id') != current_user.tenant_id and current_user.role != 'Super Admin' and monthly_doc.get('recruiter_id') != current_user.id:
         raise HTTPException(403, 'This billing document belongs to another company')
+    if monthly_doc.get('status') in ('Approved by Director', 'Approved'):
+        raise HTTPException(409, 'Director-approved billing cannot be returned through Procurement.')
+    if not str(body.get('notes') or body.get('revision_notes') or body.get('rejection_notes') or '').strip():
+        raise HTTPException(422, 'Provide a reason so the recruiter knows what must change before reapproval.')
     now_iso = datetime.now(timezone.utc).isoformat()
     notes = body.get("notes") or body.get("revision_notes") or "Please revise rates/hours as discussed."
 
-    sow_coll.update_one(
-        sow_query,
+    update_billing_snapshot(
+        sow_coll, sow_query, monthly_doc,
         {"$set": {
             "status": "Revision Requested",
             "revision_notes": notes,
             "revision_requested_by": f"{current_user.name} ({current_user.role})",
             "revision_requested_at": now_iso,
             "updated_at": now_iso,
+            "procurement_authorized": False,
+            "director_approved": False,
             "sow_data.status": "Revision Requested"
         }}
     )

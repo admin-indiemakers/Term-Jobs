@@ -56,8 +56,9 @@ def notification_dict(n: Notification, user_id: str = "") -> dict:
         read_by = []
 
     is_read = bool(getattr(n, "read", False)) or getattr(n, "status", "") == "read"
-    if user_id and user_id in read_by:
-        is_read = True
+    if user_id and read_by:
+        # A shared alert is read independently by each recipient.
+        is_read = user_id in read_by if not n.user_id else is_read or user_id in read_by
 
     created_at = n.created_at.isoformat() if hasattr(n.created_at, "isoformat") else (n.created_at or "")
 

@@ -89,8 +89,9 @@ export function AuthProvider({ children }) {
           } catch {}
         }
       })
-      .catch(() => {
-        if (!cancelled) logout();
+      .catch((error) => {
+        // A timeout or server outage does not invalidate a signed-in session.
+        if (!cancelled && (error.status === 401 || error.status === 403)) logout();
       })
       .finally(() => {
         if (!cancelled) setInitializing(false);
