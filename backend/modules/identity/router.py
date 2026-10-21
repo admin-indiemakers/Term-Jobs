@@ -1219,7 +1219,7 @@ def update_user(
     if body.email is not None:
         new_email = body.email.strip().lower()
         if new_email != (target.email or '').strip().lower():
-            existing = db.query(User).filter(func.lower(User.email) == new_email).first()
+            existing = db.query(User).filter(User.email == new_email).first()
             if existing and str(existing.id) != str(target.id):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
