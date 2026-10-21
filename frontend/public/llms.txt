@@ -1,0 +1,40 @@
+# TermJobs — Contract Workforce & VMS Platform
+
+> TermJobs (`https://www.termjobs.in/`) is an enterprise-grade contract staffing, vendor management system (VMS), and flexible workforce operating platform. It connects Client Enterprises, Staffing Vendor Consultancies, and Contract Professionals into one transparent, automated hiring and billing ecosystem.
+
+## Core Capabilities & Architecture
+
+- **Contract Requisitions**: Requisitions created with structured budgets, bill rates, markup limits, and instant distribution to approved staffing agencies with a 48-hour sourcing window.
+- **AI-Powered Candidate Screening**: Deep resume parsing, technical skills scoring, GitHub activity verification, and automated shortlist recommendations.
+- **Integrated Video Interviews**: Built-in encrypted WebRTC video rooms with automated transcription, speech heuristics (speaking pace, filler words), and competency rubrics.
+- **Clickwrap Work Orders & SOWs**: Formal offer generation, digital acceptance, and commercial work order sign-offs between Enterprise Clients and Staffing Vendors.
+- **Onboarding & Compliance**: Automated background verification (BGV), bank/tax checklist verification, and secure equipment tracking.
+- **Workforce Timesheets & Invoicing**: Weekly time tracking with 0.5-hour increments, dual manager approval workflows, overtime calculation, automated vendor invoicing, and finance payment clearing.
+
+## Key System Roles & Portals
+
+1. **Super Admin**: Enterprise tenant management, staffing agency network management, cross-tenant talent pool, and outreach automation.
+2. **Company Admin**: Internal department setup, hiring manager / director permissions, and vendor partner allocations.
+3. **Hiring Manager**: Requisition creation, candidate review, AI shortlists, technical interview scheduling, and timesheet approvals.
+4. **Director / Executive**: Commercial approval for high-budget requisitions, master service agreements, and work order budgets.
+5. **Vendor / Staffing Agency**: Sourcing talent, submitting candidate profiles against live client requisitions, compliance tracking, and monthly billing reconciliation.
+6. **Procurement**: Statements of work (SOW) compliance, commercial rate cards, and vendor agreement oversight.
+7. **Finance**: Invoice review, automated payment disbursements, expense audits, and remittance advices.
+8. **Candidate / Contractor**: Application tracking, offer acceptance, onboarding credentials, daily time capture, and timesheet submission.
+9. **Interviewer / Staff**: Candidate evaluation panel, competency scoring, and interview feedback.
+
+## Public Web Endpoints
+
+- **Homepage**: `https://www.termjobs.in/` — Overview of the contract workforce platform, enterprise solutions, and staffing vendor network.
+- **Open Roles**: `https://www.termjobs.in/open-roles` — Real-time live contract positions, skill requirements, compensation rates, and 1-click applications.
+- **Portal Sign In**: `https://www.termjobs.in/login` — Authentication gateway for candidates, hiring managers, staffing agencies, and enterprise staff.
+- **Legal & Compliance**:
+  - Privacy Policy: `https://www.termjobs.in/privacy-policy`
+  - Terms of Service: `https://www.termjobs.in/terms-and-conditions`
+  - Platform Rules & Guidelines: `https://www.termjobs.in/platform-rules`
+
+## Contact & Organization
+
+- **Organization**: Term Jobs
+- **Website**: https://www.termjobs.in/
+- **Support Email**: Termjobsofficial@gmail.com
