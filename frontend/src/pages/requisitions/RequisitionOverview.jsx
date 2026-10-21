@@ -112,6 +112,17 @@ function timeAgo(iso) {
 
 
 
+function formatCustomDate(iso) {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return String(iso);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return String(iso);
+  }
+}
+
 function formatTime(iso) {
   if (!iso) return '10:24 AM';
   try {
@@ -284,6 +295,7 @@ function RequisitionDetailDrawer({
   const r = req || initialReq || {};
   const structuredRole = r.structured_role || {};
   const isDeleted = Boolean(r.is_deleted || r.status === 'Deleted by HM' || r.status === 'Deleted');
+  const isRejected = Boolean(r.status === 'Rejected' || r.status === 'Restructuring' || (r.director_approved === false && (r.rejected_at || r.rejected_by)));
   const isPublished = ['published', 'active', 'open'].includes((r.status || '').toLowerCase().replace(/[\s_]+/g, ''));
   const reqCode = r.ref ? r.ref.replace('REQ-', 'REQ #') : `REQ #${String(r.id || requisitionId || '').slice(0, 6).toUpperCase()}`;
 
@@ -565,27 +577,31 @@ function RequisitionDetailDrawer({
               Overview
             </button>
 
-            <button
-              type="button"
-              onClick={() => {
-                navigate(`/dashboard/requisitions/${requisitionId}/candidates`);
-                onClose();
-              }}
-              className="px-3 py-1.5 rounded-xl transition-all cursor-pointer whitespace-nowrap text-gray-600 hover:text-black hover:bg-gray-100"
-            >
-              Candidates ({totalApplicants})
-            </button>
+            {!isRejected && (
+              <button
+                type="button"
+                onClick={() => {
+                  navigate(`/dashboard/requisitions/${requisitionId}/candidates`);
+                  onClose();
+                }}
+                className="px-3 py-1.5 rounded-xl transition-all cursor-pointer whitespace-nowrap text-gray-600 hover:text-black hover:bg-gray-100"
+              >
+                Candidates ({totalApplicants})
+              </button>
+            )}
 
-            <button
-              type="button"
-              onClick={() => setActiveTab('interviews')}
-              className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer whitespace-nowrap ${activeTab === 'interviews'
-                  ? 'bg-black text-white shadow-xs'
-                  : 'text-gray-600 hover:text-black hover:bg-gray-100'
-                }`}
-            >
-              Interviews ({inInterviewCount})
-            </button>
+            {!isRejected && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('interviews')}
+                className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer whitespace-nowrap ${activeTab === 'interviews'
+                    ? 'bg-black text-white shadow-xs'
+                    : 'text-gray-600 hover:text-black hover:bg-gray-100'
+                  }`}
+              >
+                Interviews ({inInterviewCount})
+              </button>
+            )}
 
             {jdContent && (
               <button
@@ -750,74 +766,88 @@ function RequisitionDetailDrawer({
                 </div>
 
                 {/* Right: Candidate Pipeline Stats Card (Total, Shortlisted, In Interview, Hired) */}
-                <div className="w-full sm:w-56 md:w-60 lg:w-64 shrink-0 bg-white/85 backdrop-blur-md border border-black/[0.06] rounded-2xl p-3.5 sm:p-4 shadow-3xs flex flex-col justify-between">
-                  <div className="flex items-center justify-between pb-1.5 border-b border-black/[0.06]">
-                    <h3 className="text-xs font-extrabold text-gray-900 uppercase tracking-wider flex items-center gap-1.5">
-                      <span>Pipeline</span>
-                    </h3>
-                    <span className="text-[10px] font-bold text-gray-400">Overview</span>
+                {isRejected ? (
+                  <div className="w-full sm:w-56 md:w-60 lg:w-64 shrink-0 bg-amber-50/80 border border-amber-200/80 rounded-2xl p-4 shadow-3xs flex flex-col justify-center text-center space-y-2">
+                    <div className="w-8 h-8 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center mx-auto">
+                      <AlertCircle size={16} />
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-amber-900">Pipeline Suspended</div>
+                      <p className="text-[10px] text-amber-700 mt-1 leading-snug">
+                        Candidate pipeline and interview loops are paused while this requisition is under revision.
+                      </p>
+                    </div>
                   </div>
+                ) : (
+                  <div className="w-full sm:w-56 md:w-60 lg:w-64 shrink-0 bg-white/85 backdrop-blur-md border border-black/[0.06] rounded-2xl p-3.5 sm:p-4 shadow-3xs flex flex-col justify-between">
+                    <div className="flex items-center justify-between pb-1.5 border-b border-black/[0.06]">
+                      <h3 className="text-xs font-extrabold text-gray-900 uppercase tracking-wider flex items-center gap-1.5">
+                        <span>Pipeline</span>
+                      </h3>
+                      <span className="text-[10px] font-bold text-gray-400">Overview</span>
+                    </div>
 
-                  <div className="grid grid-cols-4 sm:grid-cols-2 gap-2 flex-1 my-2">
-                    {/* Total */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        navigate(`/dashboard/requisitions/${requisitionId}/candidates`);
-                        onClose();
-                      }}
-                      className="p-2.5 rounded-xl bg-gray-50/80 hover:bg-gray-100 border border-black/[0.04] flex flex-col items-center justify-center text-center transition-all cursor-pointer shadow-3xs group"
-                      title="View all candidates"
-                    >
-                      <Users size={15} className="text-gray-500 group-hover:scale-110 transition-transform mb-1" />
-                      <div className="text-lg font-black text-gray-900 leading-none">{totalApplicants}</div>
-                      <div className="text-[10px] font-semibold text-gray-400 mt-1">Total</div>
-                    </button>
+                    <div className="grid grid-cols-4 sm:grid-cols-2 gap-2 flex-1 my-2">
+                      {/* Total */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigate(`/dashboard/requisitions/${requisitionId}/candidates`);
+                          onClose();
+                        }}
+                        className="p-2.5 rounded-xl bg-gray-50/80 hover:bg-gray-100 border border-black/[0.04] flex flex-col items-center justify-center text-center transition-all cursor-pointer shadow-3xs group"
+                        title="View all candidates"
+                      >
+                        <Users size={15} className="text-gray-500 group-hover:scale-110 transition-transform mb-1" />
+                        <div className="text-lg font-black text-gray-900 leading-none">{totalApplicants}</div>
+                        <div className="text-[10px] font-semibold text-gray-400 mt-1">Total</div>
+                      </button>
 
-                    {/* Shortlisted */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        navigate(`/dashboard/requisitions/${requisitionId}/candidates`);
-                        onClose();
-                      }}
-                      className="p-2.5 rounded-xl bg-emerald-50/70 hover:bg-emerald-100/80 border border-emerald-500/15 flex flex-col items-center justify-center text-center transition-all cursor-pointer shadow-3xs group"
-                      title="View shortlisted candidates"
-                    >
-                      <CheckCircle2 size={15} className="text-emerald-600 group-hover:scale-110 transition-transform mb-1" />
-                      <div className="text-lg font-black text-emerald-700 leading-none">{shortlistedCount}</div>
-                      <div className="text-[10px] font-semibold text-emerald-600 mt-1">Shortlisted</div>
-                    </button>
+                      {/* Shortlisted */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigate(`/dashboard/requisitions/${requisitionId}/candidates`);
+                          onClose();
+                        }}
+                        className="p-2.5 rounded-xl bg-emerald-50/70 hover:bg-emerald-100/80 border border-emerald-500/15 flex flex-col items-center justify-center text-center transition-all cursor-pointer shadow-3xs group"
+                        title="View shortlisted candidates"
+                      >
+                        <CheckCircle2 size={15} className="text-emerald-600 group-hover:scale-110 transition-transform mb-1" />
+                        <div className="text-lg font-black text-emerald-700 leading-none">{shortlistedCount}</div>
+                        <div className="text-[10px] font-semibold text-emerald-600 mt-1">Shortlisted</div>
+                      </button>
 
-                    {/* In Interview */}
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('interviews')}
-                      className="p-2.5 rounded-xl bg-purple-50/70 hover:bg-purple-100/80 border border-purple-500/15 flex flex-col items-center justify-center text-center transition-all cursor-pointer shadow-3xs group"
-                      title="View interviews"
-                    >
-                      <Calendar size={15} className="text-purple-600 group-hover:scale-110 transition-transform mb-1" />
-                      <div className="text-lg font-black text-purple-700 leading-none">{inInterviewCount}</div>
-                      <div className="text-[10px] font-semibold text-purple-600 mt-1">In Interview</div>
-                    </button>
+                      {/* In Interview */}
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('interviews')}
+                        className="p-2.5 rounded-xl bg-purple-50/70 hover:bg-purple-100/80 border border-purple-500/15 flex flex-col items-center justify-center text-center transition-all cursor-pointer shadow-3xs group"
+                        title="View interviews"
+                      >
+                        <Calendar size={15} className="text-purple-600 group-hover:scale-110 transition-transform mb-1" />
+                        <div className="text-lg font-black text-purple-700 leading-none">{inInterviewCount}</div>
+                        <div className="text-[10px] font-semibold text-purple-600 mt-1">In Interview</div>
+                      </button>
 
-                    {/* Hired */}
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('candidates')}
-                      className="p-2.5 rounded-xl bg-amber-50/70 hover:bg-amber-100/80 border border-amber-500/15 flex flex-col items-center justify-center text-center transition-all cursor-pointer shadow-3xs group"
-                      title="View hired candidates"
-                    >
-                      <Trophy size={15} className="text-amber-600 group-hover:scale-110 transition-transform mb-1" />
-                      <div className="text-lg font-black text-amber-700 leading-none">{hiredCount}</div>
-                      <div className="text-[10px] font-semibold text-amber-600 mt-1">Hired</div>
-                    </button>
+                      {/* Hired */}
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('candidates')}
+                        className="p-2.5 rounded-xl bg-amber-50/70 hover:bg-amber-100/80 border border-amber-500/15 flex flex-col items-center justify-center text-center transition-all cursor-pointer shadow-3xs group"
+                        title="View hired candidates"
+                      >
+                        <Trophy size={15} className="text-amber-600 group-hover:scale-110 transition-transform mb-1" />
+                        <div className="text-lg font-black text-amber-700 leading-none">{hiredCount}</div>
+                        <div className="text-[10px] font-semibold text-amber-600 mt-1">Hired</div>
+                      </button>
+                    </div>
+
+                    <div className="pt-1.5 border-t border-black/[0.04] text-[10.5px] text-gray-500 text-center font-medium">
+                      {hiredCount > 0 ? `${hiredCount} of ${headcountDisplay} filled` : `${headcountDisplay} position(s) open`}
+                    </div>
                   </div>
-
-                  <div className="pt-1.5 border-t border-black/[0.04] text-[10.5px] text-gray-500 text-center font-medium">
-                    {hiredCount > 0 ? `${hiredCount} of ${headcountDisplay} filled` : `${headcountDisplay} position(s) open`}
-                  </div>
-                </div>
+                )}
               </div>
 
               {/* Card 3: Required Skills & Tech Stack */}
@@ -873,6 +903,17 @@ function RequisitionDetailDrawer({
 
           {/* Candidates Tab */}
           {activeTab === 'candidates' && (
+            isRejected ? (
+              <div className="text-center py-12 bg-white/60 border border-black/[0.04] rounded-2xl p-6 space-y-2">
+                <div className="w-10 h-10 rounded-2xl bg-amber-50 border border-amber-200 mx-auto flex items-center justify-center text-amber-600">
+                  <AlertCircle size={20} />
+                </div>
+                <div className="text-xs font-bold text-gray-800">Pipeline Suspended for Rejected Requisition</div>
+                <p className="text-[11px] text-gray-500 max-w-sm mx-auto">
+                  Active candidate applications and sourcing are paused until this requisition is updated and approved by the Director.
+                </p>
+              </div>
+            ) : (
             <div className="space-y-3">
               <div className="bg-white/85 backdrop-blur-md border border-black/[0.06] rounded-2xl p-4 shadow-3xs flex items-center justify-between">
                 <div>
@@ -940,10 +981,22 @@ function RequisitionDetailDrawer({
                 </div>
               )}
             </div>
+            )
           )}
 
           {/* Interviews Tab */}
           {activeTab === 'interviews' && (
+            isRejected ? (
+              <div className="text-center py-12 bg-white/60 border border-black/[0.04] rounded-2xl p-6 space-y-2">
+                <div className="w-10 h-10 rounded-2xl bg-amber-50 border border-amber-200 mx-auto flex items-center justify-center text-amber-600">
+                  <AlertCircle size={20} />
+                </div>
+                <div className="text-xs font-bold text-gray-800">Interview Loops Suspended</div>
+                <p className="text-[11px] text-gray-500 max-w-sm mx-auto">
+                  Interview scheduling is paused while this requisition is under revision.
+                </p>
+              </div>
+            ) : (
             <div className="space-y-3">
               <div className="bg-white/85 backdrop-blur-md border border-black/[0.06] rounded-2xl p-4 shadow-3xs flex items-center justify-between">
                 <div>
@@ -977,7 +1030,7 @@ function RequisitionDetailDrawer({
                           {item.candidate_name || item.round_name || 'Interview Round'}
                         </div>
                         <div className="text-[11px] text-gray-500 flex items-center gap-2 mt-0.5">
-                          {item.scheduled_time && <span>{formatCustomDate(item.scheduled_time, item.scheduled_time)}</span>}
+                          {item.scheduled_time && <span>{formatCustomDate(item.scheduled_time)}</span>}
                           {item.interviewer_name && <span>with {item.interviewer_name}</span>}
                         </div>
                       </div>
@@ -999,6 +1052,7 @@ function RequisitionDetailDrawer({
                 </div>
               )}
             </div>
+            )
           )}
 
           {/* Job Description Tab */}

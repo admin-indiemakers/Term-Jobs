@@ -6562,23 +6562,34 @@ body,
 .app-shell.ai-fixed-mode,
 .app-shell.ai-chat-mode {
   height: 100vh !important;
+  height: 100dvh !important;
   max-height: 100vh !important;
+  max-height: 100dvh !important;
   overflow: hidden !important;
 }
 
 .app-shell.ai-fixed-mode .main-area,
 .app-shell.ai-chat-mode .main-area {
   height: 100vh !important;
+  height: 100dvh !important;
   max-height: 100vh !important;
+  max-height: 100dvh !important;
+  min-height: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
   overflow: hidden !important;
 }
 
 .app-shell.ai-fixed-mode .content-area,
 .app-shell.ai-chat-mode .content-area {
-  height: 100% !important;
-  max-height: 100% !important;
+  flex: 1 1 0% !important;
+  min-height: 0 !important;
+  height: auto !important;
+  max-height: none !important;
   overflow: hidden !important;
   padding: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
 }
 
 /* Consistent requirement hints for labelled fields across portal forms. */

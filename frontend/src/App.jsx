@@ -355,6 +355,7 @@ export default function App() {
             <Route path="procurement" element={<ProcurementDashboard />} />
             <Route path="procurement/finance-approvals" element={<FinanceApprovals />} />
             <Route path="procurement/sow" element={<ProcurementDashboard />} />
+            <Route path="procurement/profile" element={<UserProfileSettings portalTitle="Procurement Officer Profile" />} />
             <Route path="finance" element={<FinanceDashboard />} />
             <Route path="finance/work-orders" element={<FinanceDashboard />} />
             <Route path="finance/approvals" element={<FinanceApprovals />} />

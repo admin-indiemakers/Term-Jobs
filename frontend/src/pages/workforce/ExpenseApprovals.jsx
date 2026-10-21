@@ -359,6 +359,31 @@ export default function ExpenseApprovals() {
                     <div className="flex items-center gap-2">
                       {statusBadge(exp.status)}
 
+                      {isPending && (
+                        <div className="flex items-center gap-1.5 ml-1">
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); handleApprove(exp.id); }}
+                            disabled={actionLoading === exp.id}
+                            className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition cursor-pointer shadow-xs disabled:opacity-50"
+                            title="Quick Approve"
+                          >
+                            <CheckCircle size={13} />
+                            <span>{actionLoading === exp.id ? '...' : 'Approve'}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setRejectModal(exp.id); }}
+                            disabled={actionLoading === exp.id}
+                            className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white hover:bg-rose-50 text-rose-600 text-xs font-bold border border-rose-200 transition cursor-pointer disabled:opacity-50"
+                            title="Quick Reject"
+                          >
+                            <XCircle size={13} />
+                            <span>Reject</span>
+                          </button>
+                        </div>
+                      )}
+
                       <button
                         type="button"
                         onClick={() => setExpandedId(isExpanded ? null : exp.id)}

@@ -13,7 +13,9 @@ import {
   Loader2,
   ShieldCheck,
   DollarSign,
-  CreditCard
+  CreditCard,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 
 function formatDate(iso) {
@@ -56,6 +58,7 @@ export default function ManageFinance() {
   const [copied, setCopied] = useState(false);
   const [approvingId, setApprovingId] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [edit, setEdit] = useState(null);
@@ -356,13 +359,13 @@ export default function ManageFinance() {
               <div>
                 <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">Full Name *</label>
                 <input type="text" name="name" required value={form.name} onChange={handleInput} placeholder="e.g. Rachel Green"
-                  className="w-full px-3.5 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-black transition-all" />
+                  className="w-full px-3.5 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black transition-all" />
               </div>
               <div>
                 <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">Email Address *</label>
                 <input type="email" name="finance_email" autoComplete="off" data-lpignore="true" data-form-type="other" required value={form.email}
                   onChange={(e) => { setForm({ ...form, email: e.target.value }); setEmailError(validateEmail(e.target.value)); setError(''); }} placeholder="finance@company.com"
-                  className={`w-full px-3.5 py-2 text-xs text-gray-900 bg-white border rounded-lg focus:outline-hidden focus:ring-1 transition-all ${emailError ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 focus:ring-black'}`} />
+                  className={`w-full px-3.5 py-2 text-xs text-gray-900 bg-white border rounded-xl focus:outline-hidden focus:ring-1 transition-all ${emailError ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 focus:ring-black'}`} />
                 {emailError && (
                   <p className="mt-1 text-[11px] text-red-500 flex items-center gap-1"><span>⚠</span> {emailError}</p>
                 )}
@@ -370,13 +373,33 @@ export default function ManageFinance() {
               <div>
                 <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">Department</label>
                 <input type="text" name="department" value={form.department} onChange={handleInput} placeholder="e.g. Finance, Accounting"
-                  className="w-full px-3.5 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-black transition-all" />
+                  className="w-full px-3.5 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black transition-all" />
               </div>
               <div>
                 <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">Initial Password *</label>
-                <input type="password" name="finance_password" autoComplete="new-password" data-lpignore="true" data-form-type="other" required minLength={4}
-                  value={form.password} onChange={(e) => { setForm({ ...form, password: e.target.value }); setError(''); }} placeholder="..."
-                  className="w-full px-3.5 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-black transition-all" />
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    name="finance_password"
+                    autoComplete="new-password"
+                    data-lpignore="true"
+                    data-form-type="other"
+                    required
+                    minLength={4}
+                    value={form.password}
+                    onChange={(e) => { setForm({ ...form, password: e.target.value }); setError(''); }}
+                    placeholder="••••••••"
+                    className="w-full pl-3.5 pr-10 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 transition cursor-pointer p-1"
+                    title={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
               </div>
               <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-gray-100">
                 <button type="button" onClick={() => setShowCreateModal(false)} disabled={submitting}

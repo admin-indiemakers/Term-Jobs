@@ -1206,16 +1206,16 @@ export default function DirectorDashboard({ view = 'overview' }) {
               ) : (
                 <>
                   {/* Desktop Table View */}
-                  <div className="hidden md:block overflow-x-auto">
-                    <table className="w-full min-w-[880px] text-left text-xs border-collapse">
+                  <div className="hidden md:block overflow-x-auto pb-2">
+                    <table className="w-full min-w-[960px] text-left text-xs border-collapse">
                     <thead>
                       <tr className="border-b border-gray-100 text-[10px] font-extrabold text-gray-400 uppercase tracking-wider">
-                        <th className="w-[22%] py-3 px-3.5 text-left">Requisition Title</th>
-                        <th className="w-[13%] py-3 px-3 text-left">Status</th>
-                        <th className="w-[16%] py-3 px-3 text-left">Director Sign-off</th>
-                        <th className="w-[11%] py-3 px-3 text-left">Candidates</th>
-                        <th className="w-[15%] py-3 px-3 text-left">Timeline</th>
-                        <th className="w-[23%] min-w-[225px] py-3 px-3.5 text-right">Action</th>
+                        <th className="py-3 px-3.5 text-left">Requisition Title</th>
+                        <th className="w-28 py-3 px-3 text-left">Status</th>
+                        <th className="w-48 py-3 px-3 text-left">Director Sign-off</th>
+                        <th className="w-28 py-3 px-3 text-left">Candidates</th>
+                        <th className="w-36 py-3 px-3 text-left">Timeline</th>
+                        <th className="w-60 min-w-[240px] py-3 pr-4 text-right">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -1230,15 +1230,15 @@ export default function DirectorDashboard({ view = 'overview' }) {
                             className={`transition-colors cursor-pointer ${isDeletedByHm ? 'bg-rose-50/25 hover:bg-rose-50/40' : 'hover:bg-gray-50/80'
                               }`}
                           >
-                            <td className="w-[22%] py-3.5 px-3.5 align-middle font-bold text-gray-900">
-                              <div className="truncate" title={r.title || 'Untitled Requisition'}>
+                            <td className="py-3.5 px-3.5 align-middle font-bold text-gray-900">
+                              <div className="truncate max-w-[260px]" title={r.title || 'Untitled Requisition'}>
                                 {r.title || 'Untitled Requisition'}
                               </div>
                               <div className="text-[10px] text-gray-400 font-mono font-normal mt-0.5">
                                 {r.ref || `REQ #${r.id.slice(0, 8)}`}
                               </div>
                             </td>
-                            <td className="w-[13%] py-3.5 px-3 align-middle">
+                            <td className="w-28 py-3.5 px-3 align-middle">
                               {isDeletedByHm ? (
                                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-rose-50 text-rose-800 border border-rose-300 whitespace-nowrap">
                                   <Trash2 size={12} className="text-rose-600" />
@@ -1254,7 +1254,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
                                 <StatusBadge status={disp.status} />
                               )}
                             </td>
-                            <td className="w-[16%] py-3.5 px-3 align-middle">
+                            <td className="w-48 py-3.5 px-3 align-middle">
                               {isDeletedByHm ? (
                                 <div className="space-y-0.5">
                                   <div className="text-[10px] text-gray-400 line-through">
@@ -1275,22 +1275,17 @@ export default function DirectorDashboard({ view = 'overview' }) {
                                 </span>
                               ) : disp.isRejected ? (
                                 <div className="space-y-1">
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-800 border border-rose-200">
-                                      <X size={12} className="text-rose-600 shrink-0" />
-                                      <span>Rejected{r.rejected_by ? ` (${r.rejected_by})` : ''}</span>
-                                    </span>
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                                      <AlertCircle size={10} className="text-amber-600 shrink-0" />
-                                      <span>Revision Required</span>
-                                    </span>
-                                  </div>
-                                  <div className="text-[10px] text-gray-500 font-medium flex items-center gap-1">
-                                    <span className="text-amber-700 font-semibold">Awaiting Resubmission</span>
-                                    {r.rejection_reason && (
-                                      <span className="text-gray-400 max-w-xs truncate" title={r.rejection_reason}>
-                                        • "{r.rejection_reason}"
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-800 border border-rose-200 whitespace-nowrap">
+                                    <AlertCircle size={12} className="text-rose-600 shrink-0" />
+                                    <span>Revision Required</span>
+                                  </span>
+                                  <div className="text-[10px] text-gray-500 font-medium">
+                                    {r.rejection_reason ? (
+                                      <span className="text-gray-600 line-clamp-1 max-w-[200px]" title={r.rejection_reason}>
+                                        {r.rejection_reason}
                                       </span>
+                                    ) : (
+                                      <span className="text-gray-400">Awaiting HM updates</span>
                                     )}
                                   </div>
                                 </div>
@@ -1303,16 +1298,19 @@ export default function DirectorDashboard({ view = 'overview' }) {
                                 <span className="text-gray-400 font-medium text-[11px]">{disp.signOffText}</span>
                               )}
                             </td>
-                            <td className="w-[11%] py-3.5 px-3 align-middle font-semibold text-gray-700 whitespace-nowrap">
+                            <td className="w-28 py-3.5 px-3 align-middle font-semibold text-gray-700 whitespace-nowrap">
                               {isDeletedByHm ? (
                                 <span className="text-gray-400">—</span>
                               ) : (
                                 <span>
-                                  {candidatesByRequisition[r.id] || 0} {candidatesByRequisition[r.id] === 1 ? 'candidate' : 'candidates'}
+                                  {(() => {
+                                    const reqHeadcount = Number(r.structured_role?.headcount || r.headcount || (candidatesByRequisition[r.id] || 0) || 1);
+                                    return `${reqHeadcount} ${reqHeadcount === 1 ? 'candidate' : 'candidates'}`;
+                                  })()}
                                 </span>
                               )}
                             </td>
-                            <td className="w-[15%] py-3.5 px-3 align-middle">
+                            <td className="w-36 py-3.5 px-3 align-middle">
                               <div className="text-gray-900 font-semibold text-xs flex items-center gap-1 whitespace-nowrap">
                                 <span className="text-gray-400 font-medium text-[11px]">Created:</span>
                                 <span>{formatDate(r.created_at)}</span>
@@ -1324,7 +1322,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
                                 </div>
                               )}
                             </td>
-                            <td className="w-[23%] min-w-[225px] py-3.5 px-3.5 align-middle text-right" onClick={(e) => e.stopPropagation()}>
+                            <td className="w-60 min-w-[240px] py-3.5 pr-4 align-middle text-right" onClick={(e) => e.stopPropagation()}>
                               {isDeletedByHm ? (
                                 <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
                                   <span className="inline-block px-2.5 py-1 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-[10px] font-bold">
@@ -1333,7 +1331,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
                                   <button
                                     type="button"
                                     onClick={(e) => handleViewRequisition(r, e)}
-                                    className="w-16 py-1.5 rounded-lg bg-white hover:bg-gray-100 border border-gray-200 text-gray-700 text-xs font-bold transition-colors shadow-2xs cursor-pointer text-center"
+                                    className="px-3 py-1.5 rounded-lg bg-white hover:bg-gray-100 border border-gray-200 text-gray-700 text-xs font-bold transition-colors shadow-2xs cursor-pointer text-center"
                                   >
                                     View →
                                   </button>
@@ -1343,7 +1341,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
                                   <button
                                     type="button"
                                     onClick={(e) => handleViewRequisition(r, e)}
-                                    className="w-16 py-1.5 rounded-lg bg-white hover:bg-gray-100 border border-gray-200 text-gray-700 text-xs font-bold transition-colors cursor-pointer shadow-2xs text-center"
+                                    className="px-3 py-1.5 rounded-lg bg-white hover:bg-gray-100 border border-gray-200 text-gray-700 text-xs font-bold transition-colors cursor-pointer shadow-2xs text-center"
                                   >
                                     View
                                   </button>
@@ -1351,7 +1349,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
                                     type="button"
                                     onClick={(e) => handleOpenRejectModal(r, e)}
                                     disabled={Boolean(approvingId)}
-                                    className="w-16 py-1.5 rounded-lg bg-white hover:bg-red-50 border border-red-200 text-red-600 text-xs font-bold transition-colors cursor-pointer shadow-2xs disabled:opacity-50 text-center"
+                                    className="px-3 py-1.5 rounded-lg bg-white hover:bg-red-50 border border-red-200 text-red-600 text-xs font-bold transition-colors cursor-pointer shadow-2xs disabled:opacity-50 text-center"
                                   >
                                     Reject
                                   </button>
@@ -1359,7 +1357,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
                                     type="button"
                                     onClick={(e) => handleApproveRequisition(r.id, e)}
                                     disabled={Boolean(approvingId)}
-                                    className="w-16 py-1.5 rounded-lg bg-black hover:bg-gray-900 border border-black text-white text-xs font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-50 text-center"
+                                    className="px-3.5 py-1.5 rounded-lg bg-black hover:bg-gray-900 border border-black text-white text-xs font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-50 text-center"
                                   >
                                     {approvingId === r.id ? 'Approving...' : 'Approve'}
                                   </button>
@@ -1439,7 +1437,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
                                 </span>
                               ) : null}
                               <span>•</span>
-                              <span>{candidatesByRequisition[r.id] || 0} candidate(s)</span>
+                              <span>{Number(r.structured_role?.headcount || r.headcount || (candidatesByRequisition[r.id] || 0) || 1)} candidate(s)</span>
                             </div>
 
                             <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
@@ -1839,10 +1837,10 @@ export default function DirectorDashboard({ view = 'overview' }) {
                           <div className={`text-[10px] font-bold uppercase ${disp.isApproved ? 'text-emerald-700' : 'text-gray-400'}`}>
                             Approval Date
                           </div>
-                          <div className={`font-extrabold mt-0.5 ${disp.isApproved ? 'text-emerald-900 text-sm' : 'text-gray-500'}`}>
+                          <div className={`mt-0.5 ${disp.isApproved ? 'font-extrabold text-emerald-900 text-sm' : 'font-semibold text-gray-500'}`}>
                             {disp.isApproved
                               ? formatDate(selectedRequisitionForView.director_approved_at || selectedRequisitionForView.approved_at || disp.approvedAt || selectedRequisitionForView.updated_at)
-                              : (disp.isRejected ? 'Rejected (Revision Required)' : 'Pending Director Approval')}
+                              : (disp.isRejected ? 'Not Approved' : 'Awaiting Approval')}
                           </div>
                           <div className="text-[10px] text-gray-400 mt-0.5">
                             {disp.isApproved ? `Signed off by ${selectedRequisitionForView.director_approved_by || selectedRequisitionForView.approved_by || 'Director'}` : 'Director executive sign-off'}
@@ -1919,7 +1917,11 @@ export default function DirectorDashboard({ view = 'overview' }) {
                         <div className="bg-white p-3 rounded-xl border border-gray-200/60 shadow-2xs">
                           <div className="text-[10px] text-gray-400 font-bold uppercase">Candidate Pipeline</div>
                           <div className="font-extrabold text-gray-900 mt-0.5">
-                            {candidatesByRequisition[selectedRequisitionForView.id] || 0} candidate(s)
+                            {disp.isRejected ? (
+                              <span className="text-amber-700 text-xs font-semibold">Paused (Under Revision)</span>
+                            ) : (
+                              `${candidatesByRequisition[selectedRequisitionForView.id] || 0} candidate(s)`
+                            )}
                           </div>
                         </div>
                       </div>

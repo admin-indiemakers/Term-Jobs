@@ -4471,11 +4471,11 @@ def delete_requisition(requisition_id: str, current_user: User = Depends(get_cur
 
     was_director_approved = bool(getattr(req, "director_approved", False)) or req.status in ("Published", "Approved")
     if was_director_approved and current_user.role not in (
-        "Company Admin", "Admin", "Super Admin",
+        "Company Admin", "Admin", "Super Admin", "Director",
     ):
         raise HTTPException(
             status_code=403,
-            detail="Approved or published requisitions must be deleted by a company administrator.",
+            detail="Approved or published requisitions must be deleted by a company administrator or Company Director.",
         )
     hm_name = current_user.name or current_user.email or "Hiring Manager"
     req_title = req.title or "Untitled Requisition"

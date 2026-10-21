@@ -364,7 +364,7 @@ export default function ManageHiringManagers() {
             className="px-4 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
           >
             <Plus size={14} />
-            <span>+ Create Hiring Manager</span>
+            <span>Create Hiring Manager</span>
           </button>
         </div>
       </div>

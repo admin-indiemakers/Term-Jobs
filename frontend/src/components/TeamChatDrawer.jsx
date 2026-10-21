@@ -36,6 +36,8 @@ export default function TeamChatDrawer({ isOpen, onClose, currentUserName }) {
     current_user_can_chat: true,
   });
   const [errorMessage, setErrorMessage] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+  const [activeFilter, setActiveFilter] = useState('ALL');
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
@@ -228,6 +230,8 @@ export default function TeamChatDrawer({ isOpen, onClose, currentUserName }) {
   const activeContact = contacts.find((c) => c.id === activeContactId) || contacts[0] || null;
 
   const filteredContacts = contacts.filter((c) => {
+    if (activeFilter === 'UNREAD' && !(c.unread_count > 0)) return false;
+    if (activeFilter === 'ONLINE' && !(c.online || c.is_online)) return false;
     const q = searchQuery.toLowerCase().trim();
     if (!q) return true;
     return (
@@ -272,7 +276,7 @@ export default function TeamChatDrawer({ isOpen, onClose, currentUserName }) {
                     Team Chat
                   </h2>
                   <p className="text-[10.5px] text-gray-500 mt-0.5">
-                    Chat with company admins and hiring managers
+                    Chat across company admins, hiring managers, directors, finance, and procurement
                   </p>
                 </div>
               </div>
@@ -314,12 +318,41 @@ export default function TeamChatDrawer({ isOpen, onClose, currentUserName }) {
 
               <button
                 type="button"
-                className="w-8.5 h-8.5 rounded-2xl bg-white border border-gray-200/90 shadow-3xs hover:bg-gray-50 text-gray-700 flex items-center justify-center transition cursor-pointer shrink-0"
+                onClick={() => setShowFilters(!showFilters)}
+                className={`w-8.5 h-8.5 rounded-2xl border transition cursor-pointer shrink-0 flex items-center justify-center ${
+                  showFilters || activeFilter !== 'ALL'
+                    ? 'bg-black text-white border-black shadow-xs'
+                    : 'bg-white border-gray-200/90 shadow-3xs hover:bg-gray-50 text-gray-700'
+                }`}
                 title="Filter conversations"
               >
                 <SlidersHorizontal size={13.5} />
               </button>
             </div>
+
+            {/* Filter Pills */}
+            {showFilters && (
+              <div className="px-3.5 pb-2 flex items-center gap-1.5 flex-wrap">
+                {[
+                  { id: 'ALL', label: 'All Contacts' },
+                  { id: 'UNREAD', label: 'Unread' },
+                  { id: 'ONLINE', label: 'Online' },
+                ].map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setActiveFilter(f.id)}
+                    className={`px-2.5 py-1 rounded-xl text-[10.5px] font-bold transition cursor-pointer ${
+                      activeFilter === f.id
+                        ? 'bg-black text-white shadow-2xs'
+                        : 'bg-white hover:bg-gray-100 text-gray-600 border border-gray-200/80 shadow-3xs'
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* ── CONVERSATIONS LIST (Top Half - Exact Image Match) ────── */}
             <div className="h-[210px] sm:h-[220px] overflow-y-auto px-2 space-y-1 divide-y divide-transparent shrink-0 custom-scrollbar">

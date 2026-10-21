@@ -13,7 +13,9 @@ import {
   AlertCircle,
   X,
   Loader2,
-  ShieldCheck
+  ShieldCheck,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 
 function formatDate(iso) {
@@ -71,6 +73,8 @@ export default function ManageProcurement() {
 
   // Modals
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showEditPassword, setShowEditPassword] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [edit, setEdit] = useState(null);
@@ -248,11 +252,11 @@ export default function ManageProcurement() {
         <div className="flex items-center gap-2.5 shrink-0">
           <button
             type="button"
-            onClick={() => setShowCreateModal(true)}
+            onClick={() => { setShowPassword(false); setShowCreateModal(true); }}
             className="px-4 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
           >
             <UserPlus size={14} />
-            <span>+ Create Procurement Member</span>
+            <span>Create Procurement Member</span>
           </button>
         </div>
       </div>
@@ -518,9 +522,29 @@ export default function ManageProcurement() {
               </div>
               <div>
                 <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">Initial Password *</label>
-                <input type="password" name="procurement_password" autoComplete="new-password" data-lpignore="true" data-form-type="other" required minLength={4}
-                  value={form.password} onChange={(e) => { setForm({ ...form, password: e.target.value }); setError(''); }} placeholder="••••••••"
-                  className="w-full px-3.5 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-black transition-all" />
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    name="procurement_password"
+                    autoComplete="new-password"
+                    data-lpignore="true"
+                    data-form-type="other"
+                    required
+                    minLength={4}
+                    value={form.password}
+                    onChange={(e) => { setForm({ ...form, password: e.target.value }); setError(''); }}
+                    placeholder="••••••••"
+                    className="w-full pl-3.5 pr-10 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 transition cursor-pointer p-1"
+                    title={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
               </div>
 
               <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-gray-100">
@@ -579,9 +603,28 @@ export default function ManageProcurement() {
                 <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
                   New Password <span className="text-gray-400 font-normal">(leave blank to keep current)</span>
                 </label>
-                <input type="password" name="procurement_edit_password" autoComplete="new-password" data-lpignore="true" data-form-type="other"
-                  minLength={4} value={edit.password || ''} onChange={(e) => setEdit({ ...edit, password: e.target.value })} placeholder="••••••••"
-                  className="w-full px-3.5 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-black transition-all" />
+                <div className="relative">
+                  <input
+                    type={showEditPassword ? 'text' : 'password'}
+                    name="procurement_edit_password"
+                    autoComplete="new-password"
+                    data-lpignore="true"
+                    data-form-type="other"
+                    minLength={4}
+                    value={edit.password || ''}
+                    onChange={(e) => setEdit({ ...edit, password: e.target.value })}
+                    placeholder="••••••••"
+                    className="w-full pl-3.5 pr-10 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowEditPassword((prev) => !prev)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 transition cursor-pointer p-1"
+                    title={showEditPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showEditPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
               </div>
 
               <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-gray-100">

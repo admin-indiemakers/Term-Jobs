@@ -384,6 +384,35 @@ export default function TimesheetApprovals() {
                           {ts.rejection_reason}
                         </div>
                       )}
+
+                      {/* Quick Approval Action Bar inside Expanded Details */}
+                      {ts.status === 'SUBMITTED' && (
+                        <div className="pt-3 border-t border-black/[0.06] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <span className="text-xs text-gray-500 font-medium">
+                            Reviewed the hours? Complete your approval decision:
+                          </span>
+                          <div className="flex items-center gap-2 self-end sm:self-auto">
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); setRejectModal(ts.id); }}
+                              disabled={actionLoading === ts.id}
+                              className="px-4 py-2 rounded-xl bg-white border border-red-200 text-red-600 hover:bg-red-50 text-xs font-bold transition shadow-3xs disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+                            >
+                              <XCircle size={14} />
+                              <span>Reject Timesheet</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); handleApprove(ts.id); }}
+                              disabled={actionLoading === ts.id}
+                              className="px-5 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold transition shadow-xs disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+                            >
+                              <CheckCircle size={14} />
+                              <span>{actionLoading === ts.id ? 'Approving...' : 'Approve Timesheet'}</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

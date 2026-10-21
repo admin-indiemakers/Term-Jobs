@@ -2096,7 +2096,24 @@ function HiringManagerDashboardContent() {
               value={promptInput}
               onChange={(e) => setPromptInput(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
+                if (e.key === 'Enter' && e.shiftKey) {
+                  e.preventDefault();
+                  const target = e.target;
+                  const start = target.selectionStart;
+                  const end = target.selectionEnd;
+                  const val = target.value;
+                  const nextVal = val.substring(0, start) + '\n' + val.substring(end);
+                  setPromptInput(nextVal);
+                  setTimeout(() => {
+                    if (target) {
+                      target.selectionStart = target.selectionEnd = start + 1;
+                      target.style.height = 'auto';
+                      target.style.height = `${Math.min(target.scrollHeight, 140)}px`;
+                    }
+                  }, 0);
+                  return;
+                }
+                if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey) {
                   e.preventDefault();
                   handleSendPrompt();
                 }
@@ -2904,15 +2921,42 @@ function HiringManagerDashboardContent() {
                 className="bg-white rounded-2xl border border-gray-200/90 shadow-md p-2 pl-4 flex items-center gap-2.5 transition-all focus-within:ring-2 focus-within:ring-black/10 focus-within:border-gray-300"
               >
 
-                <input
+                <textarea
                   ref={promptInputRef}
-                  type="text"
+                  rows={1}
                   value={promptInput}
-                  onChange={(e) => setPromptInput(e.target.value)}
+                  onChange={(e) => {
+                    setPromptInput(e.target.value);
+                    e.target.style.height = 'auto';
+                    e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && e.shiftKey) {
+                      e.preventDefault();
+                      const target = e.target;
+                      const start = target.selectionStart;
+                      const end = target.selectionEnd;
+                      const val = target.value;
+                      const nextVal = val.substring(0, start) + '\n' + val.substring(end);
+                      setPromptInput(nextVal);
+                      setTimeout(() => {
+                        if (target) {
+                          target.selectionStart = target.selectionEnd = start + 1;
+                          target.style.height = 'auto';
+                          target.style.height = `${Math.min(target.scrollHeight, 120)}px`;
+                        }
+                      }, 0);
+                      return;
+                    }
+                    if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey) {
+                      e.preventDefault();
+                      handleSendPrompt();
+                    }
+                  }}
                   aria-label="Message Hiring Assistant"
-              placeholder="Message Hiring Assistant…"
+                  placeholder="Message Hiring Assistant…"
                   disabled={isAiTyping}
-                  className="w-full bg-transparent text-xs sm:text-sm text-gray-800 placeholder-gray-400 outline-none font-normal disabled:opacity-50"
+                  className="w-full bg-transparent text-xs sm:text-sm text-gray-800 placeholder-gray-400 outline-none resize-none font-normal leading-relaxed disabled:opacity-50 max-h-[120px] py-1"
                 />
                 <button
                   type="button"

@@ -237,11 +237,6 @@ export default function DashboardLayout() {
       const rCount = rawReqs.filter((r) => !r.is_deleted && r.status !== 'Deleted by HM' && r.status !== 'Deleted' && isPublishedStatus(r?.status)).length;
       const sList = Array.isArray(shortlisted) ? shortlisted : (shortlisted?.shortlisted_candidates || []);
       const aList = Array.isArray(accepted) ? accepted : (accepted?.candidates || []);
-      const uniqueCandIds = new Set();
-      [...sList, ...aList].forEach((c) => {
-        const cid = c.id || c.submission_id || c.candidate_id || c.candidate_email;
-        if (cid) uniqueCandIds.add(String(cid).toLowerCase());
-      });
       const issueList = Array.isArray(issuesData) ? issuesData : issuesData?.issues || [];
       const openIssues = issueList.filter((i) => (i.status || '').toLowerCase() === 'open').length;
       const pendingTs = wfStats?.stats?.pending_timesheets || 0;
@@ -249,7 +244,7 @@ export default function DashboardLayout() {
       setHmCounts((prev) => ({
         ...prev,
         requisitions: rCount,
-        candidates: uniqueCandIds.size,
+        candidates: aList.length,
         openIssues: openIssues,
         pendingTimesheets: pendingTs,
         pendingExpenses: pendingExp,
@@ -537,9 +532,10 @@ export default function DashboardLayout() {
           ]
           : (userRole === 'Procurement' || userRole === 'Procurement Team')
             ? [
-              { to: '/dashboard/procurement/finance-approvals', label: 'Finance Approvals', end: false, icon: Icons.Receipt },
-              { to: '/dashboard/procurement', label: 'Work Orders', end: true, icon: Icons.Agreements, badge: procurementPendingSows },
-              { to: '/dashboard/requisitions', label: 'Requisitions', end: false, icon: Icons.Requisitions },
+              { to: '/dashboard/procurement/finance-approvals', label: 'Finance Approvals', end: false, section: 'WORKSPACE', icon: Icons.Receipt },
+              { to: '/dashboard/procurement', label: 'Work Orders', end: true, section: 'WORKSPACE', icon: Icons.Agreements, badge: procurementPendingSows },
+              { to: '/dashboard/requisitions', label: 'Requisitions', end: false, section: 'WORKSPACE', icon: Icons.Requisitions },
+              { to: '/dashboard/procurement/profile', label: 'Profile', end: false, section: 'ACCOUNT', icon: User },
             ]
             : isFinance
               ? [
@@ -1190,40 +1186,68 @@ export default function DashboardLayout() {
         }
         .app-shell.ai-fixed-mode {
           height: 100vh !important;
+          height: 100dvh !important;
           max-height: 100vh !important;
+          max-height: 100dvh !important;
           overflow: hidden !important;
         }
         .app-shell.ai-fixed-mode .main-area {
           height: 100vh !important;
+          height: 100dvh !important;
           max-height: 100vh !important;
+          max-height: 100dvh !important;
+          min-height: 0 !important;
+          display: flex !important;
+          flex-direction: column !important;
           overflow: hidden !important;
         }
         .app-shell.ai-fixed-mode .content-area {
-          height: calc(100vh - 28px) !important;
-          max-height: calc(100vh - 28px) !important;
-          min-height: calc(100vh - 28px) !important;
+          flex: 1 1 0% !important;
+          min-height: 0 !important;
+          height: auto !important;
+          max-height: none !important;
           width: calc(100% - 28px) !important;
           max-width: calc(100% - 28px) !important;
           margin: 14px 14px 14px 14px !important;
           padding: 0 !important;
           overflow: hidden !important;
-          flex: none !important;
           box-sizing: border-box !important;
+          display: flex !important;
+          flex-direction: column !important;
         }
         @media (max-width: 1023px) {
           .sidebar {
             display: none !important;
           }
           .app-shell.ai-fixed-mode {
+            height: 100vh !important;
             height: 100dvh !important;
+            max-height: 100vh !important;
             max-height: 100dvh !important;
           }
+          .app-shell.ai-fixed-mode .main-area {
+            height: 100vh !important;
+            height: 100dvh !important;
+            max-height: 100vh !important;
+            max-height: 100dvh !important;
+            min-height: 0 !important;
+            display: flex !important;
+            flex-direction: column !important;
+            overflow: hidden !important;
+          }
           .app-shell.ai-fixed-mode .content-area {
-            height: calc(100dvh - 16px) !important;
-            max-height: calc(100dvh - 16px) !important;
+            flex: 1 1 0% !important;
+            min-height: 0 !important;
+            height: auto !important;
+            max-height: none !important;
             width: calc(100% - 16px) !important;
             max-width: calc(100% - 16px) !important;
-            margin: 8px !important;
+            margin: 8px 8px 8px 8px !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+            box-sizing: border-box !important;
+            display: flex !important;
+            flex-direction: column !important;
           }
         }
       `}</style>
