@@ -1217,14 +1217,15 @@ def update_user(
 
     previous_email = target.email
     if body.email is not None:
-        if body.email != target.email:
-            existing = db.query(User).filter(User.email == body.email).first()
-            if existing:
+        new_email = body.email.strip().lower()
+        if new_email != (target.email or '').strip().lower():
+            existing = db.query(User).filter(func.lower(User.email) == new_email).first()
+            if existing and str(existing.id) != str(target.id):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Email address already registered",
                 )
-        target.email = body.email
+        target.email = new_email
     if body.name is not None:
         target.name = body.name
     if body.password is not None:
