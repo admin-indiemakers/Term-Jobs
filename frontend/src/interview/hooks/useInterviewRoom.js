@@ -54,13 +54,33 @@ export function useInterviewRoom({ roundId, participantName, role, livekitToken,
 
     const handleParticipantConnected = (participant) => {
       setParticipants((prev) => {
-        if (prev.some((p) => p.identity === participant.identity)) return prev;
+        const idx = prev.findIndex((p) => p.identity === participant.identity);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = { ...next[idx], ...participant };
+          return next;
+        }
         return [...prev, participant];
       });
     };
 
     const handleParticipantDisconnected = (participant) => {
       setParticipants((prev) => prev.filter((p) => p.identity !== participant.identity));
+    };
+
+    const handleParticipantsUpdated = (peerList) => {
+      if (Array.isArray(peerList)) {
+        setParticipants(peerList);
+      }
+    };
+
+    const handleParticipantStreamChanged = ({ peerId, stream }) => {
+      setParticipants((prev) =>
+        prev.map((p) => (p.identity === peerId ? { ...p, stream } : p))
+      );
+      if (stream) {
+        setRemoteStream(stream);
+      }
     };
 
     const handleActiveSpeakers = (speakers) => {
@@ -77,6 +97,8 @@ export function useInterviewRoom({ roundId, participantName, role, livekitToken,
     livekitService.on('remoteScreenShareChanged', handleRemoteScreenShare);
     livekitService.on('participantConnected', handleParticipantConnected);
     livekitService.on('participantDisconnected', handleParticipantDisconnected);
+    livekitService.on('participantsUpdated', handleParticipantsUpdated);
+    livekitService.on('participantStreamChanged', handleParticipantStreamChanged);
     livekitService.on('activeSpeakersChanged', handleActiveSpeakers);
 
     return () => {
@@ -86,6 +108,8 @@ export function useInterviewRoom({ roundId, participantName, role, livekitToken,
       livekitService.off('remoteScreenShareChanged', handleRemoteScreenShare);
       livekitService.off('participantConnected', handleParticipantConnected);
       livekitService.off('participantDisconnected', handleParticipantDisconnected);
+      livekitService.off('participantsUpdated', handleParticipantsUpdated);
+      livekitService.off('participantStreamChanged', handleParticipantStreamChanged);
       livekitService.off('activeSpeakersChanged', handleActiveSpeakers);
     };
   }, [connectRoom]);

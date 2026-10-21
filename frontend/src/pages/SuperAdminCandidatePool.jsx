@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { API_BASE_URL, request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import NotificationBell from '../components/NotificationBell';
 import {
   Users,
   Search,
@@ -23,7 +24,8 @@ import {
   X,
   UserCheck,
   Briefcase,
-  GraduationCap
+  GraduationCap,
+  LogOut
 } from 'lucide-react';
 import { validatePhone } from '../utils/phoneValidation';
 
@@ -40,7 +42,7 @@ const getSkillsArray = (skills) => {
 };
 
 export default function SuperAdminCandidatePool() {
-  const { token } = useAuth();
+  const { token, logout } = useAuth();
   const [candidates, setCandidates] = useState([]);
   const [vendorsList, setVendorsList] = useState([]);
   const [stats, setStats] = useState({
@@ -354,163 +356,179 @@ export default function SuperAdminCandidatePool() {
   }, [candidates, selectedSource, selectedVendor, selectedSkill, searchTerm]);
 
   return (
-    <div className="w-full min-w-0 pb-16 space-y-6 text-left" style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}>
-      {/* Top Banner Header */}
-      <div className="bg-white border border-gray-200/90 rounded-2xl p-6 sm:p-7 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-5">
+    <div className="w-full min-w-0 pb-16 space-y-5 text-left" style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}>
+      {/* Top Header: Unboxed, Transparent, Clean Big Typography */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 shrink-0">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-[10px] font-extrabold text-gray-400 tracking-wider uppercase">
-              TERM JOBS • GLOBAL TALENT REPOSITORY
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
+            <span className="text-[10px] font-extrabold text-teal-800 tracking-wider uppercase bg-teal-500/10 border border-teal-500/20 px-2.5 py-0.5 rounded-full">
+              Global Talent Repository
             </span>
-            <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200">
+            <span className="text-xs text-gray-400 font-semibold flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               Live Synchronized
             </span>
           </div>
-          <h1 className="text-2xl sm:text-[1.75rem] font-extrabold text-gray-900 tracking-tight flex items-center gap-2.5">
+          <h1 className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight leading-none">
             Platform Candidate Pool
           </h1>
-          <p className="text-xs sm:text-sm text-gray-500 font-normal mt-1 max-w-2xl">
+          <p className="text-xs sm:text-[13px] text-gray-500 font-normal mt-1 max-w-2xl">
             Centralized talent intelligence aggregating every candidate registered via public job portal and submitted across all vendor partner agencies.
           </p>
         </div>
 
-        <div className="flex items-center gap-3 shrink-0 flex-wrap">
+        {/* Top Right Actions: Notification Bell, Refresh, Export CSV, + Add Candidate & Sign out */}
+        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 flex-wrap">
+          <NotificationBell />
+
           <button
             type="button"
             onClick={() => fetchPoolData(true).catch(() => {})}
             title="Refresh candidate roster"
-            className="p-2.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-xs font-semibold shadow-2xs transition-colors cursor-pointer flex items-center gap-1.5"
+            className="p-2 rounded-xl border border-white/80 bg-white/70 hover:bg-white text-gray-700 shadow-2xs transition-all cursor-pointer flex items-center gap-1.5 active:scale-95"
           >
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
             <span className="hidden sm:inline">Refresh</span>
           </button>
+
           <button
             type="button"
             onClick={handleExportCSV}
-            className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-800 text-xs font-bold shadow-2xs transition-colors cursor-pointer flex items-center gap-1.5"
+            className="px-3 py-1.5 rounded-xl border border-white/80 bg-white/70 hover:bg-white text-gray-800 text-xs font-bold shadow-2xs transition-all cursor-pointer flex items-center gap-1.5 active:scale-95"
           >
-            <Download size={14} />
-            Export CSV
+            <Download size={13} />
+            <span className="hidden sm:inline">Export CSV</span>
           </button>
+
           <button
             type="button"
             onClick={() => { setAddError(''); setShowAddModal(true); }}
-            className="px-4 py-2.5 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+            className="px-3 py-1.5 rounded-xl bg-gray-900 hover:bg-black text-white text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
           >
             <Plus size={14} />
-            + Add Candidate
+            <span>+ Add Candidate</span>
+          </button>
+
+          <button
+            onClick={logout}
+            type="button"
+            title="Sign out"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-rose-200/80 bg-rose-50/80 hover:bg-rose-100 text-rose-700 text-xs font-bold transition-all shadow-2xs cursor-pointer active:scale-95"
+          >
+            <LogOut size={13} />
+            <span className="hidden sm:inline">Sign out</span>
           </button>
         </div>
       </div>
 
-      {/* 5 Core Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+      {/* 5 Core Metric Cards - Swipeable horizontal strip on mobile, 5 cols on lg */}
+      <div className="flex flex-row overflow-x-auto snap-x no-scrollbar lg:grid lg:grid-cols-5 gap-2.5 sm:gap-3.5 pb-1 lg:pb-0">
         {/* Total Candidates */}
-        <div className="bg-white border border-gray-200/90 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col justify-between">
+        <div className="w-[145px] sm:w-[165px] lg:w-full shrink-0 snap-start backdrop-blur-2xl bg-white/40 border border-white/70 hover:border-gray-300 rounded-2xl p-3 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between transition-all">
           <div>
-            <div className="flex items-center justify-between gap-2 mb-2">
-              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">TOTAL POOL</span>
-              <div className="w-7 h-7 rounded-lg bg-gray-50 border border-gray-200 text-gray-800 flex items-center justify-center">
+            <div className="flex items-center justify-between gap-1.5 mb-1.5">
+              <span className="text-[10px] sm:text-[11px] font-bold text-gray-500 uppercase tracking-wider truncate">TOTAL POOL</span>
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-white/80 border border-white/90 text-gray-800 flex items-center justify-center shrink-0 shadow-2xs">
                 <Users size={14} />
               </div>
             </div>
-            <div className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight my-0.5">
+            <div className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight my-0.5">
               {stats.total}
             </div>
-            <div className="text-[11px] text-gray-500 font-medium">All registered candidates</div>
+            <div className="text-[10px] sm:text-xs text-gray-500 font-medium truncate">All registered candidates</div>
           </div>
         </div>
 
         {/* Direct Portal Applicants */}
-        <div className="bg-white border border-gray-200/90 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col justify-between">
+        <div className="w-[145px] sm:w-[165px] lg:w-full shrink-0 snap-start backdrop-blur-2xl bg-white/40 border border-white/70 hover:border-emerald-300 rounded-2xl p-3 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between transition-all">
           <div>
-            <div className="flex items-center justify-between gap-2 mb-2">
-              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">PORTAL DIRECT</span>
-              <div className="w-7 h-7 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center justify-center">
+            <div className="flex items-center justify-between gap-1.5 mb-1.5">
+              <span className="text-[10px] sm:text-[11px] font-bold text-emerald-700 uppercase tracking-wider truncate">PORTAL DIRECT</span>
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-emerald-50/80 border border-emerald-200/80 text-emerald-700 flex items-center justify-center shrink-0 shadow-2xs">
                 <UserCheck size={14} />
               </div>
             </div>
-            <div className="text-2xl sm:text-3xl font-extrabold text-emerald-600 tracking-tight my-0.5">
+            <div className="text-2xl sm:text-3xl font-black text-emerald-600 tracking-tight my-0.5">
               {stats.portal_applicants}
             </div>
-            <div className="text-[11px] text-gray-500 font-medium">Public job board & portal</div>
+            <div className="text-[10px] sm:text-xs text-gray-500 font-medium truncate">Public job board talent</div>
           </div>
         </div>
 
         {/* Vendor Sourced */}
-        <div className="bg-white border border-gray-200/90 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col justify-between">
+        <div className="w-[145px] sm:w-[165px] lg:w-full shrink-0 snap-start backdrop-blur-2xl bg-white/40 border border-white/70 hover:border-blue-300 rounded-2xl p-3 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between transition-all">
           <div>
-            <div className="flex items-center justify-between gap-2 mb-2">
-              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">VENDOR SOURCED</span>
-              <div className="w-7 h-7 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 flex items-center justify-center">
+            <div className="flex items-center justify-between gap-1.5 mb-1.5">
+              <span className="text-[10px] sm:text-[11px] font-bold text-blue-700 uppercase tracking-wider truncate">VENDOR SOURCED</span>
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-blue-50/80 border border-blue-200/80 text-blue-700 flex items-center justify-center shrink-0 shadow-2xs">
                 <Layers size={14} />
               </div>
             </div>
-            <div className="text-2xl sm:text-3xl font-extrabold text-blue-600 tracking-tight my-0.5">
+            <div className="text-2xl sm:text-3xl font-black text-blue-600 tracking-tight my-0.5">
               {stats.vendor_candidates}
             </div>
-            <div className="text-[11px] text-gray-500 font-medium">From staffing agencies</div>
+            <div className="text-[10px] sm:text-xs text-gray-500 font-medium truncate">From staffing agencies</div>
           </div>
         </div>
 
         {/* Resumes on File */}
-        <div className="bg-white border border-gray-200/90 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col justify-between">
+        <div className="w-[145px] sm:w-[165px] lg:w-full shrink-0 snap-start backdrop-blur-2xl bg-white/40 border border-white/70 hover:border-purple-300 rounded-2xl p-3 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between transition-all">
           <div>
-            <div className="flex items-center justify-between gap-2 mb-2">
-              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">VERIFIED RESUMES</span>
-              <div className="w-7 h-7 rounded-lg bg-purple-50 border border-purple-200 text-purple-700 flex items-center justify-center">
+            <div className="flex items-center justify-between gap-1.5 mb-1.5">
+              <span className="text-[10px] sm:text-[11px] font-bold text-purple-700 uppercase tracking-wider truncate">VERIFIED RESUMES</span>
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-purple-50/80 border border-purple-200/80 text-purple-700 flex items-center justify-center shrink-0 shadow-2xs">
                 <FileText size={14} />
               </div>
             </div>
-            <div className="text-2xl sm:text-3xl font-extrabold text-purple-600 tracking-tight my-0.5">
+            <div className="text-2xl sm:text-3xl font-black text-purple-600 tracking-tight my-0.5">
               {stats.resumes_count}
             </div>
-            <div className="text-[11px] text-gray-500 font-medium">100% PDF coverage</div>
+            <div className="text-[10px] sm:text-xs text-gray-500 font-medium truncate">100% PDF coverage</div>
           </div>
         </div>
 
         {/* Contributing Vendors */}
-        <div className="bg-white border border-gray-200/90 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col justify-between">
+        <div className="w-[145px] sm:w-[165px] lg:w-full shrink-0 snap-start backdrop-blur-2xl bg-white/40 border border-white/70 hover:border-amber-300 rounded-2xl p-3 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between transition-all">
           <div>
-            <div className="flex items-center justify-between gap-2 mb-2">
-              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">ACTIVE AGENCIES</span>
-              <div className="w-7 h-7 rounded-lg bg-gray-50 border border-gray-200 text-gray-800 flex items-center justify-center">
+            <div className="flex items-center justify-between gap-1.5 mb-1.5">
+              <span className="text-[10px] sm:text-[11px] font-bold text-gray-500 uppercase tracking-wider truncate">AGENCIES</span>
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-white/80 border border-white/90 text-gray-800 flex items-center justify-center shrink-0 shadow-2xs">
                 <Building2 size={14} />
               </div>
             </div>
-            <div className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight my-0.5">
+            <div className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight my-0.5">
               {stats.contributing_vendors}
             </div>
-            <div className="text-[11px] text-gray-500 font-medium">Partner consultancies</div>
+            <div className="text-[10px] sm:text-xs text-gray-500 font-medium truncate">Partner consultancies</div>
           </div>
         </div>
       </div>
 
       {/* Error & Success Toasts */}
       {error && (
-        <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-medium flex items-center gap-2">
+        <div className="p-3.5 bg-red-50/90 border border-red-200 rounded-xl text-xs text-red-700 font-medium flex items-center gap-2">
           <AlertCircle size={15} />
           <span>{error}</span>
         </div>
       )}
       {success && (
-        <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-700 font-semibold flex items-center gap-2 shadow-2xs">
+        <div className="p-3 bg-emerald-50/90 border border-emerald-200 rounded-xl text-xs text-emerald-800 font-semibold flex items-center gap-2 shadow-2xs">
           <CheckCircle2 size={15} />
           <span>{success}</span>
         </div>
       )}
 
       {/* Control Bar: Search & Filter Controls */}
-      <div className="bg-white border border-gray-200/90 rounded-2xl p-4 shadow-xs flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+      <div className="bg-white/70 backdrop-blur-xl border border-white/80 rounded-2xl p-3 sm:p-4 shadow-xs flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
         {/* Search Bar */}
-        <div className="relative flex-1 min-w-[260px]">
+        <div className="relative flex-1 min-w-[240px]">
           <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Search candidates by name, email, phone, skill, role, vendor..."
-            className="w-full pl-9 pr-8 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 placeholder:text-gray-400 focus:outline-none focus:bg-white focus:border-black transition-colors"
+            className="w-full pl-9 pr-8 py-2 bg-white/80 border border-gray-200/80 rounded-xl text-xs text-gray-900 placeholder:text-gray-400 focus:outline-none focus:bg-white focus:border-black transition-all shadow-3xs"
           />
           {searchTerm && (
             <button
@@ -523,9 +541,9 @@ export default function SuperAdminCandidatePool() {
         </div>
 
         {/* Filter Dropdowns */}
-        <div className="flex items-center gap-2.5 flex-wrap">
+        <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap">
           {/* Source Tabs */}
-          <div className="flex items-center p-1 bg-gray-100 rounded-xl text-[11px] font-bold text-gray-600">
+          <div className="flex items-center p-1 bg-gray-100/80 border border-gray-200/60 rounded-xl text-[11px] font-bold text-gray-600">
             <button
               type="button"
               onClick={() => setSelectedSource('all')}
@@ -559,7 +577,7 @@ export default function SuperAdminCandidatePool() {
           <select
             value={selectedVendor}
             onChange={(e) => setSelectedVendor(e.target.value)}
-            className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-800 focus:outline-none focus:bg-white focus:border-black cursor-pointer"
+            className="px-3 py-2 bg-white/80 border border-gray-200/80 rounded-xl text-xs font-medium text-gray-800 focus:outline-none focus:bg-white focus:border-black cursor-pointer shadow-3xs"
           >
             <option value="all">All Vendors ({vendorsList.length})</option>
             {vendorsList.map((v) => (
@@ -574,7 +592,7 @@ export default function SuperAdminCandidatePool() {
             <select
               value={selectedSkill}
               onChange={(e) => setSelectedSkill(e.target.value)}
-              className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-800 focus:outline-none focus:bg-white focus:border-black cursor-pointer max-w-[180px]"
+              className="px-3 py-2 bg-white/80 border border-gray-200/80 rounded-xl text-xs font-medium text-gray-800 focus:outline-none focus:bg-white focus:border-black cursor-pointer max-w-[180px] shadow-3xs"
             >
               <option value="all">All Skills ({allSkills.length})</option>
               {allSkills.map((sk) => (
@@ -602,9 +620,9 @@ export default function SuperAdminCandidatePool() {
         </div>
       </div>
 
-      {/* Main Candidate Table */}
-      <div className="bg-white border border-gray-200/90 rounded-2xl shadow-xs overflow-hidden">
-        <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+      {/* Main Candidate Talent Table Container */}
+      <div className="bg-white/70 backdrop-blur-xl border border-white/80 rounded-2xl sm:rounded-3xl shadow-xs overflow-hidden">
+        <div className="p-4 border-b border-gray-100/90 flex items-center justify-between bg-white/40">
           <div className="text-xs font-bold text-gray-900">
             Showing <span className="font-extrabold text-black">{filteredCandidates.length}</span> candidates
           </div>
@@ -629,177 +647,314 @@ export default function SuperAdminCandidatePool() {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-gray-100 bg-gray-50/60 text-gray-400 uppercase text-[10px] font-extrabold tracking-wider">
-                  <th className="py-3 px-4">Candidate Profile</th>
-                  <th className="py-3 px-4">Channel / Vendor</th>
-                  <th className="py-3 px-4">Target Role & Applications</th>
-                  <th className="py-3 px-4">Core Competencies</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 text-gray-700">
-                {filteredCandidates.map((cand) => {
-                  const apps = cand.applications || [];
+          <>
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-gray-100 bg-gray-50/60 text-gray-400 uppercase text-[10px] font-extrabold tracking-wider">
+                    <th className="py-3 px-4">Candidate Profile</th>
+                    <th className="py-3 px-4">Channel / Vendor</th>
+                    <th className="py-3 px-4">Target Role & Applications</th>
+                    <th className="py-3 px-4">Core Competencies</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 text-gray-700">
+                  {filteredCandidates.map((cand) => {
+                    const apps = cand.applications || [];
 
-                  return (
-                    <tr key={cand.id} className="hover:bg-gray-50/70 transition-colors group">
-                      {/* Candidate Column */}
-                      <td className="py-3.5 px-4 min-w-[220px]">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-gray-900 text-white font-extrabold text-xs flex items-center justify-center shrink-0 shadow-2xs">
-                            {(cand.candidate_name || 'C').charAt(0).toUpperCase()}
-                          </div>
-                          <div className="min-w-0">
-                            <div className="font-extrabold text-gray-900 hover:text-black cursor-pointer flex items-center gap-1.5">
-                              <span onClick={() => setInspectCandidate(cand)}>{cand.candidate_name}</span>
-                            </div>
-                            <div className="text-[11px] text-gray-500 font-medium truncate mt-0.5">
-                              {cand.candidate_title || 'Candidate'}
-                            </div>
-                            <div className="text-[11px] text-gray-400 flex items-center gap-2 mt-1">
-                              {cand.candidate_email && (
-                                <a
-                                  href={`mailto:${cand.candidate_email}`}
-                                  className="hover:text-gray-700 flex items-center gap-1"
-                                  title={cand.candidate_email}
-                                >
-                                  <Mail size={11} />
-                                  <span className="truncate max-w-[140px]">{cand.candidate_email}</span>
-                                </a>
-                              )}
-                              {cand.candidate_phone && (
-                                <span className="flex items-center gap-0.5 text-gray-400" title={cand.candidate_phone}>
-                                  <Phone size={10} />
-                                  <span className="truncate">{cand.candidate_phone}</span>
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
 
-                      {/* Channel / Vendor Column */}
-                      <td className="py-3.5 px-4 min-w-[170px]">
-                        <div>
-                          {cand.is_direct_applicant ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10.5px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                              <UserCheck size={11} />
-                              Portal Direct
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10.5px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-                              <Layers size={11} />
-                              Vendor Partner
-                            </span>
-                          )}
-                          <div className="text-[11px] font-semibold text-gray-800 mt-1.5 flex items-center gap-1">
-                            <Building2 size={12} className="text-gray-400 shrink-0" />
-                            <span className="truncate">{cand.vendor_name}</span>
-                          </div>
-                          {cand.created_at && (
-                            <div className="text-[10px] text-gray-400 mt-0.5">
-                              Added {new Date(cand.created_at).toLocaleDateString()}
-                            </div>
-                          )}
-                        </div>
-                      </td>
 
-                      {/* Applications Column */}
-                      <td className="py-3.5 px-4 min-w-[220px]">
-                        {apps.length === 0 ? (
-                          <div className="text-gray-400 text-[11px] italic">
-                            General Talent Pool (No active requisition)
-                          </div>
-                        ) : (
-                          <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                            {apps.map((app) => (
-                              <div key={`${app.requisition_id}:${app.submission_id}`} className="rounded-lg border border-gray-200 bg-gray-50 p-2.5">
-                                <div className="font-bold text-gray-900 text-xs whitespace-normal">{app.requisition_title}</div>
-                                <div className="text-[10px] text-gray-500 mt-1">{app.company_name}</div>
-                                <div className="text-[10px] text-gray-500 break-all mt-1">Requisition: {app.requisition_id || 'Unavailable'}</div>
-                                <div className="text-[11px] font-bold text-emerald-800 mt-1">
-                                  {app.match_score == null ? 'Match score unavailable' : `${Math.round(app.match_score)}% Match Fit`}
-                                </div>
+                    return (
+                      <tr key={cand.id} className="hover:bg-white/80 transition-colors group">
+                        {/* Candidate Column */}
+                        <td className="py-3.5 px-4 min-w-[220px]">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-gray-900 text-white font-extrabold text-xs flex items-center justify-center shrink-0 shadow-2xs">
+                              {(cand.candidate_name || 'C').charAt(0).toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="font-extrabold text-gray-900 hover:text-black cursor-pointer flex items-center gap-1.5">
+                                <span onClick={() => setInspectCandidate(cand)}>{cand.candidate_name}</span>
                               </div>
-                            ))}
+                              <div className="text-[11px] text-gray-500 font-medium truncate mt-0.5">
+                                {cand.candidate_title || 'Candidate'}
+                              </div>
+                              <div className="text-[11px] text-gray-400 flex items-center gap-2 mt-1">
+                                {cand.candidate_email && (
+                                  <a
+                                    href={`mailto:${cand.candidate_email}`}
+                                    className="hover:text-gray-700 flex items-center gap-1"
+                                    title={cand.candidate_email}
+                                  >
+                                    <Mail size={11} />
+                                    <span className="truncate max-w-[140px]">{cand.candidate_email}</span>
+                                  </a>
+                                )}
+                                {cand.candidate_phone && (
+                                  <span className="flex items-center gap-0.5 text-gray-400" title={cand.candidate_phone}>
+                                    <Phone size={10} />
+                                    <span className="truncate">{cand.candidate_phone}</span>
+                                  </span>
+                                )}
+                              </div>
+                            </div>
                           </div>
-                        )}
-                      </td>
+                        </td>
 
-                      {/* Skills Column */}
-                      <td className="py-3.5 px-4 min-w-[200px]">
-                        <div className="flex flex-wrap gap-1 max-w-[240px]">
-                          {getSkillsArray(cand.skills).slice(0, 3).map((sk, idx) => (
-                            <span
-                              key={idx}
-                              className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-700 text-[10.5px] font-medium border border-gray-200/60"
+                        {/* Channel / Vendor Column */}
+                        <td className="py-3.5 px-4 min-w-[170px]">
+                          <div>
+                            {cand.is_direct_applicant ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10.5px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                <UserCheck size={11} />
+                                Portal Direct
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10.5px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                <Layers size={11} />
+                                Vendor Partner
+                              </span>
+                            )}
+                            <div className="text-[11px] font-semibold text-gray-800 mt-1.5 flex items-center gap-1">
+                              <Building2 size={12} className="text-gray-400 shrink-0" />
+                              <span className="truncate">{cand.vendor_name}</span>
+                            </div>
+                            {cand.created_at && (
+                              <div className="text-[10px] text-gray-400 mt-0.5">
+                                Added {new Date(cand.created_at).toLocaleDateString()}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Applications Column */}
+                        <td className="py-3.5 px-4 min-w-[220px]">
+                          {apps.length === 0 ? (
+                            <div className="text-gray-400 text-[11px] italic">
+                              General Talent Pool (No active requisition)
+                            </div>
+                          ) : (
+                            <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+  {apps.map((app) => (
+    <div key={`${app.requisition_id}:${app.submission_id}`} className="rounded-lg border border-gray-200 bg-gray-50 p-2.5">
+      <div className="font-bold text-gray-900 text-xs whitespace-normal">{app.requisition_title}</div>
+      <div className="text-[10px] text-gray-500 mt-1">{app.company_name}</div>
+      <div className="text-[10px] text-gray-500 break-all mt-1">Requisition: {app.requisition_id || 'Unavailable'}</div>
+      <div className="text-[11px] font-bold text-emerald-800 mt-1">{app.match_score == null ? 'Match score unavailable' : `${Math.round(app.match_score)}% Match Fit`}</div>
+    </div>
+  ))}
+</div>
+                          )}
+                        </td>
+
+                        {/* Skills Column */}
+                        <td className="py-3.5 px-4 min-w-[200px]">
+                          <div className="flex flex-wrap gap-1 max-w-[240px]">
+                            {getSkillsArray(cand.skills).slice(0, 3).map((sk, idx) => (
+                              <span
+                                key={idx}
+                                className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-700 text-[10.5px] font-medium border border-gray-200/60"
+                              >
+                                {sk}
+                              </span>
+                            ))}
+                            {getSkillsArray(cand.skills).length > 3 && (
+                              <span className="px-1.5 py-0.5 rounded-md bg-gray-50 text-gray-400 text-[10px] font-bold">
+                                +{getSkillsArray(cand.skills).length - 3}
+                              </span>
+                            )}
+                            {getSkillsArray(cand.skills).length === 0 && (
+                              <span className="text-gray-400 text-[11px] italic">General Profile</span>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Actions Column */}
+                        <td className="py-3.5 px-4 text-right min-w-[160px]">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleViewResume(cand)}
+                              disabled={!cand.has_resume}
+                              className="px-2.5 py-1.5 rounded-lg bg-black hover:bg-gray-800 text-white text-[11px] font-bold shadow-2xs transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                              title={cand.has_resume ? 'View resume' : 'No uploaded resume'}
                             >
-                              {sk}
-                            </span>
-                          ))}
-                          {getSkillsArray(cand.skills).length > 3 && (
-                            <span className="px-1.5 py-0.5 rounded-md bg-gray-50 text-gray-400 text-[10px] font-bold">
-                              +{getSkillsArray(cand.skills).length - 3}
-                            </span>
-                          )}
-                          {getSkillsArray(cand.skills).length === 0 && (
-                            <span className="text-gray-400 text-[11px] italic">General Profile</span>
-                          )}
+                              <FileText size={12} />
+                              Resume
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleDownloadResume(cand)}
+                              disabled={!cand.has_resume}
+                              className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-100 text-gray-700 text-xs transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                              title={cand.has_resume ? 'Download resume' : 'No uploaded resume'}
+                            >
+                              <Download size={13} />
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setInspectCandidate(cand)}
+                              className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-100 text-gray-700 text-xs transition-colors cursor-pointer"
+                              title="Candidate Profile Inspector"
+                            >
+                              <Eye size={13} />
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setDeleteCandidateTarget(cand)}
+                              className="p-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 text-xs transition-colors cursor-pointer"
+                              title="Remove Candidate"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Candidate Cards Alternative */}
+            <div className="block md:hidden divide-y divide-gray-100/90">
+              {filteredCandidates.map((cand) => {
+                const apps = cand.applications || [];
+
+                const skills = getSkillsArray(cand.skills);
+
+                return (
+                  <div key={cand.id} className="p-3.5 space-y-2.5 hover:bg-white/90 transition">
+                    {/* Top Row: Avatar, Name, Title, Channel Pill */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-8 h-8 rounded-xl bg-gray-900 text-white font-extrabold text-xs flex items-center justify-center shrink-0 shadow-2xs">
+                          {(cand.candidate_name || 'C').charAt(0).toUpperCase()}
                         </div>
-                      </td>
-
-                      {/* Actions Column */}
-                      <td className="py-3.5 px-4 text-right min-w-[160px]">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => handleViewResume(cand)}
-                            disabled={!cand.has_resume}
-                            className="px-2.5 py-1.5 rounded-lg bg-black hover:bg-gray-800 text-white text-[11px] font-bold shadow-2xs transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                            title={cand.has_resume ? 'View resume' : 'No uploaded resume'}
-                          >
-                            <FileText size={12} />
-                            Resume
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => handleDownloadResume(cand)}
-                            disabled={!cand.has_resume}
-                            className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-100 text-gray-700 text-xs transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                            title={cand.has_resume ? 'Download resume' : 'No uploaded resume'}
-                          >
-                            <Download size={13} />
-                          </button>
-
-                          <button
-                            type="button"
+                        <div className="min-w-0">
+                          <div
                             onClick={() => setInspectCandidate(cand)}
-                            className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-100 text-gray-700 text-xs transition-colors cursor-pointer"
-                            title="Candidate Profile Inspector"
+                            className="font-black text-gray-950 text-sm truncate cursor-pointer hover:text-black"
                           >
-                            <Eye size={13} />
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => setDeleteCandidateTarget(cand)}
-                            className="p-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 text-xs transition-colors cursor-pointer"
-                            title="Remove Candidate"
-                          >
-                            <Trash2 size={13} />
-                          </button>
+                            {cand.candidate_name}
+                          </div>
+                          <div className="text-[11px] text-gray-500 font-medium truncate">
+                            {cand.candidate_title || 'Candidate'}
+                          </div>
                         </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                      </div>
+
+                      {cand.is_direct_applicant ? (
+                        <span className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <UserCheck size={10} />
+                          Portal
+                        </span>
+                      ) : (
+                        <span className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                          <Layers size={10} />
+                          Vendor
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Metadata: Vendor, Email, Phone */}
+                    <div className="flex flex-wrap items-center gap-2 text-[11px] text-gray-500">
+                      {cand.vendor_name && (
+                        <span className="inline-flex items-center gap-1 font-semibold text-gray-700 bg-gray-100/80 px-2 py-0.5 rounded-md">
+                          <Building2 size={11} className="text-gray-400" />
+                          <span className="truncate max-w-[150px]">{cand.vendor_name}</span>
+                        </span>
+                      )}
+                      {cand.candidate_email && (
+                        <span className="truncate max-w-[170px] text-gray-400">
+                          ✉ {cand.candidate_email}
+                        </span>
+                      )}
+                      {cand.candidate_phone && (
+                        <span className="text-gray-400">
+                          📞 {cand.candidate_phone}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Applications / Target Role */}
+                    {apps.length > 0 && (<div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+  {apps.map((app) => (
+    <div key={`${app.requisition_id}:${app.submission_id}`} className="rounded-lg border border-gray-200 bg-gray-50 p-2.5">
+      <div className="font-bold text-gray-900 text-xs whitespace-normal">{app.requisition_title}</div>
+      <div className="text-[10px] text-gray-500 mt-1">{app.company_name}</div>
+      <div className="text-[10px] text-gray-500 break-all mt-1">Requisition: {app.requisition_id || 'Unavailable'}</div>
+      <div className="text-[11px] font-bold text-emerald-800 mt-1">{app.match_score == null ? 'Match score unavailable' : `${Math.round(app.match_score)}% Match Fit`}</div>
+    </div>
+  ))}
+</div>)}
+
+                    {/* Skills tags */}
+                    {skills.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {skills.slice(0, 3).map((sk, idx) => (
+                          <span key={idx} className="px-2 py-0.5 rounded-md bg-white border border-gray-200/80 text-gray-700 text-[10px] font-medium shadow-3xs">
+                            {sk}
+                          </span>
+                        ))}
+                        {skills.length > 3 && (
+                          <span className="px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-500 text-[10px] font-semibold">
+                            +{skills.length - 3}
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Action buttons strip on mobile */}
+                    <div className="flex items-center justify-between gap-1.5 pt-2 border-t border-gray-100 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => handleViewResume(cand)}
+                        disabled={!cand.has_resume}
+                        className="flex-1 py-1.5 px-2.5 rounded-xl bg-gray-900 hover:bg-black text-white text-[11px] font-bold shadow-2xs transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-40 active:scale-95"
+                      >
+                        <FileText size={12} />
+                        <span>View Resume</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDownloadResume(cand)}
+                        disabled={!cand.has_resume}
+                        className="p-1.5 rounded-xl border border-gray-200/80 hover:bg-gray-100 text-gray-700 transition cursor-pointer disabled:opacity-40 active:scale-95"
+                        title="Download resume"
+                      >
+                        <Download size={13} />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setInspectCandidate(cand)}
+                        className="p-1.5 rounded-xl border border-gray-200/80 hover:bg-gray-100 text-gray-700 transition cursor-pointer active:scale-95"
+                        title="Inspect candidate"
+                      >
+                        <Eye size={13} />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setDeleteCandidateTarget(cand)}
+                        className="p-1.5 rounded-xl border border-red-200 text-red-600 hover:bg-red-50 transition cursor-pointer active:scale-95"
+                        title="Delete"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
         )}
       </div>
 
@@ -1040,7 +1195,6 @@ export default function SuperAdminCandidatePool() {
                           <div className="font-bold text-xs text-gray-900 truncate">
                             {app.requisition_title}
                           </div>
-                          <div className="text-[10px] text-gray-500 break-all mt-1">Requisition: {app.requisition_id || 'Unavailable'}</div>
                           <div className="text-[11px] text-gray-500 mt-0.5 flex items-center gap-1.5">
                             <span>{app.company_name}</span>
                             <span>•</span>

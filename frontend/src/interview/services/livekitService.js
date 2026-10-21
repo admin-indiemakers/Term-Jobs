@@ -8,6 +8,10 @@ export class LiveKitService {
     this.isLiveKitConnected = false;
     this.fallbackLocalStream = null;
     this.fallbackScreenStream = null;
+    this.peerConnections = new Map(); // peerId -> RTCPeerConnection
+    this.peerStreams = new Map(); // peerId -> MediaStream
+    this.peersInfo = new Map(); // peerId -> { identity, name, role, stream, videoTrack, audioTrack }
+    this.screenSenders = new Map(); // peerId -> RTCRtpSender
     this.peerConnection = null;
     this.screenSender = null;
     this.signalingSocket = null;
@@ -16,13 +20,15 @@ export class LiveKitService {
     this.isRemoteSharingScreen = false;
     this.remoteScreenTrackId = null;
     this.remoteScreenStreamId = null;
-    this.myId = Math.random().toString(36).substring(2, 9);
+    this.myId = 'peer_' + Math.random().toString(36).substring(2, 9);
     this.currentRole = '';
     this.currentRoundId = '';
     this._activeVideoTracks = new Set();
     this.listeners = {
       participantConnected: [],
       participantDisconnected: [],
+      participantsUpdated: [],
+      participantStreamChanged: [],
       trackSubscribed: [],
       trackUnsubscribed: [],
       activeSpeakersChanged: [],
@@ -129,6 +135,9 @@ export class LiveKitService {
         await this.room.connect(url, token);
         this.isLiveKitConnected = true;
         this._emit('connectionStateChanged', 'connected');
+
+        // Immediately emit all existing participants already in the room
+        this._syncLiveKitParticipants();
 
         // Enable default camera & mic
         try {
@@ -267,6 +276,28 @@ export class LiveKitService {
     this.closeP2PConnection();
     this._isDestroyed = false;
 
+    this.currentRole = role;
+    this.currentParticipantName = participantName;
+    this.myRole = role;
+    this.myName = participantName;
+
+    // Use stable peer ID per session and participant identity so reloads reuse the same ID
+    const storageKey = `termjobs_peer_id_${roundId}_${role}_${participantName}`;
+    let savedId = null;
+    try {
+      savedId = sessionStorage.getItem(storageKey);
+    } catch (_) {}
+
+    if (!savedId) {
+      const cleanRole = String(role || 'participant').toLowerCase().replace(/[^a-z0-9]/g, '_');
+      const cleanName = String(participantName || 'user').toLowerCase().replace(/[^a-z0-9]/g, '_');
+      savedId = `p_${cleanRole}_${cleanName}_${Math.random().toString(36).substring(2, 7)}`;
+      try {
+        sessionStorage.setItem(storageKey, savedId);
+      } catch (_) {}
+    }
+    this.myId = savedId;
+
     try {
       let wsBase = (API_BASE_URL || '').replace(/^http/, 'ws');
       if (!wsBase.startsWith('ws')) {
@@ -280,71 +311,10 @@ export class LiveKitService {
       const socket = new WebSocket(wsUrl);
       this.signalingSocket = socket;
 
-      const pc = new RTCPeerConnection({
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun1.l.google.com:19302' },
-          { urls: 'stun:stun2.l.google.com:19302' },
-        ],
-      });
-      this.peerConnection = pc;
-
-      // Add local media tracks to peer connection
-      if (this.fallbackLocalStream) {
-        this.fallbackLocalStream.getTracks().forEach((track) => {
-          pc.addTrack(track, this.fallbackLocalStream);
-        });
-      }
-
-      // Handle remote media track arrival (camera, mic, or screen share)
-      pc.ontrack = (event) => {
-        console.log('🎥 WebRTC Remote track received:', event.track.kind, event.streams);
-        const incomingStream = event.streams && event.streams[0] ? event.streams[0] : new MediaStream([event.track]);
-
-        // Detect if this incoming track is the remote screen share
-        const isScreen =
-          (this.remoteScreenTrackId && event.track.id === this.remoteScreenTrackId) ||
-          (this.remoteScreenStreamId && incomingStream.id === this.remoteScreenStreamId) ||
-          (this.isRemoteSharingScreen && event.track.kind === 'video' && this.remoteStream && this.remoteStream.getVideoTracks().length > 0);
-
-        if (isScreen) {
-          console.log('🖥️ Remote Screen track received:', incomingStream);
-          this.remoteScreenStream = incomingStream;
-          this._emit('remoteScreenTrackReceived', this.remoteScreenStream);
-        } else {
-          console.log('👤 Remote Camera/Audio track received:', incomingStream);
-          if (!this.remoteStream) {
-            this.remoteStream = incomingStream;
-          } else if (!this.remoteStream.getTracks().some((t) => t.id === event.track.id)) {
-            this.remoteStream.addTrack(event.track);
-          }
-          this._emit('remoteTrackReceived', this.remoteStream);
-          this._emit('participantConnected', {
-            identity: 'remote_peer',
-            name: role === 'candidate' ? 'Interviewer' : 'Candidate',
-            role: role === 'candidate' ? 'interviewer' : 'candidate',
-            videoTrack: true,
-          });
-        }
-      };
-
-      // Send local ICE candidates to peer
-      pc.onicecandidate = (event) => {
-        if (event.candidate && socket.readyState === WebSocket.OPEN) {
-          socket.send(JSON.stringify({
-            type: 'signal',
-            action: 'ice-candidate',
-            sender_id: this.myId,
-            sender_role: role,
-            candidate: event.candidate,
-          }));
-        }
-      };
-
       socket.onopen = () => {
         this._p2pReconnectAttempts = 0;
-        console.log('📡 P2P Signaling connected to room WebSocket');
-        // Announce presence in room
+        console.log('📡 P2P Signaling connected to room WebSocket as', this.myId, participantName, role);
+        // Announce presence in room to all connected peers
         socket.send(JSON.stringify({
           type: 'signal',
           action: 'join',
@@ -352,11 +322,6 @@ export class LiveKitService {
           sender_role: role,
           sender_name: participantName,
         }));
-
-        // Interviewer initiates offer when socket is ready
-        if (role === 'interviewer') {
-          setTimeout(() => this._initiateP2POffer(pc, socket, role), 600);
-        }
       };
 
       socket.onclose = () => {
@@ -383,61 +348,109 @@ export class LiveKitService {
           // Handle in-meeting chat message
           if (data.type === 'chat' && data.message) {
             this._emit('chatMessageReceived', data.message);
-            if (data.message.senderName && data.message.senderName !== participantName) {
-              this._emit('participantConnected', {
-                identity: data.message.senderId || 'chat_peer',
-                name: data.message.senderName,
-                role: data.message.senderRole || (role === 'candidate' ? 'interviewer' : 'candidate'),
-                videoTrack: false,
-              });
+            if (data.message.senderName && data.message.senderName !== this.myName) {
+              const pId = data.message.senderId || `chat_${data.message.senderName}`;
+              if (!this.peersInfo.has(pId)) {
+                const peerInfo = {
+                  identity: pId,
+                  name: data.message.senderName,
+                  role: data.message.senderRole || 'interviewer',
+                  stream: null,
+                  videoTrack: false,
+                  audioTrack: false,
+                };
+                this.peersInfo.set(pId, peerInfo);
+                this._emit('participantConnected', peerInfo);
+                this._emit('participantsUpdated', Array.from(this.peersInfo.values()));
+              }
             }
             return;
           }
 
           if (data.type !== 'signal' || data.sender_id === this.myId) return;
 
-          console.log('📥 P2P Signal received:', data.action, 'from role:', data.sender_role);
+          // Target filtering: if message is targeted to another peer, skip
+          if (data.target_id && data.target_id !== this.myId) {
+            return;
+          }
+
+          const senderId = data.sender_id;
+          const senderName = data.sender_name;
+          const senderRole = data.sender_role;
 
           if (data.action === 'join' || data.action === 'peer-presence') {
-            this._emit('participantConnected', {
-              identity: data.sender_id || 'remote_peer',
-              name: data.sender_name || (data.sender_role === 'candidate' ? 'Candidate' : 'Interviewer'),
-              role: data.sender_role || (role === 'candidate' ? 'interviewer' : 'candidate'),
-              videoTrack: false,
-            });
+            // Prune any obsolete peer entries for the same participant name or candidate role
+            for (const [oldId, oldInfo] of Array.from(this.peersInfo.entries())) {
+              const isSameName = oldInfo.name && senderName && oldInfo.name.toLowerCase() === senderName.toLowerCase();
+              const isDuplicateCandidate = (senderRole || '').toLowerCase() === 'candidate' && (oldInfo.role || '').toLowerCase() === 'candidate';
+              if (oldId !== senderId && (isSameName || isDuplicateCandidate)) {
+                const oldPc = this.peerConnections.get(oldId);
+                if (oldPc) {
+                  try { oldPc.close(); } catch (_) {}
+                  this.peerConnections.delete(oldId);
+                }
+                this.peerStreams.delete(oldId);
+                this.peersInfo.delete(oldId);
+              }
+            }
+
+            const pc = this._getOrCreatePeerConnection(senderId, senderName, senderRole);
+
+            const peerInfo = {
+              identity: senderId,
+              name: senderName || (senderRole === 'candidate' ? 'Candidate' : 'Interviewer'),
+              role: senderRole || 'interviewer',
+              stream: this.peerStreams.get(senderId) || null,
+              videoTrack: Boolean(this.peerStreams.get(senderId)?.getVideoTracks().some((t) => t.enabled)),
+              audioTrack: Boolean(this.peerStreams.get(senderId)?.getAudioTracks().some((t) => t.enabled)),
+            };
+            this.peersInfo.set(senderId, peerInfo);
+            this._emit('participantConnected', peerInfo);
+            this._emit('participantsUpdated', Array.from(this.peersInfo.values()));
 
             if (data.action === 'join' && socket.readyState === WebSocket.OPEN) {
+              // Respond back specifically to the joining peer
               socket.send(JSON.stringify({
                 type: 'signal',
                 action: 'peer-presence',
                 sender_id: this.myId,
-                sender_role: role,
-                sender_name: participantName,
+                sender_role: this.myRole || role,
+                sender_name: this.myName || participantName,
+                target_id: senderId,
               }));
             }
 
-            // Another peer arrived; if we are the interviewer, make an offer
-            if (role === 'interviewer' && data.action === 'join') {
-              await this._initiateP2POffer(pc, socket, role);
+            // Lexicographical tie-breaking ensures exactly ONE offer per peer pair
+            if (this.myId > senderId) {
+              await this._initiateP2POfferTo(senderId, pc);
             }
-            // If we are currently sharing screen, let the newcomer know
+
+            // If we are currently sharing screen, inform the newcomer
             if (this.fallbackScreenStream) {
               const screenTrack = this.fallbackScreenStream.getVideoTracks()[0];
               socket.send(JSON.stringify({
                 type: 'signal',
                 action: 'screen-share-state',
                 sender_id: this.myId,
-                sender_role: role,
+                sender_role: this.myRole || role,
+                target_id: senderId,
                 isSharing: true,
                 stream_id: this.fallbackScreenStream.id,
                 track_id: screenTrack?.id,
               }));
             }
           } else if (data.action === 'leave') {
-            this._emit('participantDisconnected', {
-              identity: data.sender_id || 'remote_peer',
-            });
+            const pc = this.peerConnections.get(senderId);
+            if (pc) {
+              try { pc.close(); } catch (_) {}
+              this.peerConnections.delete(senderId);
+            }
+            this.peerStreams.delete(senderId);
+            this.peersInfo.delete(senderId);
+            this._emit('participantDisconnected', { identity: senderId });
+            this._emit('participantsUpdated', Array.from(this.peersInfo.values()));
           } else if (data.action === 'offer' && data.sdp) {
+            const pc = this._getOrCreatePeerConnection(senderId, senderName, senderRole);
             if (pc.signalingState !== 'stable') {
               await Promise.all([
                 pc.setLocalDescription({ type: 'rollback' }),
@@ -452,21 +465,26 @@ export class LiveKitService {
               type: 'signal',
               action: 'answer',
               sender_id: this.myId,
-              sender_role: role,
+              sender_role: this.myRole || role,
+              sender_name: this.myName || participantName,
+              target_id: senderId,
               sdp: answer,
             }));
           } else if (data.action === 'answer' && data.sdp) {
-            if (pc.signalingState === 'have-local-offer') {
+            const pc = this.peerConnections.get(senderId);
+            if (pc && pc.signalingState === 'have-local-offer') {
               await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
             }
           } else if (data.action === 'ice-candidate' && data.candidate) {
-            try {
-              await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-            } catch (iceErr) {
-              console.warn('Error adding received ICE candidate:', iceErr);
+            const pc = this.peerConnections.get(senderId);
+            if (pc) {
+              try {
+                await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+              } catch (iceErr) {
+                console.warn('Error adding received ICE candidate:', iceErr);
+              }
             }
           } else if (data.action === 'screen-share-state') {
-            console.log('Remote screen share state changed:', data.isSharing);
             this.isRemoteSharingScreen = !!data.isSharing;
             this.remoteScreenTrackId = data.track_id || null;
             this.remoteScreenStreamId = data.stream_id || null;
@@ -488,7 +506,122 @@ export class LiveKitService {
     }
   }
 
+  _getOrCreatePeerConnection(peerId, peerName, peerRole) {
+    if (this.peerConnections.has(peerId)) {
+      return this.peerConnections.get(peerId);
+    }
+
+    const pc = new RTCPeerConnection({
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+      ],
+    });
+
+    // Add local camera/audio tracks to this peer connection
+    if (this.fallbackLocalStream) {
+      this.fallbackLocalStream.getTracks().forEach((track) => {
+        try {
+          pc.addTrack(track, this.fallbackLocalStream);
+        } catch (_) {}
+      });
+    }
+
+    // Add active screen share track if currently sharing
+    if (this.fallbackScreenStream) {
+      const screenTrack = this.fallbackScreenStream.getVideoTracks()[0];
+      if (screenTrack) {
+        try {
+          pc.addTrack(screenTrack, this.fallbackScreenStream);
+        } catch (_) {}
+      }
+    }
+
+    pc.onicecandidate = (event) => {
+      if (event.candidate && this.signalingSocket?.readyState === WebSocket.OPEN) {
+        this.signalingSocket.send(JSON.stringify({
+          type: 'signal',
+          action: 'ice-candidate',
+          sender_id: this.myId,
+          sender_role: this.myRole || this.currentRole,
+          sender_name: this.myName || this.currentParticipantName,
+          target_id: peerId,
+          candidate: event.candidate,
+        }));
+      }
+    };
+
+    pc.ontrack = (event) => {
+      console.log('🎥 WebRTC Remote track received from', peerId, event.track.kind);
+      const incomingStream = event.streams && event.streams[0] ? event.streams[0] : new MediaStream([event.track]);
+
+      const isScreen =
+        (this.remoteScreenTrackId && event.track.id === this.remoteScreenTrackId) ||
+        (this.remoteScreenStreamId && incomingStream.id === this.remoteScreenStreamId) ||
+        (this.isRemoteSharingScreen && event.track.kind === 'video' && this.peerStreams.get(peerId)?.getVideoTracks().length > 0);
+
+      if (isScreen) {
+        console.log('🖥️ Remote Screen track received:', incomingStream);
+        this.remoteScreenStream = incomingStream;
+        this._emit('remoteScreenTrackReceived', this.remoteScreenStream);
+      } else {
+        let pStream = this.peerStreams.get(peerId);
+        if (!pStream) {
+          pStream = incomingStream;
+          this.peerStreams.set(peerId, pStream);
+        } else if (!pStream.getTracks().some((t) => t.id === event.track.id)) {
+          pStream.addTrack(event.track);
+        }
+        this.remoteStream = pStream;
+
+        const peerInfo = {
+          identity: peerId,
+          name: peerName || (peerRole === 'candidate' ? 'Candidate' : 'Interviewer'),
+          role: peerRole || 'interviewer',
+          stream: pStream,
+          videoTrack: pStream.getVideoTracks().some((t) => t.enabled && t.readyState === 'live'),
+          audioTrack: pStream.getAudioTracks().some((t) => t.enabled && t.readyState === 'live'),
+        };
+        this.peersInfo.set(peerId, peerInfo);
+        this._emit('participantStreamChanged', { peerId, stream: pStream });
+        this._emit('remoteTrackReceived', pStream);
+        this._emit('participantConnected', peerInfo);
+        this._emit('participantsUpdated', Array.from(this.peersInfo.values()));
+      }
+    };
+
+    this.peerConnections.set(peerId, pc);
+    this.peerConnection = pc; // for single-ref compatibility
+    return pc;
+  }
+
+  async _initiateP2POfferTo(peerId, pc) {
+    try {
+      if (!pc || !this.signalingSocket || this.signalingSocket.readyState !== WebSocket.OPEN) return;
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      this.signalingSocket.send(JSON.stringify({
+        type: 'signal',
+        action: 'offer',
+        sender_id: this.myId,
+        sender_role: this.myRole || this.currentRole,
+        sender_name: this.myName || this.currentParticipantName,
+        target_id: peerId,
+        sdp: offer,
+      }));
+    } catch (err) {
+      console.warn('Error creating WebRTC offer to peer:', peerId, err);
+    }
+  }
+
   async _initiateP2POffer(pc = this.peerConnection, socket = this.signalingSocket, role = this.currentRole) {
+    if (this.peerConnections.size > 0) {
+      for (const [peerId, peerPc] of this.peerConnections.entries()) {
+        await this._initiateP2POfferTo(peerId, peerPc);
+      }
+      return;
+    }
     try {
       if (!pc || !socket || socket.readyState !== WebSocket.OPEN) return;
       const offer = await pc.createOffer();
@@ -507,12 +640,15 @@ export class LiveKitService {
 
   closeP2PConnection() {
     this._isDestroyed = true;
-    if (this.peerConnection) {
-      try {
-        this.peerConnection.close();
-      } catch (e) {}
-      this.peerConnection = null;
+    if (this.peerConnections) {
+      for (const pc of this.peerConnections.values()) {
+        try { pc.close(); } catch (_) {}
+      }
+      this.peerConnections.clear();
     }
+    this.peerConnection = null;
+    if (this.peerStreams) this.peerStreams.clear();
+    if (this.peersInfo) this.peersInfo.clear();
     if (this.signalingSocket) {
       try {
         this.signalingSocket.onclose = null;
@@ -536,6 +672,49 @@ export class LiveKitService {
     });
   }
 
+  _formatLiveKitParticipant(p) {
+    if (!p) return null;
+    let role = '';
+    let name = p.name || '';
+    if (p.metadata) {
+      try {
+        const meta = typeof p.metadata === 'string' ? JSON.parse(p.metadata) : p.metadata;
+        if (meta.role) role = meta.role;
+        if (meta.name && !name) name = meta.name;
+      } catch (_) {}
+    }
+    const identLower = String(p.identity || '').toLowerCase();
+    if (!role) {
+      if (identLower.startsWith('candidate') || identLower.includes('candidate')) role = 'candidate';
+      else if (identLower.startsWith('interviewer') || identLower.includes('interviewer')) role = 'interviewer';
+      else if (identLower.startsWith('hiring_manager') || identLower.includes('hiring_manager')) role = 'hiring manager';
+    }
+    const stream = this.peerStreams.get(p.identity) || null;
+    return {
+      identity: p.identity,
+      name: name || (role === 'candidate' ? 'Candidate' : 'Interviewer'),
+      role: role || (identLower.includes('candidate') ? 'candidate' : 'interviewer'),
+      isSpeaking: Boolean(p.isSpeaking),
+      metadata: p.metadata,
+      stream,
+      videoTrack: Boolean(stream?.getVideoTracks().some((t) => t.enabled && t.readyState === 'live')),
+      audioTrack: Boolean(stream?.getAudioTracks().some((t) => t.enabled && t.readyState === 'live')),
+      rawParticipant: p,
+    };
+  }
+
+  _syncLiveKitParticipants() {
+    if (!this.room) return;
+    const list = [];
+    if (this.room.remoteParticipants) {
+      for (const p of this.room.remoteParticipants.values()) {
+        const formatted = this._formatLiveKitParticipant(p);
+        if (formatted) list.push(formatted);
+      }
+    }
+    this._emit('participantsUpdated', list);
+  }
+
   _setupRoomListeners() {
     if (!this.room) return;
     this.room.on(RoomEvent.LocalTrackPublished, () => this._emitLocalMedia());
@@ -544,19 +723,57 @@ export class LiveKitService {
     this.room.on(RoomEvent.TrackUnmuted, () => this._emitLocalMedia());
 
     this.room.on(RoomEvent.ParticipantConnected, (participant) => {
-      this._emit('participantConnected', participant);
+      const formatted = this._formatLiveKitParticipant(participant);
+      if (formatted) {
+        this._emit('participantConnected', formatted);
+      }
+      this._syncLiveKitParticipants();
     });
 
     this.room.on(RoomEvent.ParticipantDisconnected, (participant) => {
-      this._emit('participantDisconnected', participant);
+      const formatted = this._formatLiveKitParticipant(participant);
+      if (formatted) {
+        this._emit('participantDisconnected', formatted);
+      }
+      this._syncLiveKitParticipants();
     });
 
     this.room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+      console.log('🎥 LiveKit TrackSubscribed:', track?.kind, participant?.identity);
+      if (track && track.mediaStreamTrack) {
+        const pId = participant?.identity;
+        let stream = this.peerStreams.get(pId);
+        if (!stream) {
+          stream = new MediaStream([track.mediaStreamTrack]);
+          if (pId) this.peerStreams.set(pId, stream);
+        } else if (!stream.getTracks().some((t) => t.id === track.mediaStreamTrack.id)) {
+          stream.addTrack(track.mediaStreamTrack);
+        }
+
+        if (publication?.source === 'screen_share') {
+          this.remoteScreenStream = stream;
+          this._emit('remoteScreenTrackReceived', stream);
+          this._emit('remoteScreenShareChanged', { isSharing: true });
+        } else {
+          this.remoteStream = stream;
+          this._emit('remoteTrackReceived', stream);
+          if (pId) {
+            this._emit('participantStreamChanged', { peerId: pId, stream });
+          }
+        }
+      }
       this._emit('trackSubscribed', { track, publication, participant });
+      this._syncLiveKitParticipants();
     });
 
     this.room.on(RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
+      if (publication?.source === 'screen_share') {
+        this.remoteScreenStream = null;
+        this._emit('remoteScreenTrackReceived', null);
+        this._emit('remoteScreenShareChanged', { isSharing: false });
+      }
       this._emit('trackUnsubscribed', { track, publication, participant });
+      this._syncLiveKitParticipants();
     });
 
     this.room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {

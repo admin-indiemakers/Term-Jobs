@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import NotificationBell from '../components/NotificationBell';
 import {
   ShieldAlert,
   ShieldCheck,
@@ -25,7 +26,8 @@ import {
   Clock,
   Activity,
   History,
-  UserCog
+  UserCog,
+  LogOut
 } from 'lucide-react';
 import { validatePhone } from '../utils/phoneValidation';
 
@@ -55,7 +57,7 @@ const EMPTY_FORM = {
 };
 
 export default function AdminAccounts() {
-  const { user, token } = useAuth();
+  const { user, token, logout } = useAuth();
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState('admins'); // 'admins' | 'logs'
@@ -285,131 +287,129 @@ export default function AdminAccounts() {
 
   return (
     <div
-      className="p-6 sm:p-8 space-y-6 max-w-7xl mx-auto min-h-screen"
+      className="w-full min-w-0 pb-16 space-y-5 text-left"
       style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}
     >
-      {/* Top Banner Header Card */}
-      <div className="bg-white border border-gray-200/90 rounded-2xl p-6 sm:p-7 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-5">
+      {/* Top Header: Unboxed, Transparent, Clean Big Typography */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 shrink-0">
         <div>
-          <div className="flex items-center gap-2 mb-1.5">
+          <div className="flex items-center gap-2 mb-1">
             <button
               type="button"
               onClick={() => navigate('/dashboard/superadmin')}
-              className="text-xs font-semibold text-gray-500 hover:text-black flex items-center gap-1 transition-colors cursor-pointer"
+              className="text-xs font-semibold text-gray-500 hover:text-black flex items-center gap-1.5 transition-colors cursor-pointer"
             >
               <ArrowLeft size={13} />
-              Super Admin Workspace
+              <span>Dashboard</span>
             </button>
             <span className="text-gray-300">•</span>
-            <span className="text-[10px] font-extrabold text-gray-400 tracking-wider uppercase">
-              PLATFORM GOVERNANCE
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-rose-500/10 text-rose-700 border border-rose-500/20">
+              <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+              Platform Governance
             </span>
           </div>
 
-          <h1 className="text-2xl sm:text-[1.75rem] font-extrabold text-gray-900 tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight leading-none">
             Admin Accounts & Audit Logs
           </h1>
-          <p className="text-xs sm:text-sm text-gray-500 font-normal mt-1 max-w-2xl">
+          <p className="text-xs sm:text-[13px] text-gray-500 font-normal mt-1 max-w-2xl leading-relaxed">
             Provision platform Super Administrators and review operational audit logs across companies, vendor consultancies, and access accounts.
           </p>
-
-          <div className="flex items-center gap-2 mt-4 flex-wrap">
-            <span className="px-3 py-1 rounded-full bg-black text-white text-xs font-bold shadow-2xs">
-              ● Super Admin
-            </span>
-            <span className="px-3 py-1 rounded-full bg-white border border-gray-200 text-gray-800 text-xs font-semibold shadow-2xs">
-              {admins.length} Super Admins
-            </span>
-            <span className="px-3 py-1 rounded-full bg-white border border-gray-200 text-gray-800 text-xs font-semibold shadow-2xs">
-              {logs.length} Total Logs
-            </span>
-          </div>
         </div>
 
-        <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
-          <Link
-            to="/dashboard/superadmin"
-            className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-800 text-xs font-bold shadow-2xs transition-colors inline-flex items-center gap-1.5"
-          >
-            Back to Dashboard
-          </Link>
+        {/* Top Right Actions: Notification Bell, + Add Super Admin, Sign out */}
+        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 flex-wrap">
+          <NotificationBell />
 
           <button
             type="button"
             onClick={() => setShowCreateModal(true)}
-            className="px-4 py-2.5 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+            className="px-3 py-1.5 rounded-xl bg-gray-900 hover:bg-black text-white text-xs font-bold shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
           >
             <UserPlus size={14} />
             <span>+ Add Super Admin</span>
           </button>
+
+          <button
+            onClick={logout}
+            type="button"
+            title="Sign out"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-rose-200/80 bg-rose-50/80 hover:bg-rose-100 text-rose-700 text-xs font-bold transition-all shadow-2xs cursor-pointer active:scale-95"
+          >
+            <LogOut size={13} />
+            <span className="hidden sm:inline">Sign out</span>
+          </button>
         </div>
       </div>
 
-      {/* 3 Metric Stat Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-        <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between">
-          <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">
-            SUPER ADMINISTRATORS
+      {/* 3 Metric Stat Cards Strip (Mobile Swipeable / Desktop Grid) */}
+      <div className="flex flex-row overflow-x-auto snap-x no-scrollbar sm:grid sm:grid-cols-3 gap-2.5 sm:gap-3.5 pb-1 sm:pb-0">
+        <div className="w-[155px] sm:w-full shrink-0 snap-start rounded-2xl p-3.5 sm:p-5 backdrop-blur-2xl bg-white/40 border border-white/70 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between">
+          <div className="flex items-center justify-between text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+            <span>Super Admins</span>
+            <ShieldCheck size={14} className="text-rose-500" />
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight my-0.5">
+          <div className="text-xl sm:text-3xl font-black text-gray-900 tracking-tight my-0.5">
             {admins.length}
           </div>
-          <div className="text-xs text-gray-500 font-medium">
+          <div className="text-[10px] sm:text-xs text-gray-500 font-medium truncate">
             Platform governance credentials
           </div>
         </div>
 
-        <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between">
-          <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">
-            ACTIVE ADMIN LOGINS
+        <div className="w-[155px] sm:w-full shrink-0 snap-start rounded-2xl p-3.5 sm:p-5 backdrop-blur-2xl bg-white/40 border border-white/70 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between">
+          <div className="flex items-center justify-between text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+            <span>Active Logins</span>
+            <Activity size={14} className="text-emerald-500" />
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight my-0.5">
+          <div className="text-xl sm:text-3xl font-black text-gray-900 tracking-tight my-0.5">
             {activeAdminCount}
           </div>
-          <div className="text-xs text-gray-500 font-medium">
-            Authorized administrative access
+          <div className="text-[10px] sm:text-xs text-gray-500 font-medium truncate">
+            Authorized admin access
           </div>
         </div>
 
-        <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between">
-          <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">
-            AUDIT TRAIL ACTIONS
+        <div className="w-[155px] sm:w-full shrink-0 snap-start rounded-2xl p-3.5 sm:p-5 backdrop-blur-2xl bg-white/40 border border-white/70 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between">
+          <div className="flex items-center justify-between text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+            <span>Audit Trail</span>
+            <History size={14} className="text-indigo-500" />
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight my-0.5">
+          <div className="text-xl sm:text-3xl font-black text-gray-900 tracking-tight my-0.5">
             {logs.length}
           </div>
-          <div className="text-xs text-gray-500 font-medium">
+          <div className="text-[10px] sm:text-xs text-gray-500 font-medium truncate">
             Historical operations recorded
           </div>
         </div>
       </div>
 
       {error && (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2">
+        <div className="p-3.5 sm:p-4 bg-red-50/90 border border-red-200/90 rounded-2xl text-xs text-red-700 flex items-center gap-2.5 backdrop-blur-xs shadow-xs">
           <AlertCircle size={15} className="shrink-0 text-red-500" />
           <span>{error}</span>
         </div>
       )}
 
       {success && (
-        <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-700 font-semibold flex items-center gap-2.5 shadow-2xs animate-in fade-in slide-in-from-top-1 duration-200">
+        <div className="p-3.5 sm:p-4 bg-emerald-50/90 border border-emerald-200/90 rounded-2xl text-xs text-emerald-800 font-semibold flex items-center gap-2.5 shadow-xs animate-in fade-in slide-in-from-top-1 duration-200 backdrop-blur-xs">
           <CheckCircle2 size={16} className="shrink-0 text-emerald-600" />
           <span>{success}</span>
         </div>
       )}
 
       {/* Main Hub Tabs & Content */}
-      <div className="bg-white border border-gray-200/90 rounded-2xl p-5 sm:p-6 shadow-xs space-y-4">
+      <div className="rounded-3xl bg-white/40 backdrop-blur-2xl border border-white/70 p-4 sm:p-6 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] space-y-4">
         {/* Navigation Tabs Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-gray-100">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-gray-100/80">
+          <div className="bg-white/40 backdrop-blur-2xl border border-white/70 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] p-1 rounded-2xl flex items-center gap-1 overflow-x-auto no-scrollbar">
             <button
               type="button"
               onClick={() => setActiveTab('admins')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+              className={`shrink-0 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
                 activeTab === 'admins'
-                  ? 'bg-black text-white shadow-2xs'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  ? 'bg-black text-white shadow-md'
+                  : 'text-gray-600 hover:text-black hover:bg-white/50'
               }`}
             >
               <ShieldCheck size={14} />
@@ -419,135 +419,212 @@ export default function AdminAccounts() {
             <button
               type="button"
               onClick={() => setActiveTab('logs')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+              className={`shrink-0 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
                 activeTab === 'logs'
-                  ? 'bg-black text-white shadow-2xs'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  ? 'bg-black text-white shadow-md'
+                  : 'text-gray-600 hover:text-black hover:bg-white/50'
               }`}
             >
               <History size={14} />
-              <span>Admin Activity Logs ({logs.length})</span>
+              <span>Activity Logs ({logs.length})</span>
             </button>
           </div>
 
           {/* Search Box */}
-          <div className="relative w-full sm:w-72">
+          <div className="relative w-full md:w-72">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
               value={activeTab === 'admins' ? adminSearch : logSearch}
               onChange={(e) => (activeTab === 'admins' ? setAdminSearch(e.target.value) : setLogSearch(e.target.value))}
               placeholder={activeTab === 'admins' ? 'Search admin name, email, phone...' : 'Search logs, admin, entity...'}
-              className="w-full pl-8 pr-3 py-1.5 text-xs text-gray-900 bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
+              className="w-full pl-8 pr-3 py-1.5 text-xs text-gray-900 bg-white/80 border border-gray-200/90 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black transition-all placeholder:text-gray-400 shadow-2xs"
             />
           </div>
         </div>
 
-        {/* Tab 1: Super Admins Table */}
+        {/* Tab 1: Super Admins */}
         {activeTab === 'admins' && (
           <div>
             {loading ? (
-              <div className="py-12 text-center text-xs text-gray-400">Loading admin accounts...</div>
+              <div className="py-16 text-center text-xs text-gray-400 font-medium">Loading admin accounts...</div>
             ) : filteredAdmins.length === 0 ? (
-              <div className="py-12 text-center text-xs text-gray-400">
+              <div className="py-16 text-center text-xs text-gray-400 font-medium">
                 No Super Admin accounts found matching your query.
               </div>
             ) : (
-              <div
-                className="overflow-x-auto overflow-y-auto pr-1"
-                style={{ maxHeight: '480px', minHeight: '260px' }}
-              >
-                <table className="w-full text-left text-xs border-collapse relative">
-                  <thead className="sticky top-0 bg-white z-10 shadow-2xs">
-                    <tr className="border-b border-gray-200 text-[10px] font-bold text-gray-400 uppercase tracking-wider bg-white">
-                      <th className="py-3 px-3">ADMIN</th>
-                      <th className="py-3 px-3">EMAIL</th>
-                      <th className="py-3 px-3">PHONE NUMBER</th>
-                      <th className="py-3 px-3">ROLE / ACCESS</th>
-                      <th className="py-3 px-3">STATUS</th>
-                      <th className="py-3 px-3">CREATED</th>
-                      <th className="py-3 px-3 text-right">ACTIONS</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {filteredAdmins.map((u) => (
-                      <tr key={u.id} className="hover:bg-gray-50/60 transition-colors">
-                        {/* Name with Avatar */}
-                        <td className="py-3.5 px-3">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-lg bg-black text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-2xs">
-                              {(u.name || u.email || 'A').slice(0, 1).toUpperCase()}
+              <>
+                {/* Mobile View: Dedicated Modern Cards (< md) */}
+                <div className="block md:hidden space-y-3">
+                  {filteredAdmins.map((u) => (
+                    <div
+                      key={u.id}
+                      className="p-4 rounded-2xl bg-white/80 border border-gray-200/80 shadow-[0_4px_20px_rgb(0,0,0,0.02)] space-y-3"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-gray-900 to-gray-700 text-white font-extrabold text-xs flex items-center justify-center shrink-0 shadow-2xs">
+                            {(u.name || u.email || 'A').slice(0, 1).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-extrabold text-sm text-gray-900 truncate">
+                              {u.name || 'Super Admin'}
                             </div>
-                            <div>
-                              <div className="font-bold text-gray-900">{u.name || 'Super Admin'}</div>
+                            <div className="text-[11px] text-gray-500 truncate">
+                              {u.email}
                             </div>
                           </div>
-                        </td>
+                        </div>
 
-                        {/* Email */}
-                        <td className="py-3.5 px-3 text-gray-600 font-medium">
-                          {u.email}
-                        </td>
-
-                        {/* Phone */}
-                        <td className="py-3.5 px-3 text-gray-600 font-medium font-mono text-[11px]">
-                          {u.phone || '—'}
-                        </td>
-
-                        {/* Role Badge */}
-                        <td className="py-3.5 px-3">
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-black text-white shadow-2xs">
-                            <ShieldCheck size={11} />
-                            <span>{u.email?.toUpperCase() === 'ADMIN' ? 'Root Super Admin' : 'Super Admin'}</span>
-                          </span>
-                        </td>
-
-                        {/* Status */}
-                        <td className="py-3.5 px-3">
+                        <span
+                          className={`shrink-0 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            u.is_active !== false
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : 'bg-gray-100 text-gray-600 border border-gray-200'
+                          }`}
+                        >
                           <span
-                            className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                              u.is_active !== false
-                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                : 'bg-gray-100 text-gray-600 border border-gray-200'
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              u.is_active !== false ? 'bg-emerald-500' : 'bg-gray-400'
                             }`}
-                          >
-                            <span
-                              className={`w-1.5 h-1.5 rounded-full ${
-                                u.is_active !== false ? 'bg-emerald-500' : 'bg-gray-400'
-                              }`}
-                            />
-                            {u.is_active !== false ? 'Active' : 'Not Active'}
+                          />
+                          {u.is_active !== false ? 'Active' : 'Inactive'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-black text-white shadow-2xs">
+                          <ShieldCheck size={11} />
+                          <span>{u.email?.toUpperCase() === 'ADMIN' ? 'Root Super Admin' : 'Super Admin'}</span>
+                        </span>
+
+                        {u.phone && (
+                          <span className="text-[11px] text-gray-500 font-mono">
+                            {u.phone}
                           </span>
-                        </td>
+                        )}
 
-                        {/* Created Date */}
-                        <td className="py-3.5 px-3 text-gray-500 font-medium">
-                          {formatDate(u.created_at)}
-                        </td>
+                        <span className="text-[10px] text-gray-400 font-medium ml-auto">
+                          Created {formatDate(u.created_at)}
+                        </span>
+                      </div>
 
-                        {/* Actions */}
-                        <td className="py-3.5 px-3 text-right">
-                          <div className="inline-flex items-center gap-3">
-                            {u.email?.toUpperCase() === 'ADMIN' ? (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-400 bg-gray-100 px-2.5 py-1 rounded-lg select-none">
-                                Non-Deletable
-                              </span>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => setConfirmDelete(u)}
-                                className="font-bold text-red-600 hover:text-red-700 text-xs transition-colors underline-offset-2 hover:underline cursor-pointer"
-                              >
-                                Remove
-                              </button>
-                            )}
-                          </div>
-                        </td>
+                      <div className="pt-2 flex items-center justify-end gap-2 border-t border-gray-100/80">
+                        {u.email?.toUpperCase() === 'ADMIN' ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-400 bg-gray-100 px-2.5 py-1 rounded-lg select-none">
+                            Root Account (Protected)
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDelete(u)}
+                            className="px-3 py-1.5 rounded-lg border border-red-200 bg-red-50/70 hover:bg-red-100 text-red-700 text-xs font-bold shadow-2xs transition-all cursor-pointer"
+                          >
+                            Remove Administrator
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Desktop Table View (>= md) */}
+                <div
+                  className="hidden md:block overflow-x-auto overflow-y-auto pr-1"
+                  style={{ maxHeight: '480px', minHeight: '260px' }}
+                >
+                  <table className="w-full text-left text-xs border-collapse relative">
+                    <thead className="sticky top-0 bg-white/95 backdrop-blur-md z-10 shadow-2xs">
+                      <tr className="border-b border-gray-200/80 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                        <th className="py-3 px-3">ADMIN</th>
+                        <th className="py-3 px-3">EMAIL</th>
+                        <th className="py-3 px-3">PHONE NUMBER</th>
+                        <th className="py-3 px-3">ROLE / ACCESS</th>
+                        <th className="py-3 px-3">STATUS</th>
+                        <th className="py-3 px-3">CREATED</th>
+                        <th className="py-3 px-3 text-right">ACTIONS</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100/90">
+                      {filteredAdmins.map((u) => (
+                        <tr key={u.id} className="hover:bg-gray-50/70 transition-colors">
+                          {/* Name with Avatar */}
+                          <td className="py-3.5 px-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-lg bg-gray-900 text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-2xs">
+                                {(u.name || u.email || 'A').slice(0, 1).toUpperCase()}
+                              </div>
+                              <div>
+                                <div className="font-bold text-gray-900">{u.name || 'Super Admin'}</div>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Email */}
+                          <td className="py-3.5 px-3 text-gray-600 font-medium">
+                            {u.email}
+                          </td>
+
+                          {/* Phone */}
+                          <td className="py-3.5 px-3 text-gray-600 font-medium font-mono text-[11px]">
+                            {u.phone || '—'}
+                          </td>
+
+                          {/* Role Badge */}
+                          <td className="py-3.5 px-3">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-black text-white shadow-2xs">
+                              <ShieldCheck size={11} />
+                              <span>{u.email?.toUpperCase() === 'ADMIN' ? 'Root Super Admin' : 'Super Admin'}</span>
+                            </span>
+                          </td>
+
+                          {/* Status */}
+                          <td className="py-3.5 px-3">
+                            <span
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                                u.is_active !== false
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                  : 'bg-gray-100 text-gray-600 border border-gray-200'
+                              }`}
+                            >
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full ${
+                                  u.is_active !== false ? 'bg-emerald-500' : 'bg-gray-400'
+                                }`}
+                              />
+                              {u.is_active !== false ? 'Active' : 'Not Active'}
+                            </span>
+                          </td>
+
+                          {/* Created Date */}
+                          <td className="py-3.5 px-3 text-gray-500 font-medium">
+                            {formatDate(u.created_at)}
+                          </td>
+
+                          {/* Actions */}
+                          <td className="py-3.5 px-3 text-right">
+                            <div className="inline-flex items-center gap-3">
+                              {u.email?.toUpperCase() === 'ADMIN' ? (
+                                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-400 bg-gray-100 px-2.5 py-1 rounded-lg select-none">
+                                  Non-Deletable
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmDelete(u)}
+                                  className="font-bold text-red-600 hover:text-red-700 text-xs transition-colors underline-offset-2 hover:underline cursor-pointer"
+                                >
+                                  Remove
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </div>
         )}
@@ -556,7 +633,7 @@ export default function AdminAccounts() {
         {activeTab === 'logs' && (
           <div className="space-y-4">
             {/* Filter Pills for Logs */}
-            <div className="flex items-center gap-1.5 flex-wrap">
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
               {[
                 { label: 'All Operations', value: 'ALL' },
                 { label: 'Companies', value: 'COMPANY' },
@@ -568,10 +645,10 @@ export default function AdminAccounts() {
                   key={f.value}
                   type="button"
                   onClick={() => setLogFilter(f.value)}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                     logFilter === f.value
                       ? 'bg-black text-white shadow-2xs'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      : 'bg-gray-100/80 text-gray-600 hover:bg-gray-200/80'
                   }`}
                 >
                   {f.label}
@@ -580,77 +657,134 @@ export default function AdminAccounts() {
             </div>
 
             {loading ? (
-              <div className="py-12 text-center text-xs text-gray-400">Loading audit trail...</div>
+              <div className="py-16 text-center text-xs text-gray-400 font-medium">Loading audit trail...</div>
             ) : filteredLogs.length === 0 ? (
-              <div className="py-12 text-center text-xs text-gray-400">
+              <div className="py-16 text-center text-xs text-gray-400 font-medium">
                 No activity logs found for the selected filter.
               </div>
             ) : (
-              <div
-                className="overflow-x-auto overflow-y-auto pr-1"
-                style={{ maxHeight: '480px', minHeight: '260px' }}
-              >
-                <table className="w-full text-left text-xs border-collapse relative">
-                  <thead className="sticky top-0 bg-white z-10 shadow-2xs">
-                    <tr className="border-b border-gray-200 text-[10px] font-bold text-gray-400 uppercase tracking-wider bg-white">
-                      <th className="py-3 px-3">TIMESTAMP</th>
-                      <th className="py-3 px-3">ADMIN ACTOR</th>
-                      <th className="py-3 px-3">ACTION</th>
-                      <th className="py-3 px-3">TARGET ENTITY</th>
-                      <th className="py-3 px-3">OPERATION DETAILS</th>
-                      <th className="py-3 px-3 text-right">CHANNEL</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {filteredLogs.map((log) => (
-                      <tr key={log.id} className="hover:bg-gray-50/60 transition-colors">
-                        {/* Timestamp */}
-                        <td className="py-3.5 px-3 text-gray-500 font-medium whitespace-nowrap">
+              <>
+                {/* Mobile View: Dedicated Modern Cards for Logs (< md) */}
+                <div className="block md:hidden space-y-3">
+                  {filteredLogs.map((log) => (
+                    <div
+                      key={log.id}
+                      className="p-4 rounded-2xl bg-white/80 border border-gray-200/80 shadow-[0_4px_20px_rgb(0,0,0,0.02)] space-y-2.5"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div>{getActionBadge(log.action || '')}</div>
+                        <span className="text-[10px] text-gray-400 font-medium shrink-0">
                           {formatDate(log.timestamp)}
-                        </td>
+                        </span>
+                      </div>
 
-                        {/* Admin Actor */}
-                        <td className="py-3.5 px-3">
-                          <div className="flex items-center gap-2">
-                            <div className="w-6 h-6 rounded-md bg-black text-white font-bold text-[10px] flex items-center justify-center shrink-0">
-                              {(log.admin_name || 'A').slice(0, 1).toUpperCase()}
-                            </div>
-                            <div>
-                              <div className="font-bold text-gray-900 text-xs">{log.admin_name || 'Super Admin'}</div>
-                              <div className="text-[10px] text-gray-400">{log.admin_email}</div>
-                            </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-md bg-gray-900 text-white font-bold text-[10px] flex items-center justify-center shrink-0">
+                          {(log.admin_name || 'A').slice(0, 1).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="font-bold text-xs text-gray-900 truncate">
+                            {log.admin_name || 'Super Admin'}
                           </div>
-                        </td>
+                          <div className="text-[10px] text-gray-400 truncate">
+                            {log.admin_email}
+                          </div>
+                        </div>
+                      </div>
 
-                        {/* Action Badge */}
-                        <td className="py-3.5 px-3">
-                          {getActionBadge(log.action || '')}
-                        </td>
-
-                        {/* Target Entity */}
-                        <td className="py-3.5 px-3">
-                          <span className="font-bold text-gray-900">{log.target_name || '—'}</span>
+                      <div className="p-2.5 rounded-xl bg-gray-50/80 border border-gray-100/90 text-xs">
+                        <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                            TARGET:
+                          </span>
+                          <span className="font-bold text-gray-900">
+                            {log.target_name || '—'}
+                          </span>
                           {log.target_type && (
-                            <span className="ml-1.5 text-[10px] px-2 py-0.5 rounded-md bg-gray-100 text-gray-600 font-medium">
+                            <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-white border border-gray-200 text-gray-600 font-bold">
                               {log.target_type}
                             </span>
                           )}
-                        </td>
-
-                        {/* Details */}
-                        <td className="py-3.5 px-3 text-gray-600 font-medium">
+                        </div>
+                        <div className="text-gray-600 font-medium leading-relaxed">
                           {log.details || '—'}
-                        </td>
+                        </div>
+                      </div>
 
-                        {/* Channel / Source */}
-                        <td className="py-3.5 px-3 text-right text-gray-400 font-mono text-[10px]">
-                          {log.ip_address || 'Web Console'}
-                        </td>
+                      <div className="text-right text-[10px] text-gray-400 font-mono">
+                        {log.ip_address || 'Web Console'}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Desktop Table View (>= md) */}
+                <div
+                  className="hidden md:block overflow-x-auto overflow-y-auto pr-1"
+                  style={{ maxHeight: '480px', minHeight: '260px' }}
+                >
+                  <table className="w-full text-left text-xs border-collapse relative">
+                    <thead className="sticky top-0 bg-white/95 backdrop-blur-md z-10 shadow-2xs">
+                      <tr className="border-b border-gray-200/80 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                        <th className="py-3 px-3">TIMESTAMP</th>
+                        <th className="py-3 px-3">ADMIN ACTOR</th>
+                        <th className="py-3 px-3">ACTION</th>
+                        <th className="py-3 px-3">TARGET ENTITY</th>
+                        <th className="py-3 px-3">OPERATION DETAILS</th>
+                        <th className="py-3 px-3 text-right">CHANNEL</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100/90">
+                      {filteredLogs.map((log) => (
+                        <tr key={log.id} className="hover:bg-gray-50/70 transition-colors">
+                          {/* Timestamp */}
+                          <td className="py-3.5 px-3 text-gray-500 font-medium whitespace-nowrap">
+                            {formatDate(log.timestamp)}
+                          </td>
+
+                          {/* Admin Actor */}
+                          <td className="py-3.5 px-3">
+                            <div className="flex items-center gap-2">
+                              <div className="w-6 h-6 rounded-md bg-gray-900 text-white font-bold text-[10px] flex items-center justify-center shrink-0">
+                                {(log.admin_name || 'A').slice(0, 1).toUpperCase()}
+                              </div>
+                              <div>
+                                <div className="font-bold text-gray-900 text-xs">{log.admin_name || 'Super Admin'}</div>
+                                <div className="text-[10px] text-gray-400">{log.admin_email}</div>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Action Badge */}
+                          <td className="py-3.5 px-3">
+                            {getActionBadge(log.action || '')}
+                          </td>
+
+                          {/* Target Entity */}
+                          <td className="py-3.5 px-3">
+                            <span className="font-bold text-gray-900">{log.target_name || '—'}</span>
+                            {log.target_type && (
+                              <span className="ml-1.5 text-[10px] px-2 py-0.5 rounded-md bg-gray-100 text-gray-600 font-medium">
+                                {log.target_type}
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Details */}
+                          <td className="py-3.5 px-3 text-gray-600 font-medium">
+                            {log.details || '—'}
+                          </td>
+
+                          {/* Channel / Source */}
+                          <td className="py-3.5 px-3 text-right text-gray-400 font-mono text-[10px]">
+                            {log.ip_address || 'Web Console'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </div>
         )}

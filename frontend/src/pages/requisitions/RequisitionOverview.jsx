@@ -1266,7 +1266,7 @@ export default function RequisitionOverview({ section }) {
       window.dispatchEvent(new CustomEvent('tj-requisition-count-updated', { detail: { count: activeCount } }));
 
       // Fetch live real overview metrics for right stat cards
-      request('/api/requisitions/overview-metrics', { token, forceRefresh: force })
+      request('/api/requisitions/overview-metrics', { token, forceRefresh: force, noCache: true })
         .then((m) => {
           if (m && typeof m === 'object') {
             setOverviewMetrics(m);
@@ -1372,7 +1372,10 @@ export default function RequisitionOverview({ section }) {
   const statCounts = useMemo(() => {
     const totalReqs = overviewMetrics?.total_requisitions || counts.history || 0;
     const reqsMonth = overviewMetrics?.requisitions_this_month || 0;
-    const totalApplicants = overviewMetrics?.total_applicants || 0;
+    const sumReqApplicants = requisitions.reduce((acc, r) => acc + (Number(r.applicant_count) || 0), 0);
+    const totalApplicants = (overviewMetrics?.total_applicants !== undefined && overviewMetrics?.total_applicants !== null && overviewMetrics?.total_applicants > 0)
+      ? overviewMetrics.total_applicants
+      : (sumReqApplicants || 0);
     const shortlisted = overviewMetrics?.shortlisted || 0;
     const inInterview = overviewMetrics?.in_interview || 0;
     const hired = overviewMetrics?.hired || 0;
@@ -1389,7 +1392,7 @@ export default function RequisitionOverview({ section }) {
       interviewGrowth: overviewMetrics?.interview_growth ?? (inInterview > 0 ? 3 : 0),
       hiredGrowth: overviewMetrics?.hired_growth ?? (hired > 0 ? 1 : 0),
     };
-  }, [overviewMetrics, counts.history]);
+  }, [overviewMetrics, counts.history, requisitions]);
 
   const currentConfig = SECTION_CONFIG[activeTab] || SECTION_CONFIG.published;
 
@@ -1456,19 +1459,19 @@ export default function RequisitionOverview({ section }) {
 
   return (
     <div
-      className="w-full min-w-0 h-full flex-1 flex flex-col justify-between gap-3 text-left overflow-hidden pb-1"
+      className="w-full min-w-0 h-full flex-1 flex flex-col justify-between gap-3 text-left overflow-y-auto lg:overflow-hidden pb-2 lg:pb-1"
       style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}
     >
       {/* ── TOP HEADER AREA (Matches Company Admin ManageHiringManagers Header) ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-5 shrink-0">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-3 sm:pt-5 shrink-0">
         <div>
-          <div className="text-[10px] font-extrabold text-gray-400 tracking-wider uppercase mb-1">
+          <div className="text-[10px] font-extrabold text-gray-400 tracking-wider uppercase mb-0.5 sm:mb-1">
             TERM JOBS • CONTRACT PIPELINE
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight leading-none">
+          <h1 className="text-xl sm:text-3xl font-extrabold text-gray-900 tracking-tight leading-tight sm:leading-none">
             Requisitions Management
           </h1>
-          <p className="text-xs sm:text-[13px] text-gray-500 font-normal mt-1">
+          <p className="text-xs sm:text-[13px] text-gray-500 font-normal mt-1 leading-snug">
             Create, track, and manage hiring requisitions for contract roles across departments.
           </p>
         </div>
@@ -1478,7 +1481,7 @@ export default function RequisitionOverview({ section }) {
           <button
             type="button"
             onClick={() => navigate('/dashboard/requisitions/new')}
-            className="px-4 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+            className="w-full sm:w-auto px-4 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
           >
             <Plus size={14} />
             <span>New Requisition</span>
@@ -1501,10 +1504,146 @@ export default function RequisitionOverview({ section }) {
         </div>
       )}
 
-      {/* ── MAIN CONTENT AREA: Left Table Card + Right Vertical Metric Stat Cards ── */}
-      <div className="flex-1 min-h-[calc(100vh-260px)] flex flex-col lg:flex-row gap-3.5 items-stretch overflow-hidden pt-2.5 sm:pt-4">
-        {/* Left: Main Glassmorphic Table Card */}
-        <div className="flex-1 min-w-0 h-full min-h-[calc(100vh-260px)] bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between overflow-hidden">
+      {/* ── MAIN CONTENT AREA: Small Stat Cards (On Top in Mobile, Right in Desktop) + Table Card ── */}
+      <div className="flex-1 min-h-0 lg:min-h-[calc(100vh-260px)] flex flex-col lg:flex-row gap-3 sm:gap-3.5 items-stretch overflow-visible lg:overflow-hidden pt-1 sm:pt-3">
+        {/* Metric Stat Cards: comes FIRST on mobile (order-1, small horizontal row), and on the RIGHT on desktop (order-2) */}
+        <div className="order-1 lg:order-2 w-full lg:w-44 xl:w-48 shrink-0 flex flex-row lg:flex-col gap-2 sm:gap-2.5 overflow-x-auto no-scrollbar py-0.5 px-0.5 snap-x">
+          {/* Stat Card 1: Total Requisitions */}
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('history');
+              setSelectedStatus('All Status');
+              setSelectedDept('All Departments');
+              setSearchQuery('');
+              navigate('/dashboard/requisitions/history');
+            }}
+            title="View all active requisitions"
+            className={`snap-start shrink-0 w-[122px] sm:w-[136px] lg:w-full h-[66px] sm:h-[72px] lg:h-[102px] p-2 sm:p-2.5 lg:p-3 rounded-2xl border backdrop-blur-2xl flex flex-col justify-between text-left transition-all cursor-pointer group shadow-[0_4px_20px_0_rgba(0,0,0,0.02),inset_0_1px_1px_rgba(255,255,255,0.85)] active:scale-95 ${
+              activeTab === 'history' && selectedStatus === 'All Status'
+                ? 'bg-white/90 border-black/40 ring-1 ring-black/15 shadow-sm'
+                : 'bg-white/40 border-white/70 hover:bg-white/70 hover:border-black/20'
+            }`}
+          >
+            <div className="flex items-center justify-between w-full">
+              <div className="w-5.5 h-5.5 sm:w-6 sm:h-6 lg:w-7.5 lg:h-7.5 rounded-lg lg:rounded-xl bg-white/70 backdrop-blur-md border border-white/80 flex items-center justify-center text-gray-700 shadow-3xs shrink-0 group-hover:scale-105 transition-transform">
+                <Layers size={13} className="lg:w-[15px] lg:h-[15px]" />
+              </div>
+              <ArrowRight size={11} className="text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity hidden lg:block" />
+            </div>
+            <div>
+              <div className="text-base sm:text-lg lg:text-xl xl:text-[22px] font-black text-gray-900 tracking-tight leading-none">
+                {statCounts.totalReqs}
+              </div>
+              <div className="text-[9.5px] sm:text-[10px] font-semibold text-gray-500 mt-0.5 truncate">
+                Total Requisitions
+              </div>
+            </div>
+          </button>
+
+          {/* Stat Card 2: Total Applicants */}
+          <button
+            type="button"
+            onClick={() => {
+              navigate(user?.role === 'Recruiter' ? '/dashboard/recruiter/candidates' : '/dashboard/candidates');
+            }}
+            title="View candidate pool & applicants"
+            className="snap-start shrink-0 w-[122px] sm:w-[136px] lg:w-full h-[66px] sm:h-[72px] lg:h-[102px] p-2 sm:p-2.5 lg:p-3 rounded-2xl border border-white/70 bg-white/40 backdrop-blur-2xl flex flex-col justify-between text-left transition-all cursor-pointer group shadow-[0_4px_20px_0_rgba(0,0,0,0.02),inset_0_1px_1px_rgba(255,255,255,0.85)] hover:bg-white/70 hover:border-black/20 active:scale-95"
+          >
+            <div className="flex items-center justify-between w-full">
+              <div className="w-5.5 h-5.5 sm:w-6 sm:h-6 lg:w-7.5 lg:h-7.5 rounded-lg lg:rounded-xl bg-white/70 backdrop-blur-md border border-white/80 flex items-center justify-center text-gray-700 shadow-3xs shrink-0 group-hover:scale-105 transition-transform">
+                <Users size={13} className="lg:w-[15px] lg:h-[15px]" />
+              </div>
+              <ArrowRight size={11} className="text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity hidden lg:block" />
+            </div>
+            <div>
+              <div className="text-base sm:text-lg lg:text-xl xl:text-[22px] font-black text-gray-900 tracking-tight leading-none">
+                {statCounts.totalApplicants}
+              </div>
+              <div className="text-[9.5px] sm:text-[10px] font-semibold text-gray-500 mt-0.5 truncate">
+                Total Applicants
+              </div>
+            </div>
+          </button>
+
+          {/* Stat Card 3: Shortlisted */}
+          <button
+            type="button"
+            onClick={() => {
+              navigate(user?.role === 'Recruiter' ? '/dashboard/recruiter/shortlisted' : '/dashboard/candidates');
+            }}
+            title="View shortlisted candidates"
+            className="snap-start shrink-0 w-[122px] sm:w-[136px] lg:w-full h-[66px] sm:h-[72px] lg:h-[102px] p-2 sm:p-2.5 lg:p-3 rounded-2xl border border-white/70 bg-white/40 backdrop-blur-2xl flex flex-col justify-between text-left transition-all cursor-pointer group shadow-[0_4px_20px_0_rgba(0,0,0,0.02),inset_0_1px_1px_rgba(255,255,255,0.85)] hover:bg-white/70 hover:border-black/20 active:scale-95"
+          >
+            <div className="flex items-center justify-between w-full">
+              <div className="w-5.5 h-5.5 sm:w-6 sm:h-6 lg:w-7.5 lg:h-7.5 rounded-lg lg:rounded-xl bg-white/70 backdrop-blur-md border border-white/80 flex items-center justify-center text-gray-700 shadow-3xs shrink-0 group-hover:scale-105 transition-transform">
+                <CheckCircle2 size={13} className="lg:w-[15px] lg:h-[15px]" />
+              </div>
+              <ArrowRight size={11} className="text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity hidden lg:block" />
+            </div>
+            <div>
+              <div className="text-base sm:text-lg lg:text-xl xl:text-[22px] font-black text-gray-900 tracking-tight leading-none">
+                {statCounts.shortlisted}
+              </div>
+              <div className="text-[9.5px] sm:text-[10px] font-semibold text-gray-500 mt-0.5 truncate">
+                Shortlisted
+              </div>
+            </div>
+          </button>
+
+          {/* Stat Card 4: In Interview */}
+          <button
+            type="button"
+            onClick={() => {
+              navigate('/dashboard/interviews');
+            }}
+            title="View scheduled interviews & AI evaluations"
+            className="snap-start shrink-0 w-[122px] sm:w-[136px] lg:w-full h-[66px] sm:h-[72px] lg:h-[102px] p-2 sm:p-2.5 lg:p-3 rounded-2xl border border-white/70 bg-white/40 backdrop-blur-2xl flex flex-col justify-between text-left transition-all cursor-pointer group shadow-[0_4px_20px_0_rgba(0,0,0,0.02),inset_0_1px_1px_rgba(255,255,255,0.85)] hover:bg-white/70 hover:border-black/20 active:scale-95"
+          >
+            <div className="flex items-center justify-between w-full">
+              <div className="w-5.5 h-5.5 sm:w-6 sm:h-6 lg:w-7.5 lg:h-7.5 rounded-lg lg:rounded-xl bg-white/70 backdrop-blur-md border border-white/80 flex items-center justify-center text-gray-700 shadow-3xs shrink-0 group-hover:scale-105 transition-transform">
+                <Clock size={13} className="lg:w-[15px] lg:h-[15px]" />
+              </div>
+              <ArrowRight size={11} className="text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity hidden lg:block" />
+            </div>
+            <div>
+              <div className="text-base sm:text-lg lg:text-xl xl:text-[22px] font-black text-gray-900 tracking-tight leading-none">
+                {statCounts.inInterview}
+              </div>
+              <div className="text-[9.5px] sm:text-[10px] font-semibold text-gray-500 mt-0.5 truncate">
+                In Interview
+              </div>
+            </div>
+          </button>
+
+          {/* Stat Card 5: Hired */}
+          <button
+            type="button"
+            onClick={() => {
+              navigate(user?.role === 'Recruiter' ? '/dashboard/recruiter/accepted' : '/dashboard/candidates/accepted');
+            }}
+            title="View accepted & hired candidates"
+            className="snap-start shrink-0 w-[122px] sm:w-[136px] lg:w-full h-[66px] sm:h-[72px] lg:h-[102px] p-2 sm:p-2.5 lg:p-3 rounded-2xl border border-white/70 bg-white/40 backdrop-blur-2xl flex flex-col justify-between text-left transition-all cursor-pointer group shadow-[0_4px_20px_0_rgba(0,0,0,0.02),inset_0_1px_1px_rgba(255,255,255,0.85)] hover:bg-white/70 hover:border-black/20 active:scale-95"
+          >
+            <div className="flex items-center justify-between w-full">
+              <div className="w-5.5 h-5.5 sm:w-6 sm:h-6 lg:w-7.5 lg:h-7.5 rounded-lg lg:rounded-xl bg-white/70 backdrop-blur-md border border-white/80 flex items-center justify-center text-gray-700 shadow-3xs shrink-0 group-hover:scale-105 transition-transform">
+                <Briefcase size={13} className="lg:w-[15px] lg:h-[15px]" />
+              </div>
+              <ArrowRight size={11} className="text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity hidden lg:block" />
+            </div>
+            <div>
+              <div className="text-base sm:text-lg lg:text-xl xl:text-[22px] font-black text-gray-900 tracking-tight leading-none">
+                {statCounts.hired}
+              </div>
+              <div className="text-[9.5px] sm:text-[10px] font-semibold text-gray-500 mt-0.5 truncate">
+                Hired
+              </div>
+            </div>
+          </button>
+        </div>
+
+        {/* Left: Main Glassmorphic Table Card (order-2 on mobile, order-1 on desktop) */}
+        <div className="order-2 lg:order-1 flex-1 min-w-0 min-h-0 lg:min-h-[calc(100vh-260px)] bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between overflow-hidden">
           {/* Table Top Controls Row: Search Bar + Section / Department Filters */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-black/[0.04] shrink-0">
             {/* Search Input Bar with ⌘K Badge */}
@@ -1516,18 +1655,18 @@ export default function RequisitionOverview({ section }) {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search by title, role, or department..."
-                className="w-full pl-9 pr-12 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs placeholder:text-gray-400 transition-all"
+                className="w-full pl-9 pr-4 sm:pr-12 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs placeholder:text-gray-400 transition-all"
               />
-              <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
+              <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none hidden sm:block">
                 <span className="text-[10px] font-bold text-gray-400 px-1.5 py-0.5 rounded-md bg-white/80 border border-gray-200/80 shadow-3xs">
                   ⌘ K
                 </span>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap">
+            <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
               {/* Category / Section Dropdown */}
-              <div className="relative">
+              <div className="relative flex-1 sm:flex-initial">
                 <button
                   type="button"
                   onClick={(e) => {
@@ -1536,15 +1675,15 @@ export default function RequisitionOverview({ section }) {
                     setShowDeptDropdown(false);
                     setShowStatusDropdown(false);
                   }}
-                  className="px-3 py-1.5 rounded-xl bg-white/60 backdrop-blur-md border border-white/80 text-xs font-semibold text-gray-700 hover:text-black hover:bg-white transition-all flex items-center gap-2 shadow-3xs cursor-pointer"
+                  className="w-full sm:w-auto px-3 py-1.5 rounded-xl bg-white/60 backdrop-blur-md border border-white/80 text-xs font-semibold text-gray-700 hover:text-black hover:bg-white transition-all flex items-center justify-between sm:justify-start gap-2 shadow-3xs cursor-pointer"
                 >
-                  <span>{SECTION_CONFIG[activeTab]?.title || 'All Requisitions'}</span>
-                  <ChevronDown size={13} className="text-gray-400" />
+                  <span className="truncate">{SECTION_CONFIG[activeTab]?.title || 'All Requisitions'}</span>
+                  <ChevronDown size={13} className="text-gray-400 shrink-0" />
                 </button>
 
                 {showSectionDropdown && (
                   <div
-                    className="absolute right-0 mt-1.5 w-44 bg-white/95 backdrop-blur-2xl border border-white/90 rounded-2xl shadow-[0_12px_36px_rgba(0,0,0,0.1)] p-1 z-30 animate-in fade-in zoom-in-95"
+                    className="absolute left-0 sm:left-auto sm:right-0 mt-1.5 w-44 bg-white/95 backdrop-blur-2xl border border-white/90 rounded-2xl shadow-[0_12px_36px_rgba(0,0,0,0.1)] p-1 z-30 animate-in fade-in zoom-in-95"
                     onClick={(e) => e.stopPropagation()}
                   >
                     {Object.entries(SECTION_CONFIG).map(([key, config]) => (
@@ -1556,10 +1695,11 @@ export default function RequisitionOverview({ section }) {
                           setShowSectionDropdown(false);
                           navigate(config.to);
                         }}
-                        className={`w-full text-left px-3 py-1.5 rounded-xl text-xs font-medium transition-colors cursor-pointer flex items-center justify-between ${activeTab === key
+                        className={`w-full text-left px-3 py-1.5 rounded-xl text-xs font-medium transition-colors cursor-pointer flex items-center justify-between ${
+                          activeTab === key
                             ? 'bg-black text-white font-bold'
                             : 'text-gray-700 hover:bg-gray-100/80'
-                          }`}
+                        }`}
                       >
                         <span>{config.title}</span>
                         {activeTab === key && <Check size={12} />}
@@ -1570,7 +1710,7 @@ export default function RequisitionOverview({ section }) {
               </div>
 
               {/* Department Filter Dropdown */}
-              <div className="relative">
+              <div className="relative flex-1 sm:flex-initial">
                 <button
                   type="button"
                   onClick={(e) => {
@@ -1579,10 +1719,10 @@ export default function RequisitionOverview({ section }) {
                     setShowSectionDropdown(false);
                     setShowStatusDropdown(false);
                   }}
-                  className="px-3 py-1.5 rounded-xl bg-white/60 backdrop-blur-md border border-white/80 text-xs font-semibold text-gray-700 hover:text-black hover:bg-white transition-all flex items-center gap-2 shadow-3xs cursor-pointer"
+                  className="w-full sm:w-auto px-3 py-1.5 rounded-xl bg-white/60 backdrop-blur-md border border-white/80 text-xs font-semibold text-gray-700 hover:text-black hover:bg-white transition-all flex items-center justify-between sm:justify-start gap-2 shadow-3xs cursor-pointer"
                 >
-                  <span>{selectedDept}</span>
-                  <ChevronDown size={13} className="text-gray-400" />
+                  <span className="truncate">{selectedDept}</span>
+                  <ChevronDown size={13} className="text-gray-400 shrink-0" />
                 </button>
 
                 {showDeptDropdown && (
@@ -1598,10 +1738,11 @@ export default function RequisitionOverview({ section }) {
                           setSelectedDept(dept);
                           setShowDeptDropdown(false);
                         }}
-                        className={`w-full text-left px-3 py-1.5 rounded-xl text-xs font-medium transition-colors cursor-pointer flex items-center justify-between ${selectedDept === dept
+                        className={`w-full text-left px-3 py-1.5 rounded-xl text-xs font-medium transition-colors cursor-pointer flex items-center justify-between ${
+                          selectedDept === dept
                             ? 'bg-black text-white font-bold'
                             : 'text-gray-700 hover:bg-gray-100/80'
-                          }`}
+                        }`}
                       >
                         <span>{dept}</span>
                         {selectedDept === dept && <Check size={12} />}
@@ -1613,7 +1754,7 @@ export default function RequisitionOverview({ section }) {
             </div>
           </div>
 
-          {/* Data Table with Hidden Scrollbar */}
+          {/* Data List / Table Container */}
           {loading ? (
             <div className="py-12 text-center text-xs text-gray-400 font-medium flex-1 flex items-center justify-center">
               Loading requisitions...
@@ -1633,196 +1774,321 @@ export default function RequisitionOverview({ section }) {
               )}
             </div>
           ) : (
-            <div className="overflow-x-auto overflow-y-auto no-scrollbar flex-1 min-h-0 mt-1">
+            <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar mt-1">
               {activeTab === 'deleted' && (
-                <div className="mb-2.5 px-3 py-2 bg-rose-50/80 border border-rose-200/80 rounded-xl text-xs text-rose-800 flex items-center justify-between shadow-3xs">
+                <div className="mb-2.5 px-3 py-2 bg-rose-50/80 border border-rose-200/80 rounded-xl text-xs text-rose-800 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 shadow-3xs">
                   <div className="flex items-center gap-2 font-medium">
-                    <History size={14} className="text-rose-600" />
+                    <History size={14} className="text-rose-600 shrink-0" />
                     <span>Viewing deleted requisitions archive history ({filteredRows.length} total).</span>
                   </div>
                   <button
                     type="button"
                     onClick={() => setActiveTab('history')}
-                    className="text-[11px] font-bold text-rose-700 hover:text-rose-900 underline cursor-pointer"
+                    className="text-[11px] font-bold text-rose-700 hover:text-rose-900 underline cursor-pointer text-left sm:text-right"
                   >
                     Return to Active Requisitions →
                   </button>
                 </div>
               )}
-              <table className="w-full min-w-[780px] text-left text-xs border-collapse">
-                <thead className="sticky top-0 bg-transparent border-b border-black/[0.04] z-10">
-                  <tr className="text-xs font-medium text-gray-400">
-                    <th className="py-2.5 px-3">Job Title</th>
-                    <th className="py-2.5 px-3">Department</th>
-                    <th className="py-2.5 px-3">Location</th>
-                    <th className="py-2.5 px-3">Applicants</th>
-                    <th className="py-2.5 px-3">Status</th>
-                    <th className="py-2.5 px-3">{activeTab === 'deleted' ? 'Deleted On' : 'Posted On'}</th>
-                    <th className="py-2.5 px-3 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-black/[0.03]">
-                  {paginatedRows.map((r) => {
-                    const isMenuOpen = activeMenuId === r.id;
-                    const isDeleted = Boolean(r.is_deleted || r.status === 'Deleted by HM' || r.status === 'Deleted');
-                    const reqCode = r.ref ? r.ref.replace('REQ-', 'REQ #') : `REQ #${(r.id || '8302CO').slice(0, 6).toUpperCase()}`;
 
-                    return (
-                      <tr
-                        key={r.id}
-                        className={`transition-colors relative ${isDeleted
-                            ? 'bg-rose-50/25 hover:bg-rose-50/45'
-                            : 'bg-transparent hover:bg-white/35'
-                          }`}
-                      >
-                        {/* 1. Job Title */}
-                        <td className="py-3 px-3">
-                          <div className="flex items-center gap-3">
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 shadow-2xs ${isDeleted ? 'bg-rose-950 text-rose-300' : 'bg-slate-900 text-white'
-                              }`}>
+              {/* MOBILE VIEW: Compact Organized Requisition Cards (< md) */}
+              <div className="block md:hidden space-y-2.5 pb-2">
+                {paginatedRows.map((r) => {
+                  const isDeleted = Boolean(r.is_deleted || r.status === 'Deleted by HM' || r.status === 'Deleted');
+                  const reqCode = r.ref ? r.ref.replace('REQ-', 'REQ #') : `REQ #${(r.id || '8302CO').slice(0, 6).toUpperCase()}`;
+
+                  return (
+                    <div
+                      key={r.id}
+                      className={`p-3 sm:p-3.5 rounded-2xl border transition-all text-left shadow-3xs ${
+                        isDeleted
+                          ? 'bg-rose-50/35 border-rose-200/70'
+                          : 'bg-white/60 hover:bg-white/90 border-white/80'
+                      }`}
+                    >
+                      {/* Top row: Icon + Title/Code + Status Badge */}
+                      <div className="flex items-start justify-between gap-2.5">
+                        <div className="flex items-start gap-2.5 min-w-0">
+                          <div
+                            className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 shadow-2xs mt-0.5 ${
+                              isDeleted ? 'bg-rose-950 text-rose-300' : 'bg-slate-900 text-white'
+                            }`}
+                          >
+                            {isDeleted ? <Trash2 size={13} /> : <Briefcase size={13} />}
+                          </div>
+                          <div className="min-w-0">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedDetailReqId(r.id)}
+                              className="font-bold text-gray-900 text-[13px] leading-snug truncate block text-left hover:underline cursor-pointer"
+                            >
+                              {r.title || 'Untitled Role'}
+                            </button>
+                            <div className="text-[10px] text-gray-400 font-mono font-medium truncate mt-0.5">
                               {isDeleted ? (
-                                <Trash2 size={13} className="text-rose-300" />
+                                <span className="text-rose-600 font-sans font-medium">
+                                  Deleted {timeAgo(r.deleted_at || r.created_at)}
+                                </span>
                               ) : (
-                                <Briefcase size={13} className="text-white" />
+                                reqCode
                               )}
                             </div>
-                            <div className="min-w-0">
-                              <div
-                                onClick={() => setSelectedDetailReqId(r.id)}
-                                className="font-bold text-gray-900 text-[13px] leading-tight truncate hover:underline cursor-pointer"
-                              >
-                                {r.title || 'Untitled Role'}
-                              </div>
-                              <div className="text-[10px] text-gray-400 font-mono font-medium truncate mt-0.5">
-                                {isDeleted ? (
-                                  <span className="text-rose-600 font-sans font-medium">
-                                    Deleted {timeAgo(r.deleted_at || r.created_at)}
-                                  </span>
-                                ) : (
-                                  reqCode
-                                )}
-                              </div>
-                            </div>
                           </div>
-                        </td>
+                        </div>
+                        <div className="shrink-0">
+                          <RequisitionStatusBadge status={r.status || 'Published'} />
+                        </div>
+                      </div>
 
-                        {/* 2. Department */}
-                        <td className="py-3 px-3">
-                          <span className="inline-block px-2.5 py-1 rounded-lg text-xs font-semibold bg-gray-100 text-gray-700 border border-gray-200/60 truncate max-w-[120px]">
+                      {/* Middle row: Department & Location & Date */}
+                      <div className="mt-2.5 pt-2 border-t border-black/[0.04] grid grid-cols-2 gap-2 text-xs">
+                        <div>
+                          <span className="text-[9.5px] uppercase font-bold text-gray-400 tracking-wider block mb-0.5">
+                            Department
+                          </span>
+                          <span className="inline-block px-2 py-0.5 rounded-md text-[11px] font-semibold bg-gray-100 text-gray-700 border border-gray-200/60 truncate max-w-full">
                             {r.department && r.department.trim() ? r.department : 'Engineering'}
                           </span>
-                        </td>
-
-                        {/* 3. Location */}
-                        <td className="py-3 px-3">
+                        </div>
+                        <div>
+                          <span className="text-[9.5px] uppercase font-bold text-gray-400 tracking-wider block mb-0.5">
+                            Location
+                          </span>
                           <LocationCell location={r.primary_location || r.location} workplaceType={r.workplace_type} />
-                        </td>
+                        </div>
+                      </div>
 
-                        {/* 4. Applicants */}
-                        <td
-                          className="py-3 px-3 cursor-pointer group"
-                          title="View Candidates"
+                      {/* Bottom row: Applicants & Quick Action Buttons */}
+                      <div className="mt-2.5 pt-2 border-t border-black/[0.04] flex items-center justify-between gap-2">
+                        <div
                           onClick={(e) => {
                             e.stopPropagation();
                             navigate(`/dashboard/requisitions/${r.id}/candidates`);
                           }}
+                          className="cursor-pointer flex items-center gap-1.5"
+                          title="View Candidates"
                         >
+                          <span className="text-[10.5px] text-gray-500 font-medium">Applicants:</span>
                           <ApplicantStack count={r.applicant_count ?? 0} />
-                        </td>
+                        </div>
 
-                        {/* 5. Status */}
-                        <td className="py-3 px-3">
-                          <RequisitionStatusBadge status={r.status || 'Published'} />
-                        </td>
-
-                        {/* 6. Posted On */}
-                        <td className="py-3 px-3 text-gray-700 font-normal text-xs">
-                          <div className="font-medium text-gray-900 leading-tight">
-                            {formatDate(isDeleted ? (r.deleted_at || r.created_at) : r.created_at)}
-                          </div>
-                          <div className="text-[10.5px] text-gray-400 leading-tight mt-0.5">
-                            {formatTime(isDeleted ? (r.deleted_at || r.created_at) : r.created_at)}
-                          </div>
-                        </td>
-
-                        {/* 7. Actions */}
-                        <td className="py-3 px-3 text-right relative">
+                        <div className="flex items-center gap-1.5 shrink-0">
                           <button
                             type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setActiveMenuId(isMenuOpen ? null : r.id);
-                            }}
-                            className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg inline-flex items-center justify-center transition-colors cursor-pointer"
+                            onClick={() => setSelectedDetailReqId(r.id)}
+                            className="px-2.5 py-1 text-[11px] font-semibold text-gray-700 bg-white/80 hover:bg-white border border-gray-200/80 rounded-lg shadow-3xs cursor-pointer flex items-center gap-1"
                           >
-                            <MoreHorizontal size={15} />
+                            <Eye size={12} className="text-gray-500" />
+                            <span>Details</span>
                           </button>
 
-                          {/* Floating Action Menu Dropdown */}
-                          {isMenuOpen && (
-                            <div
-                              className="absolute right-3 top-10 w-38 bg-white/95 backdrop-blur-2xl border border-white/90 rounded-2xl shadow-[0_12px_40px_rgba(0,0,0,0.12)] p-1 z-30 animate-in fade-in zoom-in-95 text-left"
-                              onClick={(e) => e.stopPropagation()}
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/dashboard/requisitions/${r.id}/candidates`)}
+                            className="px-2.5 py-1 text-[11px] font-bold text-white bg-black hover:bg-gray-800 rounded-lg shadow-3xs cursor-pointer flex items-center gap-1"
+                          >
+                            <Users size={12} />
+                            <span>Candidates</span>
+                          </button>
+
+                          {!isDeleted && (
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDelete(r)}
+                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                              title="Delete Requisition"
                             >
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedDetailReqId(r.id);
-                                  setActiveMenuId(null);
-                                }}
-                                className="w-full px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-100/80 rounded-xl transition-colors flex items-center gap-2 font-medium cursor-pointer"
-                              >
-                                <Eye size={13} className="text-gray-400" />
-                                <span>Details</span>
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  navigate(`/dashboard/requisitions/${r.id}/candidates`);
-                                  setActiveMenuId(null);
-                                }}
-                                className="w-full px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-100/80 rounded-xl transition-colors flex items-center gap-2 font-medium cursor-pointer"
-                              >
-                                <Users size={13} className="text-gray-400" />
-                                <span>Candidates</span>
-                              </button>
-
-                              {!isDeleted && (
-                                <>
-                                  <div className="h-px bg-black/[0.04] my-1" />
-
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setConfirmDelete(r);
-                                      setActiveMenuId(null);
-                                    }}
-                                    className="w-full px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-xl transition-colors flex items-center gap-2 font-semibold cursor-pointer"
-                                  >
-                                    <Trash2 size={13} className="text-red-500" />
-                                    <span>Delete</span>
-                                  </button>
-                                </>
-                              )}
-                            </div>
+                              <Trash2 size={13} />
+                            </button>
                           )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* DESKTOP VIEW: Full 7-column Table (>= md) */}
+              <div className="hidden md:block overflow-x-auto no-scrollbar">
+                <table className="w-full min-w-[780px] text-left text-xs border-collapse">
+                  <thead className="sticky top-0 bg-transparent border-b border-black/[0.04] z-10">
+                    <tr className="text-xs font-medium text-gray-400">
+                      <th className="py-2.5 px-3">Job Title</th>
+                      <th className="py-2.5 px-3">Department</th>
+                      <th className="py-2.5 px-3">Location</th>
+                      <th className="py-2.5 px-3">Applicants</th>
+                      <th className="py-2.5 px-3">Status</th>
+                      <th className="py-2.5 px-3">{activeTab === 'deleted' ? 'Deleted On' : 'Posted On'}</th>
+                      <th className="py-2.5 px-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-black/[0.03]">
+                    {paginatedRows.map((r) => {
+                      const isMenuOpen = activeMenuId === r.id;
+                      const isDeleted = Boolean(r.is_deleted || r.status === 'Deleted by HM' || r.status === 'Deleted');
+                      const reqCode = r.ref ? r.ref.replace('REQ-', 'REQ #') : `REQ #${(r.id || '8302CO').slice(0, 6).toUpperCase()}`;
+
+                      return (
+                        <tr
+                          key={r.id}
+                          className={`transition-colors relative ${
+                            isDeleted
+                              ? 'bg-rose-50/25 hover:bg-rose-50/45'
+                              : 'bg-transparent hover:bg-white/35'
+                          }`}
+                        >
+                          {/* 1. Job Title */}
+                          <td className="py-3 px-3">
+                            <div className="flex items-center gap-3">
+                              <div
+                                className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 shadow-2xs ${
+                                  isDeleted ? 'bg-rose-950 text-rose-300' : 'bg-slate-900 text-white'
+                                }`}
+                              >
+                                {isDeleted ? (
+                                  <Trash2 size={13} className="text-rose-300" />
+                                ) : (
+                                  <Briefcase size={13} className="text-white" />
+                                )}
+                              </div>
+                              <div className="min-w-0">
+                                <div
+                                  onClick={() => setSelectedDetailReqId(r.id)}
+                                  className="font-bold text-gray-900 text-[13px] leading-tight truncate hover:underline cursor-pointer"
+                                >
+                                  {r.title || 'Untitled Role'}
+                                </div>
+                                <div className="text-[10px] text-gray-400 font-mono font-medium truncate mt-0.5">
+                                  {isDeleted ? (
+                                    <span className="text-rose-600 font-sans font-medium">
+                                      Deleted {timeAgo(r.deleted_at || r.created_at)}
+                                    </span>
+                                  ) : (
+                                    reqCode
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* 2. Department */}
+                          <td className="py-3 px-3">
+                            <span className="inline-block px-2.5 py-1 rounded-lg text-xs font-semibold bg-gray-100 text-gray-700 border border-gray-200/60 truncate max-w-[120px]">
+                              {r.department && r.department.trim() ? r.department : 'Engineering'}
+                            </span>
+                          </td>
+
+                          {/* 3. Location */}
+                          <td className="py-3 px-3">
+                            <LocationCell location={r.primary_location || r.location} workplaceType={r.workplace_type} />
+                          </td>
+
+                          {/* 4. Applicants */}
+                          <td
+                            className="py-3 px-3 cursor-pointer group"
+                            title="View Candidates"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/dashboard/requisitions/${r.id}/candidates`);
+                            }}
+                          >
+                            <ApplicantStack count={r.applicant_count ?? 0} />
+                          </td>
+
+                          {/* 5. Status */}
+                          <td className="py-3 px-3">
+                            <RequisitionStatusBadge status={r.status || 'Published'} />
+                          </td>
+
+                          {/* 6. Posted On */}
+                          <td className="py-3 px-3 text-gray-700 font-normal text-xs">
+                            <div className="font-medium text-gray-900 leading-tight">
+                              {formatDate(isDeleted ? (r.deleted_at || r.created_at) : r.created_at)}
+                            </div>
+                            <div className="text-[10.5px] text-gray-400 leading-tight mt-0.5">
+                              {formatTime(isDeleted ? (r.deleted_at || r.created_at) : r.created_at)}
+                            </div>
+                          </td>
+
+                          {/* 7. Actions */}
+                          <td className="py-3 px-3 text-right relative">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveMenuId(isMenuOpen ? null : r.id);
+                              }}
+                              className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg inline-flex items-center justify-center transition-colors cursor-pointer"
+                            >
+                              <MoreHorizontal size={15} />
+                            </button>
+
+                            {/* Floating Action Menu Dropdown */}
+                            {isMenuOpen && (
+                              <div
+                                className="absolute right-3 top-10 w-38 bg-white/95 backdrop-blur-2xl border border-white/90 rounded-2xl shadow-[0_12px_40px_rgba(0,0,0,0.12)] p-1 z-30 animate-in fade-in zoom-in-95 text-left"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedDetailReqId(r.id);
+                                    setActiveMenuId(null);
+                                  }}
+                                  className="w-full px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-100/80 rounded-xl transition-colors flex items-center gap-2 font-medium cursor-pointer"
+                                >
+                                  <Eye size={13} className="text-gray-400" />
+                                  <span>Details</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    navigate(`/dashboard/requisitions/${r.id}/candidates`);
+                                    setActiveMenuId(null);
+                                  }}
+                                  className="w-full px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-100/80 rounded-xl transition-colors flex items-center gap-2 font-medium cursor-pointer"
+                                >
+                                  <Users size={13} className="text-gray-400" />
+                                  <span>Candidates</span>
+                                </button>
+
+                                {!isDeleted && (
+                                  <>
+                                    <div className="h-px bg-black/[0.04] my-1" />
+
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setConfirmDelete(r);
+                                        setActiveMenuId(null);
+                                      }}
+                                      className="w-full px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-xl transition-colors flex items-center gap-2 font-semibold cursor-pointer"
+                                    >
+                                      <Trash2 size={13} className="text-red-500" />
+                                      <span>Delete</span>
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
 
-          {/* Table Footer with Pagination & History Button at Marked Position */}
-          <div className="flex items-center justify-between pt-3 border-t border-black/[0.04] shrink-0 text-xs text-gray-400">
-            <div>
+          {/* Table Footer with Pagination & History Button */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 pt-3 border-t border-black/[0.04] shrink-0 text-xs text-gray-400">
+            <div className="text-center sm:text-left text-[11px] sm:text-xs">
               Showing {filteredRows.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, filteredRows.length)} of {filteredRows.length} requisitions
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center justify-between sm:justify-end w-full sm:w-auto gap-2">
               {totalPages > 1 && (
                 <div className="flex items-center gap-1">
                   <button
@@ -1839,10 +2105,11 @@ export default function RequisitionOverview({ section }) {
                       key={pg}
                       type="button"
                       onClick={() => setCurrentPage(pg)}
-                      className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs shadow-3xs cursor-pointer ${currentPage === pg
+                      className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs shadow-3xs cursor-pointer ${
+                        currentPage === pg
                           ? 'bg-black text-white'
                           : 'bg-white/60 hover:bg-white text-gray-700 border border-white/80'
-                        }`}
+                      }`}
                     >
                       {pg}
                     </button>
@@ -1866,111 +2133,26 @@ export default function RequisitionOverview({ section }) {
                   setActiveTab((prev) => (prev === 'deleted' ? 'history' : 'deleted'));
                 }}
                 title={activeTab === 'deleted' ? 'Switch back to active requisitions' : 'View deleted requisitions history'}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer shadow-3xs ${activeTab === 'deleted'
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer shadow-3xs ${
+                  activeTab === 'deleted'
                     ? 'bg-black text-white shadow-xs font-bold'
                     : 'bg-white/60 hover:bg-white text-gray-700 hover:text-black border border-white/80'
-                  }`}
+                }`}
               >
                 <History size={13} className={activeTab === 'deleted' ? 'text-white' : 'text-gray-500'} />
                 <span>History</span>
                 {counts.deleted > 0 && (
                   <span
-                    className={`px-1.5 py-0.2 rounded-full text-[9.5px] font-bold ${activeTab === 'deleted'
+                    className={`px-1.5 py-0.2 rounded-full text-[9.5px] font-bold ${
+                      activeTab === 'deleted'
                         ? 'bg-white/20 text-white'
                         : 'bg-rose-50 text-rose-700 border border-rose-200'
-                      }`}
+                    }`}
                   >
                     {counts.deleted}
                   </span>
                 )}
               </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Right: 5 Live Metric Stat Cards (Total Requisitions, Total Applicants, Shortlisted, In Interview, Hired) */}
-        <div className="w-full lg:w-44 xl:w-48 shrink-0 flex flex-col gap-2.5">
-          {/* Stat Card 1: Total Requisitions */}
-          <div
-            onClick={() => {
-              setActiveTab('history');
-              navigate('/dashboard/requisitions/history');
-            }}
-            className={`backdrop-blur-2xl border rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between h-[102px] cursor-pointer transition-all ${activeTab === 'history'
-                ? 'bg-white/85 border-black/40 ring-1 ring-black/15 shadow-sm'
-                : 'bg-white/40 border-white/70 hover:bg-white/60'
-              }`}
-          >
-            <div className="w-7.5 h-7.5 rounded-xl bg-white/60 backdrop-blur-md border border-white/70 flex items-center justify-center text-gray-700 shadow-2xs shrink-0">
-              <Layers size={15} />
-            </div>
-            <div>
-              <div className="text-xl sm:text-[22px] font-black text-gray-900 tracking-tight leading-none">
-                {statCounts.totalReqs}
-              </div>
-              <div className="text-[10px] font-semibold text-gray-500 mt-0.5">
-                Total Requisitions
-              </div>
-            </div>
-          </div>
-
-          {/* Stat Card 2: Total Applicants */}
-          <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between h-[102px] transition-all hover:bg-white/60">
-            <div className="w-7.5 h-7.5 rounded-xl bg-white/60 backdrop-blur-md border border-white/70 flex items-center justify-center text-gray-700 shadow-2xs shrink-0">
-              <Users size={15} />
-            </div>
-            <div>
-              <div className="text-xl sm:text-[22px] font-black text-gray-900 tracking-tight leading-none">
-                {statCounts.totalApplicants}
-              </div>
-              <div className="text-[10px] font-semibold text-gray-500 mt-0.5">
-                Total Applicants
-              </div>
-            </div>
-          </div>
-
-          {/* Stat Card 3: Shortlisted */}
-          <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between h-[102px] transition-all hover:bg-white/60">
-            <div className="w-7.5 h-7.5 rounded-xl bg-white/60 backdrop-blur-md border border-white/70 flex items-center justify-center text-gray-700 shadow-2xs shrink-0">
-              <CheckCircle2 size={15} />
-            </div>
-            <div>
-              <div className="text-xl sm:text-[22px] font-black text-gray-900 tracking-tight leading-none">
-                {statCounts.shortlisted}
-              </div>
-              <div className="text-[10px] font-semibold text-gray-500 mt-0.5">
-                Shortlisted
-              </div>
-            </div>
-          </div>
-
-          {/* Stat Card 4: In Interview */}
-          <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between h-[102px] transition-all hover:bg-white/60">
-            <div className="w-7.5 h-7.5 rounded-xl bg-white/60 backdrop-blur-md border border-white/70 flex items-center justify-center text-gray-700 shadow-2xs shrink-0">
-              <Clock size={15} />
-            </div>
-            <div>
-              <div className="text-xl sm:text-[22px] font-black text-gray-900 tracking-tight leading-none">
-                {statCounts.inInterview}
-              </div>
-              <div className="text-[10px] font-semibold text-gray-500 mt-0.5">
-                In Interview
-              </div>
-            </div>
-          </div>
-
-          {/* Stat Card 5: Hired */}
-          <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between h-[102px] transition-all hover:bg-white/60">
-            <div className="w-7.5 h-7.5 rounded-xl bg-white/60 backdrop-blur-md border border-white/70 flex items-center justify-center text-gray-700 shadow-2xs shrink-0">
-              <Briefcase size={15} />
-            </div>
-            <div>
-              <div className="text-xl sm:text-[22px] font-black text-gray-900 tracking-tight leading-none">
-                {statCounts.hired}
-              </div>
-              <div className="text-[10px] font-semibold text-gray-500 mt-0.5">
-                Hired
-              </div>
             </div>
           </div>
         </div>
