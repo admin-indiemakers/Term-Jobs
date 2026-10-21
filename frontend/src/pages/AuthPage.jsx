@@ -90,7 +90,7 @@ export default function AuthPage() {
       <SEOHead
         title="Sign In | Term Jobs Portal"
         description="Sign in to your Term Jobs portal to manage contractor requisitions, talent onboarding, timesheets, and automated workforce billing."
-        canonicalUrl="https://termjobs.vercel.app/login"
+        canonicalUrl="https://www.termjobs.in/login"
       />
 
       <main className="clp-shell">

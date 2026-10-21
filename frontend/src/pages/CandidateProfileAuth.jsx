@@ -236,7 +236,7 @@ export default function CandidateProfileAuth({ onLoginSuccess, onBackToHome }) {
       <SEOHead
         title="Candidate Profile Sign In | TermJobs Talent Portal"
         description="Access live enterprise open roles, 1-click apply with your candidate profile, and track your interview invitations."
-        canonicalUrl="https://termjobs.vercel.app/#jobs"
+        canonicalUrl="https://www.termjobs.in/#jobs"
       />
 
       <main className="clp-shell">
