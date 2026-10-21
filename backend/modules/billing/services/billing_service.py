@@ -12,7 +12,7 @@ import calendar
 from typing import Optional, List, Dict, Any
 
 from modules.shared.db import db
-from modules.billing.services.billing_periods import billing_period, period_query, require_editable
+from modules.billing.services.billing_periods import billing_period, period_query, require_editable, require_resubmittable, update_billing_snapshot
 from modules.identity.domain.models import User
 from modules.billing.services.engagement_details import resolve_engagement
 
@@ -548,7 +548,7 @@ def dispatch_vendor_sow(workorder_id: str, user: User, period: Optional[str] = N
     """Compile contractor billing sheet and dispatch directly as SOW to the company's Procurement team."""
     breakdown = get_candidate_billing_breakdown(workorder_id, period)
     sow_coll = db["sow_documents"]
-    notif_coll = db["candidate_notifications"]
+    notif_coll = db["notifications"]
     wo_coll = db["work_orders"]
 
     cand = breakdown["candidate"]
@@ -574,7 +574,8 @@ def dispatch_vendor_sow(workorder_id: str, user: User, period: Optional[str] = N
     # Compile structured SOW package
     period = breakdown["period"]
     sow_query = period_query(sow_coll, cid, period)
-    require_editable(sow_coll.find_one(sow_query))
+    previous = sow_coll.find_one(sow_query)
+    require_resubmittable(previous)
     sow_payload = {
         "period": period,
         "candidate_id": cid,
@@ -642,8 +643,8 @@ def dispatch_vendor_sow(workorder_id: str, user: User, period: Optional[str] = N
         "updated_at": now_iso,
     }
 
-    sow_coll.update_one(
-        sow_query,
+    update_billing_snapshot(
+        sow_coll, sow_query, previous,
         {"$set": doc_record},
         upsert=True
     )
@@ -654,6 +655,7 @@ def dispatch_vendor_sow(workorder_id: str, user: User, period: Optional[str] = N
         "candidate_id": cid,
         "tenant_id": tenant_id,
         "type": "sow_submitted_to_procurement",
+        "target_role": "Procurement",
         "title": "New SOW Billing Sheet Released to Procurement",
         "message": f"Recruiter {user.name} submitted SOW billing sheet for {cand['name']} ({sow_payload['ws_number']}) for {company_name} Procurement authorization.",
         "is_read": False,

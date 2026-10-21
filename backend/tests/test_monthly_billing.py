@@ -126,3 +126,132 @@ def test_invoice_mark_paid_uses_monthly_finance_approval_flow(billing, monkeypat
 @pytest.mark.parametrize('label', ['October 2026', 'Oct 1, 2026 - Oct 31, 2026', '2026-10'])
 def test_legacy_period_labels(label):
     assert record_period({'sow_data': {'cycle_period': label}}) == '2026-10'
+
+
+def test_authorized_submission_survives_draft_and_redispatch_attempts(billing):
+    service, workforce, db = billing
+    service.dispatch_vendor_sow('candidate-1', actor('Super Admin'), '2026-10')
+    workforce.approve_procurement_sow('candidate-1', period='2026-10', current_user=actor('Procurement'))
+    authorized = db.sow_documents.find_one({'period': '2026-10'})
+    for action in (
+        lambda: service.dispatch_vendor_sow('candidate-1', actor('Super Admin'), '2026-10'),
+        lambda: workforce.send_sow_to_procurement('candidate-1', {'grand_total': 1}, period='2026-10', current_user=actor('Super Admin')),
+        lambda: workforce.save_sow_draft('candidate-1', {'grand_total': 1}, period='2026-10', current_user=actor('Super Admin')),
+    ):
+        with pytest.raises(HTTPException) as error:
+            action()
+        assert error.value.status_code == 409
+        assert 'revision' in error.value.detail.lower()
+        assert db.sow_documents.find_one({'period': '2026-10'}) == authorized
+    workforce.director_approve_procurement_sow('candidate-1', period='2026-10', current_user=actor('Director'))
+    assert db.sow_documents.find_one({'period': '2026-10'})['status'] == 'Approved by Director'
+    with pytest.raises(HTTPException):
+        workforce.save_sow_draft('candidate-1', {}, period='2026-10', current_user=actor('Super Admin'))
+
+
+def test_explicit_revision_requires_reason_and_new_procurement_approval(billing):
+    service, workforce, db = billing
+    service.dispatch_vendor_sow('candidate-1', actor('Super Admin'), '2026-10')
+    workforce.approve_procurement_sow('candidate-1', period='2026-10', current_user=actor('Procurement'))
+    with pytest.raises(HTTPException) as error:
+        workforce.request_procurement_sow_revision('candidate-1', {}, period='2026-10', current_user=actor('Director'))
+    assert error.value.status_code == 422
+    assert db.sow_documents.find_one({'period': '2026-10'})['status'] == 'Pending Director Approval'
+    workforce.request_procurement_sow_revision('candidate-1', {'notes': 'Correct the approved hours'}, period='2026-10', current_user=actor('Director'))
+    returned = db.sow_documents.find_one({'period': '2026-10'})
+    assert returned['procurement_authorized'] is False
+    assert returned['revision_notes'] == 'Correct the approved hours'
+    service.dispatch_vendor_sow('candidate-1', actor('Super Admin'), '2026-10')
+    with pytest.raises(HTTPException) as error:
+        workforce.director_approve_procurement_sow('candidate-1', period='2026-10', current_user=actor('Director'))
+    assert error.value.status_code == 409
+    workforce.approve_procurement_sow('candidate-1', period='2026-10', current_user=actor('Procurement'))
+    workforce.director_approve_procurement_sow('candidate-1', period='2026-10', current_user=actor('Director'))
+
+
+@pytest.mark.parametrize('writer', ['draft', 'dispatch', 'send'])
+def test_concurrent_procurement_approval_cannot_be_overwritten(billing, monkeypatch, writer):
+    service, workforce, db = billing
+    service.dispatch_vendor_sow('candidate-1', actor('Super Admin'), '2026-10')
+    original_update = db.sow_documents.update_one
+    raced = False
+
+    def approve_before_write(query, update, **kwargs):
+        nonlocal raced
+        if not raced:
+            raced = True
+            original_update({'period': '2026-10'}, {'$set': {
+                'status': 'Pending Director Approval', 'procurement_authorized': True,
+                'procurement_approved_by': 'Procurement', 'updated_at': 'concurrent-approval',
+            }})
+        return original_update(query, update, **kwargs)
+
+    monkeypatch.setattr(db.sow_documents, 'update_one', approve_before_write)
+    actions = {
+        'draft': lambda: workforce.save_sow_draft('candidate-1', {}, period='2026-10', current_user=actor('Super Admin')),
+        'send': lambda: workforce.send_sow_to_procurement('candidate-1', {}, period='2026-10', current_user=actor('Super Admin')),
+        'dispatch': lambda: service.dispatch_vendor_sow('candidate-1', actor('Super Admin'), '2026-10'),
+    }
+    with pytest.raises(HTTPException) as error:
+        actions[writer]()
+    assert error.value.status_code == 409
+    assert db.sow_documents.count_documents({'period': '2026-10'}) == 1
+    assert db.sow_documents.find_one({'period': '2026-10'})['status'] == 'Pending Director Approval'
+    workforce.director_approve_procurement_sow('candidate-1', period='2026-10', current_user=actor('Director'))
+
+
+def test_payment_confirmation_returns_saved_details_even_if_alert_fails(billing, monkeypatch):
+    service, workforce, db = billing
+    service.dispatch_vendor_sow('candidate-1', actor('Super Admin'), '2026-10')
+    workforce.approve_procurement_sow('candidate-1', period='2026-10', current_user=actor('Procurement'))
+    workforce.director_approve_procurement_sow('candidate-1', period='2026-10', current_user=actor('Director'))
+
+    def fail_alert(*args, **kwargs):
+        raise RuntimeError('Notification delivery unavailable')
+
+    monkeypatch.setattr(db.candidate_notifications, 'insert_one', fail_alert)
+    result = workforce.process_finance_work_order_payment('candidate-1', {
+        'transaction_ref': 'UTR-confirmed', 'payment_method': 'NEFT/RTGS',
+    }, period='2026-10', current_user=actor('Finance Team'))
+    assert result['status'] == 'success'
+    assert result['payment']['payment_status'] == 'Paid'
+    assert result['payment']['transaction_ref'] == 'UTR-confirmed'
+    stored = db.sow_documents.find_one({'period': '2026-10'})
+    assert stored['payment_status'] == 'Paid'
+    assert result['payment']['payment_amount'] == stored['payment_amount']
+    assert result['payment']['payment_processed_at'] == stored['payment_processed_at']
+
+
+def test_finance_pending_director_bill_is_not_ready_and_cannot_be_paid(billing):
+    service, workforce, db = billing
+    service.dispatch_vendor_sow('candidate-1', actor('Super Admin'), '2026-10')
+    workforce.approve_procurement_sow('candidate-1', period='2026-10', current_user=actor('Procurement'))
+    response = workforce.get_finance_work_orders(period='2026-10', current_user=actor('Finance'))
+    assert response['ready_for_payment_count'] == 0
+    assert response['work_orders'][0]['ready_for_payment'] is False
+    assert response['work_orders'][0]['status'] == 'Pending Director Approval'
+    with pytest.raises(HTTPException) as error:
+        workforce.process_finance_work_order_payment('candidate-1', {}, period='2026-10', current_user=actor('Finance'))
+    assert error.value.status_code == 409
+    assert db.sow_documents.find_one({'period': '2026-10'})['status'] == 'Pending Director Approval'
+    workforce.director_approve_procurement_sow('candidate-1', period='2026-10', current_user=actor('Director'))
+    assert workforce.get_finance_work_orders(period='2026-10', current_user=actor('Finance'))['ready_for_payment_count'] == 1
+
+
+def test_director_rejection_is_recorded_and_requires_resubmission(billing):
+    service, workforce, db = billing
+    service.dispatch_vendor_sow('candidate-1', actor('Super Admin'), '2026-10')
+    with pytest.raises(HTTPException) as error:
+        workforce.reject_procurement_sow('candidate-1', {'rejection_notes': 'Correct hours'}, period='2026-10', current_user=actor('Director'))
+    assert error.value.status_code == 409
+    workforce.approve_procurement_sow('candidate-1', period='2026-10', current_user=actor('Procurement'))
+    workforce.reject_procurement_sow('candidate-1', {'rejection_notes': 'Correct hours'}, period='2026-10', current_user=actor('Director'))
+    doc = db.sow_documents.find_one({'period': '2026-10'})
+    assert doc['status'] == 'Rejected by Director'
+    assert doc['sow_data']['status'] == 'Rejected by Director'
+    assert doc['rejection_notes'] == 'Correct hours'
+    assert doc['rejected_by'] == 'Director (Director)'
+    assert doc['procurement_authorized'] is False
+    assert workforce.get_finance_work_orders(period='2026-10', current_user=actor('Finance'))['ready_for_payment_count'] == 0
+    service.dispatch_vendor_sow('candidate-1', actor('Super Admin'), '2026-10')
+    assert db.sow_documents.find_one({'period': '2026-10'})['status'] == 'Sent to Procurement'

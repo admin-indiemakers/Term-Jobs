@@ -1,3 +1,4 @@
+import json
 """FastAPI router exposing notifications for the current user."""
 from fastapi import APIRouter, Depends, HTTPException, Query
 from bson import ObjectId
@@ -5,7 +6,7 @@ from bson import ObjectId
 from modules.identity.domain.models import User
 from modules.identity.router import get_current_user
 from modules.notifications.domain.models import Notification, notification_dict
-from modules.shared.db import get_session, db
+from modules.shared.db import db
 
 
 router = APIRouter(prefix="/api/notifications", tags=["Notifications"])
@@ -16,6 +17,8 @@ def _matches_user(n: Notification, current_user: User) -> bool:
     user_id = str(current_user.id or "")
     user_tenant = str(current_user.tenant_id or "")
     user_role = str(current_user.role or "").strip().lower()
+    if user_role == "finance team":
+        user_role = "finance"
 
     n_uid = str(getattr(n, "user_id", "") or "")
     n_tid = str(getattr(n, "tenant_id", "") or "")
@@ -59,17 +62,49 @@ def _matches_user(n: Notification, current_user: User) -> bool:
     return True
 
 
-def _is_read_by_user(n: Notification, user_id: str) -> bool:
-    """Check if notification is read by this user."""
-    n_uid = str(getattr(n, "user_id", "") or "")
-    if n_uid and n_uid == user_id:
-        return bool(getattr(n, "read", False)) or getattr(n, "status", "") == "read"
+def _notification(doc):
+    # Legacy records have only Mongo's _id; never generate a new public ID on read.
+    return Notification.from_doc({**doc, "id": str(doc.get("id") or doc["_id"]), "created_at": doc.get("created_at") or ""})
 
-    # For shared/broadcast/tenant notifications, check user_id in read_by list
-    read_by = getattr(n, "read_by", None) or []
-    if isinstance(read_by, list) and user_id in read_by:
-        return True
-    return bool(getattr(n, "read", False)) or getattr(n, "status", "") == "read"
+
+def _is_read_by_user(n: Notification, user_id: str) -> bool:
+    return notification_dict(n, user_id=user_id)["read"]
+
+
+def _visible_documents(user):
+    return [doc for doc in db["notifications"].find({}) if _matches_user(_notification(doc), user)]
+
+
+def _event_key(doc):
+    # Old model upserts cloned legacy records with a new id. Match only exact
+    # event content and timestamp; distinct recipients and real new events stay separate.
+    if not doc.get('created_at'):
+        return str(doc['_id'])
+    content = {key: value for key, value in doc.items()
+               if key not in {'_id', 'id', 'read', 'read_by', 'status'}}
+    # Model defaults were added to cloned records; normalize those absent on originals.
+    notification = _notification(doc)
+    return json.dumps({
+        'created_at': str(doc['created_at']), 'user_id': notification.user_id or '',
+        'tenant_id': notification.tenant_id or '', 'target_role': notification.target_role or '',
+        'type': notification.type or '', 'title': notification.title or '',
+        'body': notification.body or doc.get('message') or '',
+        'data': notification.data or {},
+        'context': {key: content.get(key) for key in ('candidate_id', 'requisition_id', 'workorder_id', 'candidate_email')},
+    }, sort_keys=True, default=str)
+
+
+def _event_groups(user):
+    groups = {}
+    for doc in _visible_documents(user):
+        groups.setdefault(_event_key(doc), []).append(doc)
+    return list(groups.values())
+
+
+def _group_item(documents, user_id):
+    item = notification_dict(_notification(documents[0]), user_id=user_id)
+    item['read'] = any(_is_read_by_user(_notification(doc), user_id) for doc in documents)
+    return item
 
 
 @router.get("")
@@ -79,124 +114,37 @@ def list_notifications(
     compact: bool = False,
     limit: int = Query(default=60, ge=1, le=60),
 ) -> list[dict]:
-    """Return the current user's notifications, newest first."""
-    with get_session() as session:
-        all_items = session.query(Notification).all()
-        user_id = str(current_user.id or "")
-
-        matched = [n for n in all_items if _matches_user(n, current_user)]
-
-        if unread_only:
-            matched = [n for n in matched if not _is_read_by_user(n, user_id)]
-
-        matched.sort(key=lambda x: str(getattr(x, "created_at", "") or ""), reverse=True)
-        lim = int(limit) if isinstance(limit, (int, float, str)) and str(limit).isdigit() else 60
-        items = matched[:lim]
-        return [notification_dict(n, user_id=user_id) for n in items]
+    items = [_group_item(group, str(current_user.id)) for group in _event_groups(current_user)]
+    if unread_only:
+        items = [item for item in items if not item["read"]]
+    items.sort(key=lambda item: item["created_at"], reverse=True)
+    return items[:limit if isinstance(limit, int) else 60]
 
 
 @router.get("/unread-count")
 def unread_count(current_user: User = Depends(get_current_user)) -> dict:
-    with get_session() as session:
-        all_items = session.query(Notification).all()
-        user_id = str(current_user.id or "")
-
-        unread_items = [
-            n for n in all_items
-            if _matches_user(n, current_user) and not _is_read_by_user(n, user_id)
-        ]
-        return {"count": len(unread_items)}
-
-
-@router.post("/{notification_id}/read")
-def mark_notification_read(
-    notification_id: str,
-    current_user: User = Depends(get_current_user),
-) -> dict:
-    user_id = str(current_user.id or "")
-    with get_session() as session:
-        n = session.get(Notification, notification_id)
-        if not n:
-            all_items = session.query(Notification).all()
-            for it in all_items:
-                if str(getattr(it, "id", "")) == notification_id or str(getattr(it, "_id", "")) == notification_id:
-                    n = it
-                    break
-        if not n:
-            raise HTTPException(status_code=404, detail="Notification not found")
-
-        if not _matches_user(n, current_user):
-            raise HTTPException(status_code=404, detail="Notification not found")
-
-        n_uid = str(getattr(n, "user_id", "") or "")
-        if not n_uid or n_uid == user_id:
-            n.read = True
-            n.status = "read"
-
-        read_by = list(getattr(n, "read_by", None) or [])
-        if user_id and user_id not in read_by:
-            read_by.append(user_id)
-            n.read_by = read_by
-
-        session.add(n)
-        session.commit()
-
-        # Direct MongoDB sync to ensure immediate persistence across queries
-        try:
-            update_fields = {"read": True, "status": "read"}
-            push_fields = {"read_by": user_id} if user_id else {}
-            mongo_filter = {"$or": [
-                {"id": notification_id},
-                {"id": getattr(n, "id", "")},
-            ]}
-            if ObjectId.is_valid(notification_id):
-                mongo_filter["$or"].append({"_id": ObjectId(notification_id)})
-
-            update_op = {"$set": update_fields}
-            if push_fields:
-                update_op["$addToSet"] = push_fields
-            db["notifications"].update_many(mongo_filter, update_op)
-        except Exception:
-            pass
-
-        return {"status": "success", "id": notification_id}
+    return {"count": sum(not _group_item(group, str(current_user.id))['read'] for group in _event_groups(current_user))}
 
 
 @router.post("/read-all")
 def mark_all_read(current_user: User = Depends(get_current_user)) -> dict:
-    user_id = str(current_user.id or "")
-    with get_session() as session:
-        all_items = session.query(Notification).all()
-        matched = [n for n in all_items if _matches_user(n, current_user)]
+    documents = _visible_documents(current_user)
+    if documents:
+        db["notifications"].update_many(
+            {"_id": {"$in": [doc["_id"] for doc in documents]}},
+            {"$addToSet": {"read_by": str(current_user.id)}},
+        )
+    return {"status": "success", "marked": len(documents)}
 
-        marked_ids = []
-        for n in matched:
-            n_uid = str(getattr(n, "user_id", "") or "")
-            if not n_uid or n_uid == user_id:
-                n.read = True
-                n.status = "read"
 
-            read_by = list(getattr(n, "read_by", None) or [])
-            if user_id and user_id not in read_by:
-                read_by.append(user_id)
-                n.read_by = read_by
-
-            session.add(n)
-            doc_id = str(getattr(n, "id", "") or getattr(n, "_id", ""))
-            if doc_id:
-                marked_ids.append(doc_id)
-
-        session.commit()
-
-        # Direct Mongo sync for all matched notification IDs
-        if marked_ids:
-            try:
-                db["notifications"].update_many(
-                    {"$or": [{"id": {"$in": marked_ids}}, {"user_id": user_id}]},
-                    {"$set": {"read": True, "status": "read"}, "$addToSet": {"read_by": user_id}}
-                )
-            except Exception:
-                pass
-
-        return {"status": "success", "marked": len(marked_ids)}
-
+@router.post("/{notification_id}/read")
+def mark_notification_read(notification_id: str, current_user: User = Depends(get_current_user)) -> dict:
+    query = {"$or": [{"id": notification_id}, {"_id": notification_id}]}
+    if ObjectId.is_valid(notification_id):
+        query["$or"].append({"_id": ObjectId(notification_id)})
+    doc = db["notifications"].find_one(query)
+    if not doc or not _matches_user(_notification(doc), current_user):
+        raise HTTPException(404, "Notification not found")
+    related = [item['_id'] for item in _visible_documents(current_user) if _event_key(item) == _event_key(doc)]
+    db["notifications"].update_many({"_id": {"$in": related}}, {"$addToSet": {"read_by": str(current_user.id)}})
+    return {"status": "success", "id": notification_id}

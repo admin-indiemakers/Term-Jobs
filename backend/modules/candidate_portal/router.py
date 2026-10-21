@@ -694,7 +694,7 @@ def save_timesheet_draft(
         raise HTTPException(status_code=400, detail="Approved timesheet cannot be modified.")
 
     ts_data = {
-        "id": payload.id or (existing.get("id") if existing else f"ts_{uuid.uuid4().hex[:12]}"),
+        "id": (existing.get("id") if existing else None) or f"ts_{uuid.uuid4().hex[:12]}",
         "timesheet_number": existing.get("timesheet_number") if existing else f"TS-{datetime.now(timezone.utc).year}-W{datetime.now(timezone.utc).isocalendar()[1]:02d}-{uuid.uuid4().hex[:4].upper()}",
         "candidate_id": cand_id,
         "workorder_id": cand_id,
@@ -706,6 +706,7 @@ def save_timesheet_draft(
         "week_end_date": payload.week_end_date,
         "period_label": payload.period_label or "",
         "daily_entries": payload.daily_entries,
+        "notes": payload.notes or "",
         "total_regular_hours": analysis["total_regular_hours"],
         "total_overtime_hours": analysis["total_overtime_hours"],
         "total_hours": analysis["total_hours"],
@@ -716,7 +717,7 @@ def save_timesheet_draft(
     }
 
     if existing:
-        ts_coll.update_one({"id": existing["id"]}, {"$set": ts_data})
+        ts_coll.update_one({"_id": existing["_id"]}, {"$set": ts_data})
     else:
         ts_data["created_at"] = datetime.now(timezone.utc).isoformat()
         ts_coll.insert_one(ts_data)
@@ -1226,6 +1227,43 @@ def create_candidate_expense(
     return {"status": "success", "message": "Expense submitted successfully", "expense": doc}
 
 
+INTERNAL_NOTIFICATION_TYPES = (
+    "sow_submitted_to_procurement", "sow_forwarded_to_director",
+    "work_order_fully_approved",
+)
+
+
+def _candidate_notification_query(user):
+    if user.role != "Candidate":
+        raise HTTPException(403, "Candidate role required")
+    candidate_id = user.workorder_id or user.candidate_id
+    if not candidate_id:
+        raise HTTPException(403, "Candidate identity required")
+    return {
+        "$or": [{"workorder_id": candidate_id}, {"candidate_id": candidate_id}],
+        "type": {"$nin": list(INTERNAL_NOTIFICATION_TYPES)},
+        "target_role": {"$in": [None, "", "Candidate"]},
+    }
+
+
+@router.get("/payments")
+def list_candidate_payments(current_user: User = Depends(get_current_user)):
+    identity = _candidate_notification_query(current_user)
+    # Return payment fields only; internal billing/approval records stay private.
+    rows = db["sow_documents"].find({
+        "$or": identity["$or"],
+        "tenant_id": current_user.tenant_id,
+        "payment_status": "Paid",
+    }).sort("payment_processed_at", -1)
+    return {"payments": [{
+        "period": row.get("period"),
+        "amount": row.get("payment_amount"),
+        "transaction_ref": row.get("transaction_ref"),
+        "disbursed_at": row.get("payment_processed_at"),
+        "status": row.get("payment_status"),
+    } for row in rows]}
+
+
 @router.get("/notifications")
 def list_candidate_notifications(
     current_user: User = Depends(get_current_user)
@@ -1236,11 +1274,15 @@ def list_candidate_notifications(
     cand_id = current_user.workorder_id or current_user.candidate_id or ""
     notif_coll = db["candidate_notifications"]
 
-    notifs = list(notif_coll.find({
-        "$or": [{"workorder_id": cand_id}, {"candidate_id": cand_id}]
-    }).sort("created_at", -1))
+    notifs = list(notif_coll.find(_candidate_notification_query(current_user)).sort("created_at", -1))
     for n in notifs:
         n.pop("_id", None)
+        if n.get("type") == "payment_disbursed" and not n.get("transaction_ref"):
+            # Older payment alerts stored the reference only in their message.
+            import re
+            match = re.search(r"Txn Ref: ([^)]+)", n.get("message") or "")
+            if match:
+                n["transaction_ref"] = match.group(1).strip()
 
     if not notifs:
         notifs = []
@@ -1264,7 +1306,7 @@ def mark_notification_read(
 
     cand_id = current_user.workorder_id or current_user.candidate_id or ""
     notif_coll = db["candidate_notifications"]
-    notif_coll.update_one({"id": notification_id, "$or": [{"workorder_id": cand_id}, {"candidate_id": cand_id}]}, {"$set": {"is_read": True}})
+    notif_coll.update_one({**_candidate_notification_query(current_user), "id": notification_id}, {"$set": {"is_read": True}})
     return {"status": "success", "message": "Notification marked as read"}
 
 
@@ -1277,5 +1319,5 @@ def mark_all_notifications_read(
 
     cand_id = current_user.workorder_id or current_user.candidate_id or ""
     notif_coll = db["candidate_notifications"]
-    notif_coll.update_many({"$or": [{"workorder_id": cand_id}, {"candidate_id": cand_id}]}, {"$set": {"is_read": True}})
+    notif_coll.update_many(_candidate_notification_query(current_user), {"$set": {"is_read": True}})
     return {"status": "success", "message": "All notifications marked as read"}

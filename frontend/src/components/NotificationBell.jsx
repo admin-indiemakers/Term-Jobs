@@ -1,3 +1,5 @@
+import { createPortal } from 'react-dom';
+import { notificationDestination } from '../utils/notificationNavigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -74,19 +76,24 @@ export default function NotificationBell() {
   const { token, user } = useAuth();
   const navigate = useNavigate();
   const [items, setItems] = useState([]);
+  const [detail, setDetail] = useState(null);
   const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('all'); // 'all' | 'unread'
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const panelRef = useRef(null);
+  const requestVersion = useRef(0);
+  const savingRead = useRef(false);
 
   const load = useCallback(
     async (quiet = false) => {
-      if (!token) return;
+      if (!token || savingRead.current) return;
+      const version = ++requestVersion.current;
       if (!quiet) setLoading(true);
       try {
-        const list = await request('/api/notifications', { token });
+        const list = await request('/api/notifications', { token, noCache: true });
         if (!Array.isArray(list)) throw new Error('Invalid notification response');
+        if (version !== requestVersion.current) return;
         setItems(list);
         setError('');
       } catch (err) {
@@ -123,37 +130,38 @@ export default function NotificationBell() {
   };
 
   const markRead = async (n) => {
-    setItems((prev) => prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)));
+    if (savingRead.current) return;
+    savingRead.current = true;
+    ++requestVersion.current;
     try {
-      await request(`/api/notifications/${n.id}/read`, { method: 'POST', token });
-    } catch {
-      // ignore
+      await request(`/api/notifications/${encodeURIComponent(n.id)}/read`, { method: 'POST', token });
+      setItems((prev) => prev.map((item) => item.id === n.id ? { ...item, read: true } : item));
+    } catch (err) {
+      setError(err.message || 'Unable to save notification read status.');
+      return;
+    } finally {
+      savingRead.current = false;
     }
     setOpen(false);
 
-    // Deep link navigation
-    let link = n.data?.link;
-    if (!link) {
-      const type = (n.type || '').toLowerCase();
-      if (type.includes('requisition')) {
-        link = user?.role === 'Director' ? '/dashboard/director/requisitions' : '/dashboard/requisitions';
-      } else if (type.includes('candidate') || type.includes('offer') || type.includes('agreement')) {
-        link = '/dashboard/workforce/overview';
-      } else if (type.includes('team') || type.includes('user') || type.includes('director')) {
-        link = '/dashboard/admin/team';
-      }
-    }
-    if (link) {
-      navigate(link);
-    }
+    const link = notificationDestination(n, user?.role);
+    if (link) navigate(link);
+    else setDetail(n);
+
   };
 
   const markAllRead = async () => {
-    setItems((prev) => prev.map((x) => ({ ...x, read: true })));
+    if (savingRead.current) return;
+    savingRead.current = true;
+    ++requestVersion.current;
     try {
       await request('/api/notifications/read-all', { method: 'POST', token });
-    } catch {
-      // ignore
+      setItems((prev) => prev.map((item) => ({ ...item, read: true })));
+      setError('');
+    } catch (err) {
+      setError(err.message || 'Unable to save notification read status.');
+    } finally {
+      savingRead.current = false;
     }
   };
 
@@ -184,6 +192,16 @@ export default function NotificationBell() {
           </span>
         )}
       </button>
+
+      {detail && createPortal(
+        <div role="dialog" aria-modal="true" aria-label="Notification details" className="fixed inset-0 z-[100] bg-black/40 flex items-center justify-center p-4" onClick={() => setDetail(null)}>
+          <div className="w-full max-w-md rounded-2xl bg-white text-gray-900 p-6 shadow-xl" onClick={(event) => event.stopPropagation()}>
+            <h2 className="font-bold text-lg">{detail.title}</h2>
+            <p className="mt-3 text-sm whitespace-pre-wrap">{detail.body || 'No additional details available.'}</p>
+            <button type="button" autoFocus onClick={() => setDetail(null)} className="mt-5 rounded-lg bg-black text-white px-4 py-2">Close</button>
+          </div>
+        </div>, document.body
+      )}
 
       {/* Glassmorphic Notification Panel Dropdown */}
       {open && (
@@ -261,6 +279,7 @@ export default function NotificationBell() {
             </button>
           </div>
 
+          {error && items.length > 0 && <p role="alert" className="p-3 text-xs text-red-800 bg-red-50">{error}</p>}
           {/* Panel Body / Notifications List */}
           <div className="overflow-y-auto flex-1 min-h-0 divide-y divide-black/[0.03]">
             {loading && items.length === 0 ? (

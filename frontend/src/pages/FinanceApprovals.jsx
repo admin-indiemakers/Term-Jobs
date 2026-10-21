@@ -1,4 +1,6 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
+import { billingApprovalState, billingReviewLink } from '../utils/billingApprovalState';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { request } from '../api/client';
 import { currentBillingMonth, billingCycle } from '../utils/billingPeriod';
@@ -36,6 +38,56 @@ export default function FinanceApprovals() {
   const [filter, setFilter] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRow, setSelectedRow] = useState(null);
+  const [decisionNotes, setDecisionNotes] = useState('');
+  const [decisionError, setDecisionError] = useState('');
+  const [decisionLoading, setDecisionLoading] = useState(false);
+  const [decisionSuccess, setDecisionSuccess] = useState('');
+  const decisionInFlight = useRef(false);
+
+  useEffect(() => {
+    setDecisionNotes('');
+    setDecisionError('');
+  }, [selectedRow]);
+
+  async function decideBilling(approve) {
+    if (decisionInFlight.current || user?.role !== 'Director' || !selectedRow || !billingApprovalState(selectedRow).pendingDirector) return;
+    if (!approve && !decisionNotes.trim()) {
+      setDecisionError('Enter a rejection reason so the submitter knows what must change.');
+      return;
+    }
+    const row = selectedRow;
+    const candidateId = row.candidate_id || row.workorder_id;
+    if (!candidateId || !row.period) {
+      setDecisionError('This bill is missing its candidate or billing period. Refresh before approving.');
+      return;
+    }
+    decisionInFlight.current = true;
+    setDecisionLoading(true);
+    setDecisionError('');
+    setDecisionSuccess('');
+    try {
+      const result = await request(`/api/workforce/procurement/sow/${encodeURIComponent(candidateId)}/${approve ? 'director-approve' : 'reject'}?period=${encodeURIComponent(row.period)}`, {
+        method: 'POST', token, body: approve ? {} : { rejection_notes: decisionNotes.trim() },
+      });
+      if (result?.status !== 'success') throw new Error(result?.message || 'The decision could not be saved.');
+      setRows((previous) => previous.map((item) =>
+        (item.candidate_id || item.workorder_id) === candidateId && item.period === row.period
+          ? { ...item, status: approve ? 'Approved by Director' : 'Rejected by Director', director_approved: approve, ready_for_payment: approve,
+              director_approved_by: approve ? result.approved_by : '', director_approved_at: approve ? result.approved_at : '',
+              procurement_authorized: approve, rejection_notes: approve ? '' : decisionNotes.trim() }
+          : item
+      ));
+      setSelectedRow(null);
+      setDecisionSuccess(approve ? 'Director sign-off saved. This bill is ready for Finance payment.' : 'Bill rejected. The submitter must correct and resubmit it through Procurement.');
+      setRefresh((value) => value + 1);
+    } catch (err) {
+      setDecisionError(err.message || 'Unable to save the decision.');
+    } finally {
+      decisionInFlight.current = false;
+      setDecisionLoading(false);
+    }
+  }
+
 
   useEffect(() => {
     let active = true;
@@ -60,7 +112,7 @@ export default function FinanceApprovals() {
   }, [token, month, refresh]);
 
   const paid = (row) => row.status === 'Paid' || row.payment_status === 'Paid';
-  const ready = (row) => !paid(row) && row.ready_for_payment;
+  const ready = (row) => !paid(row) && billingApprovalState(row).directorApproved;
 
   const totalPaidVolume = useMemo(() => {
     return rows.filter(paid).reduce((sum, row) => sum + Number(row.payment_amount ?? row.total_amount ?? 0), 0);
@@ -119,7 +171,7 @@ export default function FinanceApprovals() {
             TERM JOBS • FINANCIAL GOVERNANCE & APPROVALS
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight leading-none">
-            Financial Approvals
+            Payment Tracking
           </h1>
           <p className="text-xs sm:text-[13px] text-gray-500 font-normal mt-1 max-w-2xl">
             {activeTenantName} · Track Procurement authorization, Director sign-off, and Finance disbursements for {billingCycle(month).label}.
@@ -155,6 +207,15 @@ export default function FinanceApprovals() {
         </div>
       </div>
 
+      {user?.role === 'Director' && (
+        <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 text-sm text-blue-950">
+          Review pending bills below, or open{' '}
+          <Link className="font-bold underline" to={`/dashboard/director/work-orders?period=${month}`}>Billing Approvals</Link>.
+          {' '}Both views update the same monthly approval. After Director sign-off, Finance processes payment.
+        </div>
+      )}
+
+      {decisionSuccess && <p role="status" className="p-4 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-900 text-sm">{decisionSuccess}</p>}
       {/* Alert Notifications */}
       {error && (
         <div className="p-3 bg-red-50 border border-red-200 rounded-2xl text-xs text-red-900 flex items-center justify-between shadow-2xs animate-in fade-in">
@@ -181,9 +242,9 @@ export default function FinanceApprovals() {
             <div className="pb-3.5 border-b border-gray-100 space-y-3">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <h2 className="text-base font-extrabold text-gray-900">Billing & Payment Approvals</h2>
+                  <h2 className="text-base font-extrabold text-gray-900">Billing & Payment Status</h2>
                   <p className="text-xs text-gray-500 mt-0.5">
-                    Complete record of Procurement verification, Director executive authorization, and Finance settlements.
+                    One monthly billing approval, followed by Finance disbursement. Open a pending bill to approve or reject it. Billing Approvals shows the same decision.
                   </p>
                 </div>
 
@@ -337,7 +398,7 @@ export default function FinanceApprovals() {
 
                           {/* Procurement */}
                           <td className="w-[15%] py-3.5 px-3 align-middle">
-                            {row.procurement_approved_by ? (
+                            {billingApprovalState(row).procurementApproved && row.procurement_approved_by ? (
                               <div>
                                 <div className="text-gray-900 font-bold flex items-center gap-1 truncate">
                                   <CheckCircle2 size={12} className="text-emerald-600 shrink-0" />
@@ -357,7 +418,7 @@ export default function FinanceApprovals() {
 
                           {/* Director */}
                           <td className="w-[15%] py-3.5 px-3 align-middle">
-                            {directorApprover ? (
+                            {billingApprovalState(row).directorApproved && directorApprover ? (
                               <div>
                                 <div className="text-gray-900 font-bold flex items-center gap-1 truncate">
                                   <CheckCircle2 size={12} className="text-emerald-600 shrink-0" />
@@ -372,6 +433,9 @@ export default function FinanceApprovals() {
                                 <Clock size={11} className="shrink-0" />
                                 Pending Sign-off
                               </span>
+                            )}
+                            {user?.role === 'Director' && billingApprovalState(row).pendingDirector && (
+                              <Link onClick={(event) => event.stopPropagation()} className="block mt-2 text-xs font-bold text-blue-700 underline" to={billingReviewLink(row, month)}>Review bill</Link>
                             )}
                           </td>
 
@@ -534,7 +598,7 @@ export default function FinanceApprovals() {
       {selectedRow && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in"
-          onClick={() => setSelectedRow(null)}
+          onClick={() => { if (!decisionInFlight.current) setSelectedRow(null); }}
         >
           <div
             className="relative w-full max-w-xl bg-white/95 backdrop-blur-2xl rounded-3xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.2),inset_0_1px_1px_rgba(255,255,255,0.9)] border border-white/90 p-6 sm:p-7 text-left space-y-4 max-h-[90vh] overflow-y-auto no-scrollbar"
@@ -544,7 +608,7 @@ export default function FinanceApprovals() {
             <div className="flex items-center justify-between pb-3 border-b border-black/[0.04]">
               <div>
                 <div className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider">
-                  Financial Approval Voucher
+                  Payment Status Details
                 </div>
                 <h3 className="text-base font-black text-gray-900 mt-0.5">
                   {selectedRow.candidate_name}
@@ -555,7 +619,7 @@ export default function FinanceApprovals() {
               </div>
               <button
                 type="button"
-                onClick={() => setSelectedRow(null)}
+                onClick={() => { if (!decisionInFlight.current) setSelectedRow(null); }}
                 className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-600 transition-colors cursor-pointer"
               >
                 <X size={14} />
@@ -614,7 +678,7 @@ export default function FinanceApprovals() {
                     <div>
                       <div className="text-xs font-bold text-gray-900">Procurement Authorization</div>
                       <div className="text-[10px] text-gray-400">
-                        {selectedRow.procurement_approved_by ? `Authorized by ${selectedRow.procurement_approved_by}` : 'Pending authorization'}
+                        {billingApprovalState(selectedRow).procurementApproved && selectedRow.procurement_approved_by ? `Authorized by ${selectedRow.procurement_approved_by}` : 'Pending authorization'}
                       </div>
                     </div>
                   </div>
@@ -632,7 +696,7 @@ export default function FinanceApprovals() {
                     <div>
                       <div className="text-xs font-bold text-gray-900">Director Executive Sign-off</div>
                       <div className="text-[10px] text-gray-400">
-                        {selectedRow.director_approved_by || selectedRow.sow_data?.director_approved_by
+                        {billingApprovalState(selectedRow).directorApproved && (selectedRow.director_approved_by || selectedRow.sow_data?.director_approved_by)
                           ? `Signed off by ${selectedRow.director_approved_by || selectedRow.sow_data?.director_approved_by}`
                           : 'Pending director sign-off'}
                       </div>
@@ -677,11 +741,29 @@ export default function FinanceApprovals() {
               </div>
             )}
 
+            {decisionError && <p role="alert" className="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-900">{decisionError}</p>}
+            {user?.role === 'Director' && billingApprovalState(selectedRow).pendingDirector && (
+              <div className="space-y-3 border-t border-gray-200 pt-4">
+                <p className="text-sm text-gray-700">Review this monthly bill before recording your decision. Approval releases it to Finance for disbursement.</p>
+                <label className="block text-sm font-semibold text-gray-900" htmlFor="billing-rejection-reason">Reason for rejection</label>
+                <textarea id="billing-rejection-reason" value={decisionNotes} disabled={decisionLoading} onChange={(event) => setDecisionNotes(event.target.value)} className="w-full border border-gray-300 rounded-xl p-3 text-sm text-gray-900" placeholder="Required when rejecting" />
+                <div className="flex gap-3">
+                  <button type="button" disabled={decisionLoading} onClick={() => decideBilling(true)} className="px-4 py-2 rounded-xl bg-black text-white font-bold text-sm disabled:opacity-50">{decisionLoading ? 'Saving…' : 'Approve billing'}</button>
+                  <button type="button" disabled={decisionLoading} onClick={() => decideBilling(false)} className="px-4 py-2 rounded-xl border border-red-300 text-red-800 font-bold text-sm disabled:opacity-50">Reject billing</button>
+                </div>
+              </div>
+            )}
+            {user?.role === 'Director' && billingApprovalState(selectedRow).pendingDirector && (
+              <Link className="block rounded-xl bg-blue-50 p-3 text-sm font-bold text-blue-900 underline" to={billingReviewLink(selectedRow, month)}>
+                Review this month’s bill in Billing Approvals
+              </Link>
+            )}
+
             {/* Close Button */}
             <div className="pt-2">
               <button
                 type="button"
-                onClick={() => setSelectedRow(null)}
+                onClick={() => { if (!decisionInFlight.current) setSelectedRow(null); }}
                 className="w-full py-2.5 rounded-xl bg-black hover:bg-gray-800 text-white text-xs font-bold transition cursor-pointer shadow-xs"
               >
                 Close Voucher

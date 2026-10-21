@@ -1,3 +1,4 @@
+import { canCreateRequisition } from '../../utils/requisitionPermissions';
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
@@ -1473,7 +1474,7 @@ export default function RequisitionOverview({ section }) {
         </div>
 
         {/* Top Right: Create Action Button */}
-        <div className="flex items-center gap-2.5 shrink-0">
+        {canCreateRequisition(user?.role) && <div className="flex items-center gap-2.5 shrink-0">
           <button
             type="button"
             onClick={() => navigate('/dashboard/requisitions/new')}
@@ -1482,7 +1483,7 @@ export default function RequisitionOverview({ section }) {
             <Plus size={14} />
             <span>New Requisition</span>
           </button>
-        </div>
+        </div>}
       </div>
 
       {/* Notifications / Alerts */}

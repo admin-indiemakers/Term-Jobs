@@ -115,7 +115,7 @@ export default function SuperAdminCandidateManagement() {
         params.append('sort_by', sortBy);
       }
 
-      const res = await request(`/api/superadmin/candidate-management?${params.toString()}`, { token });
+      const res = await request(`/api/superadmin/candidate-management?${params.toString()}`, { token, noCache: true });
       if (res && res.status === 'success') {
         setSelections(res.selections || []);
         if (res.companies) {
@@ -508,6 +508,7 @@ export default function SuperAdminCandidateManagement() {
                       <div className="pt-2 border-t border-gray-100 flex items-center justify-between gap-3">
                         <div className="text-xs font-black text-emerald-700">
                           {formatMatchScore(cand.match_score)} Match Fit
+                          <div className="mt-1 text-[10px] font-normal text-gray-500 break-all">Requisition: {cand.requisition_id || 'Unavailable'}</div>
                         </div>
 
                         <button

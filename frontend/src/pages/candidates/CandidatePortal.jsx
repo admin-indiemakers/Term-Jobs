@@ -1,3 +1,4 @@
+import { applyWorkdayPattern, eligiblePatternDay } from '../../utils/workdayPattern';
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
@@ -105,6 +106,23 @@ export default function CandidatePortal() {
     return 'dashboard';
   });
 
+  const [payments, setPayments] = useState([]);
+  const [paymentError, setPaymentError] = useState('');
+  const [paymentsLoading, setPaymentsLoading] = useState(false);
+  const [paymentSelection, setPaymentSelection] = useState(null);
+
+  useEffect(() => {
+    if (activeTab !== 'billing') return;
+    let cancelled = false;
+    setPaymentsLoading(true);
+    setPaymentError('');
+    request('/api/candidate-portal/payments', { token })
+      .then((res) => { if (!cancelled) setPayments(res.payments || []); })
+      .catch((err) => { if (!cancelled) setPaymentError(err.message || 'Unable to load payments'); })
+      .finally(() => { if (!cancelled) setPaymentsLoading(false); });
+    return () => { cancelled = true; };
+  }, [activeTab, token, paymentSelection]);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [data, setData] = useState(null);
@@ -210,6 +228,7 @@ export default function CandidatePortal() {
 
   // Daily entries initialized with real hours respecting start date
   const [dailyEntries, setDailyEntries] = useState(generateInitialSevenDays);
+  const [patternSourceDay, setPatternSourceDay] = useState(0);
 
   // Attendance state
   const [selectedMonth, setSelectedMonth] = useState(() => todayForDeadline().slice(0, 7));
@@ -421,7 +440,10 @@ export default function CandidatePortal() {
 
   const handleNotificationClick = (notif) => {
     handleMarkSingleRead(notif.id);
-    if (notif.target_tab) {
+    if (notif.type === 'payment_disbursed') {
+      setPaymentSelection(notif);
+      setActiveTab('billing');
+    } else if (['dashboard', 'assignment', 'timesheet', 'attendance', 'expenses'].includes(notif.target_tab)) {
       setActiveTab(notif.target_tab);
     }
     setShowNotifications(false);
@@ -471,13 +493,13 @@ export default function CandidatePortal() {
       // Primary essential dashboard data
       const [dash, curTs] = await Promise.all([
         request('/api/candidate-portal/dashboard', { token }).catch(() => null),
-        request('/api/candidate-portal/timesheet/current', { token }).catch(() => null),
+        request('/api/candidate-portal/timesheet/current', { token, noCache: true }).catch(() => null),
       ]);
 
       if (dash) setData(dash);
       if (curTs?.timesheet) {
         setCurrentTimesheet(curTs.timesheet);
-        if (curTs.timesheet.daily_entries && curTs.timesheet.daily_entries.length === 7) {
+        if (Array.isArray(curTs.timesheet.daily_entries) && curTs.timesheet.daily_entries.length > 0) {
           setDailyEntries(curTs.timesheet.daily_entries);
         }
       }
@@ -642,6 +664,7 @@ export default function CandidatePortal() {
       return;
     }
 
+    setPatternSourceDay(dayIndex);
     const clamped = Math.max(0, Math.min(24, Math.round(newHours * 2) / 2));
     const updated = [...dailyEntries];
     updated[dayIndex] = {
@@ -663,6 +686,7 @@ export default function CandidatePortal() {
       return;
     }
 
+    setPatternSourceDay(dayIndex);
     const updated = [...dailyEntries];
     updated[dayIndex] = {
       ...entry,
@@ -690,18 +714,20 @@ export default function CandidatePortal() {
     setTimesheetMsg({ type: 'success', text: 'Restored standard working pattern for active workdays!' });
   };
 
-  // Apply to all workdays
+  const patternOptions = {
+    today: todayStr,
+    assignmentStart: assignmentStartStr,
+    locked: isTimesheetFrozen || ['SUBMITTED', 'APPROVED', 'INVOICED', 'PAID'].includes(String(currentTimesheet?.status || '').toUpperCase()),
+  };
   const handleApplyToAllWorkdays = () => {
-    const updated = dailyEntries.map((e, idx) => {
-      const isFuture = e.date && e.date > todayStr;
-      const isBeforeStart = e.date && e.date < assignmentStartStr;
-      if (idx < 5 && !isFuture && !isBeforeStart) {
-        return { ...e, hours: 8.0, category: 'Regular' };
-      }
-      return e;
+    const result = applyWorkdayPattern(dailyEntries, patternSourceDay, patternOptions);
+    setDailyEntries(result.entries);
+    setTimesheetMsg({
+      type: result.changed ? 'success' : 'error',
+      text: result.changed
+        ? `Applied ${dailyEntries[patternSourceDay].hours}h ${dailyEntries[patternSourceDay].category || 'Regular'} to ${result.changed} eligible workday(s). Review and save your timesheet.`
+        : 'No eligible workdays changed. Choose an editable source day; matching, future, locked, leave and holiday entries are preserved.',
     });
-    setDailyEntries(updated);
-    setTimesheetMsg({ type: 'success', text: 'Applied 8h standard workday pattern to active days.' });
   };
 
   // Note Modal Save
@@ -719,6 +745,10 @@ export default function CandidatePortal() {
 
   // Save Draft
   const handleSaveDraft = async () => {
+    if (!currentTimesheet?.week_start_date || !currentTimesheet?.week_end_date) {
+      setTimesheetMsg({ type: 'error', text: 'Wait for the current timesheet to load before saving or submitting.' });
+      return;
+    }
     if (isTimesheetFrozen) {
       setTimesheetMsg({ type: 'error', text: 'Timesheets are permanently frozen following completion of offboarding.' });
       return;
@@ -730,14 +760,16 @@ export default function CandidatePortal() {
         method: 'POST',
         token,
         body: {
-          id: currentTimesheet?.id || 'ts_curr_draft',
-          week_start_date: currentTimesheet?.week_start_date || '2026-08-24',
-          week_end_date: currentTimesheet?.week_end_date || '2026-08-30',
-          period_label: currentTimesheet?.period_label || '24 – 30 August 2026',
+          id: currentTimesheet.id,
+          week_start_date: currentTimesheet.week_start_date,
+          week_end_date: currentTimesheet.week_end_date,
+          period_label: currentTimesheet.period_label || '',
           daily_entries: dailyEntries,
+          notes: currentTimesheet.notes || '',
         },
       });
-      if (res.timesheet) setCurrentTimesheet(res.timesheet);
+      if (res?.status !== 'success' || !res.timesheet) throw new Error('The timesheet was not saved. Please try again.');
+      setCurrentTimesheet(res.timesheet);
       setTimesheetMsg({ type: 'success', text: 'Timesheet draft saved successfully!' });
     } catch (err) {
       setTimesheetMsg({ type: 'error', text: err.message || 'Failed to save timesheet draft.' });
@@ -748,6 +780,10 @@ export default function CandidatePortal() {
 
   // Submit timesheet
   const handleConfirmSubmit = async () => {
+    if (!currentTimesheet?.week_start_date || !currentTimesheet?.week_end_date) {
+      setTimesheetMsg({ type: 'error', text: 'Wait for the current timesheet to load before saving or submitting.' });
+      return;
+    }
     if (isTimesheetFrozen) {
       setTimesheetMsg({ type: 'error', text: 'Timesheets are permanently frozen following completion of offboarding.' });
       return;
@@ -759,14 +795,16 @@ export default function CandidatePortal() {
         method: 'POST',
         token,
         body: {
-          id: currentTimesheet?.id || 'ts_curr_draft',
-          week_start_date: currentTimesheet?.week_start_date || '2026-08-24',
-          week_end_date: currentTimesheet?.week_end_date || '2026-08-30',
-          period_label: currentTimesheet?.period_label || '24 – 30 August 2026',
+          id: currentTimesheet.id,
+          week_start_date: currentTimesheet.week_start_date,
+          week_end_date: currentTimesheet.week_end_date,
+          period_label: currentTimesheet.period_label || '',
           daily_entries: dailyEntries,
+          notes: currentTimesheet.notes || '',
         },
       });
-      if (res.timesheet) setCurrentTimesheet(res.timesheet);
+      if (res?.status !== 'success' || !res.timesheet) throw new Error('The timesheet was not saved. Please try again.');
+      setCurrentTimesheet(res.timesheet);
       setTimesheetMsg({ type: 'success', text: 'Timesheet submitted for manager approval!' });
       loadDashboardData();
     } catch (err) {
@@ -1491,6 +1529,32 @@ export default function CandidatePortal() {
         {/* ========================================================
             VIEW 1: DASHBOARD (MONOCHROME BENTO UI)
            ======================================================== */}
+        <button type="button" className="px-6 py-2 text-sm font-semibold underline" onClick={() => { setPaymentSelection(null); setActiveTab('billing'); }}>My payments</button>
+
+        {activeTab === 'billing' && (
+          <section className="p-6 space-y-4">
+            <h1 className="text-xl font-bold">Payment details</h1>
+            {paymentsLoading ? <p>Loading payments…</p> : paymentError ? (
+              <p role="alert">{paymentError}</p>
+            ) : (() => {
+              const matching = payments.filter((payment) =>
+                !paymentSelection || (paymentSelection.transaction_ref
+                  ? payment.transaction_ref === paymentSelection.transaction_ref
+                  : paymentSelection.period ? payment.period === paymentSelection.period : true)
+              );
+              return matching.length ? matching.map((payment, index) => (
+                <dl key={`${payment.transaction_ref}-${index}`} className="bg-white rounded-xl border border-gray-200 p-5 grid grid-cols-2 gap-3">
+                  <dt>Billing period</dt><dd>{payment.period || 'Unavailable'}</dd>
+                  <dt>Payment amount</dt><dd>{payment.amount == null ? 'Unavailable' : `₹${Number(payment.amount).toLocaleString('en-IN')}`}</dd>
+                  <dt>Transaction reference</dt><dd>{payment.transaction_ref || 'Unavailable'}</dd>
+                  <dt>Disbursement date</dt><dd>{payment.disbursed_at ? new Date(payment.disbursed_at).toLocaleString() : 'Unavailable'}</dd>
+                  <dt>Payment status</dt><dd>{payment.status || 'Unavailable'}</dd>
+                </dl>
+              )) : <p>Payment details are not available for this notification.</p>;
+            })()}
+          </section>
+        )}
+
         {activeTab === 'dashboard' && (
           <div className="space-y-4 pb-4">
             {/* 1. HERO WELCOME CARD */}
@@ -2362,12 +2426,17 @@ export default function CandidatePortal() {
               >
                 <div className="flex items-center gap-2.5 text-[12.5px] text-[#5A5A57]">
                   <Sparkles size={15} className="text-[#0A0A0A] shrink-0" />
-                  <span>
-                    AI prepared this based on your usual pattern (40h/week). Please review and make changes if needed.
-                  </span>
+                  <label className="flex flex-wrap items-center gap-2">
+                    Copy hours and category from
+                    <select aria-label="Workday pattern source" value={patternSourceDay} onChange={(event) => setPatternSourceDay(Number(event.target.value))} className="border border-gray-300 rounded-lg p-2 bg-white text-gray-900">
+                      {dailyEntries.map((entry, index) => <option key={entry.date || index} value={index} disabled={!eligiblePatternDay(entry, patternOptions)}>{entry.day} {entry.date} · {entry.hours}h {entry.category || 'Regular'}</option>)}
+                    </select>
+                  </label>
                 </div>
 
                 <button
+                  type="button"
+                  disabled={!eligiblePatternDay(dailyEntries[patternSourceDay], patternOptions)}
                   onClick={handleApplyToAllWorkdays}
                   style={{
                     backgroundColor: '#0A0A0A',

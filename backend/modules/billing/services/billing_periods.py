@@ -46,3 +46,34 @@ def period_query(collection, candidate_id, period):
 def require_editable(doc):
     if doc and (doc.get('status') == 'Paid' or doc.get('payment_status') == 'Paid'):
         raise HTTPException(409, 'This billing period is already paid and cannot be changed. Select another month.')
+
+
+def require_resubmittable(doc):
+    """Freeze the submitted billing snapshot until an explicit return for revision."""
+    require_editable(doc)
+    if not doc:
+        return
+    returned = doc.get('status') in ('Revision Requested', 'Rejected by Procurement', 'Rejected by Director', 'Rejected')
+    if not returned and (
+        doc.get('procurement_authorized') or doc.get('director_approved')
+        or doc.get('status') in ('Pending Director Approval', 'Approved by Procurement', 'Approved by Director', 'Approved', 'ACTIVE')
+    ):
+        raise HTTPException(409, 'This billing period has been authorized by Procurement. Request revision with a reason before changing or resubmitting it. The existing approval status has been preserved.')
+
+
+def update_billing_snapshot(collection, query, previous, update, *, upsert=False):
+    """Reject stale writes instead of reverting a concurrent approval."""
+    if previous:
+        guarded = {**query, 'status': previous.get('status'), 'updated_at': previous.get('updated_at')}
+        result = collection.update_one(guarded, update)
+        if result.matched_count != 1:
+            raise HTTPException(409, 'This billing period changed while you were reviewing it. Refresh and review its current approval status.')
+        return result
+    if upsert:
+        # A concurrent request may have created and submitted this period since
+        # our read. Never overwrite that submission with a first-save payload.
+        result = collection.update_one(query, {'$setOnInsert': update['$set']}, upsert=True)
+        if result.matched_count:
+            raise HTTPException(409, 'This billing period was created by another request. Refresh before editing it.')
+        return result
+    return collection.update_one(query, update)

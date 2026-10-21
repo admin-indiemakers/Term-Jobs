@@ -88,7 +88,7 @@ export default function SuperAdminCandidatePool() {
   const fetchPoolData = async (forceRefresh = false) => {
     setLoading(true);
     try {
-      const res = await request('/api/superadmin/candidate-pool', { token, forceRefresh });
+      const res = await request('/api/superadmin/candidate-pool', { token, forceRefresh, noCache: true });
       setCandidates(res.candidates || []);
       setVendorsList(res.vendors || []);
       if (res.stats) setStats(res.stats);
@@ -643,8 +643,6 @@ export default function SuperAdminCandidatePool() {
               <tbody className="divide-y divide-gray-100 text-gray-700">
                 {filteredCandidates.map((cand) => {
                   const apps = cand.applications || [];
-                  const latestApp = apps[0];
-                  const hasMultiple = apps.length > 1;
 
                   return (
                     <tr key={cand.id} className="hover:bg-gray-50/70 transition-colors group">
@@ -716,23 +714,17 @@ export default function SuperAdminCandidatePool() {
                             General Talent Pool (No active requisition)
                           </div>
                         ) : (
-                          <div className="space-y-1.5">
-                            <div className="font-bold text-gray-900 text-xs truncate max-w-[220px]">
-                              {latestApp.requisition_title}
-                            </div>
-                            <div className="text-[11px] text-gray-500 font-medium flex items-center gap-1.5">
-                              <span>{latestApp.company_name}</span>
-                              {latestApp.match_score !== null && (
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-800">
-                                  {latestApp.match_score}%
-                                </span>
-                              )}
-                            </div>
-                            {hasMultiple && (
-                              <div className="text-[10px] text-gray-400 font-medium">
-                                + {apps.length - 1} other application{apps.length > 2 ? 's' : ''}
+                          <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                            {apps.map((app) => (
+                              <div key={`${app.requisition_id}:${app.submission_id}`} className="rounded-lg border border-gray-200 bg-gray-50 p-2.5">
+                                <div className="font-bold text-gray-900 text-xs whitespace-normal">{app.requisition_title}</div>
+                                <div className="text-[10px] text-gray-500 mt-1">{app.company_name}</div>
+                                <div className="text-[10px] text-gray-500 break-all mt-1">Requisition: {app.requisition_id || 'Unavailable'}</div>
+                                <div className="text-[11px] font-bold text-emerald-800 mt-1">
+                                  {app.match_score == null ? 'Match score unavailable' : `${Math.round(app.match_score)}% Match Fit`}
+                                </div>
                               </div>
-                            )}
+                            ))}
                           </div>
                         )}
                       </td>
@@ -1048,6 +1040,7 @@ export default function SuperAdminCandidatePool() {
                           <div className="font-bold text-xs text-gray-900 truncate">
                             {app.requisition_title}
                           </div>
+                          <div className="text-[10px] text-gray-500 break-all mt-1">Requisition: {app.requisition_id || 'Unavailable'}</div>
                           <div className="text-[11px] text-gray-500 mt-0.5 flex items-center gap-1.5">
                             <span>{app.company_name}</span>
                             <span>•</span>
@@ -1060,7 +1053,7 @@ export default function SuperAdminCandidatePool() {
                         <div className="flex items-center gap-2 shrink-0">
                           {app.match_score !== null && (
                             <span className="px-2 py-0.5 rounded-full text-[10.5px] font-extrabold bg-gray-100 text-gray-800">
-                              {app.match_score}% Match
+                              {Math.round(app.match_score)}% Match
                             </span>
                           )}
                           <span className="px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-blue-50 text-blue-700 border border-blue-200">

@@ -3,7 +3,7 @@
 
 def deduplicate_selections(entries: list[dict]) -> list[dict]:
     unique: list[dict] = []
-    by_submission: dict[str, dict] = {}
+    by_submission: dict[tuple[str, str], dict] = {}
     by_email: dict[tuple[str, str], dict] = {}
     by_candidate_id: dict[tuple[str, str], dict] = {}
     by_candidate: dict[tuple[str, str], list[dict]] = {}
@@ -15,7 +15,7 @@ def deduplicate_selections(entries: list[dict]) -> list[dict]:
         name = " ".join(str(entry.get("candidate_name") or "").split()).casefold()
         candidate_id = str(entry.get("candidate_id") or "").strip().casefold()
 
-        match = by_submission.get(submission_id) if submission_id else None
+        match = by_submission.get((requisition_id, submission_id)) if submission_id else None
         if not match and requisition_id and email:
             match = by_email.get((requisition_id, email))
         if not match and requisition_id and candidate_id:
@@ -38,7 +38,7 @@ def deduplicate_selections(entries: list[dict]) -> list[dict]:
                 if match.get(field) in (None, "") and entry.get(field) not in (None, ""):
                     match[field] = entry[field]
             if submission_id:
-                by_submission[submission_id] = match
+                by_submission[(requisition_id, submission_id)] = match
             if requisition_id and email:
                 by_email[(requisition_id, email)] = match
             if requisition_id and candidate_id:
@@ -47,7 +47,7 @@ def deduplicate_selections(entries: list[dict]) -> list[dict]:
 
         unique.append(entry)
         if submission_id:
-            by_submission[submission_id] = entry
+            by_submission[(requisition_id, submission_id)] = entry
         if requisition_id and email:
             by_email[(requisition_id, email)] = entry
         if requisition_id and candidate_id:

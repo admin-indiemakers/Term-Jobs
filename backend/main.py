@@ -1412,6 +1412,8 @@ def create_requisition(
     background_tasks: BackgroundTasks = BackgroundTasks(),
     current_user: User = Depends(get_current_user)
 ) -> dict:
+    from modules.requisition.permissions import require_requisition_creator
+    require_requisition_creator(current_user)
     _require_writable(current_user)
 
     # The company profile must belong to the requester's tenant.
@@ -2481,6 +2483,7 @@ def get_superadmin_candidate_pool(
         raise HTTPException(status_code=403, detail="Super Admin authorization required.")
 
     from modules.shared.db import db
+    from modules.notifications.services.match_scores import submission_match_score
 
     # 1. Fetch candidates from candidates bank
     bank_candidates = list(db["candidates"].find({}, {"resume_pdf": 0, "extracted_text": 0}).sort("created_at", -1))
@@ -2571,7 +2574,7 @@ def get_superadmin_candidate_pool(
         sub_id = s.get("id") or str(s.get("_id"))
         email = (s.get("candidate_email") or "").strip().lower()
         cid = s.get("workorder_id") or s.get("candidate_id") or sub_id
-        key = email if (email and email in cand_dict) else cid
+        key = email or cid
 
         req_info = req_map.get(s.get("requisition_id"), {})
         created_val = s.get("created_at")
@@ -2580,7 +2583,7 @@ def get_superadmin_candidate_pool(
             "requisition_id": s.get("requisition_id"),
             "requisition_title": req_info.get("title") or s.get("requisition_title") or "Open Role",
             "company_name": req_info.get("company") or s.get("company_name") or "Enterprise Partner",
-            "match_score": float(s.get("match_score")) if s.get("match_score") is not None else None,
+            "match_score": submission_match_score(s, submissions),
             "recommendation": s.get("recommendation"),
             "status": s.get("status") or "Submitted",
             "applied_at": created_val.isoformat() if hasattr(created_val, "isoformat") else str(created_val or ""),
@@ -2814,11 +2817,6 @@ def get_superadmin_candidate_management(
     if current_user.role != "Super Admin":
         raise HTTPException(status_code=403, detail="Super Admin authorization required.")
 
-    cache_key = f"sa_candidate_mgmt:{company or 'all'}:{search or 'none'}:{sort_by}"
-    cached = _cache.get(cache_key)
-    if cached is not None:
-        return cached
-
     from modules.shared.db import db
     from datetime import datetime, timezone
     import re
@@ -2851,12 +2849,11 @@ def get_superadmin_candidate_management(
             return False
         return True
 
-    def recorded_match_score(value):
-        try:
-            score = float(value)
-            return score if 0 <= score <= 100 else None
-        except (TypeError, ValueError):
-            return None
+    from modules.notifications.services.match_scores import submission_match_score
+    score_submissions = list(db["candidate_submissions"].find({}, {
+        "id": 1, "candidate_id": 1, "workorder_id": 1, "candidate_email": 1,
+        "requisition_id": 1, "match_score": 1, "updated_at": 1, "created_at": 1,
+    }))
 
     # 1. Fetch recorded selections from candidate_selections collection
     recorded_selections = list(db["candidate_selections"].find({}, {"_id": 0}).sort("selected_at", -1))
@@ -2927,7 +2924,7 @@ def get_superadmin_candidate_management(
             "requisition_ref": rec.get("requisition_ref") or req_info.get("ref") or "REQ-GENERAL",
             "hiring_manager_name": rec.get("hiring_manager_name") or req_info.get("hiring_manager_name") or "Hiring Manager",
             "hiring_manager_email": rec.get("hiring_manager_email") or "",
-            "match_score": recorded_match_score(rec.get("match_score")),
+            "match_score": submission_match_score(rec, score_submissions),
             "status": rec.get("status") or "Selected",
             "notes": rec.get("notes") or "",
             "selected_at": rec.get("selected_at") or rec.get("created_at") or datetime.now(timezone.utc).isoformat(),
@@ -2962,7 +2959,7 @@ def get_superadmin_candidate_management(
             "requisition_ref": req_info.get("ref") or f"REQ-{(sub.get('requisition_id') or '')[:6].upper()}",
             "hiring_manager_name": req_info.get("hiring_manager_name") or "Hiring Manager",
             "hiring_manager_email": "",
-            "match_score": recorded_match_score(sub.get("match_score")),
+            "match_score": submission_match_score(sub, score_submissions),
             "status": "Selected",
             "notes": sub.get("hiring_manager_notes") or sub.get("summary") or "",
             "selected_at": iso_str,
@@ -3029,7 +3026,6 @@ def get_superadmin_candidate_management(
             "scored_candidates_count": len(scored_selections),
         },
     }
-    _cache.set(cache_key, res, ttl=30)
     return res
 
 

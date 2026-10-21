@@ -1,3 +1,5 @@
+import { financeRedirect } from './utils/financeAccess';
+import { canCreateRequisition, requisitionWorkflowRedirect } from './utils/requisitionPermissions';
 import CandidateTelegramLogin from './pages/CandidateTelegramLogin';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 import { useRef, useEffect, useState, lazy, Suspense } from 'react';
@@ -90,9 +92,11 @@ function FullScreenLoader() {
 
 function RequireAuth({ children }) {
   const { user, token, initializing } = useAuth();
+  const { pathname } = useLocation();
   if (initializing) return <FullScreenLoader />;
   if (!token || !user) return <Navigate to="/login" replace />;
-  return children;
+  const redirect = financeRedirect(user.role, pathname);
+  return redirect ? <Navigate to={redirect} replace /> : children;
 }
 
 function HomeRedirect() {
@@ -134,7 +138,7 @@ function CandidateRouteDispatcher() {
 function DashboardAccessGuard({ children }) {
   const { user } = useAuth();
   const { pathname } = useLocation();
-  const redirect = directorRedirect(user?.role, pathname);
+  const redirect = requisitionWorkflowRedirect(user?.role, pathname) || directorRedirect(user?.role, pathname);
   return redirect ? <Navigate to={redirect} replace /> : children;
 }
 
@@ -145,7 +149,11 @@ function SuperAdminRouteGuard({ children }) {
 
 function RequisitionRouteGuard({ children }) {
   const { user } = useAuth();
+  const { pathname } = useLocation();
   const params = useParams();
+  if (pathname.replace(/\/$/, '') === '/dashboard/requisitions/new' && !canCreateRequisition(user?.role)) {
+    return <Navigate to={['Procurement', 'Procurement Team', 'Employee'].includes(user?.role) ? '/dashboard/procurement' : '/dashboard'} replace />;
+  }
   const role = user?.role?.toLowerCase() || '';
   if (role === 'director') {
     if (params?.id) {

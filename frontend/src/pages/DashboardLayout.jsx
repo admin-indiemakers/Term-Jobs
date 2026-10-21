@@ -1,3 +1,4 @@
+import { isFinanceRole } from '../utils/financeAccess';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -475,7 +476,7 @@ export default function DashboardLayout() {
   }
 
   const userRole = (user?.role || '').trim();
-  const isFinance = userRole === 'Finance' || userRole === 'Finance Team' || userRole.toLowerCase() === 'finance' || location.pathname.startsWith('/dashboard/finance');
+  const isFinance = isFinanceRole(userRole);
   const consoleClass = isFinance ? 'console-finance' : (CONSOLE_CLASS[userRole] || 'console-default');
   const isCompanyAdmin = userRole === 'Admin' || userRole.toLowerCase() === 'admin';
   const isHiringManager = userRole === 'Hiring Manager' || userRole.toLowerCase() === 'hiring manager' || userRole === 'HR';
@@ -529,16 +530,15 @@ export default function DashboardLayout() {
         : isDirector
           ? [
             { to: '/dashboard/director', label: 'Executive Overview', end: true, section: 'WORKSPACE', icon: Icons.Dashboard },
-            { to: '/dashboard/director/finance-approvals', label: 'Finance Approvals', end: false, section: 'WORKSPACE', icon: Icons.Receipt },
-            { to: '/dashboard/director/work-orders', label: 'Work Order Approvals', end: false, section: 'WORKSPACE', icon: Icons.Agreements },
+            { to: '/dashboard/director/finance-approvals', label: 'Payment Tracking', end: false, section: 'WORKSPACE', icon: Icons.Receipt },
+            { to: '/dashboard/director/work-orders', label: 'Billing Approvals', end: false, section: 'WORKSPACE', icon: Icons.Agreements },
             { to: '/dashboard/director/templates', label: 'Role Templates', end: false, section: 'WORKSPACE', icon: Icons.Agreements },
             { to: '/dashboard/director/profile', label: 'Profile', end: false, section: 'ACCOUNT', icon: User },
           ]
           : (userRole === 'Procurement' || userRole === 'Procurement Team')
             ? [
-              { to: '/dashboard/procurement/finance-approvals', label: 'Finance Approvals', end: false, icon: Icons.Receipt },
+              { to: '/dashboard/procurement/finance-approvals', label: 'Payment Tracking', end: false, icon: Icons.Receipt },
               { to: '/dashboard/procurement', label: 'Work Orders', end: true, icon: Icons.Agreements, badge: procurementPendingSows },
-              { to: '/dashboard/requisitions', label: 'Requisitions', end: false, icon: Icons.Requisitions },
             ]
             : isFinance
               ? [

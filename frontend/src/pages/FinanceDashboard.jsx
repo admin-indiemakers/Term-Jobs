@@ -1,3 +1,5 @@
+import { billingApprovalState } from '../utils/billingApprovalState';
+import { createPortal } from 'react-dom';
 import { currentBillingMonth } from '../utils/billingPeriod';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { request } from '../api/client';
@@ -61,6 +63,8 @@ function formatCurrency(val) {
 
 export default function FinanceDashboard() {
   const loadVersionRef = useRef(0);
+  const remittanceTriggerRef = useRef(null);
+  const paymentInFlight = useRef(false);
   const [selectedMonth, setSelectedMonth] = useState(() => currentBillingMonth());
   const { token, user } = useAuth();
   const [workOrders, setWorkOrders] = useState([]);
@@ -79,6 +83,7 @@ export default function FinanceDashboard() {
   // Tabs & Search
   const [activeTab, setActiveTab] = useState('READY'); // 'READY' | 'ALL' | 'PAID' | 'PENDING_DIRECTOR'
   const [searchQuery, setSearchQuery] = useState('');
+  const [showRemittance, setShowRemittance] = useState(false);
   const [viewMode, setViewMode] = useState('PAYMENT'); // 'PAYMENT' | 'DOCUMENT'
 
   // Payment processing state
@@ -109,7 +114,7 @@ export default function FinanceDashboard() {
         // Default select first ready for payment, else first item
         const ready = list.find((w) => {
           const st = (w.status || '').toLowerCase();
-          return st.includes('director') || st.includes('ready') || st === 'approved by director';
+          return billingApprovalState(w).directorApproved && w.status !== 'Paid' && w.payment_status !== 'Paid';
         });
         const target = ready || list[0];
         if (!selectedCandidateId || !list.some((w) => (w.candidate_id || w.workorder_id || w._id) === selectedCandidateId)) {
@@ -137,12 +142,42 @@ export default function FinanceDashboard() {
     return workOrders.find((w) => (w.candidate_id || w.workorder_id || w._id) === selectedCandidateId) || workOrders[0];
   }, [workOrders, selectedCandidateId]);
 
+  useEffect(() => {
+    setShowRemittance(false);
+  }, [selectedCandidateId, selectedMonth]);
+
+  useEffect(() => {
+    if (!showRemittance) return;
+    const previousFocus = remittanceTriggerRef.current;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') setShowRemittance(false);
+      if (event.key === 'Tab') {
+        const buttons = document.querySelectorAll('#finance-remittance-print button');
+        const first = buttons[0];
+        const last = buttons[buttons.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first?.focus();
+        }
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener('keydown', onKeyDown);
+      if (previousFocus instanceof HTMLElement) previousFocus.focus();
+    };
+  }, [showRemittance]);
+
   const sowData = activeWo?.sow_data || {};
   const rawStatus = (activeWo?.status || sowData?.status || 'Pending Director Approval').trim();
-  const isDirectorApproved =
-    rawStatus === 'Approved by Director' ||
-    rawStatus === 'Approved' ||
-    activeWo?.ready_for_payment === true;
+  const isDirectorApproved = billingApprovalState(activeWo || {}).directorApproved;
+  const isProcurementApproved = billingApprovalState(activeWo || {}).procurementApproved;
   const isPaid =
     rawStatus === 'Paid' ||
     rawStatus.toLowerCase() === 'paid' ||
@@ -163,7 +198,7 @@ export default function FinanceDashboard() {
 
       const st = (item.status || '').toLowerCase();
       const isItemPaid = st === 'paid' || item.payment_status === 'Paid';
-      const isItemReady = !isItemPaid && (st.includes('director') || item.ready_for_payment === true);
+      const isItemReady = !isItemPaid && billingApprovalState(item).directorApproved;
 
       if (activeTab === 'READY') return isItemReady;
       if (activeTab === 'PAID') return isItemPaid;
@@ -174,6 +209,11 @@ export default function FinanceDashboard() {
 
   // Open Payment Modal with auto-generated reference
   const handleOpenPaymentModal = () => {
+    if (!activeWo || isPaid || !billingApprovalState(activeWo).directorApproved) {
+      setError('Director approval is required before payment can be confirmed.');
+      return;
+    }
+    setError('');
     const randomSuffix = Math.floor(100000 + Math.random() * 900000);
     setTransactionRef(`UTR-IND-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}-${randomSuffix}`);
     setPaymentNotes('Settled via standard 30-day corporate disbursement cycle.');
@@ -182,21 +222,31 @@ export default function FinanceDashboard() {
 
   // Submit Payment Disbursal
   const handleProcessPayment = async () => {
-    if (!activeWo) return;
-    const cid = activeWo.candidate_id || activeWo._id;
+    if (!activeWo || paymentInFlight.current) return;
+    const cid = activeWo.candidate_id || activeWo.workorder_id || activeWo._id;
+    paymentInFlight.current = true;
     setActionLoading(true);
     setError('');
     setSuccessMsg('');
     try {
-      const res = await request(`/api/workforce/finance/work-orders/${cid}/process-payment?period=${selectedMonth}`, {
+      const res = await request(`/api/workforce/finance/work-orders/${encodeURIComponent(cid)}/process-payment?period=${selectedMonth}`, {
         method: 'POST',
         token,
         body: {
           payment_method: paymentMethod,
-          transaction_reference: transactionRef,
+          transaction_ref: transactionRef,
           notes: paymentNotes
         }
       });
+      if (res?.status !== 'success') throw new Error(res?.message || 'Payment confirmation could not be saved.');
+      ++loadVersionRef.current;
+      const payment = res.payment || {};
+      setWorkOrders((previous) => previous.map((row) =>
+        (row.candidate_id || row.workorder_id || row._id) === cid
+          ? { ...row, ...payment, status: 'Paid', payment_status: 'Paid', ready_for_payment: false }
+          : row
+      ));
+      setActiveTab('PAID');
       setSuccessMsg(res?.message || `Payment of ${formatCurrency(activeWo.total_amount || 0)} successfully disbursed!`);
       setShowPaymentModal(false);
       await loadFinanceWorkOrders();
@@ -205,6 +255,7 @@ export default function FinanceDashboard() {
       console.error('Failed to process payment:', err);
       setError(err?.message || 'Failed to process payment disbursement.');
     } finally {
+      paymentInFlight.current = false;
       setActionLoading(false);
     }
   };
@@ -217,14 +268,37 @@ export default function FinanceDashboard() {
     <div className="min-h-screen bg-transparent p-4 sm:p-7 space-y-6 max-w-7xl mx-auto text-left font-sans pb-24">
       {/* Embedded Print Styling */}
       <style>{`
+        #finance-remittance-print {
+          color: #111827;
+          background: #fff;
+          font-size: 14px;
+          line-height: 1.5;
+          color-scheme: light;
+        }
+        #finance-remittance-print .remittance-details { margin: 0; }
+        #finance-remittance-print .remittance-row {
+          display: grid;
+          grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+          gap: 12px;
+          padding: 12px 0;
+          border-bottom: 1px solid #e5e7eb;
+          break-inside: avoid;
+        }
+        #finance-remittance-print .remittance-row:last-child { border: 0; }
+        #finance-remittance-print dt { color: #4b5563; font-weight: 500; }
+        #finance-remittance-print dd { color: #111827; font-weight: 600; margin: 0; overflow-wrap: anywhere; }
+        @media screen and (max-width: 480px) {
+          #finance-remittance-print .remittance-row { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+        }
         @media print {
+          html, body { overflow: visible !important; height: auto !important; max-height: none !important; }
           body * {
             visibility: hidden;
           }
-          #finance-work-order-print, #finance-work-order-print * {
+          #${showRemittance ? 'finance-remittance-print' : 'finance-work-order-print'}, #${showRemittance ? 'finance-remittance-print' : 'finance-work-order-print'} * {
             visibility: visible;
           }
-          #finance-work-order-print {
+          #${showRemittance ? 'finance-remittance-print' : 'finance-work-order-print'} {
             position: absolute;
             left: 0;
             top: 0;
@@ -235,6 +309,18 @@ export default function FinanceDashboard() {
             color: black !important;
             box-shadow: none !important;
             border: none !important;
+          }
+          #finance-remittance-overlay {
+            position: static !important;
+            display: block !important;
+            padding: 0 !important;
+            background: white !important;
+            overflow: visible !important;
+          }
+          #finance-remittance-print {
+            max-width: none !important;
+            max-height: none !important;
+            overflow: visible !important;
           }
           .no-print {
             display: none !important;
@@ -504,7 +590,7 @@ export default function FinanceDashboard() {
               const isSelected = (activeWo?.candidate_id || activeWo?.workorder_id || activeWo?._id) === woId;
               const st = wo.status || 'Pending';
               const isItemPaid = st === 'Paid' || wo.payment_status === 'Paid';
-              const isItemReady = !isItemPaid && (st.includes('Director') || wo.ready_for_payment === true);
+              const isItemReady = !isItemPaid && billingApprovalState(wo).directorApproved;
 
               const cName = wo.candidate_name || wo.sow_data?.deployed_personnel || wo.sow_data?.candidate_name || 'Candidate';
               const rTitle = wo.requisition_title || wo.sow_data?.role || wo.sow_data?.requisition_title || 'Contract Role';
@@ -634,21 +720,18 @@ export default function FinanceDashboard() {
                     Governance & Approval Workflow
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-center text-xs">
-                    <div className="p-3 rounded-xl bg-white/80 border border-emerald-200/80 text-emerald-900 font-bold flex flex-col items-center justify-center gap-1 shadow-3xs">
-                      <div className="flex items-center gap-1.5 text-xs">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>1. Procurement</span>
+                    {[
+                      ['1. Procurement', isProcurementApproved, 'Verified & Authorized', 'Pending authorization'],
+                      ['2. Director', isDirectorApproved, 'Verified & Approved', 'Pending Director sign-off'],
+                    ].map(([label, approved, complete, pending]) => (
+                      <div key={label} className={`p-3 rounded-xl border font-bold flex flex-col items-center justify-center gap-1 ${approved ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-white border-gray-200 text-gray-600'}`}>
+                        <div className="flex items-center gap-1.5 text-xs">
+                          {approved ? <CheckCircle2 size={14} /> : <Clock size={14} />}
+                          <span>{label}</span>
+                        </div>
+                        <span className="text-[10px] font-medium">{approved ? complete : pending}</span>
                       </div>
-                      <span className="text-[10px] text-emerald-600 font-medium">Verified & Authorized</span>
-                    </div>
-
-                    <div className="p-3 rounded-xl bg-white/80 border border-emerald-200/80 text-emerald-900 font-bold flex flex-col items-center justify-center gap-1 shadow-3xs">
-                      <div className="flex items-center gap-1.5 text-xs">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>2. Director</span>
-                      </div>
-                      <span className="text-[10px] text-emerald-600 font-medium">Executive Approved</span>
-                    </div>
+                    ))}
 
                     <div
                       className={`p-3 rounded-xl border font-bold flex flex-col items-center justify-center gap-1 shadow-3xs ${
@@ -668,7 +751,7 @@ export default function FinanceDashboard() {
                         <span>3. Finance Disbursal</span>
                       </div>
                       <span className="text-[10px] font-semibold">
-                        {isPaid ? 'Payment Disbursed' : 'Ready for Payment'}
+                        {isPaid ? 'Payment Disbursed' : isDirectorApproved ? 'Ready for Payment' : 'Blocked · Awaiting Director sign-off'}
                       </span>
                     </div>
                   </div>
@@ -729,26 +812,30 @@ export default function FinanceDashboard() {
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 text-xs text-emerald-900">
                           <div className="bg-white/80 p-3 rounded-xl border border-emerald-100 shadow-3xs">
                             <span className="text-emerald-600 text-[10.5px] block font-bold uppercase">Disbursal Method</span>
-                            <span className="font-bold mt-0.5 block">{activeWo.payment_method || 'NEFT/RTGS Transfer'}</span>
+                            <span className="font-bold mt-0.5 block">{activeWo.payment_method || 'Unavailable'}</span>
                           </div>
                           <div className="bg-white/80 p-3 rounded-xl border border-emerald-100 shadow-3xs">
                             <span className="text-emerald-600 text-[10.5px] block font-bold uppercase">Transaction Reference</span>
-                            <span className="font-mono font-bold mt-0.5 block">{activeWo.transaction_reference || 'UTR-SETTLED'}</span>
+                            <span className="font-mono font-bold mt-0.5 block">{activeWo.transaction_ref || activeWo.transaction_reference || 'Unavailable'}</span>
                           </div>
                         </div>
                         <div className="pt-2 border-t border-emerald-200/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                           <span className="text-[11px] text-emerald-700 font-medium">
-                            Payment timestamp: {formatDate(activeWo.payment_date || new Date().toISOString())}
+                            Payment timestamp: {formatDate(activeWo.payment_processed_at || activeWo.payment_date)}
                           </span>
                           <button
                             type="button"
-                            onClick={handlePrint}
+                            onClick={(event) => { remittanceTriggerRef.current = event.currentTarget; setShowRemittance(true); }}
                             className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-xl bg-white border border-emerald-300 text-emerald-900 hover:bg-emerald-100/50 shadow-2xs transition-colors cursor-pointer"
                           >
                             <Printer className="w-3.5 h-3.5" />
                             <span>Print Remittance Advice</span>
                           </button>
                         </div>
+                      </div>
+                    ) : !isDirectorApproved ? (
+                      <div role="status" className="p-5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-950 text-sm">
+                        Payment is blocked until the Director approves this billing period. Procurement authorization alone does not release payment.
                       </div>
                     ) : (
                       <div className="p-5 rounded-2xl bg-white/70 backdrop-blur-md border-2 border-emerald-200/90 shadow-2xs space-y-4">
@@ -780,6 +867,44 @@ export default function FinanceDashboard() {
                       </div>
                     )}
                   </div>
+                )}
+
+                {showRemittance && isPaid && createPortal(
+                  <div id="finance-remittance-overlay" className="fixed inset-0 z-[100] bg-black/45 flex items-center justify-center p-3 sm:p-6" onClick={(event) => { if (event.target === event.currentTarget) setShowRemittance(false); }}>
+                    <section id="finance-remittance-print" role="dialog" aria-modal="true" aria-labelledby="remittance-title" className="bg-white text-gray-900 font-sans text-left rounded-2xl w-full max-w-2xl max-h-[90dvh] overflow-y-auto shadow-2xl">
+                      <header className="flex flex-wrap items-start justify-between gap-4 p-5 sm:p-6 border-b border-gray-200">
+                        <div>
+                          <h1 id="remittance-title" className="text-xl font-bold text-gray-950 leading-tight">Remittance Advice</h1>
+                          <p className="text-sm text-gray-600 mt-1">{activeWo.company_name || user?.tenant_name || 'Term Jobs'}</p>
+                        </div>
+                        <div className="no-print flex items-center gap-2 shrink-0">
+                          <button type="button" onClick={handlePrint} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-black text-white text-sm font-semibold cursor-pointer"><Printer size={16} />Print</button>
+                          <button type="button" autoFocus onClick={() => setShowRemittance(false)} className="px-3 py-2 rounded-lg border border-gray-300 bg-white text-gray-900 text-sm font-semibold cursor-pointer">Close</button>
+                        </div>
+                      </header>
+                      <div className="p-5 sm:p-6">
+                        <div className="flex items-center gap-2 text-emerald-800 bg-emerald-50 rounded-lg px-3 py-2 mb-5 text-sm font-semibold"><CheckCircle2 size={16} />Payment settled and disbursed</div>
+                        <dl className="remittance-details">
+                          {[
+                            ['Candidate', activeCandidateName],
+                            ['Payee / Vendor', activeWo.vendor_name || sowData.supplier_name || activeCandidateName],
+                            ['Work order reference', activeWorkOrderNumber],
+                            ['Billing period', activeWo.period || activeBillingPeriod],
+                            ['Payment amount', activeWo.payment_amount == null ? 'Unavailable' : formatCurrency(activeWo.payment_amount)],
+                            ['Disbursement method', activeWo.payment_method || 'Unavailable'],
+                            ['Transaction reference', activeWo.transaction_ref || activeWo.transaction_reference || 'Unavailable'],
+                            ['Payment date', formatDate(activeWo.payment_processed_at || activeWo.payment_date)],
+                            ['Payment status', 'Paid'],
+                          ].map(([label, value]) => (
+                            <div key={label} className="remittance-row">
+                              <dt>{label}</dt><dd>{value}</dd>
+                            </div>
+                          ))}
+                        </dl>
+                      </div>
+                    </section>
+                  </div>,
+                  document.body
                 )}
 
                 {/* View Mode 2: Work Order Agreement Document */}
@@ -831,7 +956,7 @@ export default function FinanceDashboard() {
                         </div>
                         <div className="bg-white p-3 rounded-xl border border-gray-100 shadow-3xs">
                           <span className="text-[10px] text-gray-400 block font-bold uppercase">Director Signoff</span>
-                          <span className="font-bold text-emerald-700 mt-0.5 block">Verified & Approved</span>
+                          <span className={`font-bold mt-0.5 block ${isDirectorApproved ? 'text-emerald-700' : 'text-amber-700'}`}>{isDirectorApproved ? 'Verified & Approved' : 'Pending Director sign-off'}</span>
                         </div>
                         <div className="bg-white p-3 rounded-xl border border-gray-100 shadow-3xs">
                           <span className="text-[10px] text-gray-400 block font-bold uppercase">Total Disbursal</span>
@@ -867,13 +992,15 @@ export default function FinanceDashboard() {
               </div>
               <button
                 type="button"
-                onClick={() => setShowPaymentModal(false)}
+                disabled={actionLoading}
+                onClick={() => { if (!paymentInFlight.current) setShowPaymentModal(false); }}
                 className="w-8 h-8 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-700 flex items-center justify-center transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
+            {error && <p role="alert" className="p-3 rounded-xl border border-red-200 bg-red-50 text-red-900 text-sm">{error}</p>}
             <div className="space-y-4 text-xs">
               <div className="p-3.5 bg-emerald-50/70 border border-emerald-200 rounded-2xl flex justify-between items-center shadow-3xs">
                 <div>
@@ -927,7 +1054,8 @@ export default function FinanceDashboard() {
             <div className="flex items-center justify-end gap-2.5 pt-3.5 border-t border-gray-100">
               <button
                 type="button"
-                onClick={() => setShowPaymentModal(false)}
+                disabled={actionLoading}
+                onClick={() => { if (!paymentInFlight.current) setShowPaymentModal(false); }}
                 className="px-4 py-2 text-xs font-bold rounded-xl text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer"
               >
                 Cancel
@@ -939,7 +1067,7 @@ export default function FinanceDashboard() {
                 className="inline-flex items-center gap-1.5 px-5 py-2 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs hover:shadow-sm transition-all cursor-pointer disabled:opacity-50"
               >
                 {actionLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                <span>Confirm & Disburse</span>
+                <span>{actionLoading ? 'Saving payment…' : 'Confirm & Disburse'}</span>
               </button>
             </div>
           </div>
