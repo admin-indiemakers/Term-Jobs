@@ -1294,22 +1294,17 @@ export default function DirectorDashboard({ view = 'overview' }) {
                                 </span>
                               ) : disp.isRejected ? (
                                 <div className="space-y-1">
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-800 border border-rose-200">
-                                      <X size={12} className="text-rose-600 shrink-0" />
-                                      <span>Rejected{r.rejected_by ? ` (${r.rejected_by})` : ''}</span>
-                                    </span>
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                                      <AlertCircle size={10} className="text-amber-600 shrink-0" />
-                                      <span>Revision Required</span>
-                                    </span>
-                                  </div>
-                                  <div className="text-[10px] text-gray-500 font-medium flex items-center gap-1">
-                                    <span className="text-amber-700 font-semibold">Awaiting Resubmission</span>
-                                    {r.rejection_reason && (
-                                      <span className="text-gray-400 max-w-xs truncate" title={r.rejection_reason}>
-                                        • "{r.rejection_reason}"
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-800 border border-rose-200 whitespace-nowrap">
+                                    <AlertCircle size={12} className="text-rose-600 shrink-0" />
+                                    <span>Revision Required</span>
+                                  </span>
+                                  <div className="text-[10px] text-gray-500 font-medium">
+                                    {r.rejection_reason ? (
+                                      <span className="text-gray-600 line-clamp-1 max-w-[200px]" title={r.rejection_reason}>
+                                        {r.rejection_reason}
                                       </span>
+                                    ) : (
+                                      <span className="text-gray-400">Awaiting HM updates</span>
                                     )}
                                   </div>
                                 </div>
@@ -1327,7 +1322,10 @@ export default function DirectorDashboard({ view = 'overview' }) {
                                 <span className="text-gray-400">—</span>
                               ) : (
                                 <span>
-                                  {candidatesByRequisition[r.id] || 0} {candidatesByRequisition[r.id] === 1 ? 'candidate' : 'candidates'}
+                                  {(() => {
+                                    const reqHeadcount = Number(r.structured_role?.headcount || r.headcount || (candidatesByRequisition[r.id] || 0) || 1);
+                                    return `${reqHeadcount} ${reqHeadcount === 1 ? 'candidate' : 'candidates'}`;
+                                  })()}
                                 </span>
                               )}
                             </td>
@@ -1458,7 +1456,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
                                 </span>
                               ) : null}
                               <span>•</span>
-                              <span>{candidatesByRequisition[r.id] || 0} candidate(s)</span>
+                              <span>{Number(r.structured_role?.headcount || r.headcount || (candidatesByRequisition[r.id] || 0) || 1)} candidate(s)</span>
                             </div>
 
                             <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
@@ -1861,10 +1859,10 @@ export default function DirectorDashboard({ view = 'overview' }) {
                           <div className={`text-[10px] font-bold uppercase ${disp.isApproved ? 'text-emerald-700' : 'text-gray-400'}`}>
                             Approval Date
                           </div>
-                          <div className={`font-extrabold mt-0.5 ${disp.isApproved ? 'text-emerald-900 text-sm' : 'text-gray-500'}`}>
+                          <div className={`mt-0.5 ${disp.isApproved ? 'font-extrabold text-emerald-900 text-sm' : 'font-semibold text-gray-500'}`}>
                             {disp.isApproved
                               ? formatDate(selectedRequisitionForView.director_approved_at || selectedRequisitionForView.approved_at || disp.approvedAt || selectedRequisitionForView.updated_at)
-                              : (disp.isRejected ? 'Rejected (Revision Required)' : 'Pending Director Approval')}
+                              : (disp.isRejected ? 'Not Approved' : 'Awaiting Approval')}
                           </div>
                           <div className="text-[10px] text-gray-400 mt-0.5">
                             {disp.isApproved ? `Signed off by ${selectedRequisitionForView.director_approved_by || selectedRequisitionForView.approved_by || 'Director'}` : 'Director executive sign-off'}
@@ -1941,7 +1939,11 @@ export default function DirectorDashboard({ view = 'overview' }) {
                         <div className="bg-white p-3 rounded-xl border border-gray-200/60 shadow-2xs">
                           <div className="text-[10px] text-gray-400 font-bold uppercase">Candidate Pipeline</div>
                           <div className="font-extrabold text-gray-900 mt-0.5">
-                            {candidatesByRequisition[selectedRequisitionForView.id] || 0} candidate(s)
+                            {disp.isRejected ? (
+                              <span className="text-amber-700 text-xs font-semibold">Paused (Under Revision)</span>
+                            ) : (
+                              `${candidatesByRequisition[selectedRequisitionForView.id] || 0} candidate(s)`
+                            )}
                           </div>
                         </div>
                       </div>

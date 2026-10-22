@@ -875,9 +875,10 @@ export default function OnboardingManagement() {
               </div>
               <button
                 onClick={() => setShowIssuesModal(false)}
-                className="text-[#8A8A85] hover:text-[#0A0A0A] p-1 text-lg font-bold"
+                className="text-[#8A8A85] hover:text-[#0A0A0A] p-1.5 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+                title="Close"
               >
-                âœ•
+                <X size={18} />
               </button>
             </div>
 
@@ -968,14 +969,15 @@ export default function OnboardingManagement() {
                   Configure Onboarding Setup
                 </h3>
                 <p className="text-[12px] text-[#737373] font-medium mt-0.5">
-                  {editingCandidate.candidate_name || editingCandidate.name} â€¢ {editingCandidate.requisition_title || 'â€”'}
+                  {editingCandidate.candidate_name || editingCandidate.name} • {editingCandidate.requisition_title || '—'}
                 </p>
               </div>
               <button
                 onClick={() => setEditingCandidate(null)}
-                className="text-[#8A8A85] hover:text-[#0A0A0A] p-1 text-lg font-bold"
+                className="text-[#8A8A85] hover:text-[#0A0A0A] p-1.5 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+                title="Close"
               >
-                âœ•
+                <X size={18} />
               </button>
             </div>
 

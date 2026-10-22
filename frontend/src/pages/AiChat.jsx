@@ -4717,7 +4717,10 @@ export default function AiChat() {
   // Render bottom floating capsule dock shared between background and projected chatting card
   const renderInputDockPill = (isProjected = false) => {
     return (
-      <div className={`flex-shrink-0 w-full max-w-3xl lg:max-w-4xl xl:max-w-[960px] mx-auto px-2 sm:px-4 ${isProjected ? 'pb-1 pt-1.5' : 'pb-2 pt-2'} relative z-20 mt-auto`}>
+      <div
+        className={`flex-shrink-0 w-full max-w-3xl lg:max-w-4xl xl:max-w-[960px] mx-auto px-1.5 sm:px-4 ${isProjected ? 'pb-1 pt-1.5' : 'pb-1.5 sm:pb-2 pt-1.5 sm:pt-2'} relative z-20 mt-auto`}
+        style={{ paddingBottom: isProjected ? undefined : 'max(0.375rem, env(safe-area-inset-bottom, 0px))' }}
+      >
         {/* Sleek Floating Status Pill when Voice Mode or STT is active */}
         {continuousMode ? (
           <div className="mb-2 flex items-center justify-center gap-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
@@ -4810,10 +4813,10 @@ export default function AiChat() {
         />
 
         {/* Floating Pill Capsule Dock */}
-        <div className={`rounded-full pl-2 sm:pl-2.5 pr-1.5 py-1.5 flex items-center gap-2.5 transition-all duration-200 ${
+        <div className={`rounded-full pl-2 sm:pl-2.5 pr-1.5 py-1 sm:py-1.5 flex items-center gap-1.5 sm:gap-2.5 transition-all duration-200 ${
           isProjected
             ? 'bg-white shadow-[0_16px_45px_rgba(0,0,0,0.20),0_2px_8px_rgba(0,0,0,0.06)] border border-gray-200/90 ring-1 ring-black/5'
-            : 'bg-white/60 hover:bg-white/80 focus-within:bg-white/95 backdrop-blur-xl border border-white/80 shadow-[0_4px_20px_rgba(0,0,0,0.03)]'
+            : 'bg-white/85 hover:bg-white/95 focus-within:bg-white backdrop-blur-xl border border-white/90 shadow-[0_4px_20px_rgba(0,0,0,0.08),0_1px_4px_rgba(0,0,0,0.04)] ring-1 ring-black/5'
         }`}>
           {/* Attachment Button */}
           <button
@@ -4984,7 +4987,7 @@ export default function AiChat() {
           {/* Background Chat Workspace */}
           <motion.section
             layout={false}
-            className="w-full h-full min-h-0 border rounded-[24px] flex flex-col justify-between relative overflow-hidden p-3 sm:p-5 bg-white/40 backdrop-blur-2xl border-white/70 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex"
+            className="w-full h-full min-h-0 border rounded-[20px] sm:rounded-[24px] flex flex-col justify-between relative overflow-hidden p-2 sm:p-5 bg-white/40 backdrop-blur-2xl border-white/70 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex"
             data-purpose="pure-chat-workspace"
           >
             <div className="relative z-10 flex-1 flex flex-col min-h-0 overflow-hidden">
@@ -5305,29 +5308,29 @@ export default function AiChat() {
 
               {/* Middle Section: Image 2 Hero OR Chat Message Stream */}
               {messages.length === 1 && (messages[0]?.id === 'welcome-init' || messages[0]?.isWelcome) ? (
-                <div className="flex-1 flex flex-col items-center justify-center text-center px-4 py-6 select-none animate-in fade-in duration-300">
+                <div className="flex-1 flex flex-col items-center justify-center text-center px-3 sm:px-4 py-3 sm:py-6 select-none animate-in fade-in duration-300 min-h-0 overflow-y-auto">
                   {/* Bearitt Logo */}
-                  <div className="relative mb-4 flex items-center justify-center">
+                  <div className="relative mb-3 sm:mb-4 flex items-center justify-center shrink-0">
                     <img
                       src="/logo.png"
                       alt="Bearitt"
-                      className="w-14 h-14 sm:w-16 sm:h-16 object-contain relative z-10 drop-shadow-sm pointer-events-none"
+                      className="w-12 h-12 sm:w-16 sm:h-16 object-contain relative z-10 drop-shadow-sm pointer-events-none"
                     />
                   </div>
 
                   {/* Greeting Title */}
-                  <h1 className="text-3xl sm:text-4xl font-extrabold text-[#0D0E12] tracking-tight">
+                  <h1 className="text-2xl sm:text-4xl font-extrabold text-[#0D0E12] tracking-tight">
                     Hi {(messages[0]?.userName || user?.name || 'Alex').split(' ')[0]}!
                   </h1>
 
                   {/* Subtitle */}
-                  <p className="text-base sm:text-lg font-medium text-gray-600 mt-2">
+                  <p className="text-sm sm:text-lg font-medium text-gray-600 mt-1.5 sm:mt-2">
                     {isCompanyAdmin ? `I’m your ${companyName} Admin AI Copilot.` : "I’m your Enterprise HR Copilot."}
                   </p>
 
                   {/* Suggestion Prompts */}
                   {isCompanyAdmin ? (
-                    <p className="text-xs sm:text-sm text-gray-400 mt-3 max-w-lg mx-auto leading-relaxed">
+                    <p className="text-xs sm:text-sm text-gray-500 mt-2 sm:mt-3 max-w-lg mx-auto leading-relaxed">
                       Ask anything about{' '}
                       <span
                         onClick={() => handleSend('List all hiring managers and HR leads in our company')}
@@ -5421,7 +5424,7 @@ export default function AiChat() {
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: 12, scale: 0.99 }}
                       transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-                      className="w-full max-h-[calc(100vh-170px)] flex flex-col overflow-hidden bg-transparent pointer-events-auto z-10 my-auto"
+                      className="w-full max-h-[calc(100dvh-160px)] sm:max-h-[calc(100vh-170px)] flex flex-col overflow-hidden bg-transparent pointer-events-auto z-10 my-auto"
                     >
                       <TableModalTab
                         modalData={modalTabs[0]}
@@ -5435,7 +5438,7 @@ export default function AiChat() {
                       />
                     </motion.div>
                   ) : (
-                    <div className="w-full max-h-[calc(100vh-170px)] grid grid-cols-1 md:grid-cols-2 gap-3 min-h-0 pointer-events-none z-10 my-auto items-start">
+                    <div className="w-full max-h-[calc(100dvh-160px)] sm:max-h-[calc(100vh-170px)] grid grid-cols-1 md:grid-cols-2 gap-3 min-h-0 pointer-events-none z-10 my-auto items-start">
                       {/* Left Tab: Minimized to the left */}
                       <motion.div
                         key="top-tab-panel-left"
@@ -5444,7 +5447,7 @@ export default function AiChat() {
                         animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, scale: 0.96 }}
                         transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-                        className="w-full max-h-[calc(100vh-170px)] flex flex-col overflow-hidden bg-transparent pointer-events-auto z-10 min-h-0"
+                        className="w-full max-h-[calc(100dvh-160px)] sm:max-h-[calc(100vh-170px)] flex flex-col overflow-hidden bg-transparent pointer-events-auto z-10 min-h-0"
                       >
                         <TableModalTab
                           modalData={modalTabs[0]}
@@ -5466,7 +5469,7 @@ export default function AiChat() {
                         animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, x: 24, scale: 0.96 }}
                         transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-                        className="w-full max-h-[calc(100vh-170px)] flex flex-col overflow-hidden bg-transparent pointer-events-auto z-10 min-h-0"
+                        className="w-full max-h-[calc(100dvh-160px)] sm:max-h-[calc(100vh-170px)] flex flex-col overflow-hidden bg-transparent pointer-events-auto z-10 min-h-0"
                       >
                         <TableModalTab
                           modalData={modalTabs[1]}

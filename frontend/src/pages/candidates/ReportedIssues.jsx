@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { request } from '../../api/client';
-import { Flag, CheckCircle2, AlertCircle, Loader2, RefreshCw, Search } from 'lucide-react';
+import { Flag, CheckCircle2, AlertCircle, Loader2, RefreshCw, Search, Eye, X } from 'lucide-react';
 
 export default function ReportedIssues() {
   const { user, token } = useAuth();
@@ -10,6 +10,7 @@ export default function ReportedIssues() {
   const [loading, setLoading] = useState(true);
   const [resolvingId, setResolvingId] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [viewingIssue, setViewingIssue] = useState(null);
 
   const greetingText = useMemo(() => {
     const hr = new Date().getHours();
@@ -219,9 +220,37 @@ export default function ReportedIssues() {
                     )}
                   </div>
 
-                  <p className="text-xs text-gray-700 bg-white/70 p-3 rounded-xl border border-white/90 leading-relaxed mt-2.5">
+                  <p className="text-xs text-gray-700 bg-white/70 p-3 rounded-xl border border-white/90 leading-relaxed mt-2.5 line-clamp-2">
                     {issue.description || 'Candidate reported an issue.'}
                   </p>
+
+                  <div className="flex items-center justify-between gap-2 mt-2.5 pt-2 border-t border-black/[0.04]">
+                    <button
+                      type="button"
+                      onClick={() => setViewingIssue(issue)}
+                      className="px-3 py-1.5 rounded-xl bg-white hover:bg-gray-50 border border-gray-200/90 text-gray-700 text-xs font-bold transition shadow-3xs cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Eye size={12} />
+                      <span>View Full Report</span>
+                    </button>
+                    {issue.status === 'open' && (
+                      <button
+                        type="button"
+                        disabled={resolvingId === issue.id}
+                        onClick={() => handleResolveIssue(issue.id)}
+                        className="px-3.5 py-1.5 text-xs font-bold bg-black hover:bg-gray-900 text-white rounded-xl transition shadow-xs cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                      >
+                        {resolvingId === issue.id ? (
+                          <>
+                            <RefreshCw size={11} className="animate-spin" />
+                            <span>Resolving...</span>
+                          </>
+                        ) : (
+                          <span>Mark Resolved</span>
+                        )}
+                      </button>
+                    )}
+                  </div>
 
                   {issue.resolved_at && (
                     <div className="text-[10.5px] text-emerald-700 font-medium mt-2 flex items-center gap-1">
@@ -235,6 +264,89 @@ export default function ReportedIssues() {
           )}
         </div>
       </div>
+
+      {/* ── FULL ISSUE REPORT DETAILS MODAL ── */}
+      {viewingIssue && (
+        <div
+          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => setViewingIssue(null)}
+        >
+          <div
+            className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl border border-gray-100 text-left animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-start justify-between gap-3 border-b border-gray-100 pb-3">
+              <div>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                  viewingIssue.status === 'open' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                }`}>
+                  {viewingIssue.status === 'open' ? 'Open Issue' : 'Resolved'}
+                </span>
+                <h3 className="text-base font-extrabold text-gray-900 mt-1">
+                  {viewingIssue.category_label || viewingIssue.category || 'Issue Report'}
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Reported by <strong className="text-gray-800">{viewingIssue.candidate_name || viewingIssue.candidate_id || 'Candidate'}</strong>
+                  {viewingIssue.vendor_name && ` via ${viewingIssue.vendor_name}`}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingIssue(null)}
+                className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-black flex items-center justify-center transition cursor-pointer"
+              >
+                <X size={15} />
+              </button>
+            </div>
+
+            {/* Full Report Details */}
+            <div className="space-y-2">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Complete Issue Description</div>
+              <div className="p-3.5 bg-gray-50/80 rounded-2xl border border-gray-200/70 text-xs text-gray-800 leading-relaxed whitespace-pre-wrap break-words max-h-60 overflow-y-auto">
+                {viewingIssue.description || 'No detailed description provided.'}
+              </div>
+            </div>
+
+            {/* Timestamps */}
+            {viewingIssue.created_at && (
+              <div className="text-[11px] text-gray-400 font-medium">
+                Reported on {new Date(viewingIssue.created_at).toLocaleString()}
+              </div>
+            )}
+            {viewingIssue.resolved_at && (
+              <div className="text-[11px] text-emerald-700 font-medium flex items-center gap-1">
+                <CheckCircle2 size={12} className="text-emerald-600" />
+                <span>Resolved on {new Date(viewingIssue.resolved_at).toLocaleString()}</span>
+              </div>
+            )}
+
+            {/* Footer Actions */}
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => setViewingIssue(null)}
+                className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold transition cursor-pointer"
+              >
+                Close
+              </button>
+              {viewingIssue.status === 'open' && (
+                <button
+                  type="button"
+                  disabled={resolvingId === viewingIssue.id}
+                  onClick={async () => {
+                    await handleResolveIssue(viewingIssue.id);
+                    setViewingIssue((prev) => (prev ? { ...prev, status: 'fixed', resolved_at: new Date().toISOString() } : null));
+                  }}
+                  className="px-4 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold transition shadow-xs cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {resolvingId === viewingIssue.id ? 'Resolving...' : 'Mark Resolved'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

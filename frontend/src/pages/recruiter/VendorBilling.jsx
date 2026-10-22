@@ -752,7 +752,7 @@ export default function VendorBilling({ isEmbedded = false }) {
       {/* Detailed Candidate Breakdown & Work Order PDF Floating Drawer */}
       {selectedCandidateId && (
         <div
-          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex justify-end p-2 sm:p-4 md:p-6 animate-fade-in"
+          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex justify-end p-0 sm:p-4 md:p-6 animate-fade-in"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
               setSelectedCandidateId(null);
@@ -760,23 +760,23 @@ export default function VendorBilling({ isEmbedded = false }) {
             }
           }}
         >
-          <div className="bg-white w-full max-w-3xl lg:max-w-4xl h-[calc(100vh-1rem)] sm:h-[calc(100vh-2rem)] md:h-[calc(100vh-2.5rem)] rounded-3xl shadow-2xl border border-[#E5E7EB] flex flex-col overflow-hidden animate-slide-left">
-            {/* 1. Floating Drawer Header (Fixed at top) */}
-            <div className="p-5 sm:px-8 pb-4 border-b border-[#E5E7EB] bg-white shrink-0">
-              <div className="flex items-start justify-between">
-                <div>
+          <div className="bg-white w-full max-w-3xl lg:max-w-4xl h-full sm:h-[calc(100vh-2rem)] md:h-[calc(100vh-2.5rem)] rounded-none sm:rounded-3xl shadow-2xl border border-[#E5E7EB] flex flex-col overflow-hidden animate-slide-left">
+            {/* 1. Floating Drawer Header (Fixed at top - compact on mobile) */}
+            <div className="p-3.5 sm:p-5 sm:px-8 pb-3 sm:pb-4 border-b border-[#E5E7EB] bg-white shrink-0">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold px-2.5 py-1 rounded-md bg-[#0A0A0A] text-white font-mono">
+                    <span className="text-[10px] sm:text-xs font-bold px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-md bg-[#0A0A0A] text-white font-mono">
                       {docForm.ws_number || breakdownData?.candidate?.work_order_number || 'WO-2026'}
                     </span>
-                    <span className="text-xs text-[#6B7280] font-medium">
+                    <span className="text-[10.5px] sm:text-xs text-[#6B7280] font-medium truncate max-w-[140px] sm:max-w-none">
                       ID: {breakdownData?.candidate?.workorder_id || selectedCandidateId}
                     </span>
                   </div>
-                  <h2 className="text-2xl font-black text-[#0A0A0A] mt-1.5">
+                  <h2 className="text-base sm:text-2xl font-black text-[#0A0A0A] mt-1 sm:mt-1.5 truncate">
                     {docForm.deployed_personnel || breakdownData?.candidate?.name || 'Candidate Work Order & Billing'}
                   </h2>
-                  <p className="text-xs text-[#6B7280] mt-0.5">
+                  <p className="text-[11px] sm:text-xs text-[#6B7280] mt-0.5 truncate">
                     {docForm.role || breakdownData?.candidate?.role} · {docForm.company_name || breakdownData?.candidate?.company_name}
                   </p>
                 </div>
@@ -786,14 +786,14 @@ export default function VendorBilling({ isEmbedded = false }) {
                     setSelectedCandidateId(null);
                     setBreakdownData(null);
                   }}
-                  className="p-2 rounded-xl text-[#6B7280] hover:bg-[#F3F4F6] hover:text-black transition-colors cursor-pointer"
+                  className="p-1.5 sm:p-2 rounded-xl text-[#6B7280] hover:bg-[#F3F4F6] hover:text-black transition-colors cursor-pointer shrink-0"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              {/* 4-Stage Governance & Settlement Timeline */}
-              <div className="mt-3.5 no-print">
+              {/* 4-Stage Governance & Settlement Timeline (Desktop only in fixed header) */}
+              <div className="mt-3.5 no-print hidden sm:block">
                 <WorkOrderProgressBar
                   status={docForm.status || breakdownData?.sow_status}
                   paymentStatus={breakdownData?.billing_status}
@@ -801,21 +801,21 @@ export default function VendorBilling({ isEmbedded = false }) {
                 />
               </div>
 
-              {/* Top Drawer Tab Switcher */}
-              <div className="flex items-center gap-3 mt-4 pt-2 border-t border-gray-100">
+              {/* Top Drawer Tab Switcher (Single row horizontal scroll on mobile) */}
+              <div className="flex items-center gap-2 sm:gap-3 mt-2.5 sm:mt-4 pt-2 border-t border-gray-100 overflow-x-auto no-scrollbar shrink-0">
                 <button
                   type="button"
                   onClick={() => setActiveDrawerTab('pdf')}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                  className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 sm:gap-2 shrink-0 ${
                     activeDrawerTab === 'pdf'
                       ? 'bg-black text-white shadow-xs'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 >
                   <FileText className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Work Order Document (Editable PDF)</span>
+                  <span>Work Order PDF</span>
                   {docForm.status && (
-                    <span className={`text-[10px] px-2 py-0.5 rounded-md ${
+                    <span className={`text-[10px] px-1.5 py-0.2 sm:px-2 sm:py-0.5 rounded-md ${
                       activeDrawerTab === 'pdf' ? 'bg-white/20 text-white' : 'bg-white text-gray-700'
                     }`}>
                       {docForm.status}
@@ -826,7 +826,7 @@ export default function VendorBilling({ isEmbedded = false }) {
                 <button
                   type="button"
                   onClick={() => setActiveDrawerTab('timesheet')}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                  className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 sm:gap-2 shrink-0 ${
                     activeDrawerTab === 'timesheet'
                       ? 'bg-black text-white shadow-xs'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -839,7 +839,7 @@ export default function VendorBilling({ isEmbedded = false }) {
                 <button
                   type="button"
                   onClick={() => setActiveDrawerTab('transaction')}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                  className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 sm:gap-2 shrink-0 ${
                     activeDrawerTab === 'transaction'
                       ? 'bg-indigo-700 text-white shadow-xs'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -851,8 +851,16 @@ export default function VendorBilling({ isEmbedded = false }) {
               </div>
             </div>
 
-            {/* 2. Inbuilt Scrollable Body */}
-            <div className="flex-1 overflow-y-auto px-5 sm:px-8 py-6 space-y-6 custom-scrollbar bg-[#F9FAFB]">
+            {/* 2. Inbuilt Scrollable Body (Expands fully on mobile) */}
+            <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-8 py-4 sm:py-6 space-y-5 sm:space-y-6 custom-scrollbar bg-[#F9FAFB]">
+              {/* Mobile Progress Bar (Scrolls inside content area) */}
+              <div className="sm:hidden no-print">
+                <WorkOrderProgressBar
+                  status={docForm.status || breakdownData?.sow_status}
+                  paymentStatus={breakdownData?.billing_status}
+                  variant="full"
+                />
+              </div>
               {loadingBreakdown ? (
                 <div className="py-24 flex flex-col items-center justify-center bg-white rounded-2xl border border-gray-200">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black" />
@@ -1655,7 +1663,7 @@ export default function VendorBilling({ isEmbedded = false }) {
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3 text-xs pt-1">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 text-xs pt-1">
                       <div className="bg-white/10 p-3 rounded-xl">
                         <div className="text-[#A3A39E] text-[10.5px] font-medium">Target Company Procurement</div>
                         <div className="font-bold text-white mt-0.5">{breakdownData.candidate?.company_name || 'Enterprise Client'}</div>

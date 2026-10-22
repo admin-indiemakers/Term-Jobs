@@ -83,6 +83,7 @@ export default function ManageHiringManagers() {
   const [editing, setEditing] = useState(false);
   const [viewProfile, setViewProfile] = useState(null);
   const [emailError, setEmailError] = useState('');
+  const [editError, setEditError] = useState('');
 
   const searchInputRef = useRef(null);
 
@@ -267,7 +268,15 @@ export default function ManageHiringManagers() {
   const handleSaveEdit = async (e) => {
     e.preventDefault();
     if (!edit) return;
+    if (edit.email) {
+      const emailErr = validateEmail(edit.email);
+      if (emailErr) {
+        setEditError(emailErr);
+        return;
+      }
+    }
     setEditing(true);
+    setEditError('');
     setError('');
     setSuccess('');
     try {
@@ -291,8 +300,10 @@ export default function ManageHiringManagers() {
       setSuccess(`Hiring Manager "${edit.name || edit.email}" updated successfully.`);
       setEdit(null);
       setEditOriginal(null);
+      setEditError('');
       load(true);
     } catch (err) {
+      setEditError(err.message || 'Failed to update manager account');
       setError(err.message || 'Failed to update manager account');
     } finally {
       setEditing(false);
@@ -364,7 +375,7 @@ export default function ManageHiringManagers() {
             className="px-4 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
           >
             <Plus size={14} />
-            <span>+ Create Hiring Manager</span>
+            <span>Create Hiring Manager</span>
           </button>
         </div>
       </div>
@@ -601,6 +612,7 @@ export default function ManageHiringManagers() {
                                   onClick={() => {
                                     setEdit({ ...u, password: '' });
                                     setEditOriginal({ ...u });
+                                    setEditError('');
                                   }}
                                   className="font-bold text-gray-700 hover:text-black text-[10px] transition-colors cursor-pointer"
                                 >
@@ -865,6 +877,7 @@ export default function ManageHiringManagers() {
                 onClick={() => {
                   setEdit({ ...viewProfile, password: '' });
                   setEditOriginal({ ...viewProfile });
+                  setEditError('');
                   setViewProfile(null);
                 }}
                 className="px-4 py-2 text-xs font-bold text-white bg-black hover:bg-gray-900 rounded-xl shadow-xs transition-all cursor-pointer"
@@ -1027,6 +1040,12 @@ export default function ManageHiringManagers() {
             </div>
 
             <form onSubmit={handleSaveEdit} className="space-y-3.5" autoComplete="off">
+              {editError && (
+                <div className="p-2.5 bg-red-50/90 border border-red-200/80 rounded-xl text-xs text-red-700 flex items-center gap-2">
+                  <AlertCircle size={14} className="shrink-0 text-red-500" />
+                  <span>{editError}</span>
+                </div>
+              )}
               <div>
                 <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
                   Full Name *

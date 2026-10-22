@@ -849,8 +849,8 @@ export default function CandidatePortal() {
     company: 'Company',
     vendor: 'Vendor',
     requisition_title: 'Contractor Role',
-    status: isWorkOrderActive ? 'ACTIVE' : isPendingApproval ? 'PENDING_APPROVAL' : 'PENDING_ACTIVATION',
-    active_badge: isWorkOrderActive ? 'Active candidate' : isPendingApproval ? 'Pending Approval' : 'Pending Activation',
+    status: isWorkOrderActive ? 'ACTIVE' : isPendingApproval ? 'PENDING_APPROVAL' : (data ? 'PENDING_ACTIVATION' : 'ACTIVE'),
+    active_badge: isWorkOrderActive ? 'Active candidate' : isPendingApproval ? 'Pending Approval' : (data ? 'Pending Activation' : 'Active candidate'),
   };
 
   const wo = data?.work_order || {
@@ -1636,7 +1636,7 @@ export default function CandidatePortal() {
             </div>
 
             {/* PENDING ACTIVATION / APPROVAL STEPPER CARD */}
-            {!isWorkOrderActive && (
+            {!loading && data && !isWorkOrderActive && (
               <div
                 style={{
                   backgroundColor: '#FEF3C7',
@@ -2020,7 +2020,7 @@ export default function CandidatePortal() {
               </div>
 
               {/* Right Column (WHO'S INVOLVED & ASSIGNMENT SNAPSHOT) */}
-              <div className="lg:col-span-4 space-y-4">
+              <div className="lg:col-span-4 space-y-4 pb-28 sm:pb-32">
                 {/* WHO'S INVOLVED */}
                 {renderWhosInvolvedCard()}
 
@@ -2054,21 +2054,21 @@ export default function CandidatePortal() {
 
                   {/* Assignment Snapshot Key-Value List */}
                   <div className="divide-y divide-[#F2F2EE] text-[13px] border-t border-[#F2F2EE] pt-1">
-                    <div className="py-3 flex items-center justify-between">
-                      <span className="text-[#737373]">Work arrangement</span>
-                      <span className="font-bold text-[#0A0A0A]">{snapshot.work_arrangement}</span>
+                    <div className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-4">
+                      <span className="text-[#737373] text-xs sm:text-[13px] font-medium shrink-0">Work arrangement</span>
+                      <span className="font-bold text-[#0A0A0A] text-xs sm:text-[13px] sm:text-right break-words">{snapshot.work_arrangement}</span>
                     </div>
-                    <div className="py-3 flex items-center justify-between">
-                      <span className="text-[#737373]">Weekly expectation</span>
-                      <span className="font-bold text-[#0A0A0A]">{snapshot.weekly_expectation}</span>
+                    <div className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-4">
+                      <span className="text-[#737373] text-xs sm:text-[13px] font-medium shrink-0">Weekly expectation</span>
+                      <span className="font-bold text-[#0A0A0A] text-xs sm:text-[13px] sm:text-right break-words">{snapshot.weekly_expectation}</span>
                     </div>
-                    <div className="py-3 flex items-center justify-between">
-                      <span className="text-[#737373]">Overtime</span>
-                      <span className="font-bold text-[#0A0A0A]">{snapshot.overtime}</span>
+                    <div className="py-3 flex flex-col sm:flex-row sm:items-start justify-between gap-1 sm:gap-4">
+                      <span className="text-[#737373] text-xs sm:text-[13px] font-medium shrink-0 pt-0.5">Overtime policy</span>
+                      <span className="font-bold text-[#0A0A0A] text-xs sm:text-[13px] sm:text-right break-words leading-relaxed max-w-xs">{snapshot.overtime}</span>
                     </div>
-                    <div className="py-3 flex items-center justify-between">
-                      <span className="text-[#737373]">Engagement</span>
-                      <span className="font-bold text-[#0A0A0A]">{snapshot.engagement}</span>
+                    <div className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-4">
+                      <span className="text-[#737373] text-xs sm:text-[13px] font-medium shrink-0">Engagement</span>
+                      <span className="font-bold text-[#0A0A0A] text-xs sm:text-[13px] sm:text-right break-words">{snapshot.engagement}</span>
                     </div>
                   </div>
 
@@ -2197,6 +2197,21 @@ export default function CandidatePortal() {
                   <RotateCcw size={13} />
                   Restore usual week
                 </button>
+              </div>
+
+              {/* Submission Workflow Explainer Banner */}
+              <div
+                style={{
+                  backgroundColor: '#F7F7F5',
+                  border: '1px solid #E5E5E0',
+                  borderRadius: 14,
+                }}
+                className="px-4 py-2.5 flex items-center gap-2.5 text-[12px] text-[#555550]"
+              >
+                <Clock size={15} className="text-[#0A0A0A] shrink-0" />
+                <span>
+                  <strong className="text-[#0A0A0A]">Submission Workflow:</strong> Log your daily hours as you work and use <span className="font-semibold text-[#0A0A0A]">Save Draft</span> to record daily progress. At the end of the 7-day period, click <span className="font-semibold text-[#0A0A0A]">Submit Weekly Timesheet</span> to send the complete week for manager approval.
+                </span>
               </div>
 
               {/* 7-Day Interactive Columns Grid with Floating Chevrons */}
@@ -2540,9 +2555,9 @@ export default function CandidatePortal() {
                   >
                     <div className="text-[13.5px] font-bold text-[#0A0A0A] flex items-center justify-center gap-2">
                       <Save size={15} />
-                      {savingDraft ? 'Saving...' : 'Save Draft'}
+                      {savingDraft ? 'Saving Draft...' : 'Save Draft (Daily Logging)'}
                     </div>
-                    <div className="text-[11px] text-[#8A8A85] mt-1">You can continue later</div>
+                    <div className="text-[11px] text-[#8A8A85] mt-1">Saves daily entries without final submission</div>
                   </button>
 
                   <button
@@ -2558,9 +2573,9 @@ export default function CandidatePortal() {
                   >
                     <div className="text-[13.5px] font-bold flex items-center justify-center gap-2">
                       <Send size={15} />
-                      {submittingTs ? 'Submitting...' : 'Confirm & Submit'}
+                      {submittingTs ? 'Submitting...' : 'Submit Weekly Timesheet'}
                     </div>
-                    <div className="text-[11px] text-[#A3A39F] mt-1">Submit for approval</div>
+                    <div className="text-[11px] text-[#A3A39F] mt-1">Final weekly submission for manager approval</div>
                   </button>
                 </div>
               </div>
