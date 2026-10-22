@@ -1204,6 +1204,7 @@ def get_hiring_manager_rounds(
     candidate_id: Optional[str] = None,
     user_id: Optional[str] = None,
     user_role: Optional[str] = None,
+    dashboard: bool = False,
 ) -> List[dict]:
     """Retrieve all interview rounds belonging to the Hiring Manager tenant, or all rounds for Super Admin."""
     if user_role != 'Super Admin' and (not tenant_id or (user_role == 'Hiring Manager' and not user_id)):
@@ -1227,6 +1228,22 @@ def get_hiring_manager_rounds(
                 return []
             q = q.filter(InterviewRound.requisition_id.in_(hm_req_ids))
             
+        if dashboard:
+            # Overview cards need schedule fields, never transcripts, delivery logs or tokens.
+            fields = ("id", "requisition_id", "candidate_submission_id", "candidate_name",
+                      "round_name", "round_number", "status", "scheduled_date", "scheduled_time",
+                      "scheduled_timezone", "created_at", "duration_minutes")
+            from modules.interview.domain.upcoming import upcoming_interviews
+            now = datetime.now(timezone.utc)
+            # Yesterday in UTC covers schedules still upcoming in western timezones.
+            earliest_day = (now - timedelta(days=1)).date().isoformat()
+            rows = q.filter(
+                InterviewRound.status.in_(["Scheduled", "Confirmed"]),
+                scheduled_date={"$gte": earliest_day},
+            ).only(*fields).all()
+            return upcoming_interviews(
+                [{field: getattr(row, field, None) for field in fields} for row in rows], now,
+            )
         rounds = q.all()
         # Sort by candidate and round_number
         for r in rounds:

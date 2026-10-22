@@ -30,7 +30,10 @@ export default function GoogleCalendarConnect({ onStatus, onConnected, variant, 
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
-    request('/api/calendar/google/status', { token, noCache: true })
+    request('/api/calendar/google/status', {
+      token,
+      forceRefresh: new URLSearchParams(window.location.search).has('calendar'),
+    })
       .then((data) => {
         if (cancelled) return;
         setStatus(data);

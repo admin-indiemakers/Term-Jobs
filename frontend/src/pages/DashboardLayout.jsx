@@ -227,41 +227,15 @@ export default function DashboardLayout() {
 
   const fetchHmCounts = useCallback((force = false) => {
     if (user?.role !== 'Hiring Manager' || !token) return;
-    Promise.all([
-      request('/api/requisitions', { token, forceRefresh: force }).catch(() => []),
-      request('/api/candidates/shortlisted', { token, forceRefresh: force }).catch(() => []),
-      request('/api/candidates?status=Accepted', { token, forceRefresh: force }).catch(() => []),
-      request('/api/onboarding/issues', { token, forceRefresh: force }).catch(() => []),
-      request('/api/workforce/stats', { token, forceRefresh: force }).catch(() => null),
-    ]).then(([reqs, shortlisted, accepted, issuesData, wfStats]) => {
-      const rawReqs = Array.isArray(reqs) ? reqs : (Array.isArray(reqs?.requisitions) ? reqs.requisitions : []);
-      const rCount = rawReqs.filter((r) => !r.is_deleted && r.status !== 'Deleted by HM' && r.status !== 'Deleted' && isPublishedStatus(r?.status)).length;
-      const sList = Array.isArray(shortlisted) ? shortlisted : (shortlisted?.shortlisted_candidates || []);
-      const aList = Array.isArray(accepted) ? accepted : (accepted?.candidates || []);
-      const uniqueCandIds = new Set();
-      [...sList, ...aList].forEach((c) => {
-        const cid = c.id || c.submission_id || c.candidate_id || c.candidate_email;
-        if (cid) uniqueCandIds.add(String(cid).toLowerCase());
-      });
-      const issueList = Array.isArray(issuesData) ? issuesData : issuesData?.issues || [];
-      const openIssues = issueList.filter((i) => (i.status || '').toLowerCase() === 'open').length;
-      const pendingTs = wfStats?.stats?.pending_timesheets || 0;
-      const pendingExp = wfStats?.stats?.pending_expenses || 0;
-      setHmCounts((prev) => ({
-        ...prev,
-        requisitions: rCount,
-        candidates: uniqueCandIds.size,
-        openIssues: openIssues,
-        pendingTimesheets: pendingTs,
-        pendingExpenses: pendingExp,
-      }));
-    }).catch(() => { });
+    request('/api/hiring-manager/counts', { token, forceRefresh: force })
+      .then((counts) => setHmCounts(counts))
+      .catch(() => {});
   }, [user?.role, token]);
 
   useEffect(() => {
     if (user?.role === 'Hiring Manager' && token) {
-      // Immediate fresh fetch on role ready/mount
-      fetchHmCounts(true);
+      // Share cached/in-flight data with the dashboard on mount.
+      fetchHmCounts(false);
 
       const handleRefresh = (e) => {
         if (typeof e?.detail?.count === 'number') {

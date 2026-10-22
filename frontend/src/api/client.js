@@ -244,6 +244,11 @@ export async function request(path, {
     return resData;
   };
 
+  // Forced refreshes bypass cached data, but still share an active network request.
+  if (upperMethod === 'GET' && inflightGetRequests.has(cacheKey)) {
+    return inflightGetRequests.get(cacheKey);
+  }
+
   // SWR: Check if identical GET request is fresh or stale in memory or sessionStorage
   if (upperMethod === 'GET' && !forceRefresh && !noCache) {
     let cached = apiGetCache.get(cacheKey);
@@ -286,6 +291,16 @@ export async function request(path, {
 
     const requestPromise = executeFetch().finally(() => {
       inflightGetRequests.delete(cacheKey);
+    });
+    inflightGetRequests.set(cacheKey, requestPromise);
+    return await requestPromise;
+  }
+
+  if (upperMethod === 'GET') {
+    const requestPromise = executeFetch().finally(() => {
+      if (inflightGetRequests.get(cacheKey) === requestPromise) {
+        inflightGetRequests.delete(cacheKey);
+      }
     });
     inflightGetRequests.set(cacheKey, requestPromise);
     return await requestPromise;

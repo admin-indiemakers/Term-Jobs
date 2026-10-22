@@ -175,7 +175,7 @@ function HiringManagerDashboardContent() {
   const navigate = useNavigate();
   const [googleCalendar, setGoogleCalendar] = useState(null);
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [promptInput, setPromptInput] = useState('');
@@ -418,6 +418,7 @@ function HiringManagerDashboardContent() {
   useEffect(() => {
     if (!token) return;
     const fetchUnread = () => {
+      if (document.visibilityState === 'hidden') return;
       request('/api/team-chat/unread-count', { token, noCache: true, forceRefresh: true })
         .then((res) => {
           if (res && typeof res.unread_count === 'number') {
@@ -427,8 +428,12 @@ function HiringManagerDashboardContent() {
         .catch(() => {});
     };
     fetchUnread();
-    const interval = setInterval(fetchUnread, 8000);
-    return () => clearInterval(interval);
+    const interval = setInterval(fetchUnread, 30000);
+    document.addEventListener('visibilitychange', fetchUnread);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', fetchUnread);
+    };
   }, [token]);
 
   const handleChangePassword = async (e) => {
@@ -475,16 +480,14 @@ function HiringManagerDashboardContent() {
     setLoading(true);
     setError('');
     try {
-      const [reqsData, shortlistedData, allCandidatesData, acceptedData, issuesData, wfData, interviewSummaryData, roundsData, tplsData] = await Promise.all([
+      const [reqsData, shortlistedData, acceptedData, issuesData, wfData, interviewSummaryData, roundsData] = await Promise.all([
         request('/api/requisitions', { token }).catch(() => []),
         request('/api/candidates/shortlisted', { token }).catch(() => []),
-        request('/api/candidates', { token }).catch(() => []),
         request('/api/candidates?status=Accepted', { token }).catch(() => []),
         request('/api/onboarding/issues', { token }).catch(() => []),
         request('/api/workforce/stats', { token }).catch(() => null),
         interviewApi.getSummary(token).catch(() => []),
         interviewApi.listRounds({}, token).catch(() => []),
-        request('/api/templates', { token }).catch(() => request('/templates', { token })).catch(() => []),
       ]);
 
       const reqList = Array.isArray(reqsData) ? reqsData : reqsData?.requisitions || [];
@@ -495,9 +498,6 @@ function HiringManagerDashboardContent() {
       const sList = Array.isArray(shortlistedData) ? shortlistedData : shortlistedData?.shortlisted_candidates || [];
       setShortlistedCandidates(sList);
 
-      const cAllList = Array.isArray(allCandidatesData) ? allCandidatesData : (allCandidatesData?.candidates || []);
-      setAllCandidates(cAllList);
-
       const aList = Array.isArray(acceptedData) ? acceptedData : acceptedData?.candidates || [];
       setAcceptedCandidates(aList);
 
@@ -507,7 +507,7 @@ function HiringManagerDashboardContent() {
       if (wfData) setWfStats(wfData);
       setInterviewSummary(Array.isArray(interviewSummaryData) ? interviewSummaryData : []);
       setInterviewRounds(Array.isArray(roundsData) ? roundsData : []);
-      setTemplates(Array.isArray(tplsData) ? tplsData : (tplsData?.templates || []));
+      // Candidate details and templates load when their panels are opened.
       hasLoadedRef.current = true;
       prevTokenRef.current = token;
     } catch (err) {
@@ -525,11 +525,32 @@ function HiringManagerDashboardContent() {
       prevTokenRef.current = token;
       hasLoadedRef.current = false;
     }
-    if (!hasLoadedRef.current) {
-      loadDashboardData();
-      loadBotStatus();
-    }
-  }, [token, loadDashboardData, loadBotStatus]);
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) return;
+    const path = activePanel.type === 'draft_requisition'
+      ? '/api/templates'
+      : activePanel.type === 'candidates' ? '/api/candidates'
+      : activePanel.type === 'requisitions' ? '/api/requisitions'
+      : activePanel.type === 'onboarding_issues' ? '/api/onboarding/issues' : null;
+    if (!path) return;
+    let cancelled = false;
+    request(path, { token }).then((data) => {
+      if (cancelled) return;
+      if (activePanel.type === 'draft_requisition') {
+        setTemplates(Array.isArray(data) ? data : data?.templates || []);
+      } else if (activePanel.type === 'candidates') {
+        setAllCandidates(Array.isArray(data) ? data : data?.candidates || []);
+      } else if (activePanel.type === 'requisitions') {
+        setRequisitions(Array.isArray(data) ? data : data?.requisitions || []);
+      } else {
+        const issues = Array.isArray(data) ? data : data?.issues || [];
+        setOpenIssues(issues.filter(issue => String(issue.status).toLowerCase() === 'open'));
+      }
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [token, activePanel.type]);
 
   // Filtered Requisitions
   const liveRequisitions = useMemo(() => {
@@ -1380,6 +1401,11 @@ function HiringManagerDashboardContent() {
   // Right-side tools drawer state
   const [isToolsDrawerOpen, setIsToolsDrawerOpen] = useState(false);
   const [toolsSearchQuery, setToolsSearchQuery] = useState('');
+
+  useEffect(() => {
+    if (token && (isToolsDrawerOpen || showCliqModal || showTeamsModal)) loadBotStatus();
+  }, [token, isToolsDrawerOpen, showCliqModal, showTeamsModal, loadBotStatus]);
+
 
   // Right-side Conversations Drawer & History state (Stores all chats)
   const [isConversationsDrawerOpen, setIsConversationsDrawerOpen] = useState(false);

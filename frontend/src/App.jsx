@@ -2,7 +2,10 @@ import { financeRedirect } from './utils/financeAccess';
 import { canCreateRequisition, requisitionWorkflowRedirect } from './utils/requisitionPermissions';
 import CandidateTelegramLogin from './pages/CandidateTelegramLogin';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
-import { useRef, useEffect, useState, lazy, Suspense } from 'react';
+import { useRef, useEffect, useState, lazy as reactLazy, Suspense } from 'react';
+import { loadRoute } from './utils/chunkRecovery.js';
+
+const lazy = importer => reactLazy(() => loadRoute(importer));
 import { motion } from 'framer-motion';
 import { useAuth } from './context/AuthContext';
 import { CandidateAuthProvider } from './context/CandidateAuthContext';

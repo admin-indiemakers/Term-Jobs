@@ -3,7 +3,6 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
-import { interviewMetrics } from '../interview/utils/interviewMetrics';
 import { upcomingInterviewRounds } from '../interview/utils/upcomingInterviews';
 import { interviewApi } from '../interview/services/interviewApi';
 import { isPublishedStatus } from '../utils/requisitionStatus';
@@ -91,11 +90,7 @@ export default function HiringManagerChat() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [requisitions, setRequisitions] = useState([]);
-  const [shortlistedCandidates, setShortlistedCandidates] = useState([]);
-  const [acceptedCandidates, setAcceptedCandidates] = useState([]);
-  const [openIssues, setOpenIssues] = useState([]);
-  const [wfStats, setWfStats] = useState(null);
-  const [pendingTimesheets, setPendingTimesheets] = useState([]);
+  const [counts, setCounts] = useState(null);
   const [interviewDataError, setInterviewDataError] = useState('');
   const [interviewRounds, setInterviewRounds] = useState([]);
   const [notifications, setNotifications] = useState([]);
@@ -107,54 +102,21 @@ export default function HiringManagerChat() {
 
   const loadDashboardData = async () => {
     setLoading(true);
-    setWfStats(null);
     setError('');
     setInterviewDataError('');
     try {
-      const [
-        reqsData,
-        shortlistedData,
-        acceptedData,
-        issuesData,
-        wfData,
-        timesheetsData,
-        roundsData,
-        notifsData
-      ] = await Promise.all([
-        request('/api/requisitions', { token }).catch(() => { setInterviewDataError('Unable to load requisition data'); return []; }),
-        request('/api/candidates/shortlisted', { token }).catch(() => []),
-        request('/api/candidates?status=Accepted', { token }).catch(() => []),
-        request('/api/onboarding/issues', { token }).catch(() => []),
-        request('/api/workforce/stats', { token, noCache: true }).catch(() => null),
-        request('/api/workforce/timesheets', { token }).catch(() => []),
-        interviewApi.listRounds({}, token).catch(() => { setInterviewDataError('Unable to load interview data'); return []; }),
+      const [reqsData, countsData, roundsData, notifsData] = await Promise.all([
+        request('/api/requisitions?dashboard=true', { token }),
+        request('/api/hiring-manager/counts', { token }),
+        interviewApi.listRounds({ dashboard: true }, token).catch(() => { setInterviewDataError('Unable to load interview data'); return []; }),
         request('/api/notifications?compact=true&limit=12', { token }).catch(() => [])
       ]);
+      setCounts(countsData);
 
       const reqList = Array.isArray(reqsData) ? reqsData : reqsData?.requisitions || [];
       setRequisitions(reqList);
       const activeCount = reqList.filter((r) => !r.is_deleted && r.status !== 'Deleted by HM' && r.status !== 'Deleted' && isPublishedStatus(r?.status)).length;
       window.dispatchEvent(new CustomEvent('tj-requisition-count-updated', { detail: { count: activeCount } }));
-
-      const sList = Array.isArray(shortlistedData) ? shortlistedData : shortlistedData?.shortlisted_candidates || [];
-      setShortlistedCandidates(sList);
-
-      const aList = Array.isArray(acceptedData) ? acceptedData : acceptedData?.candidates || [];
-      setAcceptedCandidates(aList);
-
-      const iList = Array.isArray(issuesData) ? issuesData : issuesData?.issues || [];
-      setOpenIssues(iList.filter((i) => (i.status || '').toLowerCase() === 'open'));
-
-      setWfStats(wfData);
-
-      const tsList = Array.isArray(timesheetsData) ? timesheetsData : timesheetsData?.timesheets || [];
-      setPendingTimesheets(
-        tsList.filter(
-          (t) =>
-            (t.status || '').toLowerCase().includes('pending') ||
-            (t.status || '').toLowerCase().includes('submitted')
-        )
-      );
 
       if (!Array.isArray(roundsData)) setInterviewDataError('Unexpected interview response');
       setInterviewRounds(Array.isArray(roundsData) ? roundsData : []);
@@ -180,11 +142,6 @@ export default function HiringManagerChat() {
     [interviewRounds, requisitions]
   );
 
-  const interviewStats = useMemo(
-    () => interviewMetrics(interviewRounds, requisitions),
-    [interviewRounds, requisitions]
-  );
-
   // Derived KPI metrics
   const activeRequisitionsCount = useMemo(() => {
     return requisitions.filter((r) => {
@@ -197,47 +154,11 @@ export default function HiringManagerChat() {
     return requisitions.filter((r) => (r.status || '').toLowerCase().includes('draft')).length;
   }, [requisitions]);
 
-  // Unique Candidates In Review (deduplicating accepted and shortlisted)
-  const acceptedCandidateIds = useMemo(() => {
-    const ids = new Set();
-    acceptedCandidates.forEach((c) => {
-      const key = String(c.id || c.submission_id || c.candidate_id || c.candidate_email || c.name || '').toLowerCase().trim();
-      if (key) ids.add(key);
-    });
-    return ids;
-  }, [acceptedCandidates]);
-
-  const pureShortlistedCandidates = useMemo(() => {
-    return shortlistedCandidates.filter((c) => {
-      const key = String(c.id || c.submission_id || c.candidate_id || c.candidate_email || c.name || '').toLowerCase().trim();
-      return key && !acceptedCandidateIds.has(key);
-    });
-  }, [shortlistedCandidates, acceptedCandidateIds]);
-
-  const totalInReviewCount = useMemo(() => {
-    return acceptedCandidates.length + pureShortlistedCandidates.length;
-  }, [acceptedCandidates, pureShortlistedCandidates]);
-
-  const inReviewSubtitle = useMemo(() => {
-    const sCount = pureShortlistedCandidates.length;
-    const aCount = acceptedCandidates.length;
-    if (sCount > 0 && aCount > 0) {
-      return `${sCount} Shortlisted • ${aCount} Accepted`;
-    }
-    if (aCount > 0) {
-      return `${aCount} Accepted`;
-    }
-    if (sCount > 0) {
-      return `${sCount} Shortlisted`;
-    }
-    return '0 Candidates';
-  }, [pureShortlistedCandidates, acceptedCandidates]);
-
-  // Timesheet approvals pending count
-  const pendingTimesheetsCount = useMemo(() => {
-    return pendingTimesheets.length;
-  }, [pendingTimesheets]);
-  const pendingApprovalsTotal = pendingTimesheetsCount;
+  const totalInReviewCount = counts?.candidates;
+  const inReviewSubtitle = counts
+    ? [counts.shortlisted ? `${counts.shortlisted} Shortlisted` : '', counts.accepted ? `${counts.accepted} Accepted` : ''].filter(Boolean).join(' • ') || '0 Candidates'
+    : 'Loading candidates…';
+  const pendingTimesheetsCount = counts?.pendingTimesheets;
 
   // Filtered requisitions list
   const filteredRequisitions = useMemo(() => {
@@ -299,21 +220,6 @@ export default function HiringManagerChat() {
       });
     });
 
-    // 3. Candidates Shortlisted
-    (shortlistedCandidates || []).forEach((c) => {
-      list.push({
-        id: `cand-${c.id || c.candidate_id || Math.random()}`,
-        type: 'candidate',
-        category: 'candidates',
-        title: `${c.name || 'Candidate'} shortlisted`,
-        description: `Role: ${c.role || c.requisition_title || 'Software Engineer'} • Score: ${c.match_score || 90}% match`,
-        timestamp: c.shortlisted_at || c.created_at,
-        link: '/dashboard/candidates',
-        icon: Users,
-        color: 'text-emerald-600 bg-emerald-500/10 border-emerald-500/20',
-      });
-    });
-
     // 4. Interviews Scheduled
     (interviewRounds || []).forEach((ir) => {
       list.push({
@@ -331,7 +237,7 @@ export default function HiringManagerChat() {
 
     list.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
     return list;
-  }, [notifications, requisitions, shortlistedCandidates, interviewRounds]);
+  }, [notifications, requisitions, interviewRounds]);
 
   const filteredActivities = useMemo(() => {
     if (activityFilter === 'all') return activities;
