@@ -265,8 +265,8 @@ export default function DashboardLayout() {
 
   useEffect(() => {
     if (user?.role === 'Hiring Manager' && token) {
-      // Immediate fresh fetch on role ready/mount
-      fetchHmCounts(true);
+      // SWR badge count fetch on mount (avoids flooding network with forced cache-busting calls)
+      fetchHmCounts(false);
 
       const handleRefresh = (e) => {
         if (typeof e?.detail?.count === 'number') {
