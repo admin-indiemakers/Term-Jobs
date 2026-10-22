@@ -36,7 +36,7 @@ def test_approval_returns_saved_decision_and_defers_fanout():
 def test_rejection_records_decision_without_running_intake():
     database, context, user = setup()
     result = context['reject_requisition']('req', SimpleNamespace(reviewer=user.name, reason='Revise budget'), current_user=user)
-    assert result['status'] == 'Structuring'
+    assert result['status'] == 'Restructuring'
     assert database.requisitions.find_one({'id': 'req'})['rejection_reason'] == 'Revise budget'
     context['service'].reject.assert_not_called()
     context['service']._record_review.assert_called_once_with('req', user.name, 'rejected')

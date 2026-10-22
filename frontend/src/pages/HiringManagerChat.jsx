@@ -1,11 +1,9 @@
 import GoogleCalendarConnect from '../components/GoogleCalendarConnect';
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
-import { interviewMetrics } from '../interview/utils/interviewMetrics';
 import { upcomingInterviewRounds } from '../interview/utils/upcomingInterviews';
-import { interviewApi } from '../interview/services/interviewApi';
 import { isPublishedStatus } from '../utils/requisitionStatus';
 import {
   Briefcase,
@@ -84,104 +82,112 @@ function StatusBadge({ status }) {
   );
 }
 
+// In-memory module cache for instant rendering without reload when navigating back
+let hmDashboardMemoryCache = null;
+
 export default function HiringManagerChat() {
   const { user, token } = useAuth();
   const navigate = useNavigate();
 
-  const [loading, setLoading] = useState(true);
+  // Instant state restoration from cache on re-navigation
+  const [loading, setLoading] = useState(() => !hmDashboardMemoryCache);
   const [error, setError] = useState('');
-  const [requisitions, setRequisitions] = useState([]);
-  const [shortlistedCandidates, setShortlistedCandidates] = useState([]);
-  const [acceptedCandidates, setAcceptedCandidates] = useState([]);
-  const [openIssues, setOpenIssues] = useState([]);
-  const [wfStats, setWfStats] = useState(null);
-  const [pendingTimesheets, setPendingTimesheets] = useState([]);
+  const [requisitions, setRequisitions] = useState(() => hmDashboardMemoryCache?.requisitions || []);
+  const [shortlistedCandidates, setShortlistedCandidates] = useState(() => hmDashboardMemoryCache?.shortlistedCandidates || []);
+  const [acceptedCandidates, setAcceptedCandidates] = useState(() => hmDashboardMemoryCache?.acceptedCandidates || []);
+  const [pendingTimesheetsCount, setPendingTimesheetsCount] = useState(() => hmDashboardMemoryCache?.pendingTimesheetsCount || 0);
   const [interviewDataError, setInterviewDataError] = useState('');
-  const [interviewRounds, setInterviewRounds] = useState([]);
-  const [notifications, setNotifications] = useState([]);
+  const [interviewRounds, setInterviewRounds] = useState(() => hmDashboardMemoryCache?.interviewRounds || []);
+  const [notifications, setNotifications] = useState(() => hmDashboardMemoryCache?.notifications || []);
 
   // Search, Filter & Activity tab states
   const [reqFilter, setReqFilter] = useState('ALL');
   const [reqSearch, setReqSearch] = useState('');
   const [activityFilter, setActivityFilter] = useState('all');
 
-  const loadDashboardData = async () => {
-    setLoading(true);
-    setWfStats(null);
+  const loadDashboardData = useCallback(async (isManualRefresh = false) => {
+    // Only show full loading spinner on initial un-cached load or manual user refresh
+    if (!hmDashboardMemoryCache || isManualRefresh) {
+      setLoading(true);
+    }
     setError('');
     setInterviewDataError('');
     try {
+      // Fetch only necessary endpoints: requisitions, shortlisted, accepted, workforce stats, interview rounds, notifications
       const [
         reqsData,
         shortlistedData,
         acceptedData,
-        issuesData,
         wfData,
-        timesheetsData,
         roundsData,
         notifsData
       ] = await Promise.all([
-        request('/api/requisitions', { token }).catch(() => { setInterviewDataError('Unable to load requisition data'); return []; }),
-        request('/api/candidates/shortlisted', { token }).catch(() => []),
-        request('/api/candidates?status=Accepted', { token }).catch(() => []),
-        request('/api/onboarding/issues', { token }).catch(() => []),
-        request('/api/workforce/stats', { token, noCache: true }).catch(() => null),
-        request('/api/workforce/timesheets', { token }).catch(() => []),
-        interviewApi.listRounds({}, token).catch(() => { setInterviewDataError('Unable to load interview data'); return []; }),
-        request('/api/notifications?compact=true&limit=12', { token }).catch(() => [])
+        request('/api/requisitions', { token, forceRefresh: isManualRefresh }).catch(() => { setInterviewDataError('Unable to load requisition data'); return []; }),
+        request('/api/candidates/shortlisted', { token, forceRefresh: isManualRefresh }).catch(() => []),
+        request('/api/candidates?status=Accepted', { token, forceRefresh: isManualRefresh }).catch(() => []),
+        request('/api/workforce/stats', { token, forceRefresh: isManualRefresh }).catch(() => null),
+        request('/api/interviews/rounds', { token, forceRefresh: isManualRefresh }).catch(() => { setInterviewDataError('Unable to load interview data'); return []; }),
+        request('/api/notifications?compact=true&limit=12', { token, forceRefresh: isManualRefresh }).catch(() => [])
       ]);
 
       const reqList = Array.isArray(reqsData) ? reqsData : reqsData?.requisitions || [];
+      const sList = Array.isArray(shortlistedData) ? shortlistedData : shortlistedData?.shortlisted_candidates || [];
+      const aList = Array.isArray(acceptedData) ? acceptedData : acceptedData?.candidates || [];
+      const pTsCount = wfData?.stats?.pending_timesheets || 0;
+      const rList = Array.isArray(roundsData) ? roundsData : [];
+      const nList = Array.isArray(notifsData) ? notifsData : notifsData?.notifications || [];
+
       setRequisitions(reqList);
+      setShortlistedCandidates(sList);
+      setAcceptedCandidates(aList);
+      setPendingTimesheetsCount(pTsCount);
+      setInterviewRounds(rList);
+      setNotifications(nList);
+
+      // Save to memory cache for instant restoration on subsequent visits
+      hmDashboardMemoryCache = {
+        requisitions: reqList,
+        shortlistedCandidates: sList,
+        acceptedCandidates: aList,
+        pendingTimesheetsCount: pTsCount,
+        interviewRounds: rList,
+        notifications: nList,
+        token
+      };
+
       const activeCount = reqList.filter((r) => !r.is_deleted && r.status !== 'Deleted by HM' && r.status !== 'Deleted' && isPublishedStatus(r?.status)).length;
       window.dispatchEvent(new CustomEvent('tj-requisition-count-updated', { detail: { count: activeCount } }));
-
-      const sList = Array.isArray(shortlistedData) ? shortlistedData : shortlistedData?.shortlisted_candidates || [];
-      setShortlistedCandidates(sList);
-
-      const aList = Array.isArray(acceptedData) ? acceptedData : acceptedData?.candidates || [];
-      setAcceptedCandidates(aList);
-
-      const iList = Array.isArray(issuesData) ? issuesData : issuesData?.issues || [];
-      setOpenIssues(iList.filter((i) => (i.status || '').toLowerCase() === 'open'));
-
-      setWfStats(wfData);
-
-      const tsList = Array.isArray(timesheetsData) ? timesheetsData : timesheetsData?.timesheets || [];
-      setPendingTimesheets(
-        tsList.filter(
-          (t) =>
-            (t.status || '').toLowerCase().includes('pending') ||
-            (t.status || '').toLowerCase().includes('submitted')
-        )
-      );
-
-      if (!Array.isArray(roundsData)) setInterviewDataError('Unexpected interview response');
-      setInterviewRounds(Array.isArray(roundsData) ? roundsData : []);
-
-      const nList = Array.isArray(notifsData) ? notifsData : notifsData?.notifications || [];
-      setNotifications(nList);
     } catch (err) {
       console.error('Failed to load hiring manager overview data:', err);
-      setError(err?.message || 'Unable to load live dashboard statistics.');
+      if (!hmDashboardMemoryCache) {
+        setError(err?.message || 'Unable to load live dashboard statistics.');
+      }
     } finally {
       setLoading(false);
     }
-  };
+  }, [token]);
 
   useEffect(() => {
     if (token) {
-      loadDashboardData();
+      loadDashboardData(false);
     }
-  }, [token]);
+  }, [token, loadDashboardData]);
+
+  // Keep dashboard data fresh when other parts of the application update requisitions
+  useEffect(() => {
+    const handleRefresh = () => {
+      loadDashboardData(false);
+    };
+    window.addEventListener('refresh-hm-data', handleRefresh);
+    window.addEventListener('tj-requisitions-updated', handleRefresh);
+    return () => {
+      window.removeEventListener('refresh-hm-data', handleRefresh);
+      window.removeEventListener('tj-requisitions-updated', handleRefresh);
+    };
+  }, [loadDashboardData]);
 
   const upcomingInterviews = useMemo(
     () => upcomingInterviewRounds(interviewRounds, requisitions),
-    [interviewRounds, requisitions]
-  );
-
-  const interviewStats = useMemo(
-    () => interviewMetrics(interviewRounds, requisitions),
     [interviewRounds, requisitions]
   );
 
@@ -232,12 +238,6 @@ export default function HiringManagerChat() {
     }
     return '0 Candidates';
   }, [pureShortlistedCandidates, acceptedCandidates]);
-
-  // Timesheet approvals pending count
-  const pendingTimesheetsCount = useMemo(() => {
-    return pendingTimesheets.length;
-  }, [pendingTimesheets]);
-  const pendingApprovalsTotal = pendingTimesheetsCount;
 
   // Filtered requisitions list
   const filteredRequisitions = useMemo(() => {

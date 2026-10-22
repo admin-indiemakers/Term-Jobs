@@ -1,5 +1,6 @@
 import { canCreateRequisition } from '../../utils/requisitionPermissions';
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { request } from '../../api/client';
@@ -60,7 +61,7 @@ const SECTION_CONFIG = {
     title: 'Drafted',
     icon: FileText,
     caption: 'Requisitions in progress — draft parameters and role specifications.',
-    statuses: ['Draft', 'Drafted', 'Intake', 'Structuring'],
+    statuses: ['Draft', 'Drafted', 'Intake', 'Structuring', 'Restructuring', 'Rejected', 'Needs Restructuring'],
     to: '/dashboard/requisitions/drafted',
   },
   completed: {
@@ -72,7 +73,7 @@ const SECTION_CONFIG = {
   history: {
     title: 'All History',
     icon: History,
-    statuses: ['Draft', 'Drafted', 'Intake', 'Structuring', 'PendingApproval', 'Pending_Approval', 'Pending Approval', 'Pending', 'Published', 'Active', 'Open', 'Closed', 'Completed', 'Filled'],
+    statuses: ['Draft', 'Drafted', 'Intake', 'Structuring', 'Restructuring', 'Rejected', 'Needs Restructuring', 'PendingApproval', 'Pending_Approval', 'Pending Approval', 'Pending', 'Published', 'Active', 'Open', 'Closed', 'Completed', 'Filled'],
     to: '/dashboard/requisitions/history',
   },
   deleted: {
@@ -133,6 +134,17 @@ function formatTime(iso) {
   } catch {
     return '10:24 AM';
   }
+}
+
+function getApplicantCount(r) {
+  if (!r) return 0;
+  return Number(
+    r.applicant_count ??
+    r.applicants_count ??
+    r.candidates_count ??
+    r.total_applicants ??
+    (Array.isArray(r.candidates) ? r.candidates.length : (Array.isArray(r.applicants) ? r.applicants.length : 0))
+  ) || 0;
 }
 
 function ApplicantStack({ count = 0 }) {
@@ -201,8 +213,28 @@ function LocationCell({ location, workplaceType }) {
   );
 }
 
-function RequisitionStatusBadge({ status }) {
-  const s = (status || '').toLowerCase().replace(/[\s_]+/g, '');
+function RequisitionStatusBadge({ status, requisition }) {
+  const reqObj = requisition || (typeof status === 'object' && status !== null ? status : null);
+  const rawStatus = typeof status === 'string' ? status : (reqObj?.status || '');
+  const s = (rawStatus || '').toLowerCase().replace(/[\s_]+/g, '');
+  const isRej = Boolean(
+    s === 'restructuring' ||
+    s === 'rejected' ||
+    s === 'needsrestructuring' ||
+    s === 'revisionrequired' ||
+    (reqObj && (
+      (reqObj.status || '').toLowerCase().includes('restructur') ||
+      (reqObj.director_approved === false && Boolean(reqObj.rejection_reason || reqObj.rejected_by || reqObj.rejected_at))
+    ))
+  );
+
+  if (isRej) {
+    return (
+      <span className="inline-block px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-300/80 shadow-3xs">
+        Restructuring
+      </span>
+    );
+  }
   if (s === 'deletedbyhm' || s === 'deleted') {
     return (
       <span className="inline-block px-2.5 py-1 rounded-lg text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
@@ -240,7 +272,7 @@ function RequisitionStatusBadge({ status }) {
   }
   return (
     <span className="inline-block px-2.5 py-1 rounded-lg text-xs font-semibold bg-gray-100 text-gray-700 border border-gray-200">
-      {status || 'Draft'}
+      {rawStatus || 'Draft'}
     </span>
   );
 }
@@ -517,15 +549,18 @@ function RequisitionDetailDrawer({
             </div>
 
             <div className="flex items-center gap-2.5">
-              <span className={`px-3 py-1 rounded-full text-xs font-bold tracking-wide border shadow-3xs ${r.status === 'Published'
-                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                  : r.status === 'Pending Approval' || r.status === 'PendingApproval'
-                    ? 'bg-amber-50 text-amber-700 border-amber-200'
-                    : isDeleted
-                      ? 'bg-rose-50 text-rose-700 border-rose-200'
-                      : 'bg-gray-100 text-gray-700 border-gray-200'
+              <span className={`px-3 py-1 rounded-full text-xs font-bold tracking-wide border shadow-3xs ${
+                isRejected || r.status === 'Restructuring' || r.status === 'Rejected'
+                  ? 'bg-amber-50 text-amber-800 border-amber-300'
+                  : r.status === 'Published'
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    : r.status === 'Pending Approval' || r.status === 'PendingApproval'
+                      ? 'bg-amber-50 text-amber-700 border-amber-200'
+                      : isDeleted
+                        ? 'bg-rose-50 text-rose-700 border-rose-200'
+                        : 'bg-gray-100 text-gray-700 border-gray-200'
                 }`}>
-                {toSafeString(r.status, 'Published')}
+                {isRejected || r.status === 'Restructuring' || r.status === 'Rejected' ? 'Restructuring' : toSafeString(r.status, 'Published')}
               </span>
 
               <button
@@ -1235,6 +1270,8 @@ export default function RequisitionOverview({ section }) {
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [showSectionDropdown, setShowSectionDropdown] = useState(false);
   const [activeMenuId, setActiveMenuId] = useState(null);
+  const [activeMenuReq, setActiveMenuReq] = useState(null);
+  const [menuPosition, setMenuPosition] = useState(null);
   const [selectedDetailReqId, setSelectedDetailReqId] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
@@ -1276,16 +1313,38 @@ export default function RequisitionOverview({ section }) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Close popup menus & dropdowns on outside click
+  // Close popup menus & dropdowns on outside click, scroll, resize, or escape
   useEffect(() => {
     const handleClickOutside = () => {
       setActiveMenuId(null);
+      setActiveMenuReq(null);
+      setMenuPosition(null);
       setShowDeptDropdown(false);
       setShowStatusDropdown(false);
       setShowSectionDropdown(false);
     };
+    const handleScrollOrResize = () => {
+      setActiveMenuId(null);
+      setActiveMenuReq(null);
+      setMenuPosition(null);
+    };
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setActiveMenuId(null);
+        setActiveMenuReq(null);
+        setMenuPosition(null);
+      }
+    };
     window.addEventListener('click', handleClickOutside);
-    return () => window.removeEventListener('click', handleClickOutside);
+    window.addEventListener('scroll', handleScrollOrResize, true);
+    window.addEventListener('resize', handleScrollOrResize);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('click', handleClickOutside);
+      window.removeEventListener('scroll', handleScrollOrResize, true);
+      window.removeEventListener('resize', handleScrollOrResize);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
   }, []);
 
   // Auto-dismiss info alerts
@@ -1409,7 +1468,7 @@ export default function RequisitionOverview({ section }) {
       ['pendingapproval', 'pending'].includes(normalize(r.status))
     ).length;
     const drafted = activeReqs.filter((r) =>
-      ['draft', 'drafted', 'intake', 'structuring'].includes(normalize(r.status))
+      ['draft', 'drafted', 'intake', 'structuring', 'restructuring', 'rejected', 'needsrestructuring'].includes(normalize(r.status))
     ).length;
     const completed = activeReqs.filter((r) =>
       ['closed', 'completed', 'filled'].includes(normalize(r.status))
@@ -1426,7 +1485,7 @@ export default function RequisitionOverview({ section }) {
   const statCounts = useMemo(() => {
     const totalReqs = overviewMetrics?.total_requisitions || counts.history || 0;
     const reqsMonth = overviewMetrics?.requisitions_this_month || 0;
-    const sumReqApplicants = requisitions.reduce((acc, r) => acc + (Number(r.applicant_count) || 0), 0);
+    const sumReqApplicants = requisitions.reduce((acc, r) => acc + getApplicantCount(r), 0);
     const totalApplicants = (overviewMetrics?.total_applicants !== undefined && overviewMetrics?.total_applicants !== null && overviewMetrics?.total_applicants > 0)
       ? overviewMetrics.total_applicants
       : (sumReqApplicants || 0);
@@ -1455,7 +1514,7 @@ export default function RequisitionOverview({ section }) {
     return ['All Departments', ...Array.from(set).sort()];
   }, [requisitions]);
 
-  const statusOptions = ['All Status', 'Published', 'Pending Approval', 'Drafted', 'Completed'];
+  const statusOptions = ['All Status', 'Published', 'Pending Approval', 'Restructuring', 'Drafted', 'Completed'];
 
   // Filtered Rows
   const filteredRows = useMemo(() => {
@@ -1480,7 +1539,8 @@ export default function RequisitionOverview({ section }) {
       const sMap = {
         'Published': ['published', 'active', 'open'],
         'Pending Approval': ['pendingapproval', 'pending'],
-        'Drafted': ['draft', 'drafted', 'intake', 'structuring'],
+        'Restructuring': ['restructuring', 'rejected', 'needsrestructuring'],
+        'Drafted': ['draft', 'drafted', 'intake', 'structuring', 'restructuring', 'rejected', 'needsrestructuring'],
         'Completed': ['closed', 'completed', 'filled'],
       };
       const allowed = sMap[selectedStatus] || [];
@@ -1503,6 +1563,9 @@ export default function RequisitionOverview({ section }) {
   // Reset pagination on filter change
   useEffect(() => {
     setCurrentPage(1);
+    setActiveMenuId(null);
+    setActiveMenuReq(null);
+    setMenuPosition(null);
   }, [searchQuery, selectedDept, selectedStatus, activeTab]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
@@ -1890,7 +1953,7 @@ export default function RequisitionOverview({ section }) {
                           </div>
                         </div>
                         <div className="shrink-0">
-                          <RequisitionStatusBadge status={r.status || 'Published'} />
+                          <RequisitionStatusBadge status={r.status || 'Published'} requisition={r} />
                         </div>
                       </div>
 
@@ -1923,7 +1986,7 @@ export default function RequisitionOverview({ section }) {
                           title="View Candidates"
                         >
                           <span className="text-[10.5px] text-gray-500 font-medium">Applicants:</span>
-                          <ApplicantStack count={r.applicant_count ?? 0} />
+                          <ApplicantStack count={getApplicantCount(r)} />
                         </div>
 
                         <div className="flex items-center gap-1.5 shrink-0">
@@ -2046,12 +2109,12 @@ export default function RequisitionOverview({ section }) {
                               navigate(`/dashboard/requisitions/${r.id}/candidates`);
                             }}
                           >
-                            <ApplicantStack count={r.applicant_count ?? 0} />
+                            <ApplicantStack count={getApplicantCount(r)} />
                           </td>
 
                           {/* 5. Status */}
                           <td className="py-3 px-3">
-                            <RequisitionStatusBadge status={r.status || 'Published'} />
+                            <RequisitionStatusBadge status={r.status || 'Published'} requisition={r} />
                           </td>
 
                           {/* 6. Posted On */}
@@ -2070,62 +2133,39 @@ export default function RequisitionOverview({ section }) {
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setActiveMenuId(isMenuOpen ? null : r.id);
+                                if (activeMenuId === r.id) {
+                                  setActiveMenuId(null);
+                                  setActiveMenuReq(null);
+                                  setMenuPosition(null);
+                                } else {
+                                  const rect = e.currentTarget.getBoundingClientRect();
+                                  const menuWidth = 152; // w-38
+                                  const approxMenuHeight = isDeleted ? 90 : 130;
+
+                                  let top = rect.bottom + 6;
+                                  if (top + approxMenuHeight > window.innerHeight - 12) {
+                                    top = Math.max(12, rect.top - approxMenuHeight - 6);
+                                  }
+
+                                  let left = rect.right - menuWidth;
+                                  if (left < 12) left = 12;
+                                  if (left + menuWidth > window.innerWidth - 12) {
+                                    left = window.innerWidth - menuWidth - 12;
+                                  }
+
+                                  setActiveMenuId(r.id);
+                                  setActiveMenuReq(r);
+                                  setMenuPosition({ top, left });
+                                }
                               }}
-                              className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg inline-flex items-center justify-center transition-colors cursor-pointer"
+                              aria-label="Requisition actions"
+                              aria-expanded={isMenuOpen}
+                              className={`p-1.5 rounded-lg inline-flex items-center justify-center transition-colors cursor-pointer ${
+                                isMenuOpen ? 'text-gray-900 bg-gray-100 ring-1 ring-black/10' : 'text-gray-400 hover:text-gray-900 hover:bg-gray-100'
+                              }`}
                             >
                               <MoreHorizontal size={15} />
                             </button>
-
-                            {/* Floating Action Menu Dropdown */}
-                            {isMenuOpen && (
-                              <div
-                                className="absolute right-3 top-10 w-38 bg-white/95 backdrop-blur-2xl border border-white/90 rounded-2xl shadow-[0_12px_40px_rgba(0,0,0,0.12)] p-1 z-30 animate-in fade-in zoom-in-95 text-left"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedDetailReqId(r.id);
-                                    setActiveMenuId(null);
-                                  }}
-                                  className="w-full px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-100/80 rounded-xl transition-colors flex items-center gap-2 font-medium cursor-pointer"
-                                >
-                                  <Eye size={13} className="text-gray-400" />
-                                  <span>Details</span>
-                                </button>
-
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    navigate(`/dashboard/requisitions/${r.id}/candidates`);
-                                    setActiveMenuId(null);
-                                  }}
-                                  className="w-full px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-100/80 rounded-xl transition-colors flex items-center gap-2 font-medium cursor-pointer"
-                                >
-                                  <Users size={13} className="text-gray-400" />
-                                  <span>Candidates</span>
-                                </button>
-
-                                {!isDeleted && (
-                                  <>
-                                    <div className="h-px bg-black/[0.04] my-1" />
-
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setConfirmDelete(r);
-                                        setActiveMenuId(null);
-                                      }}
-                                      className="w-full px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-xl transition-colors flex items-center gap-2 font-semibold cursor-pointer"
-                                    >
-                                      <Trash2 size={13} className="text-red-500" />
-                                      <span>Delete</span>
-                                    </button>
-                                  </>
-                                )}
-                              </div>
-                            )}
                           </td>
                         </tr>
                       );
@@ -2254,6 +2294,64 @@ export default function RequisitionOverview({ section }) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Floating Action Menu Dropdown Portal (Rendered to document.body to avoid clipping and panel overlap) */}
+      {activeMenuId && activeMenuReq && menuPosition && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed z-[9999] w-38 bg-white/95 backdrop-blur-2xl border border-white/90 rounded-2xl shadow-[0_12px_40px_rgba(0,0,0,0.16)] p-1 animate-in fade-in zoom-in-95 text-left"
+          style={{ top: `${menuPosition.top}px`, left: `${menuPosition.left}px` }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedDetailReqId(activeMenuReq.id);
+              setActiveMenuId(null);
+              setActiveMenuReq(null);
+              setMenuPosition(null);
+            }}
+            className="w-full px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-100/80 rounded-xl transition-colors flex items-center gap-2 font-medium cursor-pointer"
+          >
+            <Eye size={13} className="text-gray-400" />
+            <span>Details</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              navigate(`/dashboard/requisitions/${activeMenuReq.id}/candidates`);
+              setActiveMenuId(null);
+              setActiveMenuReq(null);
+              setMenuPosition(null);
+            }}
+            className="w-full px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-100/80 rounded-xl transition-colors flex items-center gap-2 font-medium cursor-pointer"
+          >
+            <Users size={13} className="text-gray-400" />
+            <span>Candidates</span>
+          </button>
+
+          {!(activeMenuReq.is_deleted || activeMenuReq.status === 'Deleted by HM' || activeMenuReq.status === 'Deleted') && (
+            <>
+              <div className="h-px bg-black/[0.04] my-1" />
+
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmDelete(activeMenuReq);
+                  setActiveMenuId(null);
+                  setActiveMenuReq(null);
+                  setMenuPosition(null);
+                }}
+                className="w-full px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-xl transition-colors flex items-center gap-2 font-semibold cursor-pointer"
+              >
+                <Trash2 size={13} className="text-red-500" />
+                <span>Delete</span>
+              </button>
+            </>
+          )}
+        </div>,
+        document.body
       )}
 
       {/* Requisition Details Slide-Over Right Bar */}

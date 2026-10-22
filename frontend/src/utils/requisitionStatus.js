@@ -25,9 +25,14 @@ export function isPublishedStatus(status) {
   return ['published', 'active', 'open'].includes(norm);
 }
 
+export function isRestructuringStatus(status) {
+  const norm = normalizeRequisitionStatus(status);
+  return ['restructuring', 'rejected', 'needsrestructuring', 'revisionrequired'].includes(norm);
+}
+
 export function isDraftedStatus(status) {
   const norm = normalizeRequisitionStatus(status);
-  return ['draft', 'drafted', 'intake', 'structuring'].includes(norm);
+  return ['draft', 'drafted', 'intake', 'structuring', 'restructuring', 'rejected', 'needsrestructuring'].includes(norm);
 }
 
 export function isCompletedStatus(status) {
@@ -48,6 +53,7 @@ export function matchesRequisitionStatusFilter(status, selectedFilter) {
   if (!selectedFilter || selectedFilter === 'All Status') return true;
   if (selectedFilter === 'Pending Approval') return isPendingApprovalStatus(status);
   if (selectedFilter === 'Published') return isPublishedStatus(status);
+  if (selectedFilter === 'Restructuring') return isRestructuringStatus(status);
   if (selectedFilter === 'Drafted') return isDraftedStatus(status);
   if (selectedFilter === 'Completed') return isCompletedStatus(status);
 

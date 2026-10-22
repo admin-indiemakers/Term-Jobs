@@ -108,7 +108,10 @@ export default function NotificationBell() {
 
   useEffect(() => {
     load();
-    const timer = setInterval(() => load(true), 20000);
+    const timer = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      load(true);
+    }, 60000);
     return () => clearInterval(timer);
   }, [load]);
 

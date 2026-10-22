@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { API_BASE_URL, request } from '../api/client';
+import { API_BASE_URL, request, clearApiCache } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import NotificationBell from '../components/NotificationBell';
 import {
@@ -89,6 +89,10 @@ export default function SuperAdminCandidatePool() {
 
   const fetchPoolData = async (forceRefresh = false) => {
     setLoading(true);
+    if (forceRefresh) {
+      clearApiCache();
+    }
+    const startTime = Date.now();
     try {
       const res = await request('/api/superadmin/candidate-pool', { token, forceRefresh, noCache: true });
       setCandidates(res.candidates || []);
@@ -100,7 +104,12 @@ export default function SuperAdminCandidatePool() {
       setError(err.message || 'Failed to load Candidate Pool');
       throw err;
     } finally {
-      setLoading(false);
+      const elapsed = Date.now() - startTime;
+      if (forceRefresh && elapsed < 400) {
+        setTimeout(() => setLoading(false), 400 - elapsed);
+      } else {
+        setLoading(false);
+      }
     }
   };
 

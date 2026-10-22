@@ -1,9 +1,10 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { request } from '../api/client';
+import { request, clearApiCache } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import NotificationBell from '../components/NotificationBell';
 import {
+  RefreshCw,
   ShieldAlert,
   ShieldCheck,
   Shield,
@@ -83,17 +84,21 @@ export default function AdminAccounts() {
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
-  const loadData = () => {
+  const loadData = (isManual = false) => {
     setLoading(true);
+    if (isManual) {
+      clearApiCache();
+    }
+    const startTime = Date.now();
     Promise.all([
-      request('/api/auth/superadmins', { token }).catch(() => null),
-      request('/api/auth/admin-logs', { token }).catch(() => []),
+      request('/api/auth/superadmins', { token, forceRefresh: isManual }).catch(() => null),
+      request('/api/auth/admin-logs', { token, forceRefresh: isManual }).catch(() => []),
     ])
       .then(async ([superAdminData, logData]) => {
         let adminList = Array.isArray(superAdminData) ? superAdminData : null;
         if (!adminList) {
           try {
-            const fallbackUsers = await request('/api/auth/users?role=Super+Admin', { token });
+            const fallbackUsers = await request('/api/auth/users?role=Super+Admin', { token, forceRefresh: isManual });
             adminList = (Array.isArray(fallbackUsers) ? fallbackUsers : []).filter((u) => u.role === 'Super Admin');
           } catch {
             adminList = [];
@@ -104,7 +109,14 @@ export default function AdminAccounts() {
         setError('');
       })
       .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
+      .finally(() => {
+        const elapsed = Date.now() - startTime;
+        if (isManual && elapsed < 400) {
+          setTimeout(() => setLoading(false), 400 - elapsed);
+        } else {
+          setLoading(false);
+        }
+      });
   };
 
   useEffect(() => {
@@ -320,6 +332,15 @@ export default function AdminAccounts() {
         {/* Top Right Actions: Notification Bell, + Add Super Admin, Sign out */}
         <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 flex-wrap">
           <NotificationBell />
+
+          <button
+            type="button"
+            onClick={() => loadData(true)}
+            title="Refresh accounts & logs"
+            className="p-2 rounded-xl bg-white/70 hover:bg-white text-gray-700 border border-white/90 shadow-2xs transition active:scale-95 cursor-pointer"
+          >
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+          </button>
 
           <button
             type="button"
