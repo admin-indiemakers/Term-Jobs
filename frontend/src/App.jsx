@@ -448,6 +448,38 @@ export default function App() {
             }
           />
           <Route
+            path="/candidate/expenses"
+            element={
+              <RequireAuth>
+                <CandidatePortal />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/candidate/billing"
+            element={
+              <RequireAuth>
+                <CandidatePortal />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/candidate/payments"
+            element={
+              <RequireAuth>
+                <CandidatePortal />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/dashboard/candidate/billing"
+            element={
+              <RequireAuth>
+                <CandidatePortal />
+              </RequireAuth>
+            }
+          />
+          <Route
             path="/candidatepool"
             element={
               <RequireAuth>

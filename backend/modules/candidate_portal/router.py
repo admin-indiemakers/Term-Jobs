@@ -1250,18 +1250,46 @@ def _candidate_notification_query(user):
 def list_candidate_payments(current_user: User = Depends(get_current_user)):
     identity = _candidate_notification_query(current_user)
     # Return payment fields only; internal billing/approval records stay private.
-    rows = db["sow_documents"].find({
+    query = {
         "$or": identity["$or"],
         "tenant_id": current_user.tenant_id,
         "payment_status": "Paid",
-    }).sort("payment_processed_at", -1)
-    return {"payments": [{
+    }
+    rows = list(db["sow_documents"].find(query).sort("payment_processed_at", -1))
+    payments = [{
         "period": row.get("period"),
-        "amount": row.get("payment_amount"),
+        "amount": row.get("payment_amount") if row.get("payment_amount") is not None else (row.get("sow_data") or {}).get("grand_total"),
         "transaction_ref": row.get("transaction_ref"),
-        "disbursed_at": row.get("payment_processed_at"),
-        "status": row.get("payment_status"),
-    } for row in rows]}
+        "disbursed_at": row.get("payment_processed_at") or row.get("disbursed_at"),
+        "status": row.get("payment_status") or "Paid",
+    } for row in rows]
+
+    seen_refs = {p["transaction_ref"] for p in payments if p.get("transaction_ref")}
+
+    # Also check candidate payment disbursement notifications as fallback
+    notif_rows = list(db["candidate_notifications"].find({
+        "$or": identity["$or"],
+        "tenant_id": current_user.tenant_id,
+        "type": "payment_disbursed",
+    }).sort("created_at", -1))
+    for nr in notif_rows:
+        tref = nr.get("transaction_ref")
+        if not tref:
+            import re
+            m = re.search(r"Txn Ref: ([^)]+)", nr.get("message") or "")
+            if m:
+                tref = m.group(1).strip()
+        if tref and tref not in seen_refs:
+            seen_refs.add(tref)
+            payments.append({
+                "period": nr.get("period") or "",
+                "amount": nr.get("payment_amount") if nr.get("payment_amount") is not None else nr.get("amount") if nr.get("amount") is not None else (nr.get("data") or {}).get("amount"),
+                "transaction_ref": tref,
+                "disbursed_at": nr.get("disbursed_at") or nr.get("created_at"),
+                "status": nr.get("status") or "Paid",
+            })
+
+    return {"payments": payments}
 
 
 @router.get("/notifications")

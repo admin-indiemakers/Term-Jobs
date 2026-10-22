@@ -4,11 +4,13 @@ import { request } from '../../api/client';
 import { RefreshCw, Shield, ShieldOff, UserPlus, Search, AlertCircle, CheckCircle, Key, Edit3, Lock, X, Mail } from 'lucide-react';
 import { validateEmail } from '../../utils/emailValidation';
 
+let portalAccessMemoryCache = null;
+
 export default function CandidatePortalAccess() {
   const { token, user } = useAuth();
 
-  const [candidates, setCandidates] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [candidates, setCandidates] = useState(() => portalAccessMemoryCache?.candidates || []);
+  const [loading, setLoading] = useState(() => !portalAccessMemoryCache);
   const [error, setError] = useState('');
   const [emailError, setEmailError] = useState('');
   const [search, setSearch] = useState('');
@@ -20,20 +22,37 @@ export default function CandidatePortalAccess() {
   const [editForm, setEditForm] = useState({ email: '', name: '', password: '', is_active: true });
   const [successMsg, setSuccessMsg] = useState('');
 
-  const loadCandidates = async () => {
-    setLoading(true);
+  const loadCandidates = async (force = false) => {
+    if (!portalAccessMemoryCache || force) {
+      setLoading(true);
+    }
     try {
-      const data = await request('/api/auth/portal-users', { token });
-      setCandidates(Array.isArray(data) ? data : []);
+      const data = await request('/api/auth/portal-users', { token, forceRefresh: force });
+      const list = Array.isArray(data) ? data : [];
+      setCandidates(list);
+      portalAccessMemoryCache = { candidates: list, token };
     } catch (err) {
       console.error('Failed to load portal users:', err);
-      setError(err.message || 'Unable to reach the server. Is the backend running?');
+      if (!portalAccessMemoryCache) {
+        setError(err.message || 'Unable to reach the server. Is the backend running?');
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { loadCandidates(); }, [token]);
+  useEffect(() => {
+    loadCandidates(false);
+
+    const handleRefresh = () => {
+      loadCandidates(true);
+    };
+
+    window.addEventListener('refresh-hm-data', handleRefresh);
+    return () => {
+      window.removeEventListener('refresh-hm-data', handleRefresh);
+    };
+  }, [token]);
 
   const filtered = useMemo(() => {
     if (!search) return candidates;

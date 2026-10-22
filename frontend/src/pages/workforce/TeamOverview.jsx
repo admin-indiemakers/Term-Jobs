@@ -4,30 +4,49 @@ import { request } from '../../api/client';
 import { Users, RefreshCw, Clock, CheckCircle, AlertCircle, Search } from 'lucide-react';
 import CandidateDetailPanel from './CandidateDetailPanel';
 
+let teamOverviewMemoryCache = null;
+
 export default function TeamOverview() {
   const { token } = useAuth();
 
-  const [team, setTeam] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [team, setTeam] = useState(() => teamOverviewMemoryCache?.team || []);
+  const [loading, setLoading] = useState(() => !teamOverviewMemoryCache);
   const [search, setSearch] = useState('');
   const [error, setError] = useState('');
   const [selectedCandidate, setSelectedCandidate] = useState(null);
 
-  const loadTeam = async () => {
-    setLoading(true);
+  const loadTeam = async (force = false) => {
+    if (!teamOverviewMemoryCache || force) {
+      setLoading(true);
+    }
     setError('');
     try {
-      const data = await request('/api/workforce/dashboard', { token });
-      setTeam(data?.team || []);
+      const data = await request('/api/workforce/dashboard', { token, forceRefresh: force });
+      const list = data?.team || [];
+      setTeam(list);
+      teamOverviewMemoryCache = { team: list, token };
     } catch (err) {
       console.error('Failed to load team:', err);
-      setError(err.message || 'Failed to load team data');
+      if (!teamOverviewMemoryCache) {
+        setError(err.message || 'Failed to load team data');
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { loadTeam(); }, [token]);
+  useEffect(() => {
+    loadTeam(false);
+
+    const handleRefresh = () => {
+      loadTeam(true);
+    };
+
+    window.addEventListener('refresh-hm-data', handleRefresh);
+    return () => {
+      window.removeEventListener('refresh-hm-data', handleRefresh);
+    };
+  }, [token]);
 
   const filtered = team.filter((m) => {
     if (!search) return true;

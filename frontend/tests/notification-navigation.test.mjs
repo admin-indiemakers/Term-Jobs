@@ -54,3 +54,18 @@ test('Company Admin notifications target management pages or display details', (
     ['candidate.selected', null], ['requisition.published', null], ['general', null],
   ]) assert.equal(destination({ type }, 'Admin'), expected, type);
 });
+
+test('Candidate notification links stay within candidate portal and payment disbursement targets billing', () => {
+  for (const link of ['/candidate/billing', '/candidate/dashboard', '/candidate/timesheet', '/candidate/expenses', '/candidate/assignment']) {
+    assert.equal(destination({ data: { link } }, 'Candidate'), link);
+  }
+  for (const link of ['/login', '/logout', '/dashboard/admin', '/dashboard/superadmin', 'https://other.example/login']) {
+    assert.equal(destination({ data: { link } }, 'Candidate'), null, link);
+  }
+  assert.equal(destination({ type: 'payment_disbursed' }, 'Candidate'), '/candidate/billing');
+  assert.equal(destination({ type: 'payment_received' }, 'Candidate'), '/candidate/billing');
+  assert.equal(destination({ type: 'timesheet_submitted' }, 'Candidate'), '/candidate/timesheet');
+  assert.equal(destination({ type: 'expense_approved' }, 'Candidate'), '/candidate/expenses');
+  assert.equal(destination({ type: 'assignment_started' }, 'Candidate'), '/candidate/assignment');
+});
+

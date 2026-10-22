@@ -224,19 +224,26 @@ export default function DashboardLayout() {
 
   // Dynamic live count badges for Hiring Manager
   const [hmCounts, setHmCounts] = useState({ requisitions: 0, candidates: 0, openIssues: 0, pendingTimesheets: 0, pendingExpenses: 0 });
+  const lastHmFetchRef = useRef(0);
+  const isFetchingHmCounts = useRef(false);
 
   const fetchHmCounts = useCallback((force = false) => {
     if (user?.role !== 'Hiring Manager' || !token) return;
+    const now = Date.now();
+    if (!force && (isFetchingHmCounts.current || (now - lastHmFetchRef.current < 15000))) {
+      return;
+    }
+    lastHmFetchRef.current = now;
+    isFetchingHmCounts.current = true;
+
     Promise.all([
       request('/api/requisitions', { token, forceRefresh: force }).catch(() => []),
-      request('/api/candidates/shortlisted', { token, forceRefresh: force }).catch(() => []),
       request('/api/candidates?status=Accepted', { token, forceRefresh: force }).catch(() => []),
       request('/api/onboarding/issues', { token, forceRefresh: force }).catch(() => []),
       request('/api/workforce/stats', { token, forceRefresh: force }).catch(() => null),
-    ]).then(([reqs, shortlisted, accepted, issuesData, wfStats]) => {
+    ]).then(([reqs, accepted, issuesData, wfStats]) => {
       const rawReqs = Array.isArray(reqs) ? reqs : (Array.isArray(reqs?.requisitions) ? reqs.requisitions : []);
       const rCount = rawReqs.filter((r) => !r.is_deleted && r.status !== 'Deleted by HM' && r.status !== 'Deleted' && isPublishedStatus(r?.status)).length;
-      const sList = Array.isArray(shortlisted) ? shortlisted : (shortlisted?.shortlisted_candidates || []);
       const aList = Array.isArray(accepted) ? accepted : (accepted?.candidates || []);
       const issueList = Array.isArray(issuesData) ? issuesData : issuesData?.issues || [];
       const openIssues = issueList.filter((i) => (i.status || '').toLowerCase() === 'open').length;
@@ -250,7 +257,10 @@ export default function DashboardLayout() {
         pendingTimesheets: pendingTs,
         pendingExpenses: pendingExp,
       }));
-    }).catch(() => { });
+    }).catch(() => { })
+    .finally(() => {
+      isFetchingHmCounts.current = false;
+    });
   }, [user?.role, token]);
 
   useEffect(() => {

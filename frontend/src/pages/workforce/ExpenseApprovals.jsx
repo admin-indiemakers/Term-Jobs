@@ -7,13 +7,15 @@ import {
   Search, ShieldCheck
 } from 'lucide-react';
 
+let expensesMemoryCache = null;
+
 export default function ExpenseApprovals() {
   const { token } = useAuth();
 
-  const [expenses, setExpenses] = useState([]);
-  const [pendingCount, setPendingCount] = useState(0);
-  const [totalPendingAmount, setTotalPendingAmount] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [expenses, setExpenses] = useState(() => expensesMemoryCache?.expenses || []);
+  const [pendingCount, setPendingCount] = useState(() => expensesMemoryCache?.pendingCount || 0);
+  const [totalPendingAmount, setTotalPendingAmount] = useState(() => expensesMemoryCache?.totalPendingAmount || 0);
+  const [loading, setLoading] = useState(() => !expensesMemoryCache);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
@@ -23,23 +25,47 @@ export default function ExpenseApprovals() {
   const [rejectReason, setRejectReason] = useState('');
   const [previewReceipt, setPreviewReceipt] = useState(null);
 
-  const loadExpenses = async () => {
-    setLoading(true);
+  const loadExpenses = async (force = false) => {
+    if (!expensesMemoryCache || force) {
+      setLoading(true);
+    }
     setError('');
     try {
-      const data = await request('/api/workforce/expenses', { token });
-      setExpenses(data?.expenses || []);
-      setPendingCount(data?.pending_count || 0);
-      setTotalPendingAmount(data?.total_amount || 0);
+      const data = await request('/api/workforce/expenses', { token, forceRefresh: force });
+      const list = data?.expenses || [];
+      const pCount = data?.pending_count || 0;
+      const tAmount = data?.total_amount || 0;
+      setExpenses(list);
+      setPendingCount(pCount);
+      setTotalPendingAmount(tAmount);
+      expensesMemoryCache = {
+        expenses: list,
+        pendingCount: pCount,
+        totalPendingAmount: tAmount,
+        token,
+      };
     } catch (err) {
       console.error('Failed to load expenses:', err);
-      setError(err.message || 'Failed to load expense data');
+      if (!expensesMemoryCache) {
+        setError(err.message || 'Failed to load expense data');
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { loadExpenses(); }, [token]);
+  useEffect(() => {
+    loadExpenses(false);
+
+    const handleRefresh = () => {
+      loadExpenses(true);
+    };
+
+    window.addEventListener('refresh-hm-data', handleRefresh);
+    return () => {
+      window.removeEventListener('refresh-hm-data', handleRefresh);
+    };
+  }, [token]);
 
   const approvedCount = useMemo(() => expenses.filter((e) => e.status === 'Approved').length, [expenses]);
   const rejectedCount = useMemo(() => expenses.filter((e) => e.status === 'Rejected').length, [expenses]);

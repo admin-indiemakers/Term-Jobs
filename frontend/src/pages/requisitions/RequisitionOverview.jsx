@@ -1242,6 +1242,21 @@ function RequisitionDetailDrawer({
   );
 }
 
+let reqOverviewMemoryCache = null;
+
+const DEFAULT_METRICS = {
+  total_requisitions: 0,
+  requisitions_this_month: 0,
+  total_applicants: 0,
+  shortlisted: 0,
+  in_interview: 0,
+  hired: 0,
+  applicant_growth: 18,
+  shortlisted_growth: 12,
+  interview_growth: 3,
+  hired_growth: 1,
+};
+
 export default function RequisitionOverview({ section }) {
   const { user, token } = useAuth();
   const location = useLocation();
@@ -1259,8 +1274,8 @@ export default function RequisitionOverview({ section }) {
   }, [section, location.pathname]);
 
   const [activeTab, setActiveTab] = useState(initialSection);
-  const [requisitions, setRequisitions] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [requisitions, setRequisitions] = useState(() => reqOverviewMemoryCache?.requisitions || []);
+  const [loading, setLoading] = useState(() => !reqOverviewMemoryCache);
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -1275,18 +1290,7 @@ export default function RequisitionOverview({ section }) {
   const [selectedDetailReqId, setSelectedDetailReqId] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
-  const [overviewMetrics, setOverviewMetrics] = useState({
-    total_requisitions: 0,
-    requisitions_this_month: 0,
-    total_applicants: 0,
-    shortlisted: 0,
-    in_interview: 0,
-    hired: 0,
-    applicant_growth: 18,
-    shortlisted_growth: 12,
-    interview_growth: 3,
-    hired_growth: 1,
-  });
+  const [overviewMetrics, setOverviewMetrics] = useState(() => reqOverviewMemoryCache?.overviewMetrics || DEFAULT_METRICS);
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -1360,49 +1364,47 @@ export default function RequisitionOverview({ section }) {
     if (!force && hasLoadedRef.current && prevTokenRef.current === token) return;
 
     isFetchingRef.current = true;
-    setLoading(true);
+    if (!reqOverviewMemoryCache || force) {
+      setLoading(true);
+    }
     setError('');
     try {
-      const reqs = await request('/api/requisitions?fresh=true', { token, noCache: true }).catch(() => []);
+      const [reqs, metricsData, profiles] = await Promise.all([
+        request('/api/requisitions', { token, forceRefresh: force }).catch(() => []),
+        request('/api/requisitions/overview-metrics', { token, forceRefresh: force }).catch(() => null),
+        request('/api/company-profiles', { token, forceRefresh: force }).catch(() => []),
+      ]);
+
       const reqList = Array.isArray(reqs) ? reqs : reqs?.requisitions || [];
+      const profileMap = Array.isArray(profiles) && profiles.length > 0 ? Object.fromEntries(profiles.map((p) => [p.id, p.name])) : {};
       const rows = reqList.map((r) => ({
         ...r,
-        company_name: r.company_name || user?.tenant_name || 'Client',
+        company_name: r.company_name || profileMap[r.company_profile_id] || user?.tenant_name || 'Client',
       }));
 
       setRequisitions(rows);
-      setLoading(false);
+      if (metricsData && typeof metricsData === 'object') {
+        setOverviewMetrics(metricsData);
+      }
+
+      reqOverviewMemoryCache = {
+        requisitions: rows,
+        overviewMetrics: metricsData || DEFAULT_METRICS,
+        token,
+      };
+
       hasLoadedRef.current = true;
       prevTokenRef.current = token;
 
       const activeCount = reqList.filter((r) => !r.is_deleted && r.status !== 'Deleted by HM' && r.status !== 'Deleted' && isPublishedStatus(r?.status)).length;
       window.dispatchEvent(new CustomEvent('tj-requisition-count-updated', { detail: { count: activeCount } }));
-
-      // Fetch live real overview metrics for right stat cards
-      request('/api/requisitions/overview-metrics', { token, forceRefresh: force, noCache: true })
-        .then((m) => {
-          if (m && typeof m === 'object') {
-            setOverviewMetrics(m);
-          }
-        })
-        .catch(() => { });
-
-      request('/api/company-profiles', { token }).then((profiles) => {
-        if (Array.isArray(profiles) && profiles.length > 0) {
-          const profileMap = Object.fromEntries(profiles.map((p) => [p.id, p.name]));
-          setRequisitions((prev) =>
-            prev.map((r) => ({
-              ...r,
-              company_name: r.company_name || profileMap[r.company_profile_id] || user?.tenant_name || 'Client',
-            }))
-          );
-        }
-      }).catch(() => { });
     } catch (err) {
       console.error('Failed to load requisitions:', err);
-      setError(err.message || 'Unable to load requisitions.');
-      setLoading(false);
+      if (!reqOverviewMemoryCache) {
+        setError(err.message || 'Unable to load requisitions.');
+      }
     } finally {
+      setLoading(false);
       isFetchingRef.current = false;
     }
   }, [token, user?.tenant_name]);
@@ -1413,9 +1415,19 @@ export default function RequisitionOverview({ section }) {
       prevTokenRef.current = token;
       hasLoadedRef.current = false;
     }
-    if (!hasLoadedRef.current) {
-      loadData();
-    }
+    loadData(false);
+
+    const handleRefresh = () => {
+      loadData(true);
+    };
+
+    window.addEventListener('refresh-hm-data', handleRefresh);
+    window.addEventListener('tj-requisitions-updated', handleRefresh);
+
+    return () => {
+      window.removeEventListener('refresh-hm-data', handleRefresh);
+      window.removeEventListener('tj-requisitions-updated', handleRefresh);
+    };
   }, [token, loadData]);
 
   useEffect(() => {

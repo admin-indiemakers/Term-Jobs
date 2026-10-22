@@ -7,14 +7,16 @@ import {
   AlertTriangle, Filter, FileText,
 } from 'lucide-react';
 
+let timesheetsMemoryCache = null;
+
 export default function TimesheetApprovals() {
   const { token } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
-  const [timesheets, setTimesheets] = useState([]);
-  const [pendingCount, setPendingCount] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [timesheets, setTimesheets] = useState(() => timesheetsMemoryCache?.timesheets || []);
+  const [pendingCount, setPendingCount] = useState(() => timesheetsMemoryCache?.pendingCount || 0);
+  const [loading, setLoading] = useState(() => !timesheetsMemoryCache);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('ALL');
   const [expandedId, setExpandedId] = useState(null);
@@ -24,22 +26,40 @@ export default function TimesheetApprovals() {
 
   const candidateFilter = searchParams.get('candidate') || '';
 
-  const loadTimesheets = async () => {
-    setLoading(true);
+  const loadTimesheets = async (force = false) => {
+    if (!timesheetsMemoryCache || force) {
+      setLoading(true);
+    }
     setError('');
     try {
-      const data = await request('/api/workforce/timesheets', { token });
-      setTimesheets(data?.timesheets || []);
-      setPendingCount(data?.pending_count || 0);
+      const data = await request('/api/workforce/timesheets', { token, forceRefresh: force });
+      const list = data?.timesheets || [];
+      const pCount = data?.pending_count || 0;
+      setTimesheets(list);
+      setPendingCount(pCount);
+      timesheetsMemoryCache = { timesheets: list, pendingCount: pCount, token };
     } catch (err) {
       console.error('Failed to load timesheets:', err);
-      setError(err.message || 'Failed to load timesheet data');
+      if (!timesheetsMemoryCache) {
+        setError(err.message || 'Failed to load timesheet data');
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { loadTimesheets(); }, [token]);
+  useEffect(() => {
+    loadTimesheets(false);
+
+    const handleRefresh = () => {
+      loadTimesheets(true);
+    };
+
+    window.addEventListener('refresh-hm-data', handleRefresh);
+    return () => {
+      window.removeEventListener('refresh-hm-data', handleRefresh);
+    };
+  }, [token]);
 
   const filtered = useMemo(() => {
     let list = timesheets;
