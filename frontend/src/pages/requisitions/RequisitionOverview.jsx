@@ -1369,17 +1369,15 @@ export default function RequisitionOverview({ section }) {
     }
     setError('');
     try {
-      const [reqs, metricsData, profiles] = await Promise.all([
+      const [reqs, metricsData] = await Promise.all([
         request('/api/requisitions', { token, forceRefresh: force }).catch(() => []),
         request('/api/requisitions/overview-metrics', { token, forceRefresh: force }).catch(() => null),
-        request('/api/company-profiles', { token, forceRefresh: force }).catch(() => []),
       ]);
 
       const reqList = Array.isArray(reqs) ? reqs : reqs?.requisitions || [];
-      const profileMap = Array.isArray(profiles) && profiles.length > 0 ? Object.fromEntries(profiles.map((p) => [p.id, p.name])) : {};
       const rows = reqList.map((r) => ({
         ...r,
-        company_name: r.company_name || profileMap[r.company_profile_id] || user?.tenant_name || 'Client',
+        company_name: r.company_name || user?.tenant_name || 'Client',
       }));
 
       setRequisitions(rows);
@@ -1457,14 +1455,16 @@ export default function RequisitionOverview({ section }) {
 
   useEffect(() => {
     if (!token) return;
-    const refresh = () => loadData(true);
-    let day = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-    const timer = setInterval(() => {
-      const nextDay = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-      if (nextDay !== day) { day = nextDay; refresh(); }
-    }, 1000);
-    window.addEventListener('focus', refresh);
-    return () => { clearInterval(timer); window.removeEventListener('focus', refresh); };
+    let lastFocusRefresh = Date.now();
+    const handleFocus = () => {
+      const now = Date.now();
+      if (now - lastFocusRefresh > 30000) {
+        lastFocusRefresh = now;
+        loadData(false);
+      }
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => { window.removeEventListener('focus', handleFocus); };
   }, [token, loadData]);
 
   // Live Section Counts

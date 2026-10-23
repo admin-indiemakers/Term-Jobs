@@ -1764,8 +1764,14 @@ def list_requisitions(
 
 @app.get("/requisitions/overview-metrics")
 @app.get("/api/requisitions/overview-metrics")
-def get_requisitions_overview_metrics(current_user: User = Depends(get_current_user)) -> dict:
+def get_requisitions_overview_metrics(fresh: bool = False, current_user: User = Depends(get_current_user)) -> dict:
     """Return real live metrics for the requisition dashboard cards."""
+    _cache_key = f"overview_metrics:{current_user.id}:{current_user.role}:{current_user.tenant_id}"
+    if not fresh:
+        _cached = _cache.get(_cache_key)
+        if _cached is not None:
+            return _cached
+
     from modules.shared.db import get_session, db
     from modules.requisition.domain import models
     from datetime import datetime, timezone
@@ -1838,7 +1844,7 @@ def get_requisitions_overview_metrics(current_user: User = Depends(get_current_u
         except Exception:
             pass
 
-        return {
+        result = {
             "total_requisitions": total_requisitions,
             "requisitions_this_month": this_month_reqs,
             "total_applicants": total_applicants,
@@ -1850,6 +1856,8 @@ def get_requisitions_overview_metrics(current_user: User = Depends(get_current_u
             "interview_growth": 3 if in_interview > 0 else 0,
             "hired_growth": 1 if hired > 0 else 0,
         }
+        _cache.set(_cache_key, result, ttl=30)
+        return result
 
 
 @app.get("/api/public/requisitions")
