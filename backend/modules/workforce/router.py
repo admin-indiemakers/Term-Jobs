@@ -1936,6 +1936,7 @@ def process_finance_work_order_payment(
         notif_coll.insert_one({
             "id": f"notif_{_uuid.uuid4().hex[:10]}",
             "candidate_id": cid,
+            "workorder_id": cid,
             "type": "payment_disbursed",
             "tenant_id": doc.get("tenant_id"),
             "period": period,
@@ -1944,6 +1945,17 @@ def process_finance_work_order_payment(
             "message": f"Finance lead {current_user.name} has disbursed payment (Txn Ref: {txn_ref}) for Work Order {cid}.",
             "is_read": False,
             "target_tab": "billing",
+            "data": {
+                "link": "/candidate/billing",
+                "transaction_ref": txn_ref,
+                "amount": amount,
+                "period": period,
+            },
+            "amount": amount,
+            "payment_amount": amount,
+            "payment_method": payment_method,
+            "disbursed_at": now_iso,
+            "status": "Paid",
             "created_at": now_iso,
         })
     except Exception:

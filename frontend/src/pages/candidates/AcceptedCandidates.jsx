@@ -23,15 +23,17 @@ const DEFAULT_TRAINING = [
   { id: 'nda', label: 'Client-specific NDA / compliance', enabled: false, mandatory: false },
 ];
 
+let acceptedCandidatesMemoryCache = null;
+
 export default function AcceptedCandidates() {
   const { user, token } = useAuth();
   const navigate = useNavigate();
 
-  const [candidates, setCandidates] = useState([]);
-  const [onboardingDocs, setOnboardingDocs] = useState({});
-  const [workOrders, setWorkOrders] = useState([]);
-  const [issues, setIssues] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [candidates, setCandidates] = useState(() => acceptedCandidatesMemoryCache?.candidates || []);
+  const [onboardingDocs, setOnboardingDocs] = useState(() => acceptedCandidatesMemoryCache?.onboardingDocs || {});
+  const [workOrders, setWorkOrders] = useState(() => acceptedCandidatesMemoryCache?.workOrders || []);
+  const [issues, setIssues] = useState(() => acceptedCandidatesMemoryCache?.issues || []);
+  const [loading, setLoading] = useState(() => !acceptedCandidatesMemoryCache);
   const [error, setError] = useState('');
   const [successInfo, setSuccessInfo] = useState('');
 
@@ -61,15 +63,17 @@ export default function AcceptedCandidates() {
   const userName = user?.name || 'HR';
 
   // Load Real Accepted Candidates, Onboarding Data & Work Orders
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async (force = false) => {
+    if (!acceptedCandidatesMemoryCache || force) {
+      setLoading(true);
+    }
     setError('');
     try {
       const [candData, obData, issuesData, woData] = await Promise.all([
-        request('/candidates?status=Accepted&refresh=true', { token, noCache: true }),
-        request('/api/onboarding', { token, noCache: true }).catch(() => []),
-        request('/api/onboarding/issues', { token, noCache: true }).catch(() => []),
-        request('/api/work-orders', { token, noCache: true }).catch(() => []),
+        request('/candidates?status=Accepted', { token, forceRefresh: force }),
+        request('/api/onboarding', { token, forceRefresh: force }).catch(() => []),
+        request('/api/onboarding/issues', { token, forceRefresh: force }).catch(() => []),
+        request('/api/work-orders', { token, forceRefresh: force }).catch(() => []),
       ]);
 
       const candList = Array.isArray(candData) ? candData : candData?.candidates || [];
@@ -87,20 +91,41 @@ export default function AcceptedCandidates() {
         }
       });
 
+      const openIssues = issueList.filter((i) => i.status === 'open');
+
       setCandidates(candList);
       setOnboardingDocs(obMap);
       setWorkOrders(woList);
-      setIssues(issueList.filter((i) => i.status === 'open'));
+      setIssues(openIssues);
+
+      acceptedCandidatesMemoryCache = {
+        candidates: candList,
+        onboardingDocs: obMap,
+        workOrders: woList,
+        issues: openIssues,
+        token,
+      };
     } catch (err) {
       console.error('Failed to load accepted candidates:', err);
-      setError(err.message || 'Unable to load accepted candidates.');
+      if (!acceptedCandidatesMemoryCache) {
+        setError(err.message || 'Unable to load accepted candidates.');
+      }
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadData();
+    loadData(false);
+
+    const handleRefresh = () => {
+      loadData(true);
+    };
+
+    window.addEventListener('refresh-hm-data', handleRefresh);
+    return () => {
+      window.removeEventListener('refresh-hm-data', handleRefresh);
+    };
   }, [token]);
 
   const woMap = useMemo(() => {

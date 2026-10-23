@@ -3,11 +3,13 @@ import { useAuth } from '../../context/AuthContext';
 import { request } from '../../api/client';
 import { Flag, CheckCircle2, AlertCircle, Loader2, RefreshCw, Search, Eye, X } from 'lucide-react';
 
+let reportedIssuesMemoryCache = null;
+
 export default function ReportedIssues() {
   const { user, token } = useAuth();
 
-  const [issues, setIssues] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [issues, setIssues] = useState(() => reportedIssuesMemoryCache?.issues || []);
+  const [loading, setLoading] = useState(() => !reportedIssuesMemoryCache);
   const [resolvingId, setResolvingId] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [viewingIssue, setViewingIssue] = useState(null);
@@ -22,10 +24,12 @@ export default function ReportedIssues() {
   const userName = user?.name || 'HR';
   const tenantName = user?.tenant_name || 'Bearitt';
 
-  const loadIssues = async () => {
-    setLoading(true);
+  const loadIssues = async (force = false) => {
+    if (!reportedIssuesMemoryCache || force) {
+      setLoading(true);
+    }
     try {
-      const data = await request('/api/onboarding/issues', { token }).catch(() => []);
+      const data = await request('/api/onboarding/issues', { token, forceRefresh: force }).catch(() => []);
       const list = Array.isArray(data) ? data : data?.issues || [];
       const sorted = [...list].sort((a, b) => {
         if (a.status === 'open' && b.status !== 'open') return -1;
@@ -33,6 +37,7 @@ export default function ReportedIssues() {
         return 0;
       });
       setIssues(sorted);
+      reportedIssuesMemoryCache = { issues: sorted, token };
     } catch (err) {
       // ignore
     } finally {
@@ -41,7 +46,16 @@ export default function ReportedIssues() {
   };
 
   useEffect(() => {
-    loadIssues();
+    loadIssues(false);
+
+    const handleRefresh = () => {
+      loadIssues(true);
+    };
+
+    window.addEventListener('refresh-hm-data', handleRefresh);
+    return () => {
+      window.removeEventListener('refresh-hm-data', handleRefresh);
+    };
   }, [token]);
 
   const handleResolveIssue = async (issueId) => {

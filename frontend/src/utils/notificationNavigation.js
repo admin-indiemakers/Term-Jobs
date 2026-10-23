@@ -1,6 +1,8 @@
 import { financeRedirect, isFinanceRole } from './financeAccess.js';
 // Notification payloads may contain legacy links. Keep clicks inside known portal routes.
 const destinations = [
+  /^\/candidate\/(?:dashboard|assignment|timesheet|attendance|expenses|billing|payments)\/?$/,
+  /^\/dashboard\/candidate(?:\/(?:billing|payments))?\/?$/,
   /^\/dashboard\/hiring-manager(?:\/chat)?\/?$/,
   /^\/dashboard\/candidates\/(?:accepted|onboarding|portal-access|issues)\/?$/,
   /^\/dashboard(?:\/superadmin(?:\/(?:candidate-management|candidates|candidate-pool|candidatepool|candidates-pool|chat|onboard|onboard-vendor|accounts|vendor-accounts|admin-accounts|admins|outreach|candidate-outreach|billing|candidate-billing|archives))?)?\/?$/,
@@ -16,7 +18,7 @@ const destinations = [
 export function notificationDestination(notification, role) {
   const supplied = notification.data?.link;
   if (supplied) {
-    if (typeof supplied !== 'string' || !supplied.startsWith('/dashboard') || /[\\\u0000-\u0020]/.test(supplied)) return null;
+    if (typeof supplied !== 'string' || (!supplied.startsWith('/dashboard') && !supplied.startsWith('/candidate')) || /[\\\u0000-\u0020]/.test(supplied)) return null;
     try {
       const url = new URL(supplied, 'https://portal.invalid');
       const path = decodeURIComponent(url.pathname);
@@ -24,6 +26,7 @@ export function notificationDestination(notification, role) {
       if (['Hiring Manager', 'HR'].includes(role)
         && !/^\/dashboard\/(?:hiring-manager(?:\/chat)?|requisitions(?:\/.*)?|workforce\/(?:team|timesheets|expenses|workers)|candidates\/(?:accepted|onboarding|portal-access|issues))\/?$/.test(path)) return null;
       if (role === 'Admin' && !/^\/dashboard\/admin(?:\/(?:chat|directors|hiring-managers|team|procurement|finance|profile|partner-vendors|vendors))?\/?$/.test(path)) return null;
+      if (role === 'Candidate' && !/^\/candidate\/(?:dashboard|assignment|timesheet|attendance|expenses|billing|payments)\/?$/.test(path) && !/^\/dashboard\/candidate(?:\/(?:billing|payments))?\/?$/.test(path)) return null;
       if (financeRedirect(role, path)) return null;
       return `${url.pathname}${url.search}${url.hash}`;
     } catch {
@@ -31,6 +34,14 @@ export function notificationDestination(notification, role) {
     }
   }
   const type = String(notification.type || '').toLowerCase();
+  if (role === 'Candidate') {
+    if (/payment|billing|disburs/.test(type)) return '/candidate/billing';
+    if (type.includes('timesheet')) return '/candidate/timesheet';
+    if (type.includes('expense')) return '/candidate/expenses';
+    if (type.includes('assignment') || type.includes('work_order')) return '/candidate/assignment';
+    if (type.includes('attendance')) return '/candidate/attendance';
+    return '/candidate/dashboard';
+  }
   if (isFinanceRole(role)) {
     return /payment|billing|sow|work_order/.test(type) ? '/dashboard/finance' : null;
   }

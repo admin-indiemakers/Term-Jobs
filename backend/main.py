@@ -578,8 +578,6 @@ def _requisition_dict(requisition_id: str, for_vendor: bool = False) -> dict:
         except Exception:
             pass
 
-        from modules.interview.domain.applicants import attended_applicants
-        cand_list = attended_applicants(db, cand_list)
         applicant_count = len(cand_list)
         shortlisted_count = sum(1 for c in cand_list if (c.get("status") or "").lower() == "shortlisted")
         in_interview_count = sum(
@@ -1649,10 +1647,24 @@ def list_requisitions(
         cand_counts = {}
         try:
             from modules.shared.db import db
-            from modules.interview.domain.applicants import attended_applicants
-            for applicant in attended_applicants(db, db["candidate_submissions"].find({"requisition_id": {"$in": [str(r.id) for r in rows]}})):
-                req_key = str(applicant["requisition_id"])
-                cand_counts[req_key] = cand_counts.get(req_key, 0) + 1
+            req_id_strs = [str(r.id) for r in rows]
+            for applicant in db["candidate_submissions"].find({"requisition_id": {"$in": req_id_strs}}):
+                req_key = str(applicant.get("requisition_id") or "")
+                if req_key:
+                    cand_counts[req_key] = cand_counts.get(req_key, 0) + 1
+        except Exception:
+            pass
+
+        try:
+            from modules.candidate.domain.models import CandidateSubmission
+            from sqlalchemy import func
+            sql_counts = session.query(
+                CandidateSubmission.requisition_id,
+                func.count(CandidateSubmission.id)
+            ).filter(CandidateSubmission.requisition_id.in_([r.id for r in rows])).group_by(CandidateSubmission.requisition_id).all()
+            for r_id, count in sql_counts:
+                r_key = str(r_id)
+                cand_counts[r_key] = max(cand_counts.get(r_key, 0), count)
         except Exception:
             pass
 
@@ -3815,7 +3827,7 @@ def reject_requisition(requisition_id: str, body: RejectIn | None = None, curren
         if db_req is None:
             raise HTTPException(status_code=404, detail="Requisition not found")
         if db_req:
-            db_req.status = schemas.RequisitionStatus.STRUCTURING.value
+            db_req.status = schemas.RequisitionStatus.RESTRUCTURING.value
             db_req.director_approved = False
             db_req.director_approved_by = None
             db_req.director_approved_at = None
@@ -3826,6 +3838,21 @@ def reject_requisition(requisition_id: str, body: RejectIn | None = None, curren
 
     # A director decision must not resume the AI intake graph or regenerate the JD.
     service._record_review(requisition_id, reviewer, "rejected")
+
+    try:
+        from modules.shared.db import db
+        db["requisitions"].update_one(
+            {"id": requisition_id},
+            {"$set": {
+                "status": "Restructuring",
+                "director_approved": False,
+                "rejection_reason": reason,
+                "rejected_by": reviewer,
+                "rejected_at": _format_datetime(db_req.rejected_at),
+            }}
+        )
+    except Exception:
+        pass
 
     _cache.clear()
     return {"id": db_req.id, "status": db_req.status, "director_approved": False,

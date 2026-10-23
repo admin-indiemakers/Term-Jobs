@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { request } from '../api/client';
+import { request, clearApiCache } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import NotificationBell from '../components/NotificationBell';
 import VendorBilling from './recruiter/VendorBilling';
@@ -102,10 +102,14 @@ export default function SuperAdminCandidateManagement() {
     notes: '',
   });
 
-  const loadData = useCallback(async (quiet = false) => {
+  const loadData = useCallback(async (force = false) => {
     if (!token) return;
-    if (!quiet) setLoading(true);
+    setLoading(true);
+    if (force) {
+      clearApiCache();
+    }
     setError('');
+    const startTime = Date.now();
     try {
       const params = new URLSearchParams();
       if (selectedCompany && selectedCompany !== 'All') {
@@ -118,7 +122,7 @@ export default function SuperAdminCandidateManagement() {
         params.append('sort_by', sortBy);
       }
 
-      const res = await request(`/api/superadmin/candidate-management?${params.toString()}`, { token, noCache: true });
+      const res = await request(`/api/superadmin/candidate-management?${params.toString()}`, { token, noCache: true, forceRefresh: force });
       if (res && res.status === 'success') {
         setSelections(res.selections || []);
         if (res.companies) {
@@ -133,7 +137,12 @@ export default function SuperAdminCandidateManagement() {
       console.error('Failed to load candidate selections:', err);
       setError(err?.message || 'Failed to load candidate management data.');
     } finally {
-      setLoading(false);
+      const elapsed = Date.now() - startTime;
+      if (force && elapsed < 400) {
+        setTimeout(() => setLoading(false), 400 - elapsed);
+      } else {
+        setLoading(false);
+      }
     }
   }, [token, selectedCompany, searchQuery, sortBy]);
 

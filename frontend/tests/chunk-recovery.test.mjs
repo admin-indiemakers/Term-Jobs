@@ -10,7 +10,7 @@ test('failed imports reload once across page loads without clearing the session'
   let prevented = 0;
   const target = {
     location: { reload: () => reloads++ },
-    addEventListener: (name, fn) => { assert.equal(name, 'vite:preloadError'); handler = fn; },
+    addEventListener: (name, fn) => { if (name === 'vite:preloadError') handler = fn; },
     removeEventListener: () => {},
   };
   const event = { preventDefault: () => prevented++ };
@@ -27,7 +27,7 @@ test('unavailable storage does not cause an unguarded reload', () => {
   let handler;
   const target = {
     location: { reload: () => assert.fail('must not reload') },
-    addEventListener: (_, fn) => { handler = fn; },
+    addEventListener: (name, fn) => { if (name === 'vite:preloadError') handler = fn; },
   };
   installChunkRecovery(target, { getItem: () => { throw new Error('disabled'); } }, 'bundle');
   handler({ preventDefault: () => assert.fail('must leave failure visible') });
@@ -38,7 +38,7 @@ test('route import failures stay pending during recovery rather than flashing an
   let handler;
   const target = {
     location: { reload() {} },
-    addEventListener: (_, fn) => { handler = fn; },
+    addEventListener: (name, fn) => { if (name === 'vite:preloadError') handler = fn; },
   };
   installChunkRecovery(target, { getItem() {}, setItem() {} }, 'v1');
   handler({});

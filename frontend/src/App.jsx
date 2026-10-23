@@ -11,79 +11,80 @@ import { useAuth } from './context/AuthContext';
 import { CandidateAuthProvider } from './context/CandidateAuthContext';
 import AuthPage from './pages/AuthPage';
 import LandingPage from './pages/LandingPage';
-const CandidatePoolAdded = lazy(() => import('./pages/CandidatePoolAdded'));
-const LegalPage = lazy(() => import('./pages/LegalPage'));
 import OpenRolesPage from './pages/OpenRolesPage';
 import DashboardLayout from './pages/DashboardLayout';
 import { directorRedirect } from './utils/directorAccess';
 import FieldRequirementIndicators from './components/FieldRequirementIndicators';
 import { TermJobsLoader } from './components/TermJobsLoader';
+import { lazyWithRetry } from './utils/chunkRecovery';
 
-// Lazy-loaded routes for code splitting (reduces initial bundle from 4.15MB down to ~250KB)
-const InterviewRequests = lazy(() => import('./pages/recruiter/InterviewRequests'));
-const VendorAgreements = lazy(() => import('./pages/recruiter/VendorAgreements'));
-const VendorBilling = lazy(() => import('./pages/recruiter/VendorBilling'));
-const TenantDashboard = lazy(() => import('./pages/TenantDashboard'));
-const AdminTeamMembers = lazy(() => import('./pages/AdminTeamMembers'));
-const JoinHiringManager = lazy(() => import('./pages/JoinHiringManager'));
-const JoinDirector = lazy(() => import('./pages/JoinDirector'));
-const JoinProcurement = lazy(() => import('./pages/JoinProcurement'));
-const JoinFinance = lazy(() => import('./pages/JoinFinance'));
-const SuperAdminLogin = lazy(() => import('./pages/SuperAdminLogin'));
-const HiringManagerTelegramLogin = lazy(() => import('./pages/HiringManagerTelegramLogin'));
-const DirectorLogin = lazy(() => import('./pages/DirectorLogin'));
-const RecruiterDashboard = lazy(() => import('./pages/RecruiterDashboard'));
-const HiringManagerDashboard = lazy(() => import('./pages/HiringManagerDashboard'));
-const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
-const ManageDirectors = lazy(() => import('./pages/ManageDirectors'));
-const ManageHiringManagers = lazy(() => import('./pages/ManageHiringManagers'));
-const ManageProcurement = lazy(() => import('./pages/ManageProcurement'));
-const ManageFinance = lazy(() => import('./pages/ManageFinance'));
-const ManagePartnerVendors = lazy(() => import('./pages/ManagePartnerVendors'));
-const CompanyAdminProfile = lazy(() => import('./pages/CompanyAdminProfile'));
-const SuperAdminDashboard = lazy(() => import('./pages/SuperAdminDashboard'));
-const AiChat = lazy(() => import('./pages/AiChat'));
-const HiringManagerChat = lazy(() => import('./pages/HiringManagerChat'));
-const DirectorDashboard = lazy(() => import('./pages/DirectorDashboard'));
-const DirectorAgreements = lazy(() => import('./pages/DirectorAgreements'));
-const DirectorWorkOrders = lazy(() => import('./pages/DirectorWorkOrders'));
-const DirectorRoleTemplates = lazy(() => import('./pages/DirectorRoleTemplates'));
-const ProcurementDashboard = lazy(() => import('./pages/ProcurementDashboard'));
-const FinanceApprovals = lazy(() => import('./pages/FinanceApprovals'));
-const FinanceDashboard = lazy(() => import('./pages/FinanceDashboard'));
-const UserProfileSettings = lazy(() => import('./pages/UserProfileSettings'));
-const OnboardCompany = lazy(() => import('./pages/OnboardCompany'));
-const OnboardVendor = lazy(() => import('./pages/OnboardVendor'));
-const ConfigureCompanyAccounts = lazy(() => import('./pages/ConfigureCompanyAccounts'));
-const ConfigureVendorAccounts = lazy(() => import('./pages/ConfigureVendorAccounts'));
-const HRDashboard = lazy(() => import('./pages/HRDashboard'));
-const RequisitionOverview = lazy(() => import('./pages/requisitions/RequisitionOverview'));
-const NewRequisition = lazy(() => import('./pages/requisitions/NewRequisition'));
-const RequisitionDetail = lazy(() => import('./pages/requisitions/RequisitionDetail'));
-const RequisitionCandidates = lazy(() => import('./pages/candidates/RequisitionCandidates'));
-const CandidateSchedule = lazy(() => import('./pages/candidates/CandidateSchedule'));
-const CandidateInterviewPanel = lazy(() => import('./pages/candidates/CandidateInterviewPanel'));
-const AcceptedCandidates = lazy(() => import('./pages/candidates/AcceptedCandidates'));
-const CandidatePortal = lazy(() => import('./pages/candidates/CandidatePortal'));
-const CandidateOnboarding = lazy(() => import('./pages/candidates/CandidateOnboarding'));
-const OnboardingManagement = lazy(() => import('./pages/candidates/OnboardingManagement'));
-const CandidatePortalAccess = lazy(() => import('./pages/candidates/CandidatePortalAccess'));
-const ReportedIssues = lazy(() => import('./pages/candidates/ReportedIssues'));
-const TeamOverview = lazy(() => import('./pages/workforce/TeamOverview'));
-const TimesheetApprovals = lazy(() => import('./pages/workforce/TimesheetApprovals'));
-const ExpenseApprovals = lazy(() => import('./pages/workforce/ExpenseApprovals'));
-const Workers = lazy(() => import('./pages/workforce/Workers'));
-const AdminAccounts = lazy(() => import('./pages/AdminAccounts'));
-const SuperAdminCandidatePool = lazy(() => import('./pages/SuperAdminCandidatePool'));
-const SuperAdminCandidateManagement = lazy(() => import('./pages/SuperAdminCandidateManagement'));
-const SuperAdminOutreachControl = lazy(() => import('./pages/SuperAdminOutreachControl'));
+// Lazy-loaded routes with auto-retry and chunk error recovery (prevents chunk load failure after deployments)
+const CandidatePoolAdded = lazyWithRetry(() => import('./pages/CandidatePoolAdded'));
+const LegalPage = lazyWithRetry(() => import('./pages/LegalPage'));
+const InterviewRequests = lazyWithRetry(() => import('./pages/recruiter/InterviewRequests'));
+const VendorAgreements = lazyWithRetry(() => import('./pages/recruiter/VendorAgreements'));
+const VendorBilling = lazyWithRetry(() => import('./pages/recruiter/VendorBilling'));
+const TenantDashboard = lazyWithRetry(() => import('./pages/TenantDashboard'));
+const AdminTeamMembers = lazyWithRetry(() => import('./pages/AdminTeamMembers'));
+const JoinHiringManager = lazyWithRetry(() => import('./pages/JoinHiringManager'));
+const JoinDirector = lazyWithRetry(() => import('./pages/JoinDirector'));
+const JoinProcurement = lazyWithRetry(() => import('./pages/JoinProcurement'));
+const JoinFinance = lazyWithRetry(() => import('./pages/JoinFinance'));
+const SuperAdminLogin = lazyWithRetry(() => import('./pages/SuperAdminLogin'));
+const HiringManagerTelegramLogin = lazyWithRetry(() => import('./pages/HiringManagerTelegramLogin'));
+const DirectorLogin = lazyWithRetry(() => import('./pages/DirectorLogin'));
+const RecruiterDashboard = lazyWithRetry(() => import('./pages/RecruiterDashboard'));
+const HiringManagerDashboard = lazyWithRetry(() => import('./pages/HiringManagerDashboard'));
+const AdminDashboard = lazyWithRetry(() => import('./pages/AdminDashboard'));
+const ManageDirectors = lazyWithRetry(() => import('./pages/ManageDirectors'));
+const ManageHiringManagers = lazyWithRetry(() => import('./pages/ManageHiringManagers'));
+const ManageProcurement = lazyWithRetry(() => import('./pages/ManageProcurement'));
+const ManageFinance = lazyWithRetry(() => import('./pages/ManageFinance'));
+const ManagePartnerVendors = lazyWithRetry(() => import('./pages/ManagePartnerVendors'));
+const CompanyAdminProfile = lazyWithRetry(() => import('./pages/CompanyAdminProfile'));
+const SuperAdminDashboard = lazyWithRetry(() => import('./pages/SuperAdminDashboard'));
+const AiChat = lazyWithRetry(() => import('./pages/AiChat'));
+const HiringManagerChat = lazyWithRetry(() => import('./pages/HiringManagerChat'));
+const DirectorDashboard = lazyWithRetry(() => import('./pages/DirectorDashboard'));
+const DirectorAgreements = lazyWithRetry(() => import('./pages/DirectorAgreements'));
+const DirectorWorkOrders = lazyWithRetry(() => import('./pages/DirectorWorkOrders'));
+const DirectorRoleTemplates = lazyWithRetry(() => import('./pages/DirectorRoleTemplates'));
+const ProcurementDashboard = lazyWithRetry(() => import('./pages/ProcurementDashboard'));
+const FinanceApprovals = lazyWithRetry(() => import('./pages/FinanceApprovals'));
+const FinanceDashboard = lazyWithRetry(() => import('./pages/FinanceDashboard'));
+const UserProfileSettings = lazyWithRetry(() => import('./pages/UserProfileSettings'));
+const OnboardCompany = lazyWithRetry(() => import('./pages/OnboardCompany'));
+const OnboardVendor = lazyWithRetry(() => import('./pages/OnboardVendor'));
+const ConfigureCompanyAccounts = lazyWithRetry(() => import('./pages/ConfigureCompanyAccounts'));
+const ConfigureVendorAccounts = lazyWithRetry(() => import('./pages/ConfigureVendorAccounts'));
+const HRDashboard = lazyWithRetry(() => import('./pages/HRDashboard'));
+const RequisitionOverview = lazyWithRetry(() => import('./pages/requisitions/RequisitionOverview'));
+const NewRequisition = lazyWithRetry(() => import('./pages/requisitions/NewRequisition'));
+const RequisitionDetail = lazyWithRetry(() => import('./pages/requisitions/RequisitionDetail'));
+const RequisitionCandidates = lazyWithRetry(() => import('./pages/candidates/RequisitionCandidates'));
+const CandidateSchedule = lazyWithRetry(() => import('./pages/candidates/CandidateSchedule'));
+const CandidateInterviewPanel = lazyWithRetry(() => import('./pages/candidates/CandidateInterviewPanel'));
+const AcceptedCandidates = lazyWithRetry(() => import('./pages/candidates/AcceptedCandidates'));
+const CandidatePortal = lazyWithRetry(() => import('./pages/candidates/CandidatePortal'));
+const CandidateOnboarding = lazyWithRetry(() => import('./pages/candidates/CandidateOnboarding'));
+const OnboardingManagement = lazyWithRetry(() => import('./pages/candidates/OnboardingManagement'));
+const CandidatePortalAccess = lazyWithRetry(() => import('./pages/candidates/CandidatePortalAccess'));
+const ReportedIssues = lazyWithRetry(() => import('./pages/candidates/ReportedIssues'));
+const TeamOverview = lazyWithRetry(() => import('./pages/workforce/TeamOverview'));
+const TimesheetApprovals = lazyWithRetry(() => import('./pages/workforce/TimesheetApprovals'));
+const ExpenseApprovals = lazyWithRetry(() => import('./pages/workforce/ExpenseApprovals'));
+const Workers = lazyWithRetry(() => import('./pages/workforce/Workers'));
+const AdminAccounts = lazyWithRetry(() => import('./pages/AdminAccounts'));
+const SuperAdminCandidatePool = lazyWithRetry(() => import('./pages/SuperAdminCandidatePool'));
+const SuperAdminCandidateManagement = lazyWithRetry(() => import('./pages/SuperAdminCandidateManagement'));
+const SuperAdminOutreachControl = lazyWithRetry(() => import('./pages/SuperAdminOutreachControl'));
 
 // LiveKit & Video Interview components (isolated 1MB chunk loaded strictly on-demand)
-const CandidateInterviewLogin = lazy(() => import('./interview/pages/CandidateInterviewLogin').then(m => ({ default: m.CandidateInterviewLogin })));
-const CandidateInterviewPortal = lazy(() => import('./interview/pages/CandidateInterviewPortal').then(m => ({ default: m.CandidateInterviewPortal })));
-const InterviewerStaffPortal = lazy(() => import('./interview/pages/InterviewerStaffPortal').then(m => ({ default: m.InterviewerStaffPortal })));
-const InterviewMeetingRoomPage = lazy(() => import('./interview/pages/InterviewMeetingRoomPage').then(m => ({ default: m.InterviewMeetingRoomPage })));
-const HiringManagerInterviews = lazy(() => import('./interview/pages/HiringManagerInterviews').then(m => ({ default: m.HiringManagerInterviews })));
+const CandidateInterviewLogin = lazyWithRetry(() => import('./interview/pages/CandidateInterviewLogin').then(m => ({ default: m.CandidateInterviewLogin })));
+const CandidateInterviewPortal = lazyWithRetry(() => import('./interview/pages/CandidateInterviewPortal').then(m => ({ default: m.CandidateInterviewPortal })));
+const InterviewerStaffPortal = lazyWithRetry(() => import('./interview/pages/InterviewerStaffPortal').then(m => ({ default: m.InterviewerStaffPortal })));
+const InterviewMeetingRoomPage = lazyWithRetry(() => import('./interview/pages/InterviewMeetingRoomPage').then(m => ({ default: m.InterviewMeetingRoomPage })));
+const HiringManagerInterviews = lazyWithRetry(() => import('./interview/pages/HiringManagerInterviews').then(m => ({ default: m.HiringManagerInterviews })));
 
 function FullScreenLoader() {
   return (
@@ -443,6 +444,38 @@ export default function App() {
           />
           <Route
             path="/candidate/attendance"
+            element={
+              <RequireAuth>
+                <CandidatePortal />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/candidate/expenses"
+            element={
+              <RequireAuth>
+                <CandidatePortal />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/candidate/billing"
+            element={
+              <RequireAuth>
+                <CandidatePortal />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/candidate/payments"
+            element={
+              <RequireAuth>
+                <CandidatePortal />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/dashboard/candidate/billing"
             element={
               <RequireAuth>
                 <CandidatePortal />

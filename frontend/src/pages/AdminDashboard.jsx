@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { request } from '../api/client';
+import { request, clearApiCache } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import NotificationBell from '../components/NotificationBell';
 import {
@@ -32,7 +32,8 @@ import {
   Activity,
   Bell,
   MessageSquare,
-  User
+  User,
+  RefreshCw
 } from 'lucide-react';
 import TeamChatDrawer from '../components/TeamChatDrawer';
 import { dashboardList, normalizeDashboardStatus } from '../utils/adminDashboard';
@@ -573,6 +574,24 @@ export default function AdminDashboard() {
           <div className="block">
             <NotificationBell />
           </div>
+
+          {/* Refresh Action Button */}
+          <button
+            type="button"
+            onClick={() => {
+              clearApiCache();
+              setLoading(true);
+              load();
+              try {
+                window.dispatchEvent(new CustomEvent('refresh-admin-data'));
+                window.dispatchEvent(new CustomEvent('tj-requisitions-updated'));
+              } catch {}
+            }}
+            className="w-8.5 h-8.5 sm:w-9 sm:h-9 rounded-xl bg-white hover:bg-[#F7F7F5] border border-gray-200/90 text-gray-700 shadow-2xs hover:shadow-xs flex items-center justify-center transition-all cursor-pointer active:scale-95 group"
+            title="Refresh dashboard data"
+          >
+            <RefreshCw size={14} className={loading ? 'animate-spin' : 'group-hover:rotate-45 transition-transform'} />
+          </button>
 
           {/* Message Icon-Only Button */}
           <button

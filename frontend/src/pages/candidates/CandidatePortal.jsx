@@ -97,14 +97,33 @@ export default function CandidatePortal() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Navigation tab state: 'dashboard' | 'assignment' | 'timesheet' | 'attendance' | 'expenses'
+  // Navigation tab state: 'dashboard' | 'assignment' | 'timesheet' | 'attendance' | 'expenses' | 'billing'
   const [activeTab, setActiveTab] = useState(() => {
     if (location.pathname.includes('/assignment')) return 'assignment';
     if (location.pathname.includes('/timesheet')) return 'timesheet';
     if (location.pathname.includes('/attendance')) return 'attendance';
     if (location.pathname.includes('/expenses')) return 'expenses';
+    if (location.pathname.includes('/billing') || location.pathname.includes('/payments')) return 'billing';
+    const params = new URLSearchParams(location.search);
+    if (params.get('tab') === 'billing' || params.get('tab') === 'payments') return 'billing';
     return 'dashboard';
   });
+
+  useEffect(() => {
+    if (location.pathname.includes('/billing') || location.pathname.includes('/payments')) {
+      setActiveTab('billing');
+    } else if (location.pathname.includes('/assignment')) {
+      setActiveTab('assignment');
+    } else if (location.pathname.includes('/timesheet')) {
+      setActiveTab('timesheet');
+    } else if (location.pathname.includes('/attendance')) {
+      setActiveTab('attendance');
+    } else if (location.pathname.includes('/expenses')) {
+      setActiveTab('expenses');
+    } else if (location.pathname.includes('/dashboard')) {
+      setActiveTab('dashboard');
+    }
+  }, [location.pathname]);
 
   const [payments, setPayments] = useState([]);
   const [paymentError, setPaymentError] = useState('');
@@ -440,11 +459,13 @@ export default function CandidatePortal() {
 
   const handleNotificationClick = (notif) => {
     handleMarkSingleRead(notif.id);
-    if (notif.type === 'payment_disbursed') {
+    if (notif.type === 'payment_disbursed' || notif.target_tab === 'billing') {
       setPaymentSelection(notif);
       setActiveTab('billing');
+      navigate('/candidate/billing');
     } else if (['dashboard', 'assignment', 'timesheet', 'attendance', 'expenses'].includes(notif.target_tab)) {
       setActiveTab(notif.target_tab);
+      navigate(`/candidate/${notif.target_tab}`);
     }
     setShowNotifications(false);
   };
@@ -1163,13 +1184,30 @@ export default function CandidatePortal() {
             </button>
 
             <button
-              onClick={() => setActiveTab('expenses')}
+              onClick={() => {
+                setActiveTab('expenses');
+                navigate('/candidate/expenses');
+              }}
               className={`sidebar-nav-btn flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[13.5px] text-left ${
                 activeTab === 'expenses' ? 'active-nav-tab' : ''
               }`}
             >
               <IndianRupee size={16} strokeWidth={activeTab === 'expenses' ? 2.4 : 2} />
               Expenses
+            </button>
+
+            <button
+              onClick={() => {
+                setPaymentSelection(null);
+                setActiveTab('billing');
+                navigate('/candidate/billing');
+              }}
+              className={`sidebar-nav-btn flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[13.5px] text-left ${
+                activeTab === 'billing' ? 'active-nav-tab' : ''
+              }`}
+            >
+              <IndianRupee size={16} strokeWidth={activeTab === 'billing' ? 2.4 : 2} />
+              Billing & Payments
             </button>
 
             <button
@@ -1529,30 +1567,244 @@ export default function CandidatePortal() {
         {/* ========================================================
             VIEW 1: DASHBOARD (MONOCHROME BENTO UI)
            ======================================================== */}
-        <button type="button" className="px-6 py-2 text-sm font-semibold underline" onClick={() => { setPaymentSelection(null); setActiveTab('billing'); }}>My payments</button>
-
         {activeTab === 'billing' && (
-          <section className="p-6 space-y-4">
-            <h1 className="text-xl font-bold">Payment details</h1>
-            {paymentsLoading ? <p>Loading payments…</p> : paymentError ? (
-              <p role="alert">{paymentError}</p>
+          <div className="space-y-4 pb-6">
+            {/* 1. HERO HEADER */}
+            <div
+              style={{
+                backgroundColor: '#FFFFFF',
+                borderRadius: 22,
+                border: '1px solid #E2E2DC',
+                boxShadow: '0 2px 10px rgba(0,0,0,0.02)',
+              }}
+              className="relative p-7 md:p-8 overflow-hidden bento-card-hover"
+            >
+              <div
+                style={{
+                  position: 'absolute',
+                  right: -40,
+                  top: -60,
+                  width: 220,
+                  height: 220,
+                  borderRadius: '50%',
+                  border: '1px solid #EDEDE8',
+                  pointerEvents: 'none',
+                }}
+              />
+              <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="text-[10.5px] font-bold tracking-[0.14em] uppercase text-[#8A8A85]">
+                      Term Jobs · Candidate Portal
+                    </span>
+                    <span className="px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-[#ECFDF5] text-[#059669]">
+                      Finance Verified
+                    </span>
+                  </div>
+                  <h1 className="text-xl md:text-2xl font-black text-[#0A0A0A] tracking-tight">
+                    Payment details
+                  </h1>
+                  <p className="text-[13px] text-[#5A5A57] mt-1.5 font-normal leading-relaxed max-w-xl">
+                    View official payment disbursement confirmations, transaction references, disbursement dates, and status for your completed work orders.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2.5 shrink-0 self-start md:self-auto">
+                  {paymentSelection && (
+                    <button
+                      type="button"
+                      onClick={() => setPaymentSelection(null)}
+                      className="px-3.5 py-2 text-xs font-bold text-[#0A0A0A] bg-[#F5F5F2] hover:bg-[#EAEAE6] rounded-xl transition-all cursor-pointer"
+                    >
+                      Show All Disbursements
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPaymentsLoading(true);
+                      setPaymentError('');
+                      request('/api/candidate-portal/payments', { token })
+                        .then((res) => setPayments(res.payments || []))
+                        .catch((err) => setPaymentError(err.message || 'Unable to load payments'))
+                        .finally(() => setPaymentsLoading(false));
+                    }}
+                    disabled={paymentsLoading}
+                    className="flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-white bg-[#0A0A0A] hover:bg-[#262626] rounded-xl transition-all shadow-sm cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw size={13} className={paymentsLoading ? 'animate-spin' : ''} />
+                    Refresh
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Notification Filter Active Banner */}
+            {paymentSelection && (
+              <div className="p-4 rounded-2xl bg-[#F0FDF4] border border-[#BBF7D0] flex items-center justify-between gap-3 shadow-2xs">
+                <div className="flex items-center gap-3">
+                  <span className="p-2 bg-[#DCFCE7] text-[#16A34A] rounded-xl flex items-center justify-center shrink-0">
+                    <CheckCircle2 size={18} strokeWidth={2.4} />
+                  </span>
+                  <div>
+                    <div className="text-[13px] font-bold text-[#166534]">
+                      Viewing payment notification details
+                    </div>
+                    <div className="text-[11.5px] text-[#15803D]">
+                      Filtered by transaction reference: <span className="font-mono font-bold">{paymentSelection.transaction_ref || 'Selected payment'}</span>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPaymentSelection(null)}
+                  className="px-3 py-1.5 text-xs font-bold text-[#166534] bg-white border border-[#BBF7D0] hover:bg-[#F0FDF4] rounded-xl transition-colors cursor-pointer shrink-0"
+                >
+                  Clear Filter
+                </button>
+              </div>
+            )}
+
+            {/* Error Banner */}
+            {paymentError && (
+              <p role="alert" className="p-4 rounded-2xl bg-[#FEF2F2] border border-[#FECACA] flex items-center gap-3 text-[#991B1B] text-[13px] font-medium">
+                <AlertCircle size={18} className="shrink-0" />
+                <span>{paymentError}</span>
+              </p>
+            )}
+
+            {/* Loading State */}
+            {paymentsLoading ? (
+              <div className="p-12 text-center bg-white rounded-2xl border border-[#E2E2DC]">
+                <RefreshCw size={24} className="mx-auto text-[#0A0A0A] animate-spin mb-3" />
+                <p className="text-sm font-semibold text-[#0A0A0A]">Loading payments…</p>
+                <p className="text-xs text-[#737373] mt-1">Retrieving official disbursement records</p>
+              </div>
             ) : (() => {
               const matching = payments.filter((payment) =>
                 !paymentSelection || (paymentSelection.transaction_ref
                   ? payment.transaction_ref === paymentSelection.transaction_ref
                   : paymentSelection.period ? payment.period === paymentSelection.period : true)
               );
-              return matching.length ? matching.map((payment, index) => (
-                <dl key={`${payment.transaction_ref}-${index}`} className="bg-white rounded-xl border border-gray-200 p-5 grid grid-cols-2 gap-3">
-                  <dt>Billing period</dt><dd>{payment.period || 'Unavailable'}</dd>
-                  <dt>Payment amount</dt><dd>{payment.amount == null ? 'Unavailable' : `₹${Number(payment.amount).toLocaleString('en-IN')}`}</dd>
-                  <dt>Transaction reference</dt><dd>{payment.transaction_ref || 'Unavailable'}</dd>
-                  <dt>Disbursement date</dt><dd>{payment.disbursed_at ? new Date(payment.disbursed_at).toLocaleString() : 'Unavailable'}</dd>
-                  <dt>Payment status</dt><dd>{payment.status || 'Unavailable'}</dd>
-                </dl>
-              )) : <p>Payment details are not available for this notification.</p>;
+
+              if (matching.length === 0) {
+                return (
+                  <div className="p-12 text-center bg-white rounded-2xl border border-[#E2E2DC] space-y-3">
+                    <div className="w-12 h-12 rounded-2xl bg-[#F5F5F2] flex items-center justify-center mx-auto text-[#737373]">
+                      <IndianRupee size={22} />
+                    </div>
+                    <div>
+                      <h3 className="text-[15px] font-bold text-[#0A0A0A]">No disbursements found</h3>
+                      <p className="text-[12.5px] text-[#737373] mt-1 max-w-md mx-auto">
+                        Payment details are not available for this notification.
+                      </p>
+                    </div>
+                    {paymentSelection && (
+                      <button
+                        type="button"
+                        onClick={() => setPaymentSelection(null)}
+                        className="px-4 py-2 text-xs font-bold text-white bg-[#0A0A0A] hover:bg-[#262626] rounded-xl transition-all cursor-pointer"
+                      >
+                        View all payments ({payments.length})
+                      </button>
+                    )}
+                  </div>
+                );
+              }
+
+              return (
+                <div className="space-y-4">
+                  {matching.map((payment, index) => (
+                    <div
+                      key={`${payment.transaction_ref}-${index}`}
+                      style={{
+                        backgroundColor: '#FFFFFF',
+                        borderRadius: 20,
+                        border: '1px solid #E2E2DC',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
+                      }}
+                      className="p-6 transition-all hover:border-[#0A0A0A]/30"
+                    >
+                      {/* Semantic dl for accessibility and automated assertions */}
+                      <dl className="grid grid-cols-2 md:grid-cols-5 gap-3 p-4 bg-[#FBFBFA] rounded-xl border border-[#F0F0EB] text-xs mb-4">
+                        <div>
+                          <dt className="text-[#8A8A85] font-semibold">Billing period</dt>
+                          <dd className="font-bold text-[#0A0A0A] mt-0.5">{payment.period || 'Unavailable'}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-[#8A8A85] font-semibold">Payment amount</dt>
+                          <dd className="font-bold text-[#0A0A0A] mt-0.5">{payment.amount == null ? 'Unavailable' : `₹${Number(payment.amount).toLocaleString('en-IN')}`}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-[#8A8A85] font-semibold">Transaction reference</dt>
+                          <dd className="font-mono font-bold text-[#0A0A0A] mt-0.5">{payment.transaction_ref || 'Unavailable'}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-[#8A8A85] font-semibold">Disbursement date</dt>
+                          <dd className="font-bold text-[#0A0A0A] mt-0.5">{payment.disbursed_at ? new Date(payment.disbursed_at).toLocaleString() : 'Unavailable'}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-[#8A8A85] font-semibold">Payment status</dt>
+                          <dd className="font-bold text-[#059669] mt-0.5">{payment.status || 'Unavailable'}</dd>
+                        </div>
+                      </dl>
+
+                      {/* Header line */}
+                      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[#F2F2EE]">
+                        <div className="flex items-center gap-2.5">
+                          <span className="w-8 h-8 rounded-xl bg-[#F5F5F2] flex items-center justify-center text-[#0A0A0A]">
+                            <Calendar size={15} />
+                          </span>
+                          <div>
+                            <span className="text-[10.5px] font-bold text-[#8A8A85] uppercase tracking-wider block">Billing Period</span>
+                            <span className="text-[13.5px] font-bold text-[#0A0A0A]">{payment.period || 'Current Cycle'}</span>
+                          </div>
+                        </div>
+
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#ECFDF5] border border-[#A7F3D0] text-[#047857] text-xs font-extrabold rounded-full">
+                          <CheckCircle2 size={13} strokeWidth={2.6} />
+                          {payment.status || 'Disbursed'}
+                        </span>
+                      </div>
+
+                      {/* Main Amount & Details */}
+                      <div className="pt-4 grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div>
+                          <span className="text-[10.5px] font-bold text-[#8A8A85] uppercase tracking-wider block mb-1">Payment Amount</span>
+                          <div className="text-[22px] font-black text-[#0A0A0A] tracking-tight">
+                            {payment.amount == null ? 'Unavailable' : `₹${Number(payment.amount).toLocaleString('en-IN')}`}
+                          </div>
+                          <span className="text-[11px] text-[#059669] font-medium">Net Disbursed</span>
+                        </div>
+
+                        <div>
+                          <span className="text-[10.5px] font-bold text-[#8A8A85] uppercase tracking-wider block mb-1">Transaction Reference</span>
+                          <span className="inline-block px-2.5 py-1 bg-[#F5F5F2] border border-[#E5E5E0] font-mono text-[12px] font-bold text-[#0A0A0A] rounded-lg">
+                            {payment.transaction_ref || 'Unavailable'}
+                          </span>
+                        </div>
+
+                        <div>
+                          <span className="text-[10.5px] font-bold text-[#8A8A85] uppercase tracking-wider block mb-1">Disbursement Date</span>
+                          <div className="text-[13px] font-bold text-[#0A0A0A] mt-0.5">
+                            {payment.disbursed_at ? new Date(payment.disbursed_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'Unavailable'}
+                          </div>
+                        </div>
+
+                        <div>
+                          <span className="text-[10.5px] font-bold text-[#8A8A85] uppercase tracking-wider block mb-1">Payment Status</span>
+                          <div className="text-[13px] font-bold text-[#047857] mt-0.5 flex items-center gap-1">
+                            <CheckCircle2 size={14} />
+                            {payment.status || 'Disbursed'}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
             })()}
-          </section>
+          </div>
         )}
 
         {activeTab === 'dashboard' && (
@@ -3513,6 +3765,7 @@ export default function CandidatePortal() {
                 <button
                   onClick={() => {
                     setActiveTab('expenses');
+                    navigate('/candidate/expenses');
                     setShowMobileDrawer(false);
                   }}
                   className={`sidebar-nav-btn flex items-center gap-3 px-3.5 py-3 rounded-xl text-[14px] text-left ${
@@ -3521,6 +3774,21 @@ export default function CandidatePortal() {
                 >
                   <IndianRupee size={18} strokeWidth={activeTab === 'expenses' ? 2.4 : 2} />
                   Expenses
+                </button>
+
+                <button
+                  onClick={() => {
+                    setPaymentSelection(null);
+                    setActiveTab('billing');
+                    navigate('/candidate/billing');
+                    setShowMobileDrawer(false);
+                  }}
+                  className={`sidebar-nav-btn flex items-center gap-3 px-3.5 py-3 rounded-xl text-[14px] text-left ${
+                    activeTab === 'billing' ? 'active-nav-tab' : ''
+                  }`}
+                >
+                  <IndianRupee size={18} strokeWidth={activeTab === 'billing' ? 2.4 : 2} />
+                  Billing & Payments
                 </button>
 
                 <button

@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { request } from '../api/client';
+import { request, clearApiCache } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import NotificationBell from '../components/NotificationBell';
 import OnboardCompanyModal from '../components/OnboardCompanyModal';
@@ -66,13 +66,17 @@ export default function SuperAdminDashboard() {
   const [poolStats, setPoolStats] = useState({ total: 0, portal_applicants: 0, vendor_candidates: 0 });
   const [outreachStats, setOutreachStats] = useState({ total_outreach_sent: 0, interested_count: 0, response_rate_percent: 0 });
 
-  const load = () => {
+  const load = (isManual = false) => {
     setLoading(true);
+    if (isManual) {
+      clearApiCache();
+    }
+    const startTime = Date.now();
     Promise.all([
-      request('/api/auth/tenants', { token }),
-      request('/api/superadmin/agent/stats', { token }).catch(() => null),
-      request('/api/superadmin/candidate-pool', { token }).catch(() => null),
-      request('/api/superadmin/outreach/stats', { token }).catch(() => null),
+      request('/api/auth/tenants', { token, forceRefresh: isManual }),
+      request('/api/superadmin/agent/stats', { token, forceRefresh: isManual }).catch(() => null),
+      request('/api/superadmin/candidate-pool', { token, forceRefresh: isManual }).catch(() => null),
+      request('/api/superadmin/outreach/stats', { token, forceRefresh: isManual }).catch(() => null),
     ])
       .then(([tenantsRes, statsRes, poolRes, outreachRes]) => {
         setTenants(tenantsRes || []);
@@ -90,7 +94,14 @@ export default function SuperAdminDashboard() {
         setError('');
       })
       .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
+      .finally(() => {
+        const elapsed = Date.now() - startTime;
+        if (isManual && elapsed < 400) {
+          setTimeout(() => setLoading(false), 400 - elapsed);
+        } else {
+          setLoading(false);
+        }
+      });
   };
 
   const [downloadingBackup, setDownloadingBackup] = useState(false);
@@ -247,7 +258,13 @@ export default function SuperAdminDashboard() {
 
           <button
             type="button"
-            onClick={() => load()}
+            onClick={() => {
+              load(true);
+              try {
+                window.dispatchEvent(new CustomEvent('refresh-superadmin-data'));
+                window.dispatchEvent(new CustomEvent('tj-requisitions-updated'));
+              } catch {}
+            }}
             title="Refresh platform telemetry"
             className="p-2 rounded-xl bg-white/70 hover:bg-white text-gray-700 border border-white/90 shadow-2xs transition active:scale-95 cursor-pointer"
           >

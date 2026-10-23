@@ -12,6 +12,8 @@ class RequisitionStatus(str, Enum):
     DRAFT = "Draft"
     INTAKE = "Intake"
     STRUCTURING = "Structuring"
+    RESTRUCTURING = "Restructuring"
+    REJECTED = "Rejected"
     PENDING_APPROVAL = "PendingApproval"
     PUBLISHED = "Published"
     CLOSED = "Closed"
