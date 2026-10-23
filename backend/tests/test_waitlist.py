@@ -114,3 +114,27 @@ def test_talent_pool_script_failure_is_shown(client, monkeypatch):
     monkeypatch.setattr(router.httpx, 'post', Mock(return_value=Mock(json=lambda: {'error': 'Drive authorization required'})))
     response = client.post('/api/waitlist/talent-pool', data={'name': 'Test', 'email': 'test@example.com'}, files={'resume': ('resume.pdf', b'pdf')})
     assert response.status_code == 502
+
+
+def test_requirements_and_referral_reach_sheet_with_legacy_compatibility(client, monkeypatch):
+    post = Mock(return_value=Mock(json=lambda: {'status': 'success'}))
+    monkeypatch.setattr(router.httpx, 'post', post)
+    response = client.post('/api/waitlist', json={
+        'name': 'Test', 'email': 'test@example.com', 'phone_number': '+919876543210',
+        'requirements': '  Two React developers\nAvailable next month  ',
+        'referral_source': '  LinkedIn  ',
+    })
+    assert response.status_code == 200
+    sent = post.call_args.kwargs['json']
+    assert sent['requirements'] == 'Two React developers\nAvailable next month'
+    assert sent['referral_source'] == 'LinkedIn'
+    assert sent['phone_number'] == '+919876543210'
+    assert sent['message'] == '+919876543210\nRequirements: Two React developers\nAvailable next month\nHow did you find us?: LinkedIn'
+
+
+@pytest.mark.parametrize('field,limit', [('requirements', 2000), ('referral_source', 160)])
+def test_new_optional_fields_have_length_limits(client, monkeypatch, field, limit):
+    post = Mock()
+    monkeypatch.setattr(router.httpx, 'post', post)
+    assert client.post('/api/waitlist', json={'name': 'Test', 'email': 'test@example.com', field: 'x' * (limit + 1)}).status_code == 422
+    post.assert_not_called()

@@ -25,16 +25,24 @@ class WaitlistEntry(BaseModel):
     company_name: str = Field(default='', max_length=160)
     email: EmailStr = Field(max_length=254)
     phone_number: str = Field(default='', max_length=40)
+    requirements: str = Field(default='', max_length=2000)
+    referral_source: str = Field(default='', max_length=160)
 
 
 @router.post('')
 def join_waitlist(entry: WaitlistEntry):
+    # Keep new details in the legacy message column until the sheet script is updated.
+    message = [entry.phone_number] if entry.phone_number else []
+    if entry.requirements:
+        message.append('Requirements: ' + entry.requirements)
+    if entry.referral_source:
+        message.append('How did you find us?: ' + entry.referral_source)
     return submit_to_sheet({
         **entry.model_dump(mode='json'),
         'timestamp': datetime.now(timezone.utc).isoformat(),
         'formType': 'Waitlist',
         'topic': entry.company_name,
-        'message': entry.phone_number,
+        'message': '\n'.join(message),
     })
 
 

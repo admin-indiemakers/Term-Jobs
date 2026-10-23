@@ -13,6 +13,15 @@ function doPost(e) {
       return ContentService.createTextOutput(JSON.stringify({status: 'success'}))
         .setMimeType(ContentService.MimeType.JSON);
     }
+    if (data.formType === 'Waitlist') {
+      sheet.appendRow([
+        data.timestamp || new Date().toLocaleString(), data.formType,
+        data.name || '', data.email || '', data.company_name || data.topic || '',
+        data.phone_number || '', data.requirements || '', data.referral_source || ''
+      ]);
+      return ContentService.createTextOutput(JSON.stringify({status: 'success'}))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
     sheet.appendRow([
       data.timestamp || new Date().toLocaleString(),
       data.formType || 'Unknown',
