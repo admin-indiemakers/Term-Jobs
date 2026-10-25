@@ -1656,7 +1656,15 @@ export default function DirectorDashboard({ view = 'overview' }) {
                   {selectedRequisitionForView.title || selectedRequisitionForView.structured_role?.title || 'Untitled Requisition'}
                 </h2>
                 <div className="text-xs text-gray-600 font-medium">
-                  Hiring Manager: <strong className="text-gray-900">{selectedRequisitionForView.structured_role?.hiring_manager || selectedRequisitionForView.hiring_manager_name || 'Assigned Hiring Manager'}</strong>
+                  Hiring Manager: <strong className="text-gray-900">{(() => {
+                    const srHm = (selectedRequisitionForView.structured_role?.hiring_manager || '').trim();
+                    const hmName = (selectedRequisitionForView.hiring_manager_name || '').trim();
+                    const createdBy = (selectedRequisitionForView.created_by_name || '').trim();
+                    if (srHm && !['assigned hiring manager', 'hiring manager', 'hm'].includes(srHm.toLowerCase())) return srHm;
+                    if (hmName && !['assigned hiring manager', 'hiring manager', 'hm'].includes(hmName.toLowerCase())) return hmName;
+                    if (createdBy) return createdBy;
+                    return 'Hiring Manager';
+                  })()}</strong>
                   {selectedRequisitionForView.company_name && (
                     <> • <span className="text-gray-500">{selectedRequisitionForView.company_name}</span></>
                   )}
@@ -1831,7 +1839,16 @@ export default function DirectorDashboard({ view = 'overview' }) {
                           <div className="font-extrabold text-gray-900 mt-0.5">
                             {formatDate(selectedRequisitionForView.created_at)}
                           </div>
-                          <div className="text-[10px] text-gray-400 mt-0.5">Submitted by Hiring Manager</div>
+                          <div className="text-[10px] text-gray-400 mt-0.5">
+                            Submitted by {(() => {
+                              const srHm = (selectedRequisitionForView.structured_role?.hiring_manager || '').trim();
+                              const hmName = (selectedRequisitionForView.hiring_manager_name || '').trim();
+                              const createdBy = (selectedRequisitionForView.created_by_name || '').trim();
+                              if (srHm && !['assigned hiring manager', 'hiring manager', 'hm'].includes(srHm.toLowerCase())) return srHm;
+                              if (hmName && !['assigned hiring manager', 'hiring manager', 'hm'].includes(hmName.toLowerCase())) return hmName;
+                              return createdBy || 'Hiring Manager';
+                            })()}
+                          </div>
                         </div>
                         <div className={`p-3 rounded-xl border shadow-2xs ${disp.isApproved ? 'bg-emerald-50/60 border-emerald-200' : 'bg-white border-gray-200/60'}`}>
                           <div className={`text-[10px] font-bold uppercase ${disp.isApproved ? 'text-emerald-700' : 'text-gray-400'}`}>

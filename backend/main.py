@@ -530,7 +530,18 @@ def _requisition_dict(requisition_id: str, for_vendor: bool = False) -> dict:
             prof = session.get(models.CompanyProfile, req.company_profile_id)
             if prof:
                 company = _company_dict(prof)
+        creator = None
+        if getattr(req, "created_by", None):
+            try:
+                creator = session.get(User, req.created_by)
+            except Exception:
+                pass
+        creator_name = (getattr(creator, "name", None) or "").strip()
         sr = dict(req.structured_role or {})
+        raw_hm = (sr.get("hiring_manager") or "").strip()
+        hm_name = raw_hm if (raw_hm and raw_hm.lower() not in ("assigned hiring manager", "hiring manager", "hm")) else (creator_name or raw_hm or "")
+        if hm_name and (not sr.get("hiring_manager") or str(sr.get("hiring_manager")).lower() in ("assigned hiring manager", "hiring manager", "hm")):
+            sr["hiring_manager"] = hm_name
         v_limit = (
             _num((req.intake_meta or {}).get("prefill", {}).get("vendor_candidate_limit"))
             or _num((req.intake_meta or {}).get("prefill", {}).get("candidate_limit"))
@@ -610,10 +621,12 @@ def _requisition_dict(requisition_id: str, for_vendor: bool = False) -> dict:
             "intent": req.intent,
             "intake_answers": req.intake_answers,
             "pending_question": req.pending_question,
+            "created_by": getattr(req, "created_by", None),
+            "created_by_name": creator_name,
             "structured_role": sr,
             "vendor_candidate_limit": v_limit,
             "published_vendors": published_vendors,
-            "hiring_manager_name": sr.get("hiring_manager") or "",
+            "hiring_manager_name": hm_name,
             "generated_jd_markdown": req.generated_jd_markdown,
             "coverage_result": req.coverage_result,
             "refinement_log": req.refinement_log or [],
@@ -1632,6 +1645,32 @@ def list_requisitions(
         except Exception:
             pass
 
+        # Resolve real hiring manager names from creator user IDs
+        needed_creator_ids = {r.created_by for r in rows if getattr(r, "created_by", None)}
+        user_names = {}
+        if needed_creator_ids:
+            try:
+                users = session.query(User).filter(User.id.in_(list(needed_creator_ids))).all()
+                user_names = {str(u.id): (u.name or "").strip() for u in users if u.name}
+            except Exception:
+                pass
+
+        def _resolve_hm(r):
+            sr_val = ((r.structured_role or {}).get("hiring_manager") or "").strip()
+            if sr_val and sr_val.lower() not in ("assigned hiring manager", "hiring manager", "hm"):
+                return sr_val
+            cid = str(getattr(r, "created_by", "") or "")
+            if cid in user_names and user_names[cid]:
+                return user_names[cid]
+            return sr_val or ""
+
+        def _build_sr(r):
+            sr_dict = dict(r.structured_role or {})
+            resolved = _resolve_hm(r)
+            if resolved and (not sr_dict.get("hiring_manager") or str(sr_dict.get("hiring_manager")).lower() in ("assigned hiring manager", "hiring manager", "hm")):
+                sr_dict["hiring_manager"] = resolved
+            return sr_dict
+
         result = [
             {
                 "id": r.id,
@@ -1652,8 +1691,10 @@ def list_requisitions(
                 if r.company_profile_id in profiles
                 else None,
                 "generated_jd_markdown": r.generated_jd_markdown,
-                "structured_role": r.structured_role,
-                "hiring_manager_name": (r.structured_role or {}).get("hiring_manager") or "",
+                "created_by": getattr(r, "created_by", None),
+                "created_by_name": user_names.get(str(getattr(r, "created_by", "") or "")) or "",
+                "structured_role": _build_sr(r),
+                "hiring_manager_name": _resolve_hm(r),
                 "intent": r.intent,
                 "created_at": _format_datetime(r.created_at),
                 "director_approved": bool(getattr(r, "director_approved", False)),
