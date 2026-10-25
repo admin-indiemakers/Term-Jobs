@@ -33,3 +33,10 @@ Repeated submissions append another row; the script does not deduplicate emails.
 The Talent Network branch requires Drive authorization using `authorizeDrive`.
 A missing or blank environment setting uses the supplied default URL. An invalid
 override or script error returns an error to the form, never a false success.
+
+All appended values are written as literal text, preserving phone-number `+`
+prefixes and leading zeroes and preventing submitted text from becoming a formula.
+If older phone cells show `#ERROR!`, select column F, choose **Format → Number →
+Plain text**, and re-enter the original phone numbers. Formatting alone does not
+repair an already stored formula. Redeploy the updated `Code.gs` using **Deploy →
+Manage deployments → Edit → New version → Deploy** for new submissions.

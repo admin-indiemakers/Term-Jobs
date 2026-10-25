@@ -15,7 +15,7 @@ router = APIRouter(prefix='/api/waitlist', tags=['Waiting list'])
 # on the ignored local .env file. Hosting configuration can override it.
 DEFAULT_GOOGLE_SCRIPT_URL = (
     'https://script.google.com/macros/s/'
-    'AKfycbzeorqMtGMQoQceCyTueIEgxWuR-mkxHCbI3giIUkhXY1o_9d1VhvezTtiCFH9XqHV1zg/exec'
+    'AKfycbxBtc2pKgJ-_NVoE5EqEYyGSgSLF_ahylsh2dc85C5q7-GJsGhlLoNf7DMYm_PLqa7UCg/exec'
 )
 
 
