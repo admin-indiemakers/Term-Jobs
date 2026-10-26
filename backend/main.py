@@ -182,30 +182,57 @@ async def vercel_routing_middleware(request: Request, call_next):
 
     print(f" [CORS LOG] {request.method} {request.url.path} | Origin: {origin} | AllowedHeaders: {allowed_headers}")
 
-    # Handle OPTIONS preflight explicitly to prevent Vercel / serverless CORS blocking
-    if request.method == "OPTIONS":
-        from fastapi.responses import Response
-        res_origin = origin if origin else "*"
-        return Response(
-            status_code=200,
-            headers={
-                "Access-Control-Allow-Origin": res_origin,
-                "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-                "Access-Control-Allow-Headers": allowed_headers,
-                "Access-Control-Allow-Credentials": "true",
-            },
-        )
+    # Dynamic DB routing: detect whether the incoming request is targeting QA/Dev or Main
+    host = (request.headers.get("x-forwarded-host") or request.headers.get("host") or "").lower()
+    referer = (request.headers.get("referer") or "").lower()
+    origin_header = (origin or "").lower()
+    combined = f"{host} {referer} {origin_header}"
 
-    response = await call_next(request)
+    qa_dev_keywords = (
+        "-git-qa-", "-git-dev-", "git-qa", "git-dev",
+        "term-jobs-git-qa", "term-jobs-git-dev",
+        "term-jobs-qa", "term-jobs-dev",
+        "termjobs-qa", "termjobs-dev",
+        "-qa.", "-dev.",
+    )
+    if any(kw in combined for kw in qa_dev_keywords):
+        target_cluster = "dev_qa"
+    elif any(kw in combined for kw in ("termjobs.in", "term-jobs-git-main", "-git-main-")):
+        target_cluster = "main"
+    else:
+        from modules.shared.config import is_dev_qa_environment
+        target_cluster = "dev_qa" if is_dev_qa_environment() else "main"
 
-    # Ensure CORS headers on all HTTP responses for any origin
-    if origin:
-        response.headers["Access-Control-Allow-Origin"] = origin
-        response.headers["Access-Control-Allow-Credentials"] = "true"
-        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
-        response.headers["Access-Control-Allow-Headers"] = allowed_headers
+    from modules.shared.config import current_cluster_var
+    token = current_cluster_var.set(target_cluster)
 
-    return response
+    try:
+        # Handle OPTIONS preflight explicitly to prevent Vercel / serverless CORS blocking
+        if request.method == "OPTIONS":
+            from fastapi.responses import Response
+            res_origin = origin if origin else "*"
+            return Response(
+                status_code=200,
+                headers={
+                    "Access-Control-Allow-Origin": res_origin,
+                    "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+                    "Access-Control-Allow-Headers": allowed_headers,
+                    "Access-Control-Allow-Credentials": "true",
+                },
+            )
+
+        response = await call_next(request)
+
+        # Ensure CORS headers on all HTTP responses for any origin
+        if origin:
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+            response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+            response.headers["Access-Control-Allow-Headers"] = allowed_headers
+
+        return response
+    finally:
+        current_cluster_var.reset(token)
 
 # --- Global Exception Handlers with CORS Preservation & Debug Logging ---
 import traceback
@@ -268,6 +295,13 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 @app.get("/api/health")
 def health_check():
     """Health check endpoint providing MongoDB connectivity and server diagnostics."""
+    from modules.shared.config import get_active_cluster, get_mongodb_url_for_cluster
+    active_cluster = get_active_cluster()
+    url = get_mongodb_url_for_cluster(active_cluster)
+    cluster_host = "unknown"
+    if "@" in url:
+        cluster_host = url.split("@")[-1].split("/")[0].split("?")[0]
+
     db_status = "unknown"
     db_error = None
     try:
@@ -279,15 +313,11 @@ def health_check():
         db_error = str(err)
         print(f" [HEALTH CHECK MONGO ERROR]: {err}", file=sys.stderr)
 
-    from modules.shared.config import settings
-    cluster_host = "unknown"
-    if "@" in settings.mongodb_url:
-        cluster_host = settings.mongodb_url.split("@")[-1].split("/")[0].split("?")[0]
-
     return {
         "status": "ok" if db_status == "connected" else "degraded",
         "database": db_status,
         "database_cluster": cluster_host,
+        "active_cluster": active_cluster,
         "database_error": db_error,
         "environment": os.getenv("VERCEL_ENV", "local"),
         "vercel_url": os.getenv("VERCEL_URL", ""),
@@ -4837,8 +4867,6 @@ def index(request: Request) -> Any:
     return {"status": "online"}
 
 
-@app.get("/health")
-@app.get("/api/health")
 @app.get("/api/index.py", include_in_schema=False)
 @app.get("/api/ping", include_in_schema=False)
 @app.get("/ping", include_in_schema=False)
