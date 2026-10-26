@@ -14,31 +14,43 @@ else:
 DEV_QA_MONGODB_URL = "mongodb+srv://worksarjunm_db_user:CwGHqtAh7UY6YB3H@cluster0.9v3d7xx.mongodb.net/?appName=TERMJOB_DEV_QA"
 
 
-def detect_git_branch() -> str:
-    """Detect current branch from Vercel / CI environment variables or local .git/HEAD."""
+def is_dev_qa_environment() -> bool:
+    """Detect whether current runtime is Dev or QA environment across local, CI, and Vercel."""
+    # 1. Vercel Preview deployments (all non-production branches like qa, dev)
+    vercel_env = (os.getenv("VERCEL_ENV") or "").strip().lower()
+    if vercel_env == "preview":
+        return True
+
+    # 2. Vercel URL inspection (e.g. term-jobs-git-qa-... or term-jobs-git-dev-...)
+    for url_var in ("VERCEL_URL", "VERCEL_BRANCH_URL"):
+        url_val = (os.getenv(url_var) or "").lower()
+        if "qa" in url_val or "dev" in url_val:
+            return True
+
+    # 3. Environment variables
     for var in ("VERCEL_GIT_COMMIT_REF", "GIT_BRANCH", "BRANCH_NAME", "APP_ENV", "ENVIRONMENT"):
         val = (os.getenv(var) or "").strip().lower()
-        if val:
-            return val
+        if val in ("dev", "qa") or "dev" in val or "qa" in val:
+            return True
+
+    # 4. Local git HEAD file
     try:
         repo_root = Path(__file__).resolve().parent.parent.parent.parent
         git_head = repo_root / ".git" / "HEAD"
         if git_head.exists():
             content = git_head.read_text(encoding="utf-8").strip()
-            if content.startswith("ref: refs/heads/"):
-                return content.split("ref: refs/heads/")[-1].strip().lower()
-            return content.strip().lower()
+            branch = content.split("ref: refs/heads/")[-1].strip().lower() if "ref: refs/heads/" in content else content.strip().lower()
+            if branch in ("dev", "qa") or "dev" in branch or "qa" in branch:
+                return True
     except Exception:
         pass
-    return ""
+
+    return False
 
 
 def resolve_mongodb_url() -> str:
     """Resolve database URL ensuring dev and qa branches never connect to main production database."""
-    branch = detect_git_branch()
-    is_dev_qa = branch in ("dev", "qa") or "dev" in branch or "qa" in branch
-
-    if is_dev_qa:
+    if is_dev_qa_environment():
         return (
             os.getenv("MONGODB_URL_DEV_QA")
             or os.getenv("MONGODB_URL_DEV")
