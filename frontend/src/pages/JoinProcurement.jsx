@@ -5,6 +5,7 @@ import {
   CheckCircle2, AlertCircle, Eye, EyeOff, ArrowRight, ShieldCheck,
   Building2, Lock, User, Mail, Briefcase, FileCheck2
 } from 'lucide-react';
+import SEOHead from '../components/SEOHead';
 
 export default function JoinProcurement() {
   const navigate = useNavigate();
@@ -87,15 +88,20 @@ export default function JoinProcurement() {
 
   return (
     <div className="min-h-screen bg-[#ECECE9] flex flex-col justify-center py-12 sm:px-6 lg:px-8 font-sans">
+      <SEOHead
+        title="Join Procurement Team — TermJobs Enterprise Portal"
+        description="Request access to join your enterprise procurement team on TermJobs to authorize contractor rate agreements and work orders."
+        canonicalUrl="https://www.termjobs.in/join/procurement"
+      />
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center">
           <div className="w-14 h-14 rounded-2xl bg-[#0A0A0A] text-white flex items-center justify-center font-extrabold text-2xl shadow-lg">
             <FileCheck2 className="w-7 h-7 text-amber-400" />
           </div>
         </div>
-        <h2 className="mt-4 text-center text-2xl font-extrabold text-[#0A0A0A] tracking-tight">
+        <h1 className="mt-4 text-center text-2xl font-extrabold text-[#0A0A0A] tracking-tight">
           Join {companyName} Procurement Team
-        </h2>
+        </h1>
         <p className="mt-1 text-center text-xs text-[#8A8A85] font-semibold">
           Commercial Vendor Work Orders & Rate Authorization Portal
         </p>
