@@ -30,44 +30,49 @@ def _utcnow() -> datetime:
     return datetime.now(UTC)
 
 
-# Lazy client — defer DNS resolution until first actual DB operation.
-# This prevents startup crash when DNS (mongodb+srv://) is slow or offline.
-_client: "MongoClient | None" = None
+# Multi-cluster client pool — keeps isolated MongoClient instances for 'main' and 'dev_qa'
+_clients: dict[str, MongoClient] = {}
 
-def _get_client() -> "MongoClient":
-    global _client
-    if _client is None:
-        import os
-        url = settings.mongodb_url
-        kwargs = {
-            "serverSelectionTimeoutMS": 5000,
-            "connectTimeoutMS": 10000,
-            "retryWrites": True,
-            "retryReads": True,
-        }
-        # In serverless environments like Vercel, maintain 1 connection warm with idle timeout
-        # to avoid repeating expensive TLS handshakes on every invocation
-        if os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"):
-            kwargs["maxPoolSize"] = 10
-            kwargs["minPoolSize"] = 1
-            kwargs["maxIdleTimeMS"] = 60000
-        else:
-            kwargs["maxPoolSize"] = 50
-            kwargs["minPoolSize"] = 10
 
-        # Enable TLS only for cloud/SRV connections
-        if "mongodb+srv://" in url or "tls=true" in url.lower() or "ssl=true" in url.lower():
-            kwargs["tls"] = True
-            try:
-                import certifi
-                kwargs["tlsCAFile"] = certifi.where()
-            except ImportError:
-                pass
+def _create_mongo_client(url: str) -> MongoClient:
+    import os
+    kwargs = {
+        "serverSelectionTimeoutMS": 5000,
+        "connectTimeoutMS": 10000,
+        "retryWrites": True,
+        "retryReads": True,
+    }
+    # In serverless environments like Vercel, maintain 1 connection warm with idle timeout
+    # to avoid repeating expensive TLS handshakes on every invocation
+    if os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"):
+        kwargs["maxPoolSize"] = 10
+        kwargs["minPoolSize"] = 1
+        kwargs["maxIdleTimeMS"] = 60000
+    else:
+        kwargs["maxPoolSize"] = 50
+        kwargs["minPoolSize"] = 10
 
-        masked_url = url.split("@")[-1] if "@" in url else url
-        print(f"[MONGO CLIENT INIT] Connecting to MongoDB: {masked_url} (TLS={kwargs.get('tls', False)})")
-        _client = MongoClient(url, **kwargs)
-    return _client
+    # Enable TLS only for cloud/SRV connections
+    if "mongodb+srv://" in url or "tls=true" in url.lower() or "ssl=true" in url.lower():
+        kwargs["tls"] = True
+        try:
+            import certifi
+            kwargs["tlsCAFile"] = certifi.where()
+        except ImportError:
+            pass
+
+    masked_url = url.split("@")[-1] if "@" in url else url
+    print(f"[MONGO CLIENT INIT] Connecting to MongoDB: {masked_url} (TLS={kwargs.get('tls', False)})")
+    return MongoClient(url, **kwargs)
+
+
+def _get_client(cluster: str | None = None) -> MongoClient:
+    from .config import get_active_cluster, get_mongodb_url_for_cluster
+    target_cluster = cluster if cluster in ("dev_qa", "main") else get_active_cluster()
+    if target_cluster not in _clients:
+        url = get_mongodb_url_for_cluster(target_cluster)
+        _clients[target_cluster] = _create_mongo_client(url)
+    return _clients[target_cluster]
 
 
 class _LazyDB:

@@ -1,8 +1,11 @@
+from contextvars import ContextVar
 from typing import Any
 import os
 from pathlib import Path
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+current_cluster_var: ContextVar[str | None] = ContextVar("current_cluster", default=None)
 
 # Ensure .env from backend directory is loaded
 backend_env = Path(__file__).resolve().parent.parent.parent / ".env"
@@ -12,6 +15,7 @@ else:
     load_dotenv(override=not bool(os.getenv("VERCEL")))
 
 DEV_QA_MONGODB_URL = "mongodb+srv://worksarjunm_db_user:CwGHqtAh7UY6YB3H@cluster0.9v3d7xx.mongodb.net/?appName=TERMJOB_DEV_QA"
+MAIN_MONGODB_URL = "mongodb+srv://worksarjunm_db_user:Y3fv1MhYgoa94NXT@termjob.bnwy4et.mongodb.net/?appName=TERMJOB"
 
 
 def detect_branch_name() -> str:
@@ -58,34 +62,45 @@ def is_dev_qa_environment() -> bool:
     return False
 
 
-def resolve_mongodb_url() -> str:
-    """Resolve database URL ensuring dev and qa branches never connect to main production database."""
-    if is_dev_qa_environment():
+def get_mongodb_url_for_cluster(cluster: str) -> str:
+    """Return MongoDB connection string for specific cluster ('dev_qa' or 'main')."""
+    if cluster == "dev_qa":
         return (
             os.getenv("MONGODB_URL_DEV_QA")
             or os.getenv("MONGODB_URL_DEV")
             or os.getenv("MONGODB_URL_QA")
             or DEV_QA_MONGODB_URL
         )
-
-    # Main production branch environment: read from MONGODB_URL_MAIN or MONGODB_URL
     return (
         os.getenv("MONGODB_URL_MAIN")
         or os.getenv("MONGODB_URL_PROD")
-        or os.getenv("MONGODB_URL", "mongodb://localhost:27017")
+        or os.getenv("MONGODB_URL")
+        or MAIN_MONGODB_URL
     )
+
+
+def get_active_cluster() -> str:
+    """Determine currently active cluster based on request context, branch, or environment."""
+    ctx_cluster = current_cluster_var.get()
+    if ctx_cluster in ("dev_qa", "main"):
+        return ctx_cluster
+    return "dev_qa" if is_dev_qa_environment() else "main"
+
+
+def resolve_mongodb_url() -> str:
+    """Resolve database URL ensuring dev and qa branches/requests never connect to main production database."""
+    return get_mongodb_url_for_cluster(get_active_cluster())
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=str(backend_env), env_file_encoding="utf-8", extra="ignore")
 
     # MongoDB
-    mongodb_url: str = ""
     mongo_db_name: str = os.getenv("MONGO_DB_NAME", "termjobs")
 
-    def __init__(self, **values: Any):
-        super().__init__(**values)
-        self.mongodb_url = resolve_mongodb_url()
+    @property
+    def mongodb_url(self) -> str:
+        return resolve_mongodb_url()
 
     # Groq (cloud LLM)
     groq_api_key: str = os.getenv("GROQ_API_KEY", "")
