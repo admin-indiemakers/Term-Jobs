@@ -6,6 +6,7 @@ import {
   CheckCircle2, AlertCircle, Eye, EyeOff, ArrowRight, ShieldCheck,
   Building2, Lock, User, Mail, Briefcase, DollarSign, Receipt
 } from 'lucide-react';
+import SEOHead from '../components/SEOHead';
 
 export default function JoinFinance() {
   const navigate = useNavigate();
@@ -89,15 +90,20 @@ export default function JoinFinance() {
 
   return (
     <div className="min-h-screen bg-[#ECECE9] flex flex-col justify-center py-12 sm:px-6 lg:px-8 font-sans text-left">
+      <SEOHead
+        title="Join Finance Team — TermJobs Enterprise Portal"
+        description="Submit authorization to join your organization's finance team on TermJobs to manage vendor billing, disbursements, and timesheet approvals."
+        canonicalUrl="https://www.termjobs.in/join/finance"
+      />
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center">
           <div className="w-14 h-14 rounded-2xl bg-[#0A0A0A] text-white flex items-center justify-center font-extrabold text-2xl shadow-lg">
             <Receipt className="w-7 h-7 text-emerald-400" />
           </div>
         </div>
-        <h2 className="mt-4 text-center text-2xl font-extrabold text-[#0A0A0A] tracking-tight">
+        <h1 className="mt-4 text-center text-2xl font-extrabold text-[#0A0A0A] tracking-tight">
           Join {companyName} Finance Team
-        </h2>
+        </h1>
         <p className="mt-1 text-center text-xs text-[#8A8A85] font-semibold">
           Accounts, Billing Schedule & Expense Disbursement Portal
         </p>
