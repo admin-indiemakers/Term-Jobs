@@ -25,6 +25,15 @@ _TRANSITIONS: dict[RequisitionStatus, set[RequisitionStatus]] = {
         RequisitionStatus.STRUCTURING,
         RequisitionStatus.DRAFT,
     },
+    RequisitionStatus.RESTRUCTURING: {
+        RequisitionStatus.PENDING_APPROVAL,
+        RequisitionStatus.STRUCTURING,
+        RequisitionStatus.DRAFT,
+    },
+    RequisitionStatus.REJECTED: {
+        RequisitionStatus.DRAFT,
+        RequisitionStatus.STRUCTURING,
+    },
     RequisitionStatus.PUBLISHED: {RequisitionStatus.CLOSED},
     RequisitionStatus.CLOSED: set(),
 }
@@ -38,7 +47,7 @@ class InvalidTransition(Exception):
 
 
 def can_transition(frm: RequisitionStatus, to: RequisitionStatus) -> bool:
-    return to in _TRANSITIONS[frm]
+    return to in _TRANSITIONS.get(frm, set())
 
 
 class StateMachine:
