@@ -144,3 +144,5 @@ htmlcov/
 # ---------- Temp test assets ----------
 frontend/public/test_*.png
 frontend/public/download_logo*.png
+.vercel
+.env*
