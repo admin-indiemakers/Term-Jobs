@@ -1,4 +1,4 @@
-"""Global config for the backend, loaded once and shared across modules."""
+from typing import Any
 import os
 from pathlib import Path
 from dotenv import load_dotenv
@@ -11,13 +11,59 @@ if backend_env.exists():
 else:
     load_dotenv(override=not bool(os.getenv("VERCEL")))
 
+DEV_QA_MONGODB_URL = "mongodb+srv://worksarjunm_db_user:CwGHqtAh7UY6YB3H@cluster0.9v3d7xx.mongodb.net/?appName=TERMJOB_DEV_QA"
+
+
+def detect_git_branch() -> str:
+    """Detect current branch from Vercel / CI environment variables or local .git/HEAD."""
+    for var in ("VERCEL_GIT_COMMIT_REF", "GIT_BRANCH", "BRANCH_NAME", "APP_ENV", "ENVIRONMENT"):
+        val = (os.getenv(var) or "").strip().lower()
+        if val:
+            return val
+    try:
+        repo_root = Path(__file__).resolve().parent.parent.parent.parent
+        git_head = repo_root / ".git" / "HEAD"
+        if git_head.exists():
+            content = git_head.read_text(encoding="utf-8").strip()
+            if content.startswith("ref: refs/heads/"):
+                return content.split("ref: refs/heads/")[-1].strip().lower()
+            return content.strip().lower()
+    except Exception:
+        pass
+    return ""
+
+
+def resolve_mongodb_url() -> str:
+    """Resolve database URL ensuring dev and qa branches never connect to main production database."""
+    branch = detect_git_branch()
+    is_dev_qa = branch in ("dev", "qa") or "dev" in branch or "qa" in branch
+
+    if is_dev_qa:
+        return (
+            os.getenv("MONGODB_URL_DEV_QA")
+            or os.getenv("MONGODB_URL_DEV")
+            or os.getenv("MONGODB_URL_QA")
+            or DEV_QA_MONGODB_URL
+        )
+
+    # Main production branch environment: read from MONGODB_URL_MAIN or MONGODB_URL
+    return (
+        os.getenv("MONGODB_URL_MAIN")
+        or os.getenv("MONGODB_URL_PROD")
+        or os.getenv("MONGODB_URL", "mongodb://localhost:27017")
+    )
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=str(backend_env), env_file_encoding="utf-8", extra="ignore")
 
     # MongoDB
-    mongodb_url: str = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
+    mongodb_url: str = ""
     mongo_db_name: str = os.getenv("MONGO_DB_NAME", "termjobs")
+
+    def __init__(self, **values: Any):
+        super().__init__(**values)
+        self.mongodb_url = resolve_mongodb_url()
 
     # Groq (cloud LLM)
     groq_api_key: str = os.getenv("GROQ_API_KEY", "")
