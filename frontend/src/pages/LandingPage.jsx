@@ -17,8 +17,8 @@ export default function LandingPage({ defaultRoute = '', enabled = true }) {
     <>
       {enabled && (
         <SEOHead
-          title="TermJobs — The future of contract work is flexible"
-          description="TermJobs is a contract workforce platform bringing hiring, verified talent, AI screening, onboarding, timesheets, and billing into one connected view."
+          title="TermJobs – Contract Jobs & Flexible Hiring"
+          description="Discover genuine contract and temporary work opportunities, or connect your organization with contract talent through TermJobs' hiring and workforce platform."
           canonicalUrl="https://www.termjobs.in/"
         />
       )}
