@@ -14,36 +14,46 @@ else:
 DEV_QA_MONGODB_URL = "mongodb+srv://worksarjunm_db_user:CwGHqtAh7UY6YB3H@cluster0.9v3d7xx.mongodb.net/?appName=TERMJOB_DEV_QA"
 
 
-def is_dev_qa_environment() -> bool:
-    """Detect whether current runtime is Dev or QA environment across local, CI, and Vercel."""
-    # 1. Vercel Preview deployments (all non-production branches like qa, dev)
-    vercel_env = (os.getenv("VERCEL_ENV") or "").strip().lower()
-    if vercel_env == "preview":
-        return True
-
-    # 2. Vercel URL inspection (e.g. term-jobs-git-qa-... or term-jobs-git-dev-...)
-    for url_var in ("VERCEL_URL", "VERCEL_BRANCH_URL"):
-        url_val = (os.getenv(url_var) or "").lower()
-        if "qa" in url_val or "dev" in url_val:
-            return True
-
-    # 3. Environment variables
+def detect_branch_name() -> str:
+    """Detect current branch from Vercel / CI environment variables or local .git/HEAD."""
     for var in ("VERCEL_GIT_COMMIT_REF", "GIT_BRANCH", "BRANCH_NAME", "APP_ENV", "ENVIRONMENT"):
         val = (os.getenv(var) or "").strip().lower()
-        if val in ("dev", "qa") or "dev" in val or "qa" in val:
-            return True
-
-    # 4. Local git HEAD file
+        if val:
+            return val
     try:
         repo_root = Path(__file__).resolve().parent.parent.parent.parent
         git_head = repo_root / ".git" / "HEAD"
         if git_head.exists():
             content = git_head.read_text(encoding="utf-8").strip()
-            branch = content.split("ref: refs/heads/")[-1].strip().lower() if "ref: refs/heads/" in content else content.strip().lower()
-            if branch in ("dev", "qa") or "dev" in branch or "qa" in branch:
-                return True
+            if "ref: refs/heads/" in content:
+                return content.split("ref: refs/heads/")[-1].strip().lower()
+            return content.strip().lower()
     except Exception:
         pass
+    return ""
+
+
+def is_dev_qa_environment() -> bool:
+    """Detect whether current runtime is Dev or QA environment across local, CI, and Vercel."""
+    branch = detect_branch_name()
+
+    # Rule 1: If branch is explicitly main or master, it is NEVER Dev/QA
+    if branch in ("main", "master", "prod", "production"):
+        return False
+
+    # Rule 2: If branch is explicitly qa or dev
+    if branch in ("qa", "dev") or branch.startswith("qa-") or branch.startswith("dev-"):
+        return True
+
+    # Rule 3: Check Vercel branch URLs with strict boundaries (e.g. -git-qa- or -git-dev-)
+    for url_var in ("VERCEL_URL", "VERCEL_BRANCH_URL"):
+        url_val = (os.getenv(url_var) or "").lower()
+        if "-git-qa-" in url_val or "-git-dev-" in url_val or url_val.startswith("term-jobs-git-qa-") or url_val.startswith("term-jobs-git-dev-"):
+            return True
+
+    # Rule 4: If Vercel Preview and not on main
+    if (os.getenv("VERCEL_ENV") or "").lower() == "preview" and branch not in ("main", "master"):
+        return True
 
     return False
 
