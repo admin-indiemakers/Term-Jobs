@@ -1,23 +1,25 @@
 # ==============================================================================
-# TermJobs — Flexible Workforce & Contract Hiring Platform
+# TermJobs — Contract Jobs & Flexible Workforce Platform
 # Website: https://www.termjobs.in
-# Description: Enterprise Vendor Management System (VMS) & marketplace for contract
-#              talent, staffing agencies, timesheets, and automated billing.
+# Description: Contract staffing and vendor management system for verified
+#              professionals, staffing agencies, and transparent billing.
 # ==============================================================================
 
 User-agent: *
 Allow: /
 Allow: /open-roles
-Allow: /login
-Allow: /director/login
-Allow: /admin/login
-Allow: /join/
+Allow: /jobs/
+Allow: /employers
+Allow: /solutions/contract-staffing
+Allow: /career-guides/
 Allow: /privacy-policy
 Allow: /terms-and-conditions
 Allow: /platform-rules
+Allow: /join/
+Allow: /login
 Allow: /llms.txt
 
-# Restrict authenticated application routes and internal dashboards
+# Restrict authenticated application routes, internal admin tools, and API endpoints
 Disallow: /dashboard/
 Disallow: /superadmin/
 Disallow: /recruiter/
@@ -34,7 +36,5 @@ Disallow: /candidate/timesheet
 Disallow: /candidate/attendance
 Disallow: /api/
 
-# Sitemap & LLM Specification
+# Canonical Sitemap Specification
 Sitemap: https://www.termjobs.in/sitemap.xml
-
-

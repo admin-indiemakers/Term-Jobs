@@ -19,6 +19,10 @@ import { TermJobsLoader } from './components/TermJobsLoader';
 import { lazyWithRetry } from './utils/chunkRecovery';
 
 // Lazy-loaded routes with auto-retry and chunk error recovery (prevents chunk load failure after deployments)
+const JobDetailPage = lazyWithRetry(() => import('./pages/JobDetailPage'));
+const JobCategoryLandingPage = lazyWithRetry(() => import('./pages/JobCategoryLandingPage'));
+const EmployerLandingPage = lazyWithRetry(() => import('./pages/EmployerLandingPage'));
+const TemporaryVsContractGuidePage = lazyWithRetry(() => import('./pages/TemporaryVsContractGuidePage'));
 const CandidatePoolAdded = lazyWithRetry(() => import('./pages/CandidatePoolAdded'));
 const LegalPage = lazyWithRetry(() => import('./pages/LegalPage'));
 const InterviewRequests = lazyWithRetry(() => import('./pages/recruiter/InterviewRequests'));
@@ -261,6 +265,17 @@ export default function App() {
           <Route path="/privacy-policy" element={<LegalPage type="privacy" />} />
           <Route path="/terms-and-conditions" element={<LegalPage type="terms" />} />
           <Route path="/platform-rules" element={<LegalPage type="rules" />} />
+          
+          {/* Public SEO & Content Routes */}
+          <Route path="/jobs/contract" element={<JobCategoryLandingPage forcedCategory="contract" />} />
+          <Route path="/jobs/temporary" element={<JobCategoryLandingPage forcedCategory="temporary" />} />
+          <Route path="/jobs/remote-contract" element={<JobCategoryLandingPage forcedCategory="remote-contract" />} />
+          <Route path="/jobs/:slugOrId" element={<JobDetailPage />} />
+          <Route path="/job/:slugOrId" element={<JobDetailPage />} />
+          <Route path="/employers" element={<EmployerLandingPage />} />
+          <Route path="/solutions/contract-staffing" element={<EmployerLandingPage />} />
+          <Route path="/career-guides/temporary-vs-contract-jobs" element={<TemporaryVsContractGuidePage />} />
+
           <Route path="/join/hiring-manager" element={<JoinHiringManager />} />
           <Route path="/invite/hiring-manager" element={<JoinHiringManager />} />
           <Route path="/join/director" element={<JoinDirector />} />
