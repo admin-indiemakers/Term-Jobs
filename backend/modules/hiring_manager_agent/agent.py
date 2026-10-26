@@ -570,6 +570,18 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "list_rejected_candidates",
+            "description": "List candidates who were not approved (marked as Rejected) for the Hiring Manager's requisitions with rejection reasons.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "schedule_candidate_interview",
             "description": "Create an interactive interview proposal card to schedule an interview meeting for a shortlisted candidate.",
             "parameters": {
@@ -868,6 +880,24 @@ TOOLS.extend([
     {"type": "function", "function": {"name": "book_company_interview",
         "description": "Reserve a company LiveKit interview only when the user explicitly says book, lock, reserve, confirm or dispatch and supplies a candidate and date/time. Checks calendar conflicts and sends invitation/reminders. Never book for a schedule-listing question.",
         "parameters": {"type": "object", "properties": {"candidate_identifier": {"type": "string"}, "round_name": {"type": "string"}}, "required": ["candidate_identifier"]}}},
+    {"type": "function", "function": {"name": "retrieve_knowledge",
+        "description": "Retrieve authorized TermJobs operating policies, guidelines, and interview governance documents.",
+        "parameters": {"type": "object", "properties": {"query": {"type": "string", "description": "The policy or guideline topic to look up"}}, "required": ["query"]}}},
+    {"type": "function", "function": {"name": "generate_step_back_query",
+        "description": "Formulate a higher-level diagnostic question to retrieve underlying hiring metrics and factual pipeline records for broad or systemic questions.",
+        "parameters": {"type": "object", "properties": {"diagnostic_query": {"type": "string", "description": "The diagnostic question"}}, "required": ["diagnostic_query"]}}},
+    {"type": "function", "function": {"name": "rewrite_query",
+        "description": "Resolve anaphoric or incomplete follow-up queries using recent conversation context to produce a standalone query.",
+        "parameters": {"type": "object", "properties": {"unresolved_query": {"type": "string", "description": "The follow-up query"}}, "required": ["unresolved_query"]}}},
+    {"type": "function", "function": {"name": "decompose_query",
+        "description": "Break complex multi-part requests into smaller discrete sub-tasks with dependency order.",
+        "parameters": {"type": "object", "properties": {"compound_query": {"type": "string", "description": "The multi-part query"}}, "required": ["compound_query"]}}},
+    {"type": "function", "function": {"name": "expand_query",
+        "description": "Expand domain acronyms (e.g. SRE -> Site Reliability Engineer, K8s -> Kubernetes) without replacing explicit user constraints.",
+        "parameters": {"type": "object", "properties": {"query": {"type": "string", "description": "Query containing acronyms"}}, "required": ["query"]}}},
+    {"type": "function", "function": {"name": "build_structured_filters",
+        "description": "Extract validated structured filters (status, date range, headcount, role) with timezone awareness, strictly rejecting arbitrary SQL.",
+        "parameters": {"type": "object", "properties": {"query": {"type": "string", "description": "Query containing filters"}}, "required": ["query"]}}},
 ])
 
 # ── TOOL IMPLEMENTATIONS ─────────────────────────────────────────────────────
@@ -1419,6 +1449,57 @@ def list_shortlisted_candidates(user_id: str = "", user_name: str = "", tenant_i
             })
     except Exception as e:
         print("Error reading shortlisted candidates from DB:", e)
+
+    return results
+
+
+def list_rejected_candidates(user_id: str = "", user_name: str = "", tenant_id: str = "local", role_filter: str = ""):
+    results = []
+    req_map = {}
+    is_scoped_tenant = bool(tenant_id and tenant_id not in ("local", "all", ""))
+    t_filter = {"tenant_id": tenant_id} if is_scoped_tenant else {}
+
+    try:
+        req_docs = list(db["requisitions"].find(t_filter))
+        req_map = {r.get("id"): r.get("title") for r in req_docs if r.get("id")}
+    except Exception:
+        pass
+
+    try:
+        cand_ids, cand_names, req_ids = _get_hm_scoped_candidate_pool(user_id, user_name, tenant_id)
+        sub_query: Dict[str, Any] = {
+            'requisition_id': {'$in': list(req_ids)},
+            '$or': [{'tenant_id': tenant_id}, {'tenant_id': None}, {'tenant_id': {'$exists': False}}]
+        }
+        all_subs = list(db['candidate_submissions'].find(sub_query))
+        filtered = [row for row in all_subs if str(row.get('status') or '').lower() == 'rejected']
+
+        for d in filtered:
+            c_name = d.get("candidate_name") or d.get("name")
+            if not c_name or c_name.strip().lower() in ("termjobs", "term jobs", "test", "candidate"):
+                continue
+            r_id = d.get("requisition_id")
+            req_title = req_map.get(r_id) or d.get("requisition_title") or (role_filter.strip().title() if role_filter else "Engineering Role")
+            vendor = d.get("vendor_name") or "Vendorqueue"
+            skills_val = d.get("matched_skills") or d.get("skills") or ["React", "TypeScript", "Node.js", "Python"]
+            skills_str = ", ".join(skills_val) if isinstance(skills_val, list) else str(skills_val)
+
+            results.append({
+                "id": str(d.get("id")),
+                "candidate_id": str(d.get("candidate_id") or d.get("id") or ""),
+                "requisition_id": str(r_id or ""),
+                "name": c_name,
+                "candidate_name": c_name,
+                "email": d.get("candidate_email") or f"{c_name.lower().replace(' ', '.')}@example.com",
+                "status": "Rejected",
+                "rejection_reason": d.get("rejection_reason") or "Not aligned with requisition requirements",
+                "requisition_title": req_title,
+                "vendor_name": vendor,
+                "skills": skills_str,
+                "rejected_at": d.get("rejected_at") or d.get("updated_at") or ""
+            })
+    except Exception as e:
+        print("Error reading rejected candidates from DB:", e)
 
     return results
 
@@ -2765,7 +2846,7 @@ def get_candidate_profile_details(candidate_name: str = "", tenant_id: str = "lo
 
     c_name = doc.get("candidate_name") or doc.get("name") or doc.get("worker_name") or target_name or "Candidate"
     r_id = doc.get("requisition_id")
-    req_title = req_map.get(r_id) or doc.get("requisition_title") or doc.get("candidate_title") or doc.get("role") or doc.get("job_title") or "Engineering Role"
+    req_title = (req_map.get(r_id) if isinstance(r_id, str) else None) or doc.get("requisition_title") or doc.get("candidate_title") or doc.get("role") or doc.get("job_title") or "Engineering Role"
     vendor = doc.get("vendor_name") or doc.get("vendor_company_name") or "Vendorqueue"
     m_score = doc.get("match_score")
     score_str = f"{int(m_score)}%" if m_score is not None else "92%"
@@ -3191,7 +3272,9 @@ def run_model_hiring_chat(prompt, history, current_user):
                     "- When the user asks about 'requisitions', 'active requisitions', 'live requisitions', 'open requisitions', or 'job directory', ALWAYS call the `list_hiring_requisitions` tool.\n"
                     "- Only call `submit_for_director_approval` when the user explicitly asks to send or submit the requisition to the Director for approval.\n"
                     "CRITICAL FOR CANDIDATE INQUIRIES:\n"
-                    "- When the user asks about 'shortlist', 'shortlisted candidates', or 'screening', ALWAYS call `list_shortlisted_candidates`.\n"
+                    "- In TermJobs, candidate submissions do not have an 'Unapproved' status; candidates awaiting your evaluation or screening are categorized under 'Shortlisted' (or 'Under Review'). Requisitions, timesheets, and expenses have formal 'Pending Approval' workflows.\n"
+                    "- When the user asks about 'unapproved candidates' (or 'unaproved candidates'), 'candidates pending approval', 'candidates awaiting review', 'shortlist', 'shortlisted candidates', or 'screening', ALWAYS call `list_shortlisted_candidates`. If the inquiry specifically asked about unapproved or pending approval candidates, explain directly that candidates awaiting evaluation are categorized under Shortlisted before presenting them.\n"
+                    "- When the user asks about 'rejected candidates', 'candidates not approved', or 'turned down candidates', ALWAYS call `list_rejected_candidates`.\n"
                     "- When the user asks about 'onboarding', 'onboarding candidates', or 'provisioning/checklist issues', ALWAYS call `list_onboarding_issues`.\n"
                     "- When the user asks for 'candidates under me', 'who is working under me', 'my team', or 'all working candidates', ALWAYS call `list_accepted_candidates`.\n"
                     "- When the user asks about a specific candidate by name, call `get_candidate_profile_details`.\n"
@@ -3289,7 +3372,24 @@ def run_model_hiring_chat(prompt, history, current_user):
                         elif fn_name == "list_shortlisted_candidates":
                             res = list_shortlisted_candidates(user_id, user_name, tenant_id)
                             executed.append({"tool": "list_shortlisted_candidates", "result": res})
-                            reply_buf.append(f"Here are the shortlisted candidates for **{company_name}**:")
+                            is_unapproved_query = bool(re.search(
+                                r"\b(?:unapproved|unaproved|pending\s+approval|awaiting\s+approval|awaiting\s+review|not\s+yet\s+approved)\b",
+                                prompt_clean, re.I
+                            ))
+                            if is_unapproved_query:
+                                if res:
+                                    reply_buf.append(f"In TermJobs, candidates awaiting your evaluation are categorized under **Shortlisted**. Here are the candidates currently pending your review for **{company_name}**:")
+                                else:
+                                    reply_buf.append(f"In TermJobs, candidates awaiting your evaluation are categorized under **Shortlisted**. There are currently no candidates pending your review for **{company_name}**.")
+                            else:
+                                reply_buf.append(f"Here are the shortlisted candidates for **{company_name}**:")
+                        elif fn_name == "list_rejected_candidates":
+                            res = list_rejected_candidates(user_id, user_name, tenant_id)
+                            executed.append({"tool": "list_rejected_candidates", "result": res})
+                            if res:
+                                reply_buf.append(f"Here are the candidates who were not approved (marked as Rejected) for **{company_name}**:")
+                            else:
+                                reply_buf.append(f"There are currently no rejected candidates on record for **{company_name}**.")
                         elif fn_name == "schedule_candidate_interview":
                             if not fn_args.get("proposed_time"):
                                 clock = re.search(r'\b(?:1[0-2]|0?[1-9])(?::[0-5]\d)?\s*(?:am|pm)\b|\b(?:[01]\d|2[0-3]):[0-5]\d\b', prompt, re.I)
@@ -3441,9 +3541,49 @@ def run_model_hiring_chat(prompt, history, current_user):
                             res = get_requisition_guide(company_name=company_name, director_name=director_name)
                             executed.append({"tool": "get_requisition_guide", "result": res})
                             reply_buf.append(res["markdown"])
+                        elif fn_name == "retrieve_knowledge":
+                            from .query_knowledge import retrieve_knowledge
+                            res = retrieve_knowledge(fn_args.get("query", prompt_clean))
+                            executed.append({"tool": "retrieve_knowledge", "result": res})
+                            reply_buf.append(res["summary"])
+                        elif fn_name == "generate_step_back_query":
+                            from .query_strategies import generate_step_back_query
+                            res, _ = generate_step_back_query(fn_args.get("diagnostic_query", prompt_clean))
+                            stats_res = get_hiring_manager_stats(user_id, tenant_id, user_name)
+                            res["pipeline_metrics"] = stats_res
+                            executed.append({"tool": "generate_step_back_query", "result": res})
+                            reply_buf.append(
+                                f"Pipeline diagnostic metrics for **{company_name}**:\n"
+                                f"- Live Requisitions: **{stats_res.get('live_requisitions', 0)}**\n"
+                                f"- Shortlisted Candidates: **{stats_res.get('shortlisted_candidates', 0)}**\n"
+                                f"- Candidates in Onboarding: **{stats_res.get('onboarding_candidates', 0)}**\n"
+                                f"- Open Issues: **{stats_res.get('open_issues', 0)}**"
+                            )
+                        elif fn_name == "rewrite_query":
+                            from .query_strategies import rewrite_query
+                            from .query_orchestrator import get_query_orchestrator
+                            slot = get_query_orchestrator().get_or_create_slot_state(user_id)
+                            rewritten, was_rewritten, _, _ = rewrite_query(fn_args.get("unresolved_query", prompt_clean), history, slot)
+                            res = {"rewritten_query": rewritten, "was_rewritten": was_rewritten}
+                            executed.append({"tool": "rewrite_query", "result": res})
+                            reply_buf.append(rewritten)
+                        elif fn_name == "decompose_query":
+                            from .query_strategies import decompose_query
+                            sub_tasks, _ = decompose_query(fn_args.get("compound_query", prompt_clean))
+                            res = {"sub_tasks": sub_tasks}
+                            executed.append({"tool": "decompose_query", "result": res})
+                            reply_buf.append(f"Decomposed into {len(sub_tasks)} tasks.")
+                        elif fn_name == "expand_query":
+                            from .query_strategies import expand_query
+                            res, _ = expand_query(fn_args.get("query", prompt_clean))
+                            executed.append({"tool": "expand_query", "result": res})
+                        elif fn_name == "build_structured_filters":
+                            from .query_strategies import build_structured_filters
+                            res, _ = build_structured_filters(fn_args.get("query", prompt_clean), timezone_name=current_user.get("timezone") or "Asia/Kolkata")
+                            executed.append({"tool": "build_structured_filters", "result": res})
 
-                    # Listing and guide responses must preserve exact formatting and records.
-                    if executed and all(action["tool"] in ("list_hiring_requisitions", "get_hiring_manager_guide", "get_requisition_guide") for action in executed):
+                    # Listing, guide, and knowledge responses must preserve exact formatting and records.
+                    if executed and all(action["tool"] in ("list_hiring_requisitions", "get_hiring_manager_guide", "get_requisition_guide", "retrieve_knowledge") for action in executed):
                         return {"reply": "\n\n".join(reply_buf), "executed_actions": executed}
 
                     # 2nd pass LLM synthesis: If tools were purely informational (e.g. requisitions, candidates, stats),
@@ -3474,6 +3614,7 @@ def run_model_hiring_chat(prompt, history, current_user):
                                     "When information is missing or not found, simply state 'I couldn't find that information.' "
                                     "NEVER output markdown pipe tables (| col |). When presenting several results, provide a short, scannable bullet list with each person's name and relevant details. "
                                     "Keep answers concise (1 to 3 short sentences for straightforward questions). "
+                                    "If the user inquired about 'unapproved candidates' or 'candidates pending approval', state directly in the first sentence that in TermJobs, candidates awaiting evaluation are categorized under Shortlisted before presenting them. "
                                     "Requisition and candidate results are rendered as cards: summarize the count and key insight without repeating every field or dumping full tables. Never invent missing values."
                                 )
                             })
@@ -3516,6 +3657,7 @@ def run_model_hiring_chat(prompt, history, current_user):
 @authorized_chat(raw_db)
 def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = None, current_user: Optional[Dict[str, Any]] = None):
     """Main AI Agent executor for Hiring Manager chat requests with Groq API integration and typo-tolerant fuzzy matching."""
+    import re
     history = history or []
     current_user = current_user or {}
     from .applications import application_reply
@@ -3537,6 +3679,28 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
     company_name = current_user.get("company_name") or current_user.get("tenant_name") or "Client Workspace"
     user_id = str(current_user.get("id") or "hm-user")
     tenant_id = str(current_user.get("tenant_id") or "local")
+
+    # Knowledge retrieval / policy query check (Strategy E + Knowledge Retrieval)
+    if re.search(r"\b(policy|policies|interview\s+rounds|contract\s+only|permanent|full-time\s+allowed|director\s+approval\s+policy)\b", prompt, re.I) and not re.search(r"\b(draft|create|schedule|list|show|post)\b", prompt, re.I):
+        from .query_knowledge import retrieve_knowledge
+        k_res = retrieve_knowledge(prompt)
+        if k_res.get("found"):
+            return {
+                "reply": k_res["summary"],
+                "executed_actions": [{"tool": "retrieve_knowledge", "result": k_res}]
+            }
+
+    # Diagnostic pipeline questions -> Step-Back reasoning (Strategy F + Hybrid)
+    if re.search(r"\b(why\s+(?:is|are|did)\s+.*(?:slow|pipeline|delay|bottleneck))\b", prompt, re.I):
+        from .query_orchestrator import get_query_orchestrator
+        orch = get_query_orchestrator()
+        plan = orch.create_strategy_plan(prompt, history, current_user)
+        if plan.execution_mode.value in ("hybrid", "knowledge_retrieval"):
+            return orch.execute_plan(
+                plan, prompt, current_user,
+                lambda t_name, args: get_hiring_manager_stats(user_id, tenant_id, user_name)
+            )
+
     from modules.shared.requisition_chat import filtered_requisition_reply
     requisition_reply = filtered_requisition_reply(
         prompt, lambda: list_hiring_requisitions(user_id, tenant_id, "all"),
@@ -3551,7 +3715,17 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
     if re.search(r'\b(pipeline|hiring\s+(?:stats|summary|overview)|dashboard\s+overview)\b', prompt, re.I) and not re.search(r'\b(create|draft|edit|update|delete)\b', prompt, re.I):
         return hiring_pipeline_reply(user_id, tenant_id)
 
-    if re.search(r'\b(shortlist|shortlisted|candidates?|candiates?|applicants?)\b', prompt, re.I) and re.search(r'\b(show|list|view|display|fetch|get|check|see)\b', prompt, re.I):
+    if re.search(r'\b(?:rejected|not\s+approved|turned\s+down)\s+(?:candidates?|candiates?|applicants?)\b|\b(?:candidates?|candiates?)\s+(?:who\s+were\s+)?(?:rejected|not\s+approved|turned\s+down)\b', prompt, re.I):
+        rej_rows = list_rejected_candidates(user_id, user_name, tenant_id)
+        if rej_rows:
+            reply = f"Here are the candidates who were not approved (marked as Rejected) for **{company_name}**:\n\n" + '\n'.join(
+                f"- **{r['candidate_name']}** — {r['requisition_title']} (Reason: {r['rejection_reason']})" for r in rej_rows
+            )
+        else:
+            reply = f"There are currently no rejected candidates on record for **{company_name}**."
+        return {'reply': reply, 'executed_actions': [{'tool': 'list_rejected_candidates', 'result': rej_rows}]}
+
+    if re.search(r'\b(shortlist|shortlisted|candidates?|candiates?|applicants?)\b', prompt, re.I) and re.search(r'\b(show|list|view|display|fetch|get|check|see|any|are\s+there|is\s+there)\b', prompt, re.I):
         role_filter = ""
         m_for = re.search(r'\b(?:for|in|role)\s+([A-Za-z0-9\s\/\+\#\-]+?)(?:\s+role|\s+position|\s+candidates?|\.|\?|$)', prompt, re.I)
         if m_for:
@@ -3561,7 +3735,18 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
 
         rows = list_shortlisted_candidates(user_id, user_name, tenant_id, role_filter=role_filter)
         role_label = f" for **{role_filter.title()}**" if role_filter else ""
-        if rows:
+        is_unapproved_query = bool(re.search(
+            r"\b(?:unapproved|unaproved|pending\s+approval|awaiting\s+approval|awaiting\s+review|not\s+yet\s+approved)\b",
+            prompt, re.I
+        ))
+        if is_unapproved_query:
+            if rows:
+                reply = f"In TermJobs, candidates awaiting your evaluation are categorized under **Shortlisted**. Here are the candidates currently pending your review{role_label} for **{company_name}**:\n\n" + '\n'.join(
+                    f"- **{row['candidate_name']}** — {row['requisition_title']} ({row['match_score']} match score)" for row in rows
+                )
+            else:
+                reply = f"In TermJobs, candidates awaiting your evaluation are categorized under **Shortlisted**. There are currently no candidates pending your review{role_label} for **{company_name}**."
+        elif rows:
             reply = f"Here are the shortlisted candidates{role_label} in **{company_name}**:\n\n" + '\n'.join(
                 f"- **{row['candidate_name']}** — {row['requisition_title']} ({row['match_score']} match score)" for row in rows
             )
@@ -4634,6 +4819,17 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
     # 4. General Candidates / Applicants Intent (handles 'candidates', 'candiates', 'applicants', etc.)
     general_cand_pattern = r"\b(candidates?|candiates?|candidats?|canditates?|applicants?|review\s+candidates?)\b"
     if re.search(general_cand_pattern, prompt_lower):
+        if re.search(r'\b(?:rejected|not\s+approved|turned\s+down)\b', prompt_lower):
+            rej_res = list_rejected_candidates(user_id, user_name, tenant_id)
+            if rej_res:
+                cand_reply = f"Here are the candidates who were not approved (marked as Rejected) for **{company_name}**:"
+            else:
+                cand_reply = f"There are currently no rejected candidates on record for **{company_name}**."
+            return {
+                "reply": cand_reply,
+                "executed_actions": [{"tool": "list_rejected_candidates", "result": rej_res}]
+            }
+
         role_filter = ""
         m_for = re.search(r'\b(?:for|in|role)\s+([A-Za-z0-9\s\/\+\#\-]+?)(?:\s+role|\s+position|\s+candidates?|\.|\?|$)', prompt, re.I)
         if m_for:
@@ -4642,7 +4838,16 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
 
         cand_res = list_shortlisted_candidates(user_id, user_name, tenant_id, role_filter=role_filter)
         role_label = f" for **{role_filter.title()}**" if role_filter else ""
-        if cand_res:
+        is_unapproved_query = bool(re.search(
+            r"\b(?:unapproved|unaproved|pending\s+approval|awaiting\s+approval|awaiting\s+review|not\s+yet\s+approved)\b",
+            prompt, re.I
+        ))
+        if is_unapproved_query:
+            if cand_res:
+                cand_reply = f"In TermJobs, candidates awaiting your evaluation are categorized under **Shortlisted**. Here are the candidates currently pending your review{role_label} for **{company_name}**:"
+            else:
+                cand_reply = f"In TermJobs, candidates awaiting your evaluation are categorized under **Shortlisted**. There are currently no candidates pending your review{role_label} for **{company_name}**."
+        elif cand_res:
             cand_reply = f"Here are the shortlisted candidates{role_label} for your open requisitions in **{company_name}**:"
         else:
             cand_reply = f"No shortlisted candidates are currently in your pipeline{role_label} for **{company_name}**. Would you like me to request vendor submissions or adjust requisition requirements?"
