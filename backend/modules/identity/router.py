@@ -1242,6 +1242,7 @@ def update_user(
     email_delivery = send_account_change_email(target, previous_email=previous_email, password_changed=body.password is not None)
     _cache.invalidate_prefix("users:")
     _cache.invalidate(f"auth_user:{target.id}")
+    _cache.invalidate_prefix("reqs:")
 
     comp = _get_company_profile(target.tenant_id, db)
     return UserResponse(
