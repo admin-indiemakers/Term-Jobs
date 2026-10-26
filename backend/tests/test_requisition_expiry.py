@@ -22,7 +22,7 @@ def today():
 
 def handlers(database):
     names = {'list_requisitions', '_auto_close_expired', '_require_approval_deadline', '_get_requisition',
-             'approve_requisition', 'director_approve_requisition', 'reject_requisition', 'submit_requisition_for_director_approval_route', 'publish_requisition'}
+             'update_requisition_role', 'approve_requisition', 'director_approve_requisition', 'reject_requisition', 'submit_requisition_for_director_approval_route', 'publish_requisition'}
     tree = ast.parse((Path(__file__).parents[1] / 'main.py').read_text(encoding='utf-8'))
     nodes = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in names]
     for node in nodes:
@@ -105,3 +105,70 @@ def test_portal_list_closes_expired_queue_before_returning_cached_pending_status
     rows = context['list_requisitions'](dashboard=True, fresh=False,
         current_user=SimpleNamespace(id='director', role='Director', tenant_id='company'))
     assert rows[0]['status'] == 'Closed'
+
+
+@pytest.mark.parametrize('status', ['Structuring', 'Closed'])
+def test_corrected_rejected_requisition_returns_to_director_pending_list(monkeypatch, status):
+    import importlib
+    import uuid
+    db = mongomock.MongoClient().resubmission
+    monkeypatch.setattr(importlib.import_module('modules.shared.db'), 'db', db)
+    db.requisitions.insert_one({'id': 'revised', 'tenant_id': 'company', 'created_by': 'manager',
+        'status': status, 'title': 'Old title', 'rejection_reason': 'Correct the deadline',
+        'rejected_by': 'Director', 'rejected_at': _utcnow(), 'director_approved': False,
+        'structured_role': {'submission_deadline': (today() - timedelta(days=1)).isoformat()}})
+    context = handlers(db)
+    context['_requisition_dict'] = lambda identity: db.requisitions.find_one({'id': identity}, {'_id': 0})
+    context['uuid'] = uuid
+    manager = SimpleNamespace(id='manager', role='Hiring Manager', tenant_id='company', name='Manager', email='hm@example.com')
+    deadline = (today() + timedelta(days=7)).isoformat()
+    context['update_requisition_role']('revised',
+        body=SimpleNamespace(title='Corrected title', structured_role={'submission_deadline': deadline}, generated_jd_markdown=None),
+        current_user=manager)
+    result = context['submit_requisition_for_director_approval_route']('revised', current_user=manager)
+    assert result['status'] == 'Pending Approval'
+    assert result['title'] == 'Corrected title'
+    assert result['structured_role']['submission_deadline'] == deadline
+    assert all(result.get(field) is None for field in ('rejection_reason', 'rejected_by', 'rejected_at',
+        'director_approved_by', 'director_approved_at', 'approved_by', 'approved_at'))
+    assert result['director_approved'] is False
+    assert db.notifications.count_documents({'requisition_id': 'revised', 'target_role': 'Director'}) == 1
+    # The next Director list refresh must not close the renewed approval queue.
+    context['_auto_close_expired']()
+    assert db.requisitions.find_one({'id': 'revised'})['status'] == 'Pending Approval'
+    context['_cache'].get.return_value = None
+    rows = context['list_requisitions'](dashboard=True, fresh=True,
+        current_user=SimpleNamespace(id='director', role='Director', tenant_id='company'))
+    assert [(row['id'], row['status']) for row in rows] == [('revised', 'Pending Approval')]
+
+
+@pytest.mark.parametrize('deadline,rejected,allow', [
+    (None, True, True), ('invalid', True, True),
+    ('2099-01-01', False, True), ('2099-01-01', True, False),
+])
+def test_closed_requests_need_valid_renewed_deadline_and_explicit_rejected_resubmission(deadline, rejected, allow):
+    db = mongomock.MongoClient().closed
+    with Session(db) as session:
+        req = models.Requisition(id='closed', status='Closed', rejection_reason='Fix required' if rejected else None,
+                                 structured_role={'submission_deadline': deadline})
+        session.add(req)
+        session.commit()
+        with pytest.raises(DeadlineExpired):
+            enforce_approval_deadline(session, req, allow_resubmission=allow)
+    assert db.requisitions.find_one({'id': 'closed'})['status'] == 'Closed'
+
+
+def test_rejected_request_with_unchanged_expired_deadline_stays_out_of_pending_queue():
+    db = mongomock.MongoClient().expired_rejection
+    db.requisitions.insert_one({'id': 'rejected', 'tenant_id': 'company', 'status': 'Structuring',
+        'rejection_reason': 'Revision required', 'rejected_by': 'Director',
+        'structured_role': {'submission_deadline': (today() - timedelta(days=1)).isoformat()}})
+    context = handlers(db)
+    with pytest.raises(HTTPException) as error:
+        context['submit_requisition_for_director_approval_route']('rejected',
+            current_user=SimpleNamespace(role='Hiring Manager', tenant_id='company'))
+    assert error.value.status_code == 409
+    stored = db.requisitions.find_one({'id': 'rejected'})
+    assert stored['status'] == 'Closed'
+    assert stored['rejection_reason'] == 'Revision required'
+    assert db.notifications.count_documents({}) == 0

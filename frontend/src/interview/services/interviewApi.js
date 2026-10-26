@@ -38,6 +38,7 @@ export const interviewApi = {
 
   async listRounds(params = {}, token) {
     const query = new URLSearchParams();
+    if (params.dashboard) query.append('dashboard', 'true');
     if (params.requisition_id) query.append('requisition_id', params.requisition_id);
     if (params.candidate_id) query.append('candidate_id', params.candidate_id);
     const qs = query.toString() ? `?${query.toString()}` : '';

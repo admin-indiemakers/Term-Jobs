@@ -61,7 +61,7 @@ def _get_hm_team_candidate_ids(user: User, use_cache: bool = True) -> list[str]:
             filters = [Requisition.tenant_id == user.tenant_id]
             if user.role == "Hiring Manager":
                 filters.append(Requisition.created_by == user.id)
-            tenant_req_ids = {r.id for r in session.query(Requisition).filter(*filters).all()}
+            tenant_req_ids = {r.id for r in session.query(Requisition).only("id").filter(*filters).all()}
 
     # Build email -> canonical candidate_id mapping
     email_to_id: dict[str, str] = {}
@@ -71,7 +71,7 @@ def _get_hm_team_candidate_ids(user: User, use_cache: bool = True) -> list[str]:
     sub_filter: dict = {"status": {"$in": ["Accepted", "Hired"]}}
     if tenant_req_ids is not None:
         sub_filter["requisition_id"] = {"$in": list(tenant_req_ids)} if tenant_req_ids else {"$in": []}
-    for doc in sub_coll.find(sub_filter):
+    for doc in sub_coll.find(sub_filter, {"id": 1, "candidate_email": 1, "email": 1}):
         cid = doc.get("id")
         email = (doc.get("candidate_email") or doc.get("email") or "").lower().strip()
         if cid and email:
@@ -84,7 +84,7 @@ def _get_hm_team_candidate_ids(user: User, use_cache: bool = True) -> list[str]:
     wo_filter: dict = {"status": "ACTIVE"}
     if tenant_req_ids is not None:
         wo_filter["requisition_id"] = {"$in": list(tenant_req_ids)} if tenant_req_ids else {"$in": []}
-    for doc in wo_coll.find(wo_filter):
+    for doc in wo_coll.find(wo_filter, {"workorder_id": 1, "candidate_id": 1, "candidate_email": 1}):
         cid = doc.get("workorder_id") or doc.get("candidate_id")
         email = (doc.get("candidate_email") or "").lower().strip()
         if not cid:
@@ -98,7 +98,7 @@ def _get_hm_team_candidate_ids(user: User, use_cache: bool = True) -> list[str]:
 
     # Fallback: if no candidates found via requisitions, show ALL active work orders for tenant
     if not id_set and user.role in ("Admin", "HR", "Director"):
-        for doc in wo_coll.find({"status": "ACTIVE", "tenant_id": user.tenant_id}):
+        for doc in wo_coll.find({"status": "ACTIVE", "tenant_id": user.tenant_id}, {"workorder_id": 1, "candidate_id": 1}):
             cid = doc.get("workorder_id") or doc.get("candidate_id")
             if cid:
                 id_set.add(cid)

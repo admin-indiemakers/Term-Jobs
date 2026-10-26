@@ -157,18 +157,6 @@ export default function OpenRolesPage({ enabled = true }) {
   });
   const [loading, setLoading] = useState(() => requisitions.length === 0);
   const [error, setError] = useState(null);
-  const [platformStats, setPlatformStats] = useState(() => {
-    try {
-      const cached = sessionStorage.getItem('tj_cached_platform_stats');
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (parsed && typeof parsed.partners_count === 'number') {
-          return parsed;
-        }
-      }
-    } catch (e) {}
-    return null;
-  });
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedWorkMode, setSelectedWorkMode] = useState('ALL');
   const [selectedFamily, setSelectedFamily] = useState('ALL');
@@ -1327,44 +1315,6 @@ export default function OpenRolesPage({ enabled = true }) {
     };
   }, [enabled]);
 
-  // Load real-time platform metrics (open roles, partner companies, review time)
-  useEffect(() => {
-    let cancelled = false;
-
-    // Check early prefetched promise from <head>
-    if (typeof window !== 'undefined' && window.__PREFETCHED_STATS__) {
-      const earlyStats = window.__PREFETCHED_STATS__;
-      window.__PREFETCHED_STATS__ = null;
-      earlyStats
-        .then((stats) => {
-          if (!cancelled && stats && typeof stats.partners_count === 'number') {
-            setPlatformStats(stats);
-            try {
-              sessionStorage.setItem('tj_cached_platform_stats', JSON.stringify(stats));
-            } catch (e) {}
-          }
-        })
-        .catch(() => {});
-    }
-
-    request('/api/public/stats')
-      .then((stats) => {
-        if (!cancelled && stats) {
-          setPlatformStats(stats);
-          try {
-            sessionStorage.setItem('tj_cached_platform_stats', JSON.stringify(stats));
-          } catch (e) {}
-        }
-      })
-      .catch((err) => {
-        console.warn('Could not load public stats:', err);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   // Filtered job list
   const filteredJobs = useMemo(() => {
     return requisitions.filter((job) => {
@@ -1827,7 +1777,7 @@ export default function OpenRolesPage({ enabled = true }) {
               <div className="flex flex-col items-center justify-center p-2 sm:p-2.5 rounded-xl bg-black/[0.02] hover:bg-black/[0.04] border border-neutral-900/15 hover:border-neutral-900/30 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.7)] transition-all group cursor-default">
                 <Briefcase size={13} className="text-neutral-500 group-hover:text-neutral-900 transition-colors shrink-0" />
                 <div className="text-sm sm:text-base font-extrabold text-neutral-900 tracking-tight leading-none my-1">
-                  {platformStats?.open_roles !== undefined ? platformStats.open_roles : requisitions.length}
+                  {requisitions.length}
                 </div>
                 <div className="text-[8.5px] sm:text-[9.5px] font-bold text-neutral-500 uppercase tracking-wider leading-tight text-center">
                   Open Roles
@@ -1838,9 +1788,7 @@ export default function OpenRolesPage({ enabled = true }) {
               <div className="flex flex-col items-center justify-center p-2 sm:p-2.5 rounded-xl bg-black/[0.02] hover:bg-black/[0.04] border border-neutral-900/15 hover:border-neutral-900/30 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.7)] transition-all group cursor-default">
                 <Building2 size={13} className="text-neutral-500 group-hover:text-neutral-900 transition-colors shrink-0" />
                 <div className="text-sm sm:text-base font-extrabold text-neutral-900 tracking-tight leading-none my-1">
-                  {platformStats?.partners_count !== undefined
-                    ? platformStats.partners_count
-                    : (new Set(requisitions.map((r) => r.company_name).filter(Boolean)).size || 2)}
+                  {new Set(requisitions.map((r) => r.company_name).filter(Boolean)).size}
                 </div>
                 <div className="text-[8.5px] sm:text-[9.5px] font-bold text-neutral-500 uppercase tracking-wider leading-tight text-center">
                   Partners

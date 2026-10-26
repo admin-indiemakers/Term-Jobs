@@ -754,7 +754,9 @@ export default function DirectorDashboard({ view = 'overview' }) {
           dept.includes(term) ||
           status.includes(term) ||
           signOff.includes(term) ||
-          skills.includes(term);
+          skills.includes(term) ||
+          String(r.hiring_manager_name || '').toLowerCase().includes(term) ||
+          String(r.hiring_manager_email || '').toLowerCase().includes(term);
 
         if (!matches) return false;
       }
@@ -1206,16 +1208,29 @@ export default function DirectorDashboard({ view = 'overview' }) {
               ) : (
                 <>
                   {/* Desktop Table View */}
-                  <div className="hidden md:block overflow-x-auto pb-2">
-                    <table className="w-full min-w-[960px] text-left text-xs border-collapse">
+                  <div
+                    className="hidden md:block w-full min-w-0 overflow-x-auto rounded-xl"
+                    role="region"
+                    aria-label="Company requisitions"
+                    tabIndex={0}
+                  >
+                    <table className="w-full min-w-[1080px] table-fixed text-left text-xs border-separate border-spacing-0">
+                    <colgroup>
+                      <col />
+                      <col className="w-[140px]" />
+                      <col className="w-[176px]" />
+                      <col className="w-[100px]" />
+                      <col className="w-[160px]" />
+                      <col className="w-[240px]" />
+                    </colgroup>
                     <thead>
                       <tr className="border-b border-gray-100 text-[10px] font-extrabold text-gray-400 uppercase tracking-wider">
                         <th className="py-3 px-3.5 text-left">Requisition Title</th>
-                        <th className="w-28 py-3 px-3 text-left">Status</th>
-                        <th className="w-48 py-3 px-3 text-left">Director Sign-off</th>
-                        <th className="w-28 py-3 px-3 text-left">Candidates</th>
-                        <th className="w-36 py-3 px-3 text-left">Timeline</th>
-                        <th className="w-60 min-w-[240px] py-3 pr-4 text-right">Action</th>
+                        <th className="py-3 px-3 text-left">Status</th>
+                        <th className="py-3 px-3 text-left">Director Sign-off</th>
+                        <th className="py-3 px-3 text-left">Candidates</th>
+                        <th className="py-3 px-3 text-left">Timeline</th>
+                        <th className="sticky right-0 z-20 bg-[#f8f8f8] py-3 px-3.5 text-right border-l border-gray-100">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -1227,18 +1242,22 @@ export default function DirectorDashboard({ view = 'overview' }) {
                           <tr
                             key={r.id}
                             onClick={() => handleViewRequisition(r)}
-                            className={`transition-colors cursor-pointer ${isDeletedByHm ? 'bg-rose-50/25 hover:bg-rose-50/40' : 'hover:bg-gray-50/80'
+                            className={`group transition-colors cursor-pointer ${isDeletedByHm ? 'bg-rose-50/25 hover:bg-rose-50/40' : 'hover:bg-gray-50/80'
                               }`}
                           >
                             <td className="py-3.5 px-3.5 align-middle font-bold text-gray-900">
-                              <div className="truncate max-w-[260px]" title={r.title || 'Untitled Requisition'}>
+                              <div className="truncate" title={r.title || 'Untitled Requisition'}>
                                 {r.title || 'Untitled Requisition'}
                               </div>
                               <div className="text-[10px] text-gray-400 font-mono font-normal mt-0.5">
                                 {r.ref || `REQ #${r.id.slice(0, 8)}`}
                               </div>
+                              <div className="mt-1 text-[11px] font-medium text-gray-600 break-words">
+                                Hiring Manager: {r.hiring_manager_name || 'Unavailable'}
+                              </div>
+                              {r.hiring_manager_email && <div className="text-[10px] font-normal text-gray-500 break-all">{r.hiring_manager_email}</div>}
                             </td>
-                            <td className="w-28 py-3.5 px-3 align-middle">
+                            <td className="py-3.5 px-3 align-middle">
                               {isDeletedByHm ? (
                                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-rose-50 text-rose-800 border border-rose-300 whitespace-nowrap">
                                   <Trash2 size={12} className="text-rose-600" />
@@ -1254,7 +1273,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
                                 <StatusBadge status={disp.status} />
                               )}
                             </td>
-                            <td className="w-48 py-3.5 px-3 align-middle">
+                            <td className="py-3.5 px-3 align-middle">
                               {isDeletedByHm ? (
                                 <div className="space-y-0.5">
                                   <div className="text-[10px] text-gray-400 line-through">
@@ -1298,7 +1317,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
                                 <span className="text-gray-400 font-medium text-[11px]">{disp.signOffText}</span>
                               )}
                             </td>
-                            <td className="w-28 py-3.5 px-3 align-middle font-semibold text-gray-700 whitespace-nowrap">
+                            <td className="py-3.5 px-3 align-middle font-semibold text-gray-700 whitespace-nowrap">
                               {isDeletedByHm ? (
                                 <span className="text-gray-400">—</span>
                               ) : (
@@ -1310,7 +1329,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
                                 </span>
                               )}
                             </td>
-                            <td className="w-36 py-3.5 px-3 align-middle">
+                            <td className="py-3.5 px-3 align-middle">
                               <div className="text-gray-900 font-semibold text-xs flex items-center gap-1 whitespace-nowrap">
                                 <span className="text-gray-400 font-medium text-[11px]">Created:</span>
                                 <span>{formatDate(r.created_at)}</span>
@@ -1322,26 +1341,26 @@ export default function DirectorDashboard({ view = 'overview' }) {
                                 </div>
                               )}
                             </td>
-                            <td className="w-60 min-w-[240px] py-3.5 pr-4 align-middle text-right" onClick={(e) => e.stopPropagation()}>
+                            <td className="sticky right-0 z-10 bg-white py-3.5 px-3.5 align-middle text-right border-l border-gray-100 group-hover:bg-gray-50" onClick={(e) => e.stopPropagation()}>
                               {isDeletedByHm ? (
-                                <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                                <div className="flex flex-wrap items-center justify-end gap-1.5 whitespace-nowrap">
                                   <span className="inline-block px-2.5 py-1 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-[10px] font-bold">
                                     Removed by HM
                                   </span>
                                   <button
                                     type="button"
                                     onClick={(e) => handleViewRequisition(r, e)}
-                                    className="px-3 py-1.5 rounded-lg bg-white hover:bg-gray-100 border border-gray-200 text-gray-700 text-xs font-bold transition-colors shadow-2xs cursor-pointer text-center"
+                                    className="min-w-16 shrink-0 px-2 py-1.5 rounded-lg bg-white hover:bg-gray-100 border border-gray-200 text-gray-700 text-xs font-bold transition-colors shadow-2xs cursor-pointer text-center"
                                   >
                                     View →
                                   </button>
                                 </div>
                               ) : disp.isPending ? (
-                                <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                                <div className="flex flex-wrap items-center justify-end gap-1.5 whitespace-nowrap">
                                   <button
                                     type="button"
                                     onClick={(e) => handleViewRequisition(r, e)}
-                                    className="px-3 py-1.5 rounded-lg bg-white hover:bg-gray-100 border border-gray-200 text-gray-700 text-xs font-bold transition-colors cursor-pointer shadow-2xs text-center"
+                                    className="min-w-16 shrink-0 px-2 py-1.5 rounded-lg bg-white hover:bg-gray-100 border border-gray-200 text-gray-700 text-xs font-bold transition-colors cursor-pointer shadow-2xs text-center"
                                   >
                                     View
                                   </button>
@@ -1349,7 +1368,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
                                     type="button"
                                     onClick={(e) => handleOpenRejectModal(r, e)}
                                     disabled={Boolean(approvingId)}
-                                    className="px-3 py-1.5 rounded-lg bg-white hover:bg-red-50 border border-red-200 text-red-600 text-xs font-bold transition-colors cursor-pointer shadow-2xs disabled:opacity-50 text-center"
+                                    className="min-w-16 shrink-0 px-2 py-1.5 rounded-lg bg-white hover:bg-red-50 border border-red-200 text-red-600 text-xs font-bold transition-colors cursor-pointer shadow-2xs disabled:opacity-50 text-center"
                                   >
                                     Reject
                                   </button>
@@ -1357,7 +1376,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
                                     type="button"
                                     onClick={(e) => handleApproveRequisition(r.id, e)}
                                     disabled={Boolean(approvingId)}
-                                    className="px-3.5 py-1.5 rounded-lg bg-black hover:bg-gray-900 border border-black text-white text-xs font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-50 text-center"
+                                    className="min-w-16 shrink-0 px-2 py-1.5 rounded-lg bg-black hover:bg-gray-900 border border-black text-white text-xs font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-50 text-center"
                                   >
                                     {approvingId === r.id ? 'Approving...' : 'Approve'}
                                   </button>
@@ -1665,6 +1684,9 @@ export default function DirectorDashboard({ view = 'overview' }) {
                     if (createdBy) return createdBy;
                     return 'Hiring Manager';
                   })()}</strong>
+                  {selectedRequisitionForView.hiring_manager_email && (
+                    <span className="ml-1 break-all">({selectedRequisitionForView.hiring_manager_email})</span>
+                  )}
                   {selectedRequisitionForView.company_name && (
                     <> • <span className="text-gray-500">{selectedRequisitionForView.company_name}</span></>
                   )}
@@ -2096,6 +2118,8 @@ export default function DirectorDashboard({ view = 'overview' }) {
               <h3 className="font-extrabold text-base text-gray-900">
                 {rejectModalReq.title || 'Untitled Requisition'}
               </h3>
+                              <p className="mt-1 text-[10px] text-gray-600 break-words">Hiring Manager: {r.hiring_manager_name || 'Unavailable'}</p>
+                              {r.hiring_manager_email && <p className="text-[10px] text-gray-500 break-all">{r.hiring_manager_email}</p>}
               <p className="text-xs text-gray-500 font-medium mt-0.5">
                 REQ #{rejectModalReq.id.slice(0, 8)} • This feedback will be sent directly to the Hiring Manager to guide their revisions.
               </p>

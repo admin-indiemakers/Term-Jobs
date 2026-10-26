@@ -76,6 +76,7 @@ export default function NotificationBell() {
   const { token, user } = useAuth();
   const navigate = useNavigate();
   const [items, setItems] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [detail, setDetail] = useState(null);
   const [open, setOpen] = useState(false);
   const [panelPosition, setPanelPosition] = useState({ top: 0, left: 0, width: 380, maxHeight: 490 });
@@ -92,10 +93,11 @@ export default function NotificationBell() {
       const version = ++requestVersion.current;
       if (!quiet) setLoading(true);
       try {
-        const list = await request('/api/notifications', { token, noCache: true });
+        const list = await request('/api/notifications', { token, forceRefresh: quiet });
         if (!Array.isArray(list)) throw new Error('Invalid notification response');
         if (version !== requestVersion.current) return;
         setItems(list);
+        setUnreadCount(list.filter(item => !item.read).length);
         setError('');
       } catch (err) {
         if (!quiet) setError(err.message || 'Unable to load notifications.');
@@ -107,13 +109,25 @@ export default function NotificationBell() {
   );
 
   useEffect(() => {
-    load();
-    const timer = setInterval(() => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
-      load(true);
-    }, 60000);
-    return () => clearInterval(timer);
-  }, [load]);
+    if (!token) return;
+    let cancelled = false;
+    const refresh = () => {
+      if (document.visibilityState === 'hidden') return;
+      if (open) { load(true); return; }
+      request('/api/notifications/unread-count', { token, forceRefresh: true })
+        .then(data => { if (!cancelled) setUnreadCount(data.count || 0); })
+        .catch(() => {});
+    };
+    if (open) load();
+    else refresh();
+    const timer = setInterval(refresh, 60000);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, [token, open, load]);
 
   useEffect(() => {
     if (!open) return;
@@ -127,7 +141,6 @@ export default function NotificationBell() {
     };
   }, [open]);
 
-  const unreadCount = items.filter((n) => !n.read).length;
   const filteredItems = activeTab === 'unread' ? items.filter((n) => !n.read) : items;
 
   const handleOpen = () => {
@@ -136,7 +149,6 @@ export default function NotificationBell() {
       const width = Math.min(380, window.innerWidth - 24);
       const top = Math.min(anchor.bottom + 8, Math.max(12, window.innerHeight - 220));
       setPanelPosition({ top, left: Math.max(12, Math.min(anchor.right - width, window.innerWidth - width - 12)), width, maxHeight: Math.min(490, window.innerHeight - top - 12) });
-      load();
     }
     setOpen((v) => !v);
   };
@@ -148,6 +160,7 @@ export default function NotificationBell() {
     try {
       await request(`/api/notifications/${encodeURIComponent(n.id)}/read`, { method: 'POST', token });
       setItems((prev) => prev.map((item) => item.id === n.id ? { ...item, read: true } : item));
+      if (!n.read) setUnreadCount(count => Math.max(0, count - 1));
     } catch (err) {
       setError(err.message || 'Unable to save notification read status.');
       return;
@@ -169,6 +182,7 @@ export default function NotificationBell() {
     try {
       await request('/api/notifications/read-all', { method: 'POST', token });
       setItems((prev) => prev.map((item) => ({ ...item, read: true })));
+      setUnreadCount(0);
       setError('');
     } catch (err) {
       setError(err.message || 'Unable to save notification read status.');

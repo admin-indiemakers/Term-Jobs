@@ -491,6 +491,7 @@ def list_rounds_endpoint(
     requisition_id: Optional[str] = Query(default=None),
     candidate_id: Optional[str] = Query(default=None),
     current_user: User = Depends(get_current_user),
+    dashboard: bool = False,
 ):
     """List interview rounds for the authenticated Hiring Manager / HR tenant, or all for Super Admin."""
     effective_tenant = None if current_user.role == "Super Admin" else current_user.tenant_id
@@ -500,6 +501,7 @@ def list_rounds_endpoint(
         candidate_id=candidate_id,
         user_id=current_user.id,
         user_role=current_user.role,
+        dashboard=dashboard,
     )
 
 

@@ -1,4 +1,5 @@
 import React from 'react';
+import { isChunkRecoveryInProgress } from '../utils/chunkRecovery.js';
 
 export class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -37,6 +38,9 @@ export class ErrorBoundary extends React.Component {
   }
 
   render() {
+    if (this.state.hasError && isChunkRecoveryInProgress()) {
+      return <div role="status" style={{ padding: '40px', textAlign: 'center' }}>Updating your workspace…</div>;
+    }
     if (this.state.hasError) {
       const isChunkLoadError =
         this.state.error?.message &&

@@ -15,7 +15,7 @@ export function WaitlistModal({ onClose, talent = false }: { onClose: () => void
     const keydown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
       if (event.key !== 'Tab') return;
-      const elements = panelRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input, a[href]');
+      const elements = panelRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input, textarea, select, a[href]');
       if (!elements?.length) return;
       const first = elements[0], last = elements[elements.length - 1];
       if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
@@ -39,6 +39,8 @@ export function WaitlistModal({ onClose, talent = false }: { onClose: () => void
       } else await request('/api/waitlist', { method: 'POST', body: {
         name: String(form.get('name') || '').trim(), company_name: String(form.get('company_name') || '').trim(),
         email: String(form.get('email') || '').trim(), phone_number: String(form.get('phone_number') || '').trim(),
+        requirements: String(form.get('requirements') || '').trim(),
+        referral_source: String(form.get('referral_source') || '').trim(),
       } });
       setJoined(true);
     } catch (err) { setError(err instanceof Error ? err.message : 'Unable to join right now. Please try again.'); }
@@ -47,7 +49,7 @@ export function WaitlistModal({ onClose, talent = false }: { onClose: () => void
   return createPortal(
     <div className="fixed inset-0 z-[400] flex items-center justify-center overflow-y-auto bg-zinc-950/55 px-4 py-6 backdrop-blur-sm" onClick={onClose}>
       <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby="waitlist-title" onClick={event => event.stopPropagation()}
-        className="relative my-auto w-full max-w-lg rounded-[28px] border border-white/80 bg-[#fafafa] p-6 text-zinc-900 shadow-2xl sm:p-9">
+        className="relative my-auto max-h-[calc(100dvh-3rem)] w-full max-w-lg overflow-y-auto rounded-[28px] border border-white/80 bg-[#fafafa] p-6 text-zinc-900 shadow-2xl sm:p-9">
         <button type="button" onClick={onClose} aria-label={talent ? "Close talent pool form" : "Close waiting list"} className="absolute right-4 top-4 grid h-10 w-10 place-items-center rounded-full hover:bg-zinc-100 focus-visible:outline-2"><X size={18} /></button>
         <p className="mb-4 text-[10px] font-semibold uppercase tracking-[0.25em] text-zinc-500">Early access · TermJobs</p>
         <h2 id="waitlist-title" className="font-display text-3xl font-bold tracking-tight">{joined ? (talent ? 'You’re in the talent pool.' : 'You’re on the list.') : (talent ? 'Your next opportunity starts here.' : 'Your next chapter starts here.')}</h2>
@@ -58,6 +60,10 @@ export function WaitlistModal({ onClose, talent = false }: { onClose: () => void
             {!talent && <label className="block text-xs font-semibold">Company name <span className="font-normal text-zinc-400">(optional)</span><input name="company_name" maxLength={160} autoComplete="organization" placeholder="Your company" className="mt-2 w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-base outline-none focus:border-zinc-500" /></label>}
             <label className="block text-xs font-semibold">Email <span className="text-zinc-500">*</span><input name="email" type="email" required maxLength={254} autoComplete="email" placeholder="you@company.com" className="mt-2 w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-base outline-none focus:border-zinc-500" /></label>
             {!talent && <label className="block text-xs font-semibold">Phone number <span className="font-normal text-zinc-400">(optional)</span><input name="phone_number" type="tel" maxLength={40} autoComplete="tel" placeholder="+91" className="mt-2 w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-base outline-none focus:border-zinc-500" /></label>}
+            {!talent && <>
+              <label className="block text-xs font-semibold">Your requirements <span className="font-normal text-zinc-400">(optional)</span><textarea name="requirements" rows={3} maxLength={2000} placeholder="Tell us about the roles, skills, team size or hiring timeline you need." className="mt-2 w-full resize-y rounded-xl border border-zinc-200 bg-white px-4 py-3 text-base outline-none focus:border-zinc-500" /></label>
+              <label className="block text-xs font-semibold">How did you find us? <span className="font-normal text-zinc-400">(optional)</span><input name="referral_source" maxLength={160} placeholder="e.g. Google, LinkedIn or a referral" className="mt-2 w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-base outline-none focus:border-zinc-500" /></label>
+            </>}
             {talent && <label className="block text-xs font-semibold">Résumé <span className="text-zinc-500">*</span><input name="resume" type="file" required accept=".pdf,.doc,.docx" className="mt-2 w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm file:mr-3 file:rounded-full file:border-0 file:bg-zinc-100 file:px-3 file:py-2" /><span className="mt-2 block font-normal text-zinc-500">PDF, DOC or DOCX · up to 2 MB</span></label>}
             {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
             <button disabled={busy} type="submit" className="flex min-h-12 w-full items-center justify-center gap-3 rounded-full bg-zinc-950 px-6 py-3 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:opacity-50">{busy ? <><Loader2 size={16} className="animate-spin" /> Joining…</> : <>{talent ? "Join talent pool" : "Join waiting list"} <ArrowRight size={16} /></>}</button>

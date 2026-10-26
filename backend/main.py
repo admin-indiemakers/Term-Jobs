@@ -530,13 +530,15 @@ def _requisition_dict(requisition_id: str, for_vendor: bool = False) -> dict:
             prof = session.get(models.CompanyProfile, req.company_profile_id)
             if prof:
                 company = _company_dict(prof)
+        from modules.requisition.services.submitter import requisition_submitters
+        submitter = requisition_submitters(session, [req]).get(req.id, {}) if not for_vendor else {}
         creator = None
         if getattr(req, "created_by", None):
             try:
                 creator = session.get(User, req.created_by)
             except Exception:
                 pass
-        creator_name = (getattr(creator, "name", None) or "").strip()
+        creator_name = (getattr(creator, "name", None) or submitter.get("hiring_manager_name") or "").strip()
         sr = dict(req.structured_role or {})
         raw_hm = (sr.get("hiring_manager") or "").strip()
         hm_name = raw_hm if (raw_hm and raw_hm.lower() not in ("assigned hiring manager", "hiring manager", "hm")) else (creator_name or raw_hm or "")
@@ -626,7 +628,8 @@ def _requisition_dict(requisition_id: str, for_vendor: bool = False) -> dict:
             "structured_role": sr,
             "vendor_candidate_limit": v_limit,
             "published_vendors": published_vendors,
-            "hiring_manager_name": hm_name,
+            **submitter,
+            "hiring_manager_name": hm_name or submitter.get("hiring_manager_name") or sr.get("hiring_manager") or "",
             "generated_jd_markdown": req.generated_jd_markdown,
             "coverage_result": req.coverage_result,
             "refinement_log": req.refinement_log or [],
@@ -744,13 +747,13 @@ def _auto_close_expired() -> None:
     _auto_close_last_run = now
 
 
-def _require_approval_deadline(requisition_id):
+def _require_approval_deadline(requisition_id, *, allow_resubmission=False):
     with get_session() as session:
         req = session.get(models.Requisition, requisition_id)
         if not req:
             raise HTTPException(status_code=404, detail='Requisition not found')
         try:
-            enforce_approval_deadline(session, req)
+            enforce_approval_deadline(session, req, allow_resubmission=allow_resubmission)
         except DeadlineExpired as exc:
             _cache.clear()
             raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -1549,6 +1552,30 @@ def create_requisition(
     return _requisition_dict(str(req.id))
 
 
+@app.get("/api/hiring-manager/counts")
+def hiring_manager_counts(current_user: User = Depends(get_current_user)) -> dict:
+    """Small shared payload for navigation badges and overview KPIs."""
+    if current_user.role not in ("Hiring Manager", "HR", "Admin") or not current_user.tenant_id or not current_user.id:
+        raise HTTPException(status_code=403, detail="Hiring dashboard access required")
+    from modules.workforce.router import _get_hm_team_candidate_ids
+    from modules.hiring_dashboard import hiring_counts
+    from modules.shared.db import db
+
+    key = f"hm_counts:{current_user.tenant_id}:{current_user.id}"
+    cached = _cache.get(key)
+    if cached is not None:
+        return cached
+    team_ids = _get_hm_team_candidate_ids(current_user)
+    team_scope = {"$or": [{"workorder_id": {"$in": team_ids}}, {"candidate_id": {"$in": team_ids}}]}
+    workforce = {
+        "pending_timesheets": db["timesheets"].count_documents({**team_scope, "status": "SUBMITTED"}),
+        "pending_expenses": db["candidate_expenses"].count_documents({**team_scope, "status": {"$in": ["Pending", "Submitted"]}}),
+    }
+    result = hiring_counts(db, current_user, workforce)
+    _cache.set(key, result, ttl=20)
+    return result
+
+
 @app.get("/requisitions")
 @app.get("/api/requisitions")
 def list_requisitions(
@@ -1596,12 +1623,19 @@ def list_requisitions(
         # The Admin Console needs only these list-card fields. Avoid loading the
         # large generated JD, intake, coverage and refinement documents.
         if dashboard:
-            rows = query.only("id", "status", "title", "created_at", "updated_at").all()
+            rows = query.only(
+                "id", "status", "title", "created_at", "updated_at", "department",
+                "primary_location", "headcount", "structured_role.department",
+                "structured_role.job_family", "structured_role.primary_location", "structured_role.headcount",
+            ).all()
             result = [
                 {
                     "id": r.id,
                     "status": r.status,
                     "title": r.title,
+                    "department": getattr(r, "department", None) or (r.structured_role or {}).get("department") or (r.structured_role or {}).get("job_family"),
+                    "primary_location": getattr(r, "primary_location", None) or (r.structured_role or {}).get("primary_location"),
+                    "headcount": getattr(r, "headcount", None) or (r.structured_role or {}).get("headcount", 1),
                     "created_at": _format_datetime(r.created_at),
                     "updated_at": _format_datetime(r.updated_at),
                 }
@@ -1619,6 +1653,8 @@ def list_requisitions(
                 models.CompanyProfile.id.in_(list(needed_cp_ids))
             ).all()}
         is_vendor = current_user.role == "Recruiter"
+        from modules.requisition.services.submitter import requisition_submitters
+        submitters = requisition_submitters(session, rows) if current_user.role in ("Director", "Admin", "Super Admin", "Hiring Manager", "HR", "Company Admin") else {}
 
         # Aggregate applicant counts per requisition
         cand_counts = {}
@@ -1656,6 +1692,10 @@ def list_requisitions(
                 pass
 
         def _resolve_hm(r):
+            sub = submitters.get(r.id, {})
+            sub_name = (sub.get("hiring_manager_name") or "").strip()
+            if sub_name and sub_name.lower() not in ("assigned hiring manager", "hiring manager", "hm"):
+                return sub_name
             sr_val = ((r.structured_role or {}).get("hiring_manager") or "").strip()
             if sr_val and sr_val.lower() not in ("assigned hiring manager", "hiring manager", "hm"):
                 return sr_val
@@ -1692,8 +1732,9 @@ def list_requisitions(
                 else None,
                 "generated_jd_markdown": r.generated_jd_markdown,
                 "created_by": getattr(r, "created_by", None),
-                "created_by_name": user_names.get(str(getattr(r, "created_by", "") or "")) or "",
+                "created_by_name": user_names.get(str(getattr(r, "created_by", "") or "")) or (submitters.get(r.id, {}) or {}).get("hiring_manager_name") or "",
                 "structured_role": _build_sr(r),
+                **submitters.get(r.id, {}),
                 "hiring_manager_name": _resolve_hm(r),
                 "intent": r.intent,
                 "created_at": _format_datetime(r.created_at),
@@ -3711,7 +3752,7 @@ def approve_requisition(requisition_id: str, body: ApproveIn | None = None, curr
     req_dict = _get_requisition(requisition_id)
     _require_tenant(req_dict, current_user)
     _require_approval_deadline(requisition_id)
-    status_str = str(req_dict.get("status") or "").lower()
+    status_str = str(req_dict.status or "").lower()
     if status_str in ("published", "active") and str(current_user.role or "").strip().lower() in ("hiring manager", "hiring_manager"):
         raise HTTPException(status_code=400, detail="This requisition is already approved, and cannot be edited.")
     edited = None
@@ -3882,11 +3923,15 @@ def submit_requisition_for_director_approval_route(
     req = _get_requisition(requisition_id)
     _require_tenant(req, current_user)
 
-    _require_approval_deadline(requisition_id)
+    _require_approval_deadline(requisition_id, allow_resubmission=True)
     now_iso = _utcnow().isoformat()
     with get_session() as session:
         db_req = session.get(models.Requisition, requisition_id)
         if db_req:
+            db_req.rejection_reason = None
+            db_req.rejected_by = None
+            db_req.rejected_at = None
+            db_req.updated_at = _utcnow()
             db_req.status = "Pending Approval"
             db_req.director_approved = False
             db_req.director_approved_by = None
@@ -3894,23 +3939,6 @@ def submit_requisition_for_director_approval_route(
             db_req.approved_by = None
             db_req.approved_at = None
             session.commit()
-
-    try:
-        from modules.shared.db import db
-        db["requisitions"].update_one(
-            {"id": requisition_id},
-            {"$set": {
-                "status": "Pending Approval",
-                "director_approved": False,
-                "director_approved_by": None,
-                "director_approved_at": None,
-                "approved_by": None,
-                "approved_at": None,
-                "updated_at": now_iso
-            }}
-        )
-    except Exception as e:
-        logger.warning(f"Failed to update requisition in Mongo: {e}")
 
     try:
         from modules.shared.db import db

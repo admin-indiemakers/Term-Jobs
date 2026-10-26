@@ -17,12 +17,26 @@ Success is shown only when the script returns `{"status":"success"}`.
    this script. Select the intended sheet before testing: the script writes to
    the active sheet of its bound spreadsheet.
 
-The existing script's six columns receive Timestamp, Form type (`Waitlist`),
-Name, Email, Company name (the `topic` field), Phone number (the `message` field).
-The backend also sends `company_name` and `phone_number` for future script use.
+The updated script writes eight waiting-list columns: Timestamp, Form type
+(`Waitlist`), Name, Email, Company name, Phone number, Requirements, and How did
+you find us? Add the last two column headers and update the deployed Web app to
+use this version of `Code.gs` for separate columns. Requirements and referral
+source are optional; only name and email are required.
+
+Until the script is redeployed, the backend also includes requirements and referral
+source as labeled lines in the legacy `message` column, alongside the phone number.
+This preserves the new details with the existing six-column deployed script.
+The payload includes separate `requirements` and `referral_source` fields as well.
 Existing Contact and Talent Network submissions retain their current format.
 Repeated submissions append another row; the script does not deduplicate emails.
 
 The Talent Network branch requires Drive authorization using `authorizeDrive`.
 A missing or blank environment setting uses the supplied default URL. An invalid
 override or script error returns an error to the form, never a false success.
+
+All appended values are written as literal text, preserving phone-number `+`
+prefixes and leading zeroes and preventing submitted text from becoming a formula.
+If older phone cells show `#ERROR!`, select column F, choose **Format → Number →
+Plain text**, and re-enter the original phone numbers. Formatting alone does not
+repair an already stored formula. Redeploy the updated `Code.gs` using **Deploy →
+Manage deployments → Edit → New version → Deploy** for new submissions.

@@ -1,9 +1,10 @@
 import GoogleCalendarConnect from '../components/GoogleCalendarConnect';
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { upcomingInterviewRounds } from '../interview/utils/upcomingInterviews';
+import { interviewApi } from '../interview/services/interviewApi';
 import { isPublishedStatus } from '../utils/requisitionStatus';
 import {
   Briefcase,
@@ -82,109 +83,59 @@ function StatusBadge({ status }) {
   );
 }
 
-// In-memory module cache for instant rendering without reload when navigating back
-let hmDashboardMemoryCache = null;
-
 export default function HiringManagerChat() {
   const { user, token } = useAuth();
   const navigate = useNavigate();
 
-  // Instant state restoration from cache on re-navigation
-  const [loading, setLoading] = useState(() => !hmDashboardMemoryCache);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [requisitions, setRequisitions] = useState(() => hmDashboardMemoryCache?.requisitions || []);
-  const [shortlistedCandidates, setShortlistedCandidates] = useState(() => hmDashboardMemoryCache?.shortlistedCandidates || []);
-  const [acceptedCandidates, setAcceptedCandidates] = useState(() => hmDashboardMemoryCache?.acceptedCandidates || []);
-  const [pendingTimesheetsCount, setPendingTimesheetsCount] = useState(() => hmDashboardMemoryCache?.pendingTimesheetsCount || 0);
+  const [requisitions, setRequisitions] = useState([]);
+  const [counts, setCounts] = useState(null);
   const [interviewDataError, setInterviewDataError] = useState('');
-  const [interviewRounds, setInterviewRounds] = useState(() => hmDashboardMemoryCache?.interviewRounds || []);
-  const [notifications, setNotifications] = useState(() => hmDashboardMemoryCache?.notifications || []);
+  const [interviewRounds, setInterviewRounds] = useState([]);
+  const [notifications, setNotifications] = useState([]);
 
   // Search, Filter & Activity tab states
   const [reqFilter, setReqFilter] = useState('ALL');
   const [reqSearch, setReqSearch] = useState('');
   const [activityFilter, setActivityFilter] = useState('all');
 
-  const loadDashboardData = useCallback(async (isManualRefresh = false) => {
-    // Only show full loading spinner on initial un-cached load or manual user refresh
-    if (!hmDashboardMemoryCache || isManualRefresh) {
-      setLoading(true);
-    }
+  const loadDashboardData = async () => {
+    setLoading(true);
     setError('');
     setInterviewDataError('');
     try {
-      // Fetch only necessary endpoints: requisitions, shortlisted, accepted, workforce stats, interview rounds, notifications
-      const [
-        reqsData,
-        shortlistedData,
-        acceptedData,
-        wfData,
-        roundsData,
-        notifsData
-      ] = await Promise.all([
-        request('/api/requisitions', { token, forceRefresh: isManualRefresh }).catch(() => { setInterviewDataError('Unable to load requisition data'); return []; }),
-        request('/api/candidates/shortlisted', { token, forceRefresh: isManualRefresh }).catch(() => []),
-        request('/api/candidates?status=Accepted', { token, forceRefresh: isManualRefresh }).catch(() => []),
-        request('/api/workforce/stats', { token, forceRefresh: isManualRefresh }).catch(() => null),
-        request('/api/interviews/rounds', { token, forceRefresh: isManualRefresh }).catch(() => { setInterviewDataError('Unable to load interview data'); return []; }),
-        request('/api/notifications?compact=true&limit=12', { token, forceRefresh: isManualRefresh }).catch(() => [])
+      const [reqsData, countsData, roundsData, notifsData] = await Promise.all([
+        request('/api/requisitions?dashboard=true', { token }),
+        request('/api/hiring-manager/counts', { token }),
+        interviewApi.listRounds({ dashboard: true }, token).catch(() => { setInterviewDataError('Unable to load interview data'); return []; }),
+        request('/api/notifications?compact=true&limit=12', { token }).catch(() => [])
       ]);
+      setCounts(countsData);
 
       const reqList = Array.isArray(reqsData) ? reqsData : reqsData?.requisitions || [];
-      const sList = Array.isArray(shortlistedData) ? shortlistedData : shortlistedData?.shortlisted_candidates || [];
-      const aList = Array.isArray(acceptedData) ? acceptedData : acceptedData?.candidates || [];
-      const pTsCount = wfData?.stats?.pending_timesheets || 0;
-      const rList = Array.isArray(roundsData) ? roundsData : [];
-      const nList = Array.isArray(notifsData) ? notifsData : notifsData?.notifications || [];
-
       setRequisitions(reqList);
-      setShortlistedCandidates(sList);
-      setAcceptedCandidates(aList);
-      setPendingTimesheetsCount(pTsCount);
-      setInterviewRounds(rList);
-      setNotifications(nList);
-
-      // Save to memory cache for instant restoration on subsequent visits
-      hmDashboardMemoryCache = {
-        requisitions: reqList,
-        shortlistedCandidates: sList,
-        acceptedCandidates: aList,
-        pendingTimesheetsCount: pTsCount,
-        interviewRounds: rList,
-        notifications: nList,
-        token
-      };
-
       const activeCount = reqList.filter((r) => !r.is_deleted && r.status !== 'Deleted by HM' && r.status !== 'Deleted' && isPublishedStatus(r?.status)).length;
       window.dispatchEvent(new CustomEvent('tj-requisition-count-updated', { detail: { count: activeCount } }));
+
+      if (!Array.isArray(roundsData)) setInterviewDataError('Unexpected interview response');
+      setInterviewRounds(Array.isArray(roundsData) ? roundsData : []);
+
+      const nList = Array.isArray(notifsData) ? notifsData : notifsData?.notifications || [];
+      setNotifications(nList);
     } catch (err) {
       console.error('Failed to load hiring manager overview data:', err);
-      if (!hmDashboardMemoryCache) {
-        setError(err?.message || 'Unable to load live dashboard statistics.');
-      }
+      setError(err?.message || 'Unable to load live dashboard statistics.');
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  };
 
   useEffect(() => {
     if (token) {
-      loadDashboardData(false);
+      loadDashboardData();
     }
-  }, [token, loadDashboardData]);
-
-  // Keep dashboard data fresh when other parts of the application update requisitions
-  useEffect(() => {
-    const handleRefresh = () => {
-      loadDashboardData(false);
-    };
-    window.addEventListener('refresh-hm-data', handleRefresh);
-    window.addEventListener('tj-requisitions-updated', handleRefresh);
-    return () => {
-      window.removeEventListener('refresh-hm-data', handleRefresh);
-      window.removeEventListener('tj-requisitions-updated', handleRefresh);
-    };
-  }, [loadDashboardData]);
+  }, [token]);
 
   const upcomingInterviews = useMemo(
     () => upcomingInterviewRounds(interviewRounds, requisitions),
@@ -203,41 +154,11 @@ export default function HiringManagerChat() {
     return requisitions.filter((r) => (r.status || '').toLowerCase().includes('draft')).length;
   }, [requisitions]);
 
-  // Unique Candidates In Review (deduplicating accepted and shortlisted)
-  const acceptedCandidateIds = useMemo(() => {
-    const ids = new Set();
-    acceptedCandidates.forEach((c) => {
-      const key = String(c.id || c.submission_id || c.candidate_id || c.candidate_email || c.name || '').toLowerCase().trim();
-      if (key) ids.add(key);
-    });
-    return ids;
-  }, [acceptedCandidates]);
-
-  const pureShortlistedCandidates = useMemo(() => {
-    return shortlistedCandidates.filter((c) => {
-      const key = String(c.id || c.submission_id || c.candidate_id || c.candidate_email || c.name || '').toLowerCase().trim();
-      return key && !acceptedCandidateIds.has(key);
-    });
-  }, [shortlistedCandidates, acceptedCandidateIds]);
-
-  const totalInReviewCount = useMemo(() => {
-    return acceptedCandidates.length + pureShortlistedCandidates.length;
-  }, [acceptedCandidates, pureShortlistedCandidates]);
-
-  const inReviewSubtitle = useMemo(() => {
-    const sCount = pureShortlistedCandidates.length;
-    const aCount = acceptedCandidates.length;
-    if (sCount > 0 && aCount > 0) {
-      return `${sCount} Shortlisted • ${aCount} Accepted`;
-    }
-    if (aCount > 0) {
-      return `${aCount} Accepted`;
-    }
-    if (sCount > 0) {
-      return `${sCount} Shortlisted`;
-    }
-    return '0 Candidates';
-  }, [pureShortlistedCandidates, acceptedCandidates]);
+  const totalInReviewCount = counts?.candidates;
+  const inReviewSubtitle = counts
+    ? [counts.shortlisted ? `${counts.shortlisted} Shortlisted` : '', counts.accepted ? `${counts.accepted} Accepted` : ''].filter(Boolean).join(' • ') || '0 Candidates'
+    : 'Loading candidates…';
+  const pendingTimesheetsCount = counts?.pendingTimesheets;
 
   // Filtered requisitions list
   const filteredRequisitions = useMemo(() => {
@@ -299,21 +220,6 @@ export default function HiringManagerChat() {
       });
     });
 
-    // 3. Candidates Shortlisted
-    (shortlistedCandidates || []).forEach((c) => {
-      list.push({
-        id: `cand-${c.id || c.candidate_id || Math.random()}`,
-        type: 'candidate',
-        category: 'candidates',
-        title: `${c.name || 'Candidate'} shortlisted`,
-        description: `Role: ${c.role || c.requisition_title || 'Software Engineer'} • Score: ${c.match_score || 90}% match`,
-        timestamp: c.shortlisted_at || c.created_at,
-        link: '/dashboard/candidates',
-        icon: Users,
-        color: 'text-emerald-600 bg-emerald-500/10 border-emerald-500/20',
-      });
-    });
-
     // 4. Interviews Scheduled
     (interviewRounds || []).forEach((ir) => {
       list.push({
@@ -331,7 +237,7 @@ export default function HiringManagerChat() {
 
     list.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
     return list;
-  }, [notifications, requisitions, shortlistedCandidates, interviewRounds]);
+  }, [notifications, requisitions, interviewRounds]);
 
   const filteredActivities = useMemo(() => {
     if (activityFilter === 'all') return activities;
