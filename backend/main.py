@@ -279,11 +279,20 @@ def health_check():
         db_error = str(err)
         print(f" [HEALTH CHECK MONGO ERROR]: {err}", file=sys.stderr)
 
+    from modules.shared.config import settings
+    cluster_host = "unknown"
+    if "@" in settings.mongodb_url:
+        cluster_host = settings.mongodb_url.split("@")[-1].split("/")[0].split("?")[0]
+
     return {
         "status": "ok" if db_status == "connected" else "degraded",
         "database": db_status,
+        "database_cluster": cluster_host,
         "database_error": db_error,
         "environment": os.getenv("VERCEL_ENV", "local"),
+        "vercel_url": os.getenv("VERCEL_URL", ""),
+        "vercel_git_commit_ref": os.getenv("VERCEL_GIT_COMMIT_REF", ""),
+        "git_commit": os.getenv("VERCEL_GIT_COMMIT_SHA", "")[:7],
     }
 
 app.include_router(identity_router, prefix="/api/auth")
