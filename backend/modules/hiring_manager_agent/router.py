@@ -63,12 +63,72 @@ def hiring_manager_agent_chat(
         current_user=user_data
     )
 
+    from modules.requisition.domain.models import CompanyProfile
+    from modules.shared.db import get_session
+    with get_session() as session:
+        company_profile = (
+            session.query(CompanyProfile)
+            .filter(CompanyProfile.tenant_id == str(current_user.tenant_id or ""))
+            .order_by(CompanyProfile.created_at.desc())
+            .first()
+        )
+        approval_required = getattr(company_profile, "require_director_approval", True) is not False
+    executed_actions = result.get("executed_actions", [])
+    has_requisition_draft = False
+    missing_requisition_fields = []
+    for action in executed_actions:
+        if action.get("tool") == "draft_hiring_requisition" and isinstance(action.get("result"), dict):
+            action["result"]["require_director_approval"] = approval_required
+            from modules.hiring_manager_agent.agent import normalize_requisition_hiring_model
+            draft_result = action["result"]
+            draft_result["hiring_model"] = normalize_requisition_hiring_model(
+                draft_result.get("hiring_model", ""),
+                draft_result.get("job_description") or draft_result.get("summary") or draft_result.get("role_summary", ""),
+                draft_result.get("location", ""),
+            ) or draft_result.get("hiring_model") or "To be confirmed"
+            from modules.requisition.domain.required_details import missing_requisition_details
+            missing_requisition_fields = missing_requisition_details(draft_result)
+            draft_result["missing_required_fields"] = missing_requisition_fields
+            draft_result["is_complete"] = not missing_requisition_fields
+            has_requisition_draft = True
+    reply = result.get("reply", "")
+    if has_requisition_draft and missing_requisition_fields:
+        flow_note = (
+            "Director approval is disabled, but this requisition still needs these details before it can be published: "
+            if not approval_required else
+            "This requisition needs these details before it can be submitted for Director approval: "
+        )
+        reply = (
+            f"{flow_note}**{', '.join(missing_requisition_fields)}**. "
+            "For example, what key skills do you need, and when should the person start? "
+            "You can reply with the missing details together, or edit the draft card."
+        )
+    elif has_requisition_draft and not approval_required:
+        reply = "Review the requisition draft below. Director approval is disabled for your company; choose **Publish Requisition** when it is ready."
     return {
-        "reply": result.get("reply", ""),
-        "executed_actions": result.get("executed_actions", []),
+        "reply": reply,
+        "executed_actions": executed_actions,
         "status": "success",
         **{key: result[key] for key in ("out_of_scope", "ai_unavailable") if key in result}
     }
+
+
+@router.get("/flow-settings")
+def get_hiring_manager_flow_settings(current_user: User = Depends(get_current_user)):
+    """Return the authenticated tenant's requisition approval policy."""
+    if current_user.role not in ("Hiring Manager", "Admin", "HR", "Director"):
+        raise HTTPException(status_code=403, detail="Company hiring staff access required")
+    from modules.requisition.domain.models import CompanyProfile
+    from modules.shared.db import get_session
+
+    with get_session() as session:
+        profile = (
+            session.query(CompanyProfile)
+            .filter(CompanyProfile.tenant_id == str(current_user.tenant_id or ""))
+            .order_by(CompanyProfile.created_at.desc())
+            .first()
+        ) if current_user.tenant_id else None
+    return {"require_director_approval": getattr(profile, "require_director_approval", True) is not False}
 
 
 class GenerateJDRequest(BaseModel):

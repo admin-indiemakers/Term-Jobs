@@ -114,8 +114,9 @@ export default function CandidatePortalAccess() {
           password: createForm.password,
         },
       });
-      if (result.email_delivery?.status === 'success') setSuccessMsg(`Portal access created and login credentials emailed to ${emailVal}`);
-      else setError(`Portal access saved, but email was not sent. ${result.email_delivery?.reason || 'Retry sending login credentials.'}`);
+      const credentialsDelivery = result.credential_delivery || result.email_delivery;
+      if (credentialsDelivery?.status === 'success') setSuccessMsg(`Portal access created and login credentials emailed to ${emailVal}${result.email_delivery !== credentialsDelivery && result.email_delivery?.status === 'success' ? '. Account change notification also sent.' : ''}`);
+      else setError(`Portal access saved, but email was not sent. ${credentialsDelivery?.reason || result.email_delivery?.reason || 'Retry sending login credentials.'}`);
       setShowCreateModal(null);
       await loadCandidates();
     } catch (err) {
@@ -182,8 +183,14 @@ export default function CandidatePortalAccess() {
           },
         });
       }
-      if (result.email_delivery?.status === 'failed') setError(`Access saved, but email failed: ${result.email_delivery.reason || 'Please retry.'}`);
-      else setSuccessMsg(`Portal credentials updated for ${editForm.name}${result.email_delivery?.status === 'success' ? ' and emailed to candidate' : ''}.`);
+      const deliveries = [result.email_delivery, result.credential_delivery].filter((delivery) => delivery && delivery.status !== 'not_requested');
+      const failedDelivery = deliveries.find((delivery) => delivery.status === 'failed');
+      if (failedDelivery) setError(`Access saved, but email failed: ${failedDelivery.reason || 'Please retry.'}`);
+      else {
+        const noticeSent = result.email_delivery?.status === 'success';
+        const credentialsSent = result.credential_delivery?.status === 'success';
+        setSuccessMsg(`Portal access updated for ${editForm.name}${noticeSent ? ' and account change notification sent' : ''}${credentialsSent ? ' and login credentials emailed' : ''}.`);
+      }
       setShowEditModal(null);
       await loadCandidates();
     } catch (err) {

@@ -2052,6 +2052,8 @@ def create_or_update_portal_user(
 
     if existing_user:
         # Update existing candidate user credentials & ensure active
+        previous_email = (existing_user.email or "").strip()
+        email_changed = previous_email.lower() != email.lower()
         existing_user.name = name
         existing_user.email = email
         existing_user.candidate_id = candidate_id
@@ -2068,9 +2070,14 @@ def create_or_update_portal_user(
         _sync_candidate_credentials_to_mongo(candidate_id, email, name)
 
         email_delivery = {"status": "not_requested"}
+        credential_delivery = {"status": "not_requested"}
+        if email_changed:
+            email_delivery = send_account_change_email(
+                existing_user, previous_email=previous_email, password_changed=bool(password)
+            )
         # Send credentials email to candidate if password was provided/reset
         if password:
-            email_delivery = _send_credentials_email(
+            credential_delivery = _send_credentials_email(
                 to_email=existing_user.email,
                 name=existing_user.name,
                 role="Candidate",
@@ -2081,6 +2088,7 @@ def create_or_update_portal_user(
         return {
             "ok": True,
             "email_delivery": email_delivery,
+            "credential_delivery": credential_delivery,
             "id": existing_user.id,
             "email": existing_user.email,
             "name": existing_user.name,
@@ -2167,6 +2175,7 @@ def update_portal_user(
         # Check Mongo users collection
         m_user = mongo_db["users"].find_one({"$or": [{"id": user_id}, {"_id": user_id}, {"candidate_id": user_id}, {"workorder_id": user_id}]})
         if m_user:
+            previous_email = (m_user.get("email") or "").strip()
             m_set = {}
             if name: m_set["name"] = name
             if email: m_set["email"] = email
@@ -2178,18 +2187,28 @@ def update_portal_user(
             target_name = name or m_user.get("name")
             if cid:
                 _sync_candidate_credentials_to_mongo(cid, target_email, target_name)
+            email_changed = bool(email and previous_email.lower() != email.lower())
             email_delivery = {"status": "not_requested"}
-            if target_email:
-                email_delivery = _send_credentials_email(
+            credential_delivery = {"status": "not_requested"}
+            if email_changed:
+                from types import SimpleNamespace
+                email_delivery = send_account_change_email(
+                    SimpleNamespace(email=target_email, name=target_name),
+                    previous_email=previous_email,
+                    password_changed=bool(password),
+                )
+            if password and target_email:
+                credential_delivery = _send_credentials_email(
                     to_email=target_email,
                     name=target_name,
                     role="Candidate",
-                    plain_password=password or "Use your existing password (unchanged)",
+                    plain_password=password,
                     candidate_id=cid,
                 )
             return {
                 "ok": True,
-            "email_delivery": email_delivery,
+                "email_delivery": email_delivery,
+                "credential_delivery": credential_delivery,
                 "message": "Portal credentials updated successfully" + (" and new password emailed to candidate" if password else ""),
                 "user": {
                     "id": user_id,
@@ -2222,6 +2241,8 @@ def update_portal_user(
                 detail=f"The email '{email}' is already in use by another candidate portal account.",
             )
 
+    previous_email = (target.email or "").strip()
+    email_changed = bool(email and previous_email.lower() != email.lower())
     if name:
         target.name = name
     if email:
@@ -2243,19 +2264,24 @@ def update_portal_user(
         _sync_candidate_credentials_to_mongo(cid, target.email, target.name)
 
     email_delivery = {"status": "not_requested"}
-    # Every Save Changes sends portal access details; a blank password keeps the existing hash.
-    if target.email:
-        email_delivery = _send_credentials_email(
+    credential_delivery = {"status": "not_requested"}
+    if email_changed:
+        email_delivery = send_account_change_email(
+            target, previous_email=previous_email, password_changed=bool(password)
+        )
+    if password and target.email:
+        credential_delivery = _send_credentials_email(
             to_email=target.email,
             name=target.name,
             role="Candidate",
-            plain_password=password or "Use your existing password (unchanged)",
+            plain_password=password,
             candidate_id=cid or getattr(target, 'candidate_id', '') or getattr(target, 'workorder_id', '')
         )
 
     return {
         "ok": True,
-            "email_delivery": email_delivery,
+        "email_delivery": email_delivery,
+        "credential_delivery": credential_delivery,
         "message": "Portal credentials updated successfully" + (" and new password emailed to candidate" if password else ""),
         "user": {
             "id": target.id,
