@@ -3492,6 +3492,43 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
                 last_assistant = str(item.get("text") or item.get("content") or "")
                 break
 
+        # A user's answer to the draft's missing fields should update that
+        # draft even when the model provider is unavailable.
+        prior_draft = requisition_draft_from_history(history)
+        if prior_draft and re.search(r"complete the draft|missing details|could you confirm|provide the following", last_assistant, re.I):
+            updated_draft = dict(prior_draft)
+            updated_draft["hiring_model"] = updated_draft.get("hiring_model") or "To be confirmed"
+            updated_draft["skills"] = updated_draft.get("skills") or "To be confirmed"
+
+            model_match = re.search(r"\b(direct\s+hire|vendor[- ]managed|direct\s+applicant|vendor\s+supplied)\b", prompt, re.I)
+            if model_match:
+                updated_draft["hiring_model"] = re.sub(r"\s+", " ", model_match.group(1)).title()
+
+            skills_match = re.search(r"\b(?:need|needs|require|requires|skills?\s*(?:are|:))\s+(.+)$", prompt, re.I)
+            if skills_match:
+                skill_text = re.sub(r"\b(?:please|thanks?)\b.*$", "", skills_match.group(1), flags=re.I).strip(" .,!?")
+                parsed_skills = [
+                    re.sub(r"\s+", " ", skill.strip()).title()
+                    for skill in re.split(r",|\band\b|&", skill_text, flags=re.I)
+                    if skill.strip()
+                ]
+                if parsed_skills:
+                    updated_draft["skills"] = parsed_skills
+
+            from modules.requisition.domain.required_details import missing_requisition_details
+            updated_draft["missing_required_fields"] = missing_requisition_details(updated_draft)
+            updated_draft["is_complete"] = not updated_draft["missing_required_fields"]
+            remaining = updated_draft["missing_required_fields"]
+            follow_up = (
+                f"I updated the **{updated_draft.get('title', 'requisition')}** draft. Please provide: {', '.join(remaining)}."
+                if remaining else
+                f"I updated the **{updated_draft.get('title', 'requisition')}** draft. All required details are now complete; review the draft card before submitting it."
+            )
+            return {
+                "reply": follow_up,
+                "executed_actions": [{"tool": "draft_hiring_requisition", "result": updated_draft}],
+            }
+
         duration_match = re.search(r"\b(\d+)\s*(months?|mos?|years?|yrs?)\b", prompt, re.I)
         duration_was_requested = bool(re.search(r"contract\s+duration", last_assistant, re.I))
         if duration_match and duration_was_requested:

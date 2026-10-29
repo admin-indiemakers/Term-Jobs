@@ -159,6 +159,45 @@ def test_existing_draft_work_mode_is_recovered_from_its_role_summary():
     assert draft["missing_required_fields"] == []
 
 
+def test_model_outage_still_applies_answers_to_missing_draft_fields(monkeypatch):
+    from modules.hiring_manager_agent import applications
+
+    monkeypatch.setattr(agent, "model_available", lambda: True)
+    monkeypatch.setattr(agent, "run_model_hiring_chat", lambda *args: None)
+    monkeypatch.setattr(applications, "application_reply", lambda *args: None)
+    draft = {
+        "title": "DevOps Engineer",
+        "department": "Engineering",
+        "location": "Calicut",
+        "experience_level": "Mid (2-4 yrs)",
+        "employment_type": "Contract",
+        "hiring_model": "To be confirmed",
+        "target_start_date": "November 2026",
+        "skills": "To be confirmed",
+        "salary_range": "₹1,000 / hr",
+        "job_description": "DevOps Engineer contract role.",
+    }
+    history = [{
+        "role": "assistant",
+        "content": (
+            "To complete the draft, could you confirm the Hiring model and Required skills?\n"
+            f"Draft context: {__import__('json').dumps(draft)}"
+        ),
+    }]
+
+    result = agent.run_hiring_manager_agent_chat(
+        "Direct hire and needs Python",
+        history=history,
+        current_user={"id": "test-hm", "tenant_id": "test-tenant"},
+    )
+
+    updated = result["executed_actions"][0]["result"]
+    assert updated["hiring_model"] == "Direct Hire"
+    assert updated["skills"] == ["Python"]
+    assert updated["missing_required_fields"] == []
+    assert "AI service is temporarily unavailable" not in result["reply"]
+
+
 @pytest.mark.parametrize('prompt', [
     'can u show me closed requsition',
     'show closed requisitions',
