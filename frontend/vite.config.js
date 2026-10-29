@@ -6,23 +6,10 @@ import { fileURLToPath } from 'url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-function deferCssPlugin() {
-  return {
-    name: 'defer-css-plugin',
-    apply: 'build',
-    enforce: 'post',
-    transformIndexHtml(html) {
-      return html.replace(
-        /<link\s+rel="stylesheet"\s+crossorigin\s+href="(\/assets\/[^"]+\.css)">/g,
-        '<link rel="preload" as="style" href="$1" crossorigin>\n    <link rel="stylesheet" href="$1" media="print" onload="this.media=\'all\'" crossorigin>\n    <noscript><link rel="stylesheet" href="$1" crossorigin></noscript>'
-      )
-    },
-  }
-}
-
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), tailwindcss(), deferCssPlugin()],
+  // Keep application CSS render-blocking so refresh never paints unstyled content.
+  plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

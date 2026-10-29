@@ -181,8 +181,9 @@
     </script>
   </head>
   <body style="margin: 0; background-color: #08090b; color: #ffffff;">
-    <!-- Crawlable semantic fallback and React root container -->
-    <div id="root">
+    <!-- React owns this container; fallback content must not flash before mount. -->
+    <div id="root"></div>
+    <noscript>
       <header style="padding: 1rem; text-align: center; border-bottom: 1px solid #222;">
         <h1 style="font-size: 1.75rem; font-weight: 800; margin: 0; letter-spacing: -0.02em;">
           TermJobs – Contract Jobs & Flexible Hiring
@@ -198,8 +199,6 @@
           <a href="/career-guides/temporary-vs-contract-jobs" style="color: #60a5fa; text-decoration: underline;">Career Guide</a>
         </nav>
       </header>
-    </div>
-    <noscript>
       <div style="padding: 20px; text-align: center; font-family: sans-serif; color: #ffffff;">
         <p>Please enable JavaScript to access all interactive features of the Term Jobs platform.</p>
       </div>

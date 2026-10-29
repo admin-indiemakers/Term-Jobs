@@ -88,6 +88,7 @@ export default function CompanyAdminProfile() {
   const [activeTab, setActiveTab] = useState('company'); // 'company' | 'admin' | 'security'
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingFlowSetting, setSavingFlowSetting] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -121,6 +122,7 @@ export default function CompanyAdminProfile() {
     notes: '',
     logo_url: '',
     tech_stack: [],
+    require_director_approval: true,
   });
 
   const [adminForm, setAdminForm] = useState({
@@ -351,17 +353,16 @@ export default function CompanyAdminProfile() {
     setError('');
     try {
       const data = await request('/api/auth/company/profile', { token });
-      savedCompanyNameRef.current = data.name || user?.tenant_name || 'TCS';
+      savedCompanyNameRef.current = data.name || user?.tenant_name || '';
       setCompanyForm({
         name: savedCompanyNameRef.current,
-        industry: data.industry || 'Information Technology',
-        size: data.size || '201-500 employees',
-        location: data.location || 'Bangalore, India',
-        notes: data.notes || 'TCS is a global leader in IT services, consulting, and business solutions. We help organizations build a more secure, scalable, and innovative future through technology and talent.',
+        industry: data.industry || '',
+        size: data.size || '',
+        location: data.location || '',
+        notes: data.notes || '',
         logo_url: data.logo_url || '',
-        tech_stack: Array.isArray(data.tech_stack) && data.tech_stack.length > 0
-          ? data.tech_stack
-          : ['React', 'Python', 'AWS', 'Node.js', 'Docker', 'Kubernetes', 'PostgreSQL'],
+        tech_stack: Array.isArray(data.tech_stack) ? data.tech_stack : [],
+        require_director_approval: data.require_director_approval !== false,
       });
       setAdminForm({
         admin_name: data.admin_name || user?.name || 'Administrator',
@@ -619,6 +620,37 @@ export default function CompanyAdminProfile() {
     }
   };
 
+  const handleFlowSettingToggle = async () => {
+    const previousValue = companyForm.require_director_approval;
+    const nextValue = !previousValue;
+    setCompanyForm((previous) => ({ ...previous, require_director_approval: nextValue }));
+    setSavingFlowSetting(true);
+    setError('');
+    setSuccess('');
+    try {
+      // Reuse the existing profile PUT route so environments running an
+      // already-started backend don't need the newly added route to reload.
+      const result = await request('/api/auth/company/profile', {
+        method: 'PUT',
+        token,
+        body: { require_director_approval: nextValue },
+      });
+      if (typeof result?.require_director_approval !== 'boolean') {
+        throw new Error('The backend has not loaded company flow settings yet. Restart the backend and try again.');
+      }
+      setCompanyForm((previous) => ({
+        ...previous,
+        require_director_approval: result.require_director_approval,
+      }));
+      setSuccess('Company flow setting saved.');
+    } catch (err) {
+      setCompanyForm((previous) => ({ ...previous, require_director_approval: previousValue }));
+      setError(err.message || 'Failed to save company flow setting');
+    } finally {
+      setSavingFlowSetting(false);
+    }
+  };
+
   // Handle password change
   const handleChangePassword = async (e) => {
     e.preventDefault();
@@ -724,7 +756,7 @@ export default function CompanyAdminProfile() {
         <div className="flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-white/70 backdrop-blur-md border border-white/80 shadow-3xs shrink-0 self-start sm:self-auto">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
           <span className="text-xs font-bold text-gray-900 tracking-tight">
-            {companyForm.name || user?.tenant_name || 'TCS'}
+            {companyForm.name || user?.tenant_name || 'Company'}
           </span>
           <span className="text-[11px] font-medium text-gray-400">• Admin Console</span>
         </div>
@@ -1055,7 +1087,7 @@ export default function CompanyAdminProfile() {
                             <div className="flex flex-col justify-center">
                               <span className="text-[10.5px] text-gray-400 font-medium leading-none">Company Name</span>
                               <span className="text-xs sm:text-[13.5px] font-semibold text-gray-900 mt-1">
-                                {companyForm.name || 'TCS'}
+                                {companyForm.name || 'Not provided'}
                               </span>
                             </div>
 
@@ -1064,7 +1096,7 @@ export default function CompanyAdminProfile() {
                               <span className="text-[10.5px] text-gray-400 font-medium leading-none">Industry Sector</span>
                               <div className="flex items-center gap-1.5 text-xs sm:text-[13.5px] font-semibold text-gray-900 mt-1">
                                 <Building2 size={13} className="text-gray-400 shrink-0" />
-                                <span className="truncate">{companyForm.industry || 'Information Technology'}</span>
+                                <span className="truncate">{companyForm.industry || 'Not provided'}</span>
                               </div>
                             </div>
 
@@ -1073,7 +1105,7 @@ export default function CompanyAdminProfile() {
                               <span className="text-[10.5px] text-gray-400 font-medium leading-none">Company Size</span>
                               <div className="flex items-center gap-1.5 text-xs sm:text-[13.5px] font-semibold text-gray-900 mt-1">
                                 <Users size={13} className="text-gray-400 shrink-0" />
-                                <span>{companyForm.size || '201–500 employees'}</span>
+                                <span>{companyForm.size || 'Not provided'}</span>
                               </div>
                             </div>
 
@@ -1082,7 +1114,7 @@ export default function CompanyAdminProfile() {
                               <span className="text-[10.5px] text-gray-400 font-medium leading-none">Headquarters</span>
                               <div className="flex items-center gap-1.5 text-xs sm:text-[13.5px] font-semibold text-gray-900 mt-1">
                                 <MapPin size={13} className="text-gray-400 shrink-0" />
-                                <span className="truncate">{companyForm.location || 'Bangalore, India'}</span>
+                                <span className="truncate">{companyForm.location || 'Not provided'}</span>
                               </div>
                             </div>
                           </div>
@@ -1151,7 +1183,7 @@ export default function CompanyAdminProfile() {
                         />
                       ) : (
                         <p className="text-xs sm:text-[13px] text-gray-600 leading-relaxed font-normal py-0.5">
-                          {companyForm.notes || 'TCS is a global leader in IT services, consulting, and business solutions. We help organizations build a more secure, scalable, and innovative future through technology and talent.'}
+                          {companyForm.notes || 'No company overview provided.'}
                         </p>
                       )}
                     </div>
@@ -1254,10 +1286,8 @@ export default function CompanyAdminProfile() {
                         </div>
                       ) : (
                         <div className="flex flex-wrap items-center gap-1.5">
-                          {(companyForm.tech_stack && companyForm.tech_stack.length > 0
-                            ? companyForm.tech_stack
-                            : ['React', 'Python', 'AWS', 'Node.js', 'Docker', 'Kubernetes', 'PostgreSQL']
-                          ).map((tech) => (
+                          {companyForm.tech_stack.length === 0 && <p className="text-xs text-gray-500">No technology stack provided.</p>}
+                          {companyForm.tech_stack.map((tech) => (
                             <span
                               key={tech}
                               className="px-3 py-1 rounded-full bg-white/70 backdrop-blur-md text-gray-800 text-xs font-semibold border border-white/80 shadow-3xs"
@@ -1270,6 +1300,35 @@ export default function CompanyAdminProfile() {
                     </div>
                   </div>
                 </div>
+              )}
+
+              {/* Company workflow policy */}
+              {activeTab === 'company' && (
+                <section className="mt-3 rounded-2xl border border-gray-200 bg-white p-4 sm:p-5 shadow-sm" aria-labelledby="company-flow-settings-title">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="max-w-2xl">
+                      <h2 id="company-flow-settings-title" className="text-sm font-bold text-gray-900">Company Flow Settings</h2>
+                      <p className="mt-1 text-xs leading-relaxed text-gray-600">Choose whether Hiring Manager requisitions need Director approval before they can be published to vendors.</p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={companyForm.require_director_approval}
+                      aria-label="Require Director approval for requisitions"
+                      disabled={saving || savingFlowSetting}
+                      onClick={handleFlowSettingToggle}
+                      className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-60 ${companyForm.require_director_approval ? 'bg-emerald-600' : 'bg-gray-300'}`}
+                    >
+                      <span className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-transform ${companyForm.require_director_approval ? 'translate-x-6' : 'translate-x-1'}`} />
+                    </button>
+                  </div>
+                  <div className="mt-3 flex flex-col gap-3 border-t border-gray-100 pt-3 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-xs font-medium text-gray-700">Director approval is <strong>{companyForm.require_director_approval ? 'required' : 'not required'}</strong>. {companyForm.require_director_approval ? 'Hiring Managers submit requisitions for Director sign-off before publishing.' : 'Hiring Managers can publish requisitions directly.'}</p>
+                    <span className="text-xs font-medium text-gray-500" role="status">
+                      {savingFlowSetting ? 'Saving…' : 'Changes save automatically'}
+                    </span>
+                  </div>
+                </section>
               )}
 
               {/* TAB 2: ADMIN CONTACT DETAILS */}

@@ -407,6 +407,7 @@ class CompanyProfileIn(BaseModel):
 
 class RequisitionIn(BaseModel):
     company_profile_id: str | None = None
+    client_request_id: str | None = None
     title: str = ""
     description: str = ""
     tech_stack_hint: list[str] = Field(default_factory=list)
@@ -498,6 +499,7 @@ def _company_dict(prof: models.CompanyProfile) -> dict:
         "industry": prof.industry,
         "location": prof.location,
         "tech_stack": prof.tech_stack or [],
+        "require_director_approval": getattr(prof, "require_director_approval", True) is not False,
     }
 
 
@@ -559,12 +561,37 @@ def _add_48h(dt_val: Any) -> str | None:
         return None
 
 
+def _director_approval_required(tenant_id: str) -> bool:
+    """Read the tenant requisition approval policy; legacy tenants remain approval-gated."""
+    if not tenant_id:
+        return True
+    try:
+        with get_session() as session:
+            profile = (
+                session.query(models.CompanyProfile)
+                .filter(models.CompanyProfile.tenant_id == tenant_id)
+                .order_by(models.CompanyProfile.created_at.desc())
+                .first()
+            )
+            return getattr(profile, "require_director_approval", True) is not False if profile else True
+    except Exception:
+        return True
+
+
 def _requisition_dict(requisition_id: str, for_vendor: bool = False) -> dict:
     with get_session() as session:
         req = session.get(models.Requisition, requisition_id)
         if req is None:
             raise HTTPException(status_code=404, detail="requisition not found")
         company = None
+        company_profile = (
+            session.query(models.CompanyProfile)
+            .filter(models.CompanyProfile.tenant_id == req.tenant_id)
+            .order_by(models.CompanyProfile.created_at.desc())
+            .first()
+            if req.tenant_id else None
+        )
+        require_director_approval = getattr(company_profile, "require_director_approval", True) is not False if company_profile else True
         if req.company_profile_id:
             prof = session.get(models.CompanyProfile, req.company_profile_id)
             if prof:
@@ -645,6 +672,7 @@ def _requisition_dict(requisition_id: str, for_vendor: bool = False) -> dict:
             "company": company,
             "company_name": (company.get("name") if isinstance(company, dict) else getattr(company, "name", None)) or getattr(req, "company_name", None) or "",
             "status": req.status,
+            "require_director_approval": require_director_approval,
             "title": req.title,
             "department": getattr(req, "department", None) or sr.get("department") or sr.get("job_family") or "",
             "job_family": sr.get("job_family") or getattr(req, "job_family", None) or "",
@@ -1494,6 +1522,19 @@ def create_requisition(
             detail="Company profile does not belong to your tenant",
         )
 
+    # The AI chat can retry after a slow response or a double-click. Reuse the
+    # first requisition for that card instead of creating duplicate records.
+    if body.client_request_id:
+        with get_session() as session:
+            existing_req = session.query(models.Requisition).filter({
+                "tenant_id": str(current_user.tenant_id or ""),
+                "client_request_id": body.client_request_id,
+            }).first()
+            if existing_req:
+                if str(existing_req.created_by or "") != str(current_user.id or ""):
+                    raise HTTPException(status_code=403, detail="This requisition request key is not owned by your account")
+                return _requisition_dict(str(existing_req.id))
+
     intent = schemas.RoleIntent(
 
         title=body.title,
@@ -1515,6 +1556,19 @@ def create_requisition(
             "prefill": body.prefill or {},
         },
     )
+    if body.client_request_id:
+        with get_session() as session:
+            saved_req = session.get(models.Requisition, req.id)
+            if saved_req:
+                saved_req.client_request_id = body.client_request_id
+                session.commit()
+    # Hiring Manager requisitions enter the approval queue only when the
+    # tenant has enabled Director approval. When approval is disabled, create
+    # in the normal pre-publication state and immediately publish through the
+    # same lifecycle used by the explicit Publish action.
+    is_hm = current_user.role == "Hiring Manager" or body.intake_mode == "chat_inline"
+    approval_required = _director_approval_required(str(current_user.tenant_id or ""))
+
     # Sync requisition document to MongoDB
     try:
         from modules.shared.db import db
@@ -1525,15 +1579,13 @@ def create_requisition(
         if isinstance(structured, dict):
             req_skills = structured.get("skills") or structured.get("must_have_skills") or []
 
-        # Hiring Managers CANNOT publish directly; enforce Pending Approval
         final_status = req.status
-        is_hm = current_user.role == "Hiring Manager" or body.intake_mode == "chat_inline"
         if is_hm:
-            final_status = "Pending Approval"
+            final_status = schemas.RequisitionStatus.PENDING_APPROVAL.value
             with get_session() as session:
                 s_req = session.get(models.Requisition, req.id)
                 if s_req:
-                    s_req.status = "Pending Approval"
+                    s_req.status = final_status
                     s_req.director_approved = False
                     s_req.director_approved_by = None
                     s_req.director_approved_at = None
@@ -1543,6 +1595,7 @@ def create_requisition(
 
         update_fields = {
             "id": req.id,
+            "client_request_id": body.client_request_id,
             "title": req.title,
             "status": final_status,
             "director_approved": False if is_hm else getattr(req, "director_approved", False),
@@ -1569,8 +1622,8 @@ def create_requisition(
             upsert=True
         )
 
-        # Notify Director if submitted by Hiring Manager
-        if is_hm:
+        # Notify Director only when this tenant requires Director approval.
+        if is_hm and approval_required:
             db["notifications"].insert_one({
                 "id": str(uuid.uuid4()),
                 "tenant_id": str(current_user.tenant_id or "local"),
@@ -1586,6 +1639,8 @@ def create_requisition(
         logger.warning(f"Failed to sync created requisition to MongoDB: {db_sync_err}")
 
     _cache.clear()
+    if is_hm and not approval_required:
+        return publish_requisition(str(req.id), None, background_tasks, current_user)
     if not is_hm and final_status == schemas.RequisitionStatus.PUBLISHED.value:
         background_tasks.add_task(_async_trigger_top_candidate_outreach, str(req.id))
     return _requisition_dict(str(req.id))
@@ -3829,18 +3884,19 @@ def approve_requisition(requisition_id: str, body: ApproveIn | None = None, curr
                 db_req.director_approved_at = None
             session.commit()
 
+    approval_required = _director_approval_required(str(getattr(current_user, "tenant_id", "") or ""))
     try:
         from modules.shared.db import db
         now_iso = _utcnow().isoformat()
         db["requisitions"].update_one(
             {"id": requisition_id},
             {"$set": {
-                "status": "Pending Approval",
+                "status": schemas.RequisitionStatus.PENDING_APPROVAL.value,
                 "director_approved": False,
                 "updated_at": now_iso
             }}
         )
-        if current_user.role not in ("Director", "Admin", "Super Admin"):
+        if current_user.role not in ("Director", "Admin", "Super Admin") and approval_required:
             req_title = db_req.title if db_req else "Job Requisition"
             db["notifications"].insert_one({
                 "id": str(uuid.uuid4()),
@@ -3855,6 +3911,9 @@ def approve_requisition(requisition_id: str, body: ApproveIn | None = None, curr
             })
     except Exception:
         pass
+
+    if current_user.role not in ("Director", "Admin", "Super Admin") and not approval_required:
+        return publish_requisition(requisition_id, None, BackgroundTasks(), current_user)
 
     _cache.clear()
     return _requisition_dict(requisition_id)
@@ -3971,13 +4030,16 @@ def submit_requisition_for_director_approval_route(
             db_req.rejected_by = None
             db_req.rejected_at = None
             db_req.updated_at = _utcnow()
-            db_req.status = "Pending Approval"
+            db_req.status = schemas.RequisitionStatus.PENDING_APPROVAL.value
             db_req.director_approved = False
             db_req.director_approved_by = None
             db_req.director_approved_at = None
             db_req.approved_by = None
             db_req.approved_at = None
             session.commit()
+
+    if not _director_approval_required(str(getattr(current_user, "tenant_id", "") or "")):
+        return publish_requisition(requisition_id, None, background_tasks, current_user)
 
     try:
         from modules.shared.db import db
@@ -4013,13 +4075,14 @@ def publish_requisition(
     db_req = _get_requisition(requisition_id)
     is_director_or_admin = current_user.role in ("Director", "Admin", "Super Admin")
 
-    if not getattr(db_req, "director_approved", False) and not is_director_or_admin:
+    approval_required = _director_approval_required(str(getattr(current_user, "tenant_id", "") or ""))
+    if approval_required and not getattr(db_req, "director_approved", False) and not is_director_or_admin:
         raise HTTPException(
             status_code=400,
             detail="Requisition requires Director approval before it can be published to vendors.",
         )
 
-    if is_director_or_admin and not getattr(db_req, "director_approved", False):
+    if approval_required and is_director_or_admin and not getattr(db_req, "director_approved", False):
         with get_session() as session:
             s_req = session.get(models.Requisition, requisition_id)
             if s_req:

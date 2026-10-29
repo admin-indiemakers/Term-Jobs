@@ -73,12 +73,18 @@ export function getRequisitionDisplayInfo(r) {
     };
   }
 
-  // Approved: Director sign-off should show Approved, and the requisition status should change to Published.
+  // A direct-publish tenant must not appear as if a Director signed off.
   const normStatus = String(r.status || '').trim().toLowerCase();
+  if (r.require_director_approval === false && ['published', 'active', 'approved'].includes(normStatus)) {
+    return {
+      status: 'Published', statusBadge: 'Published', signOffType: 'not-required',
+      signOffText: 'Not Required (Company Setting)', isApproved: true, isRejected: false, isPending: false,
+    };
+  }
+
+  // Approved: Director sign-off should show Approved, and the requisition status should change to Published.
   const isApproved =
-    (Boolean(r.director_approved) ||
-      normStatus === 'published' ||
-      normStatus === 'approved') &&
+    (Boolean(r.director_approved) || normStatus === 'published' || normStatus === 'approved') &&
     normStatus !== 'closed';
 
   if (isApproved) {

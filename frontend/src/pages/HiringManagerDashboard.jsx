@@ -187,6 +187,9 @@ function HiringManagerDashboardContent() {
 
   // Real AI Chat States
   const [messages, setMessages] = useState([]);
+  const [submittingRequisitionCards, setSubmittingRequisitionCards] = useState(() => new Set());
+  const submittingRequisitionCardsRef = useRef(new Set());
+  const [companyRequiresDirectorApproval, setCompanyRequiresDirectorApproval] = useState(null);
   const [isAiTyping, setIsAiTyping] = useState(false);
   const [isListening, setIsListening] = useState(false);
 
@@ -459,6 +462,24 @@ function HiringManagerDashboardContent() {
   const isFetchingRef = useRef(false);
   const hasLoadedRef = useRef(false);
   const prevTokenRef = useRef(token);
+
+  useEffect(() => {
+    if (!token) return undefined;
+    let cancelled = false;
+    request('/company-profiles', { token, noCache: true, forceRefresh: true })
+      .then((profiles) => {
+        const latestProfile = Array.isArray(profiles) ? profiles[0] : null;
+        if (!cancelled && typeof latestProfile?.require_director_approval === 'boolean') {
+          setCompanyRequiresDirectorApproval(latestProfile.require_director_approval);
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [token]);
+
+  const draftRequiresDirectorApproval = (draft) => (
+    companyRequiresDirectorApproval ?? (draft?.require_director_approval !== false)
+  );
 
   // Ctrl+K shortcut listener (Focuses AI Chat Input)
   useEffect(() => {
@@ -795,6 +816,12 @@ function HiringManagerDashboardContent() {
   // Inline Requisition Action Handlers (Director Approval Enforced)
   const handleSubmitForApprovalFromCard = useCallback(
     async (draft, messageId) => {
+      if (!messageId || submittingRequisitionCardsRef.current.has(messageId)) return;
+      const draftStatus = String(draft.status || '').toLowerCase().replace(/[ _-]/g, '');
+      if (draftStatus === 'published' || draft.isSubmittedForApproval) return;
+      submittingRequisitionCardsRef.current.add(messageId);
+      setSubmittingRequisitionCards((previous) => new Set(previous).add(messageId));
+      const approvalRequired = draftRequiresDirectorApproval(draft);
       try {
         let profileId = draft.company_profile_id;
         if (!profileId) {
@@ -807,6 +834,7 @@ function HiringManagerDashboardContent() {
         }
 
         const payload = {
+          client_request_id: messageId,
           company_profile_id: profileId,
           title: draft.title,
           description: draft.summary || `${draft.title} requirement`,
@@ -832,16 +860,16 @@ function HiringManagerDashboardContent() {
         });
 
         const newReqId = res?.id || res?.requisition_id;
+        if (!newReqId) throw new Error('The requisition was created, but its ID was not returned. Refresh the requisition list to continue.');
 
-        // If requisition already existed, also ensure status is updated to Pending Approval
-        if (draft.id && !draft.id.startsWith('draft-')) {
-          try {
-            await request(`/requisitions/${draft.id}/submit-for-approval`, {
-              method: 'POST',
-              token,
-            });
-          } catch (e) {}
-        }
+        // Creation already enters the configured workflow. Only call the
+        // publish transition for an off-policy tenant if an older backend
+        // returned the draft in a non-published state.
+        const workflowResult = !approvalRequired && res?.status !== 'Published'
+          ? await request(`/requisitions/${newReqId}/submit-for-approval`, { method: 'POST', token })
+          : res;
+        const isPublished = workflowResult?.status === 'Published';
+        const finalApprovalRequired = workflowResult?.require_director_approval !== false && approvalRequired;
         window.dispatchEvent(new CustomEvent('refresh-hm-data'));
         window.dispatchEvent(new CustomEvent('tj-requisitions-updated'));
 
@@ -854,8 +882,9 @@ function HiringManagerDashboardContent() {
                   requisitionDraft: {
                     ...m.requisitionDraft,
                     id: newReqId || m.requisitionDraft.id,
-                    isSubmittedForApproval: true,
-                    status: 'Pending Approval',
+                    require_director_approval: finalApprovalRequired,
+                    isSubmittedForApproval: finalApprovalRequired && !isPublished,
+                    status: workflowResult?.status || (finalApprovalRequired ? 'PendingApproval' : 'Published'),
                   },
                 }
               : m
@@ -865,7 +894,9 @@ function HiringManagerDashboardContent() {
         const confirmMsg = {
           id: `ai-approval-${Date.now()}`,
           sender: 'ai',
-          text: `🚀 **${draft.title}** requisition has been successfully sent to the Director for approval!\n\nDirector sign-off is mandatory before the role can be published to vendors. The Director has been notified to review and sign off.`,
+          text: isPublished || !finalApprovalRequired
+            ? `**${draft.title}** requisition has been published directly according to your company's flow settings.`
+            : `**${draft.title}** requisition has been sent to the Director for approval. Director sign-off is required before it can be published.`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         };
         setMessages((prev) => [...prev, confirmMsg]);
@@ -873,9 +904,16 @@ function HiringManagerDashboardContent() {
       } catch (err) {
         console.error('Failed to submit requisition for approval:', err);
         alert(err.message || 'Failed to submit requisition for approval.');
+      } finally {
+        submittingRequisitionCardsRef.current.delete(messageId);
+        setSubmittingRequisitionCards((previous) => {
+          const next = new Set(previous);
+          next.delete(messageId);
+          return next;
+        });
       }
     },
-    [token, loadDashboardData]
+    [token, loadDashboardData, companyRequiresDirectorApproval]
   );
 
   const handleOpenEditModal = useCallback((draft, messageId) => {
@@ -972,7 +1010,7 @@ function HiringManagerDashboardContent() {
           body: {
             title: draft.title,
             department: draft.department,
-            experience: draft.experience,
+            experience_level: draft.experience,
             skills: draft.skills,
             location: draft.location,
             employment_type: draft.employment_type,
@@ -1000,7 +1038,7 @@ function HiringManagerDashboardContent() {
         const jdNote = {
           id: `ai-jd-${Date.now()}`,
           sender: 'ai',
-          text: `✨ Generated an enhanced enterprise Job Description for **${draft.title}**. The Role Summary in the card above has been updated.`,
+          text: `✨ Generated an enhanced enterprise Job Description for **${draft.title}**${res?.company_website_used ? ' using your company website and profile details' : ' using your company profile details'}. The Role Summary in the card above has been updated.`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         };
         setMessages((prev) => [...prev, jdNote]);
@@ -1339,6 +1377,7 @@ function HiringManagerDashboardContent() {
         const r = draftAction.result;
         reqDraft = {
           ...r,
+          require_director_approval: companyRequiresDirectorApproval ?? (r.require_director_approval !== false),
           id: r.id || `draft-${Date.now()}`,
           experience: r.experience_level || 'To be confirmed',
           hiring_model: r.hiring_model || 'To be confirmed',
@@ -1346,6 +1385,9 @@ function HiringManagerDashboardContent() {
           skills: Array.isArray(r.skills) ? r.skills : (r.skills || '').split(',').map(skill => skill.trim()).filter(Boolean),
           summary: r.job_description || '',
         };
+        if (!reqDraft.require_director_approval) {
+          replyContent = "Review the requisition draft below. Director approval is disabled for your company. Choose **Publish Requisition** when it is ready.";
+        }
       }
 
       const listAction = executedActions.find(action => action.tool === 'list_hiring_requisitions');
@@ -2558,7 +2600,12 @@ function HiringManagerDashboardContent() {
                                     </>
                                   ) : (
                                     <>
-                                      {msg.requisitionDraft.isSubmittedForApproval || msg.requisitionDraft.status === 'Pending Approval' ? (
+                                      {msg.requisitionDraft.status === 'Published' ? (
+                                        <div className="px-3.5 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center gap-1.5 shadow-2xs">
+                                          <CheckCircle2 size={13} className="text-emerald-600" />
+                                          <span>Published</span>
+                                        </div>
+                                      ) : draftRequiresDirectorApproval(msg.requisitionDraft) && (msg.requisitionDraft.isSubmittedForApproval || ['pending approval', 'pendingapproval'].includes(String(msg.requisitionDraft.status || '').toLowerCase())) ? (
                                         <div className="px-3.5 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold flex items-center gap-1.5 shadow-2xs">
                                           <Clock size={13} className="text-amber-600" />
                                           <span>Awaiting Director Approval</span>
@@ -2566,11 +2613,12 @@ function HiringManagerDashboardContent() {
                                       ) : (
                                         <button
                                           type="button"
+                                          disabled={submittingRequisitionCards.has(msg.id)}
                                           onClick={() => handleSubmitForApprovalFromCard(msg.requisitionDraft, msg.id)}
-                                          className="px-3.5 py-2 rounded-xl bg-black text-white text-xs font-semibold hover:bg-gray-800 transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
+                                          className="px-3.5 py-2 rounded-xl bg-black text-white text-xs font-semibold hover:bg-gray-800 transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-60 disabled:cursor-wait"
                                         >
-                                          <ShieldCheck size={13} />
-                                          <span>Send to Director for Approval</span>
+                                          {submittingRequisitionCards.has(msg.id) ? <Loader2 size={13} className="animate-spin" /> : !draftRequiresDirectorApproval(msg.requisitionDraft) ? <Sparkles size={13} /> : <ShieldCheck size={13} />}
+                                          <span>{submittingRequisitionCards.has(msg.id) ? 'Submitting…' : !draftRequiresDirectorApproval(msg.requisitionDraft) ? 'Publish Requisition' : 'Send to Director for Approval'}</span>
                                         </button>
                                       )}
 

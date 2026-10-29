@@ -5,6 +5,10 @@ Exposes endpoints for the Hiring Manager AI Reasoning Assistant powered by Groq 
 from fastapi import APIRouter, HTTPException, Header, Depends
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
+from html.parser import HTMLParser
+import ipaddress
+import socket
+from urllib.parse import urljoin, urlsplit
 
 from modules.identity.domain.models import User, Tenant
 from modules.identity.router import get_current_user
@@ -12,6 +16,114 @@ from .agent import run_hiring_manager_agent_chat, model_available
 from .chat_scope import is_hiring_request_in_scope, scope_response
 
 router = APIRouter(prefix="/api/hiring-manager/agent", tags=["Hiring Manager Agent"])
+
+
+class _CompanyWebsiteText(HTMLParser):
+    """Extract concise public company context from a website's HTML."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.parts = []
+        self._capture = None
+        self._skip_depth = 0
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag in ("script", "style", "noscript", "svg"):
+            self._skip_depth += 1
+            return
+        if self._skip_depth:
+            return
+        if tag == "meta":
+            name = (attrs.get("name") or attrs.get("property") or "").lower()
+            if name in ("description", "og:description", "og:site_name"):
+                content = (attrs.get("content") or "").strip()
+                if content:
+                    self.parts.append(content)
+        elif tag in ("title", "h1", "h2", "p"):
+            self._capture = tag
+
+    def handle_endtag(self, tag):
+        if tag in ("script", "style", "noscript", "svg") and self._skip_depth:
+            self._skip_depth -= 1
+        if tag == self._capture:
+            self._capture = None
+
+    def handle_data(self, data):
+        if self._skip_depth:
+            return
+        if self._capture:
+            text = " ".join(data.split())
+            if text:
+                self.parts.append(text)
+
+
+def _is_public_website_url(url: str) -> bool:
+    """Reject local/private destinations before making an outbound request."""
+    parsed = urlsplit(url)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname or parsed.username or parsed.password:
+        return False
+    try:
+        port = parsed.port
+    except ValueError:
+        return False
+    if port not in (None, 80, 443):
+        return False
+    host = parsed.hostname.rstrip(".").lower()
+    if host == "localhost" or host.endswith((".localhost", ".local", ".internal")):
+        return False
+    try:
+        addresses = {ipaddress.ip_address(host)}
+    except ValueError:
+        try:
+            addresses = {
+                ipaddress.ip_address(item[4][0])
+                for item in socket.getaddrinfo(host, port or (443 if parsed.scheme == "https" else 80), type=socket.SOCK_STREAM)
+            }
+        except (OSError, ValueError):
+            return False
+    return bool(addresses) and all(address.is_global for address in addresses)
+
+
+def _fetch_company_website_context(website: str) -> str:
+    """Fetch up to 512 KB of public HTML and return a short text excerpt."""
+    import httpx
+
+    candidate = (website or "").strip()
+    if not candidate:
+        return ""
+    if "://" not in candidate:
+        candidate = f"https://{candidate}"
+    try:
+        with httpx.Client(
+            timeout=httpx.Timeout(4.0, connect=2.0),
+            follow_redirects=False,
+            headers={"User-Agent": "TermJobsCompanyContext/1.0", "Accept": "text/html"},
+        ) as client:
+            for _ in range(3):
+                if not _is_public_website_url(candidate):
+                    return ""
+                with client.stream("GET", candidate) as response:
+                    if response.status_code in (301, 302, 303, 307, 308):
+                        location = response.headers.get("location")
+                        if not location:
+                            return ""
+                        candidate = urljoin(candidate, location)
+                        continue
+                    if response.status_code != 200 or "text/html" not in response.headers.get("content-type", "").lower():
+                        return ""
+                    body = bytearray()
+                    for chunk in response.iter_bytes():
+                        remaining = 512_000 - len(body)
+                        if remaining <= 0:
+                            break
+                        body.extend(chunk[:remaining])
+                    parser = _CompanyWebsiteText()
+                    parser.feed(bytes(body).decode(response.encoding or "utf-8", errors="ignore"))
+                    return " ".join(parser.parts)[:3_000]
+    except Exception:
+        return ""
+    return ""
 
 
 class HiringManagerChatRequest(BaseModel):
@@ -63,12 +175,50 @@ def hiring_manager_agent_chat(
         current_user=user_data
     )
 
+    from modules.requisition.domain.models import CompanyProfile
+    from modules.shared.db import get_session
+    with get_session() as session:
+        company_profile = (
+            session.query(CompanyProfile)
+            .filter(CompanyProfile.tenant_id == str(current_user.tenant_id or ""))
+            .order_by(CompanyProfile.created_at.desc())
+            .first()
+        )
+        approval_required = getattr(company_profile, "require_director_approval", True) is not False
+    executed_actions = result.get("executed_actions", [])
+    has_requisition_draft = False
+    for action in executed_actions:
+        if action.get("tool") == "draft_hiring_requisition" and isinstance(action.get("result"), dict):
+            action["result"]["require_director_approval"] = approval_required
+            has_requisition_draft = True
+    reply = result.get("reply", "")
+    if has_requisition_draft and not approval_required:
+        reply = "Review the requisition draft below. Director approval is disabled for your company; choose **Publish Requisition** when it is ready."
+
     return {
-        "reply": result.get("reply", ""),
-        "executed_actions": result.get("executed_actions", []),
+        "reply": reply,
+        "executed_actions": executed_actions,
         "status": "success",
         **{key: result[key] for key in ("out_of_scope", "ai_unavailable") if key in result}
     }
+
+
+@router.get("/flow-settings")
+def get_hiring_manager_flow_settings(current_user: User = Depends(get_current_user)):
+    """Expose the current tenant requisition policy to Hiring Manager UI."""
+    if current_user.role not in ("Hiring Manager", "Admin", "HR", "Director"):
+        raise HTTPException(status_code=403, detail="Company hiring staff access required")
+    from modules.requisition.domain.models import CompanyProfile
+    from modules.shared.db import get_session
+
+    with get_session() as session:
+        profile = (
+            session.query(CompanyProfile)
+            .filter(CompanyProfile.tenant_id == str(current_user.tenant_id or ""))
+            .order_by(CompanyProfile.created_at.desc())
+            .first()
+        ) if current_user.tenant_id else None
+    return {"require_director_approval": getattr(profile, "require_director_approval", True) is not False}
 
 
 class GenerateJDRequest(BaseModel):
@@ -76,21 +226,60 @@ class GenerateJDRequest(BaseModel):
     department: Optional[str] = "Engineering"
     skills: Optional[Any] = None
     experience_level: Optional[str] = "Mid (2-4 yrs)"
+    location: Optional[str] = None
+    employment_type: Optional[str] = None
     company_name: Optional[str] = "Company"
 
 
 @router.post("/generate-jd")
-def generate_job_description(data: GenerateJDRequest):
+def generate_job_description(
+    data: GenerateJDRequest,
+    current_user: User = Depends(get_current_user),
+):
     """Generate an enhanced, enterprise job description summary via Groq AI or smart template."""
-    import os
     import httpx
     from modules.shared.config import settings
     from modules.superadmin_agent.groq_manager import get_all_groq_keys
+    from modules.requisition.domain.models import CompanyProfile
+    from modules.shared.db import get_session
+
+    if current_user.role not in ("Hiring Manager", "Admin", "HR", "Director"):
+        raise HTTPException(status_code=403, detail="Company hiring staff access required")
 
     title = data.title.strip() or "Software Engineer"
     dept = data.department or "Engineering"
     exp = data.experience_level or "Mid-Level"
     comp = data.company_name or "Company"
+    company_facts = []
+    website = ""
+    with get_session() as session:
+        tenant = session.get(Tenant, current_user.tenant_id) if current_user.tenant_id else None
+        profile = (
+            session.query(CompanyProfile)
+            .filter(CompanyProfile.tenant_id == str(current_user.tenant_id or ""))
+            .order_by(CompanyProfile.created_at.desc())
+            .first()
+        ) if current_user.tenant_id else None
+        comp = (getattr(profile, "name", "") or getattr(tenant, "name", "") or comp).strip()
+        website = getattr(profile, "website", "") or ""
+        if getattr(profile, "industry", ""):
+            company_facts.append(f"Industry: {profile.industry}")
+        if getattr(profile, "location", ""):
+            company_facts.append(f"Company location: {profile.location}")
+        if getattr(profile, "tech_stack", None):
+            company_facts.append(f"Company technology stack: {', '.join(profile.tech_stack)}")
+        if getattr(profile, "notes", ""):
+            company_facts.append(f"Company overview: {profile.notes[:1500]}")
+
+    website_context = _fetch_company_website_context(website)
+    if company_facts:
+        company_facts_context = "\n".join(company_facts)
+    else:
+        company_facts_context = "No additional company profile details are available."
+    website_context_prompt = (
+        f"Public company website excerpt ({website}): {website_context}"
+        if website_context else "The company website is unavailable or contains no readable public company details."
+    )
     
     if isinstance(data.skills, list):
         skills_str = ", ".join(data.skills)
@@ -103,6 +292,9 @@ def generate_job_description(data: GenerateJDRequest):
     prompt = (
         f"Generate a professional, compelling, enterprise-grade job description summary for a {title} position in the {dept} department at {comp}. "
         f"Seniority: {exp}. Key Skills: {skills_str}. "
+        f"Work location: {data.location or 'as agreed with the company'}. Employment type: {data.employment_type or 'as specified for the role'}. "
+        f"Company profile context:\n{company_facts_context}\n{website_context_prompt}\n"
+        "Use the company context only for relevant, supported details. Do not invent company products, customers, values, or claims; omit anything not supported by the supplied context. "
         f"Write 2-3 concise paragraphs covering: role mission, core day-to-day engineering impact, and key technical expectations. "
         f"Do not include generic boilerplate markdown headers. Provide only the polished job description text."
     )
@@ -155,6 +347,8 @@ def generate_job_description(data: GenerateJDRequest):
         "title": title,
         "department": dept,
         "job_description": jd_text,
+        "company_name": comp,
+        "company_website_used": bool(website_context),
         "status": "success"
     }
 

@@ -8,6 +8,7 @@ const COMPANY_NAME_MAX_LENGTH = 255;
 const FIELD_LIMITS = {
   company_name: COMPANY_NAME_MAX_LENGTH,
   industry: 100,
+  website: 2048,
   size: 30,
   location: 150,
   tech_stack: 500,
@@ -24,6 +25,12 @@ function getFieldError(name, value) {
   if (name === 'email') {
     const emailErr = validateEmail(trimmed);
     if (emailErr) return emailErr;
+  }
+  if (name === 'website' && trimmed) {
+    try {
+      const url = new URL(trimmed);
+      if (!['http:', 'https:'].includes(url.protocol) || !url.hostname || url.username || url.password) throw new Error();
+    } catch { return 'Enter a valid website link starting with https:// or http://'; }
   }
   if (name === 'password' && !value) return 'Password is required';
   if (value.length > FIELD_LIMITS[name]) return `Maximum ${FIELD_LIMITS[name]} characters allowed`;
@@ -43,6 +50,7 @@ function getFieldError(name, value) {
 const EMPTY_FORM = {
   company_name: '',
   industry: '',
+  website: '',
   size: '',
   location: '',
   tech_stack: '',
@@ -135,6 +143,7 @@ export default function OnboardCompanyModal({ isOpen, onClose, onSuccess }) {
           name: form.company_name.trim(),
           tenant_type: 'client',
           industry: form.industry.trim() || undefined,
+          website: form.website.trim(),
           size: form.size.trim() || undefined,
           location: form.location.trim() || undefined,
           tech_stack: techStack.length ? techStack : undefined,
@@ -281,6 +290,26 @@ export default function OnboardCompanyModal({ isOpen, onClose, onSuccess }) {
                 <p id="company-name-error" className="text-[11px] text-red-500 mt-1">{fieldErrors.company_name}</p>
               )}
               <p className="text-[11px] text-gray-400 mt-1 text-right">{form.company_name.length}/{COMPANY_NAME_MAX_LENGTH} characters</p>
+            </div>
+
+            <div>
+              <label htmlFor="company-website" className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
+                Company Website <span className="font-normal text-gray-500 normal-case">(optional)</span>
+              </label>
+              <input
+                id="company-website"
+                type="url"
+                name="website"
+                maxLength={FIELD_LIMITS.website}
+                value={form.website}
+                onChange={handleInput}
+                placeholder="https://www.company.com"
+                autoComplete="url"
+                aria-invalid={Boolean(fieldErrors.website)}
+                aria-describedby={fieldErrors.website ? 'company-website-error' : undefined}
+                className={`w-full px-3.5 py-2 text-xs text-gray-900 bg-white border rounded-lg focus:outline-hidden focus:ring-1 focus:ring-black transition-all ${fieldErrors.website ? 'border-red-400' : 'border-gray-200'}`}
+              />
+              {fieldErrors.website && <p id="company-website-error" className="text-[11px] text-red-500 mt-1">{fieldErrors.website}</p>}
             </div>
 
             {/* Row: Industry & Company Size */}
