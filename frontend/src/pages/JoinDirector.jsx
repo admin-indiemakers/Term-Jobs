@@ -15,6 +15,7 @@ import {
   Briefcase,
   Shield
 } from 'lucide-react';
+import SEOHead from '../components/SEOHead';
 
 export default function JoinDirector() {
   const navigate = useNavigate();
@@ -106,6 +107,11 @@ export default function JoinDirector() {
       className="min-h-screen w-full bg-[#f8fafc] flex flex-col items-center justify-center p-4 sm:p-6 md:p-10"
       style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}
     >
+      <SEOHead
+        title="Join as Executive Director — TermJobs Enterprise Portal"
+        description="Register to join your organization's executive team on TermJobs to govern requisitions, budgets, and staffing agreements."
+        canonicalUrl="https://www.termjobs.in/join/director"
+      />
       <div className="w-full max-w-2xl bg-white border border-gray-200/90 rounded-3xl p-6 sm:p-10 md:p-12 shadow-sm text-left">
         {/* Top Header Tag Bar */}
         <div className="flex items-center justify-between pb-3">

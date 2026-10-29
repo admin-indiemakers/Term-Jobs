@@ -59,7 +59,11 @@ export default function LegalPage({ type }) {
   useEffect(() => { window.scrollTo(0, 0); }, [type]);
   return (
     <div className="legal-page">
-      <SEOHead title={`${page.title} — TermJobs`} description={page.intro} canonicalUrl={`https://termjobs.in${page.path}`} />
+      <SEOHead 
+        title={`${page.title} — TermJobs Platform`} 
+        description={page.intro} 
+        canonicalUrl={`https://www.termjobs.in${page.path}`} 
+      />
       <header className="legal-header"><Link to="/" className="legal-brand">TERMJOBS</Link><Link to="/">← Back to home</Link></header>
       <main className="legal-content">
         <p className="legal-eyebrow">TRUST & TRANSPARENCY</p>

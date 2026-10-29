@@ -95,7 +95,12 @@ export function LandingPage({ enabled = true }: { enabled?: boolean }) {
             className="absolute inset-x-0 bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] z-40 flex justify-center px-3 md:bottom-3 md:px-36"
             style={{ color: dark ? "var(--color-paper)" : "var(--color-ink)" }}
           >
-            <nav aria-label="Legal" className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-[10px] sm:text-xs">
+            <nav aria-label="Legal & Directory" className="flex flex-wrap justify-center items-center gap-x-4 gap-y-1 text-[10px] sm:text-xs">
+              <Link to="/jobs/contract" className="py-2 underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2">Contract Jobs</Link>
+              <Link to="/jobs/temporary" className="py-2 underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2">Temporary Jobs</Link>
+              <Link to="/employers" className="py-2 underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2">For Employers</Link>
+              <Link to="/career-guides/temporary-vs-contract-jobs" className="py-2 underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2">Career Guide</Link>
+              <span className="hidden sm:inline text-neutral-500">•</span>
               <Link to="/privacy-policy" className="py-2 underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2">Privacy Policy</Link>
               <Link to="/terms-and-conditions" className="py-2 underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2">Terms & Conditions</Link>
               <Link to="/platform-rules" className="py-2 underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2">Platform Rules</Link>
