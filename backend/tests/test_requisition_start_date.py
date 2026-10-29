@@ -6,12 +6,12 @@ from modules.requisition.domain.schemas import RoleIntent
 from modules.requisition.services.requisition_service import RequisitionService
 
 
-@pytest.mark.parametrize('value', ['', None, '2026-10-19', '2026-10-20'])
+@pytest.mark.parametrize('value', ['', None, '2026-10-19', '2026-10-20', '2026-11', 'November 2026', 'Nov 2026'])
 def test_empty_today_and_future_are_allowed(value):
     validate_start_date(value, today=date(2026, 10, 19))
 
 
-@pytest.mark.parametrize('value', ['2026-10-18', '2025-10-19', '2026-02-30', '19/10/2026', 123])
+@pytest.mark.parametrize('value', ['2026-10-18', '2025-10-19', '2026-02-30', '19/10/2026', 'September 2026', 123])
 def test_past_or_invalid_start_date_rejected(value):
     with pytest.raises(ValueError, match='Start Date'):
         validate_start_date(value, today=date(2026, 10, 19))

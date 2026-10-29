@@ -426,7 +426,9 @@ class RequisitionIn(BaseModel):
     @classmethod
     def validate_deadline(cls, value):
         validate_submission_deadline((value or {}).get("submission_deadline"))
-        validate_start_date((value or {}).get("start_date"))
+        start_date = (value or {}).get("start_date")
+        if str(start_date or "").strip().lower() not in {"to be confirmed", "tbd"}:
+            validate_start_date(start_date)
         return value
 
 
@@ -1486,6 +1488,32 @@ def delete_template(template_id: str, current_user: User = Depends(get_current_u
 
 
 # --- requisition lifecycle --------------------------------------------------
+def _chat_requisition_missing_details(prefill: dict | None) -> list[str]:
+    from modules.requisition.domain.required_details import missing_requisition_details
+
+    prefill = prefill or {}
+    return missing_requisition_details({
+        "department": prefill.get("department"),
+        "location": prefill.get("primary_location") or prefill.get("location"),
+        "experience_level": prefill.get("experience_band") or prefill.get("experience"),
+        "hiring_model": prefill.get("work_mode") or prefill.get("hiring_model"),
+        "target_start_date": prefill.get("start_date") or prefill.get("target_start_date"),
+        "skills": prefill.get("must_have_skills") or prefill.get("skills"),
+    })
+
+
+def _ensure_chat_requisition_complete(req: models.Requisition) -> None:
+    intake_meta = getattr(req, "intake_meta", None) or {}
+    if intake_meta.get("intake_mode") != "chat_inline":
+        return
+    missing = _chat_requisition_missing_details(intake_meta.get("prefill"))
+    if missing:
+        raise HTTPException(
+            status_code=422,
+            detail="Complete these required requisition details before submission: " + ", ".join(missing),
+        )
+
+
 @app.post("/requisitions", status_code=201)
 @app.post("/api/requisitions", status_code=201)
 def create_requisition(
@@ -1496,6 +1524,14 @@ def create_requisition(
     from modules.requisition.permissions import require_requisition_creator
     require_requisition_creator(current_user)
     _require_writable(current_user)
+
+    if body.intake_mode == "chat_inline":
+        missing = _chat_requisition_missing_details(body.prefill)
+        if missing:
+            raise HTTPException(
+                status_code=422,
+                detail="Complete these required requisition details before submission: " + ", ".join(missing),
+            )
 
     # The company profile must belong to the requester's tenant.
     with get_session() as session:
@@ -3845,6 +3881,7 @@ def approve_requisition(requisition_id: str, body: ApproveIn | None = None, curr
     _require_writable(current_user)
     req_dict = _get_requisition(requisition_id)
     _require_tenant(req_dict, current_user)
+    _ensure_chat_requisition_complete(req_dict)
     _require_approval_deadline(requisition_id)
     status_str = str(req_dict.status or "").lower()
     if status_str in ("published", "active") and str(current_user.role or "").strip().lower() in ("hiring manager", "hiring_manager"):
@@ -4020,6 +4057,7 @@ def submit_requisition_for_director_approval_route(
 ) -> dict:
     req = _get_requisition(requisition_id)
     _require_tenant(req, current_user)
+    _ensure_chat_requisition_complete(req)
 
     _require_approval_deadline(requisition_id, allow_resubmission=True)
     now_iso = _utcnow().isoformat()
@@ -4069,7 +4107,9 @@ def publish_requisition(
     background_tasks: BackgroundTasks = BackgroundTasks(),
     current_user: User = Depends(get_current_user)
 ) -> dict:
-    _require_tenant(_get_requisition(requisition_id), current_user)
+    req = _get_requisition(requisition_id)
+    _require_tenant(req, current_user)
+    _ensure_chat_requisition_complete(req)
 
     _require_approval_deadline(requisition_id)
     db_req = _get_requisition(requisition_id)

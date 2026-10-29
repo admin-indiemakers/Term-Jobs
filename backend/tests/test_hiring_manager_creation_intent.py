@@ -46,6 +46,119 @@ def test_creation_opens_tenant_role_selection(monkeypatch, prompt, has_templates
     agent.httpx.post.assert_not_called()
 
 
+@pytest.mark.parametrize("prompt", [
+    "i need a fd engineer",
+    "I need a FD enginner",
+    "Hire a forward deployed engineer",
+])
+def test_fd_engineer_request_keeps_forward_deployed_title(prompt):
+    result = {
+        "reply": "I've drafted the requisition for **Full Stack Development Engineer**.",
+        "executed_actions": [{
+            "tool": "draft_hiring_requisition",
+            "result": {
+                "title": "Full Stack Development Engineer",
+                "job_description": "Seeking a Full Stack Development Engineer.",
+            },
+        }],
+    }
+
+    normalized = agent.normalize_fd_engineer_request(prompt, result)
+
+    assert normalized["executed_actions"][0]["result"]["title"] == "Forward Deployed Engineer"
+    assert normalized["executed_actions"][0]["result"]["job_description"] == "Seeking a Forward Deployed Engineer."
+    assert "Forward Deployed Engineer" in normalized["reply"]
+
+
+def test_fd_normalization_does_not_rewrite_other_roles():
+    result = {"executed_actions": [{
+        "tool": "draft_hiring_requisition",
+        "result": {"title": "Full Stack Engineer"},
+    }]}
+
+    assert agent.normalize_fd_engineer_request("I need a full stack engineer", result) is result
+    assert result["executed_actions"][0]["result"]["title"] == "Full Stack Engineer"
+
+
+def test_submission_error_lists_missing_fields_instead_of_claiming_director_submission():
+    result = {
+        "reply": "The requisition was sent to the Director.",
+        "executed_actions": [{
+            "tool": "submit_for_director_approval",
+            "result": {
+                "error": "Complete required details first.",
+                "require_director_approval": False,
+                "missing_required_fields": ["Hiring model", "Target start date", "Required skills"],
+            },
+        }],
+    }
+
+    normalized = agent.request_missing_requisition_details(result)
+
+    assert "couldn't publish" in normalized["reply"]
+    assert "Hiring model, Target start date, Required skills" in normalized["reply"]
+    assert "sent to the Director" not in normalized["reply"]
+
+
+def test_requisition_draft_is_recovered_from_chat_history():
+    draft = {"title": "Sales Executive", "skills": ["Negotiation", "CRM"]}
+    history = [{
+        "role": "assistant",
+        "content": f"Review this draft.\nDraft context: {__import__('json').dumps(draft)}",
+    }]
+
+    assert agent.requisition_draft_from_history(history) == draft
+
+
+@pytest.mark.parametrize(("shorthand", "expected"), [
+    ("WFO", "On-site"),
+    ("work from office", "On-site"),
+    ("WFH", "Remote"),
+    ("Hybrid", "Hybrid"),
+])
+def test_requisition_work_mode_shorthand_is_normalized(shorthand, expected):
+    assert agent.normalize_requisition_hiring_model(shorthand) == expected
+
+
+def test_wfo_in_role_summary_fills_hiring_model_without_replacing_city():
+    draft = agent.draft_requisition_preview(
+        title="Sales Executive",
+        department="Sales",
+        location="Calicut",
+        experience_level="Mid (2-4 yrs)",
+        skills="Docker, PostgreSQL",
+        job_description="Work 5 days WFO in Calicut.",
+        target_start_date="November 2026",
+    )
+
+    assert draft["location"] == "Calicut"
+    assert draft["hiring_model"] == "On-site"
+    assert "Hiring model" not in draft["missing_required_fields"]
+
+
+def test_existing_draft_work_mode_is_recovered_from_its_role_summary():
+    draft = {
+        "title": "Sales Executive",
+        "department": "Sales",
+        "location": "Calicut",
+        "experience": "Mid (2-4 yrs)",
+        "experience_level": "Mid (2-4 yrs)",
+        "hiring_model": "To be confirmed",
+        "target_start_date": "November 2026",
+        "skills": ["Docker", "PostgreSQL", "REST APIs"],
+        "summary": "Work five days WFO in Calicut.",
+    }
+    result = {
+        "reply": "Please provide the missing details.",
+        "executed_actions": [{"tool": "draft_hiring_requisition", "result": draft}],
+    }
+
+    normalized = agent.request_missing_requisition_details(result)
+
+    assert draft["hiring_model"] == "On-site"
+    assert draft["missing_required_fields"] == []
+
+
 @pytest.mark.parametrize('prompt', [
     'can u show me closed requsition',
     'show closed requisitions',

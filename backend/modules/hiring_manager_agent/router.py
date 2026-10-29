@@ -187,12 +187,35 @@ def hiring_manager_agent_chat(
         approval_required = getattr(company_profile, "require_director_approval", True) is not False
     executed_actions = result.get("executed_actions", [])
     has_requisition_draft = False
+    missing_requisition_fields = []
     for action in executed_actions:
         if action.get("tool") == "draft_hiring_requisition" and isinstance(action.get("result"), dict):
             action["result"]["require_director_approval"] = approval_required
+            from modules.hiring_manager_agent.agent import normalize_requisition_hiring_model
+            draft_result = action["result"]
+            draft_result["hiring_model"] = normalize_requisition_hiring_model(
+                draft_result.get("hiring_model", ""),
+                draft_result.get("job_description") or draft_result.get("summary") or draft_result.get("role_summary", ""),
+                draft_result.get("location", ""),
+            ) or draft_result.get("hiring_model") or "To be confirmed"
+            from modules.requisition.domain.required_details import missing_requisition_details
+            missing_requisition_fields = missing_requisition_details(draft_result)
+            draft_result["missing_required_fields"] = missing_requisition_fields
+            draft_result["is_complete"] = not missing_requisition_fields
             has_requisition_draft = True
     reply = result.get("reply", "")
-    if has_requisition_draft and not approval_required:
+    if has_requisition_draft and missing_requisition_fields:
+        flow_note = (
+            "Director approval is disabled, but this requisition still needs these details before it can be published: "
+            if not approval_required else
+            "This requisition needs these details before it can be submitted for Director approval: "
+        )
+        reply = (
+            f"{flow_note}**{', '.join(missing_requisition_fields)}**. "
+            "For example, what key skills do you need, and when should the person start? "
+            "You can reply with the missing details together, or edit the draft card."
+        )
+    elif has_requisition_draft and not approval_required:
         reply = "Review the requisition draft below. Director approval is disabled for your company; choose **Publish Requisition** when it is ready."
 
     return {

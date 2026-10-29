@@ -1,4 +1,5 @@
 from datetime import date, datetime
+import re
 from zoneinfo import ZoneInfo
 
 
@@ -31,6 +32,30 @@ def submission_deadline_passed(role: dict | None, today: date | None = None) -> 
 
 def validate_start_date(value, today: date | None = None) -> None:
     """New requisitions may start today or later in the application timezone."""
+    month_value = None
+    if isinstance(value, str):
+        normalized = value.strip()
+        if re.fullmatch(r"\d{4}-\d{2}", normalized):
+            year, month = map(int, normalized.split("-"))
+            month_value = (year, month)
+        else:
+            for fmt in ("%B %Y", "%b %Y"):
+                try:
+                    parsed = datetime.strptime(normalized, fmt)
+                    month_value = (parsed.year, parsed.month)
+                    break
+                except ValueError:
+                    continue
+    if month_value:
+        year, month = month_value
+        try:
+            start_month = date(year, month, 1)
+        except ValueError:
+            raise ValueError("Start Date must be a valid date or month and year.") from None
+        today = today or datetime.now(ZoneInfo("Asia/Kolkata")).date()
+        if (start_month.year, start_month.month) < (today.year, today.month):
+            raise ValueError("Start Date cannot be in the past. Choose the current or a future month.")
+        return
     try:
         validate_submission_deadline(value, today=today)
     except ValueError as error:
