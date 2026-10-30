@@ -1324,7 +1324,7 @@ function HiringManagerDashboardContent() {
   }, []);
 
   // Real AI Agent Chat Trigger
-  const handleSendPrompt = async (promptText) => {
+  const handleSendPrompt = async (promptText, chatAction = null) => {
     const text = (promptText || promptInput).trim();
     if (!text || isAiTyping) return;
 
@@ -1347,6 +1347,7 @@ function HiringManagerDashboardContent() {
         timeout: 30000,
         body: {
           prompt: text,
+          ...(chatAction || {}),
           history: messages.slice(-10).map((m) => ({
             role: m.sender === 'user' ? 'user' : 'assistant',
             content: m.text + (m.requisitionDraft ? `\nDraft context: ${JSON.stringify(m.requisitionDraft)}` : ''),
@@ -1387,6 +1388,7 @@ function HiringManagerDashboardContent() {
       let candCards = null;
       const candidateAction = executedActions.find(
         (a) =>
+          a.tool === 'list_requisition_candidates' ||
           a.tool === 'list_shortlisted_candidates' ||
           a.tool === 'compare_shortlisted_candidates' ||
           a.tool === 'screen_candidates_summary'
@@ -2653,7 +2655,7 @@ function HiringManagerDashboardContent() {
 
                                       <button
                                         type="button"
-                                        onClick={() => handleSendPrompt(`Show candidates for ${msg.requisitionDraft.title}`)}
+                                        onClick={() => handleSendPrompt(`Show candidates for ${msg.requisitionDraft.title}`, msg.requisitionDraft.id ? { action: 'list_requisition_candidates', requisition_id: msg.requisitionDraft.id } : null)}
                                         className="px-3.5 py-2 rounded-xl bg-white border border-gray-200 text-xs font-semibold text-gray-800 hover:bg-gray-50 transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
                                       >
                                         <Users size={13} className="text-gray-500" />
@@ -2918,7 +2920,7 @@ function HiringManagerDashboardContent() {
                                         </button>
                                         <button
                                           type="button"
-                                          onClick={() => handleSendPrompt(`Show candidates for ${req.title}`)}
+                                          onClick={() => handleSendPrompt(`Show candidates for ${req.title}`, { action: 'list_requisition_candidates', requisition_id: req.id })}
                                           className="px-3 py-1.5 rounded-xl bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 text-xs font-semibold transition-colors cursor-pointer"
                                         >
                                           Candidates
