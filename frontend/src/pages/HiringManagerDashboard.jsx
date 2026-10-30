@@ -477,7 +477,9 @@ function HiringManagerDashboardContent() {
   }, [token]);
 
   const draftRequiresDirectorApproval = (draft) => (
-    companyRequiresDirectorApproval ?? (draft?.require_director_approval !== false)
+    typeof draft?.require_director_approval === 'boolean'
+      ? draft.require_director_approval
+      : (companyRequiresDirectorApproval ?? true)
   );
 
   const resolvedDraftHiringModel = (draft) => {
@@ -909,13 +911,12 @@ function HiringManagerDashboardContent() {
         // Creation already enters the configured workflow. Only call the
         // publish transition for an off-policy tenant if an older backend
         // returned the draft in a non-published state.
-        const workflowResult = !approvalRequired && res?.status !== 'Published'
-          ? await request(`/requisitions/${newReqId}/submit-for-approval`, { method: 'POST', token })
+        const normalizedStatus = String(res?.status || '').toLowerCase().replace(/[ _-]/g, '');
+        const workflowResult = !approvalRequired && normalizedStatus !== 'published'
+          ? await request(`/api/requisitions/${newReqId}/publish`, { method: 'POST', token })
           : res;
-        const isPublished = workflowResult?.status === 'Published';
-        const finalApprovalRequired = typeof workflowResult?.require_director_approval === 'boolean'
-          ? workflowResult.require_director_approval
-          : approvalRequired;
+        const isPublished = String(workflowResult?.status || '').toLowerCase().replace(/[ _-]/g, '') === 'published';
+        const finalApprovalRequired = approvalRequired;
         window.dispatchEvent(new CustomEvent('refresh-hm-data'));
         window.dispatchEvent(new CustomEvent('tj-requisitions-updated'));
 
