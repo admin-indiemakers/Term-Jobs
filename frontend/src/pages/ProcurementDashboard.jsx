@@ -312,10 +312,145 @@ Timestamp: ${new Date().toISOString()}
 
   const sowData = activeSow?.sow_data || {};
   const rawStatus = (activeSow?.status || sowData?.status || '').trim();
-  const isDirectorApproved = rawStatus === 'Paid' || rawStatus === 'Approved by Director' || rawStatus === 'Approved' || rawStatus === 'ACTIVE';
+  const paymentStatus = (activeSow?.payment_status || sowData?.payment_status || '').trim();
+  const isPaid = rawStatus.toLowerCase() === 'paid' || paymentStatus.toLowerCase() === 'paid';
+  const isDirectorApproved = isPaid || rawStatus === 'Approved by Director' || rawStatus === 'Approved' || rawStatus === 'ACTIVE' || Boolean(activeSow?.director_approved_by);
   const isPendingDirector = !isDirectorApproved && (rawStatus === 'Pending Director Approval' || rawStatus.toLowerCase().includes('approved by procurement') || activeSow?.procurement_authorized === true);
   const isRevision = rawStatus.toLowerCase().includes('revision');
   const isRejected = rawStatus.toLowerCase().includes('reject');
+  const isProcurementApproved = isDirectorApproved || isPendingDirector;
+
+  const isCountersigned = isPaid || rawStatus === 'ACTIVE' || rawStatus === 'Countersigned' || Boolean(activeSow?.vendor_signed || sowData?.countersigned);
+  const isHoursLogged = isPaid || Boolean(activeSow?.hours_logged || sowData?.hours_logged);
+  const isHoursApproved = isPaid || Boolean(activeSow?.hours_approved || sowData?.hours_approved);
+
+  const workflowStages = useMemo(() => {
+    // Step 1: Generate Contract (Procurement)
+    let s1 = { id: '01', title: 'Generate Contract', role: 'Procurement Team', owner: `${String(user?.name || 'Aditi').split(' ')[0]} (Procurement)` };
+    if (isRejected) {
+      s1.status = 'blocked';
+      s1.statusText = 'Rejected';
+      s1.action = 'Commercial terms rejected by Procurement';
+    } else if (isRevision) {
+      s1.status = 'blocked';
+      s1.statusText = 'Revision Needed';
+      s1.action = 'Revision requested; awaiting Recruiter updates';
+    } else if (isProcurementApproved) {
+      s1.status = 'completed';
+      s1.statusText = 'Authorized';
+      s1.action = 'Procurement verified and authorized';
+    } else {
+      s1.status = 'current';
+      s1.statusText = 'Action Required';
+      s1.action = 'Verify commercials and authorize work order';
+    }
+
+    // Step 2: Director Approval (Executive Director)
+    let s2 = { id: '02', title: 'Director Approval', role: 'Executive Director', owner: 'Company Director' };
+    if (isRejected || isRevision) {
+      s2.status = 'blocked';
+      s2.statusText = 'Blocked';
+      s2.action = 'Blocked pending contract revision';
+    } else if (isDirectorApproved) {
+      s2.status = 'completed';
+      s2.statusText = 'Approved';
+      s2.action = 'Executive sign-off granted by Director';
+    } else if (isProcurementApproved) {
+      s2.status = 'current';
+      s2.statusText = 'Awaiting Sign-off';
+      s2.action = 'Awaiting Executive Director sign-off';
+    } else {
+      s2.status = 'pending';
+      s2.statusText = 'Pending';
+      s2.action = 'Awaiting Procurement authorization';
+    }
+
+    // Step 3: Countersign (Staffing Vendor)
+    let s3 = { id: '03', title: 'Countersign', role: 'Staffing Vendor', owner: String(sowData.supplier_name || 'Vendor').split(' ')[0] };
+    if (isRejected || isRevision) {
+      s3.status = 'blocked';
+      s3.statusText = 'Blocked';
+      s3.action = 'Blocked pending contract revision';
+    } else if (isCountersigned) {
+      s3.status = 'completed';
+      s3.statusText = 'Countersigned';
+      s3.action = 'Countersignature executed by Vendor';
+    } else if (isDirectorApproved) {
+      s3.status = 'current';
+      s3.statusText = 'Action Required';
+      s3.action = 'Vendor countersignature required to activate';
+    } else {
+      s3.status = 'pending';
+      s3.statusText = 'Pending';
+      s3.action = 'Awaiting Director approval';
+    }
+
+    // Step 4: Log Hours (Contract Worker)
+    let s4 = { id: '04', title: 'Log Hours', role: 'Contract Worker', owner: String(sowData.deployed_personnel || 'Worker').split(' ')[0] };
+    if (isRejected || isRevision) {
+      s4.status = 'blocked';
+      s4.statusText = 'Blocked';
+      s4.action = 'Blocked pending contract revision';
+    } else if (isHoursLogged) {
+      s4.status = 'completed';
+      s4.statusText = 'Hours Logged';
+      s4.action = 'Timesheet submitted for current billing cycle';
+    } else if (isCountersigned) {
+      s4.status = 'current';
+      s4.statusText = 'Active Cycle';
+      s4.action = 'Contract worker logs weekly timesheet hours';
+    } else {
+      s4.status = 'pending';
+      s4.statusText = 'Pending';
+      s4.action = 'Awaiting contract countersign';
+    }
+
+    // Step 5: Approve Hours (Hiring Manager)
+    let s5 = { id: '05', title: 'Approve Hours', role: 'Hiring Manager', owner: 'Hiring Manager' };
+    if (isRejected || isRevision) {
+      s5.status = 'blocked';
+      s5.statusText = 'Blocked';
+      s5.action = 'Blocked pending contract revision';
+    } else if (isHoursApproved) {
+      s5.status = 'completed';
+      s5.statusText = 'Approved';
+      s5.action = 'Timesheet approved by Hiring Manager';
+    } else if (isHoursLogged) {
+      s5.status = 'current';
+      s5.statusText = 'Approval Needed';
+      s5.action = 'Hiring Manager verification & timesheet approval';
+    } else {
+      s5.status = 'pending';
+      s5.statusText = 'Pending';
+      s5.action = 'Awaiting worker timesheet submission';
+    }
+
+    // Step 6: Invoice & Pay (Finance / AP)
+    let s6 = { id: '06', title: 'Invoice & Pay', role: 'Finance Team', owner: 'Finance / AP' };
+    if (isRejected || isRevision) {
+      s6.status = 'blocked';
+      s6.statusText = 'Blocked';
+      s6.action = 'Blocked pending contract revision';
+    } else if (isPaid) {
+      s6.status = 'completed';
+      s6.statusText = 'Paid';
+      s6.action = 'Payment disbursed and billing settled';
+    } else if (isHoursApproved || (isDirectorApproved && rawStatus === 'ACTIVE')) {
+      s6.status = 'current';
+      s6.statusText = 'Ready for Pay';
+      s6.action = 'Finance verification and invoice disbursement';
+    } else {
+      s6.status = 'pending';
+      s6.statusText = 'Pending';
+      s6.action = 'Awaiting approved timesheet hours';
+    }
+
+    return [s1, s2, s3, s4, s5, s6];
+  }, [isRejected, isRevision, isProcurementApproved, isDirectorApproved, isCountersigned, isHoursLogged, isHoursApproved, isPaid, user?.name, sowData.supplier_name, sowData.deployed_personnel, rawStatus]);
+
+  const activeWorkflowStage = useMemo(() => {
+    return workflowStages.find((s) => s.status === 'blocked') || workflowStages.find((s) => s.status === 'current') || workflowStages[workflowStages.length - 1];
+  }, [workflowStages]);
 
   if (loading && sowList.length === 0) {
     return (
@@ -360,73 +495,118 @@ Timestamp: ${new Date().toISOString()}
               className="bg-white border border-gray-300 rounded-lg px-3 py-2 !text-gray-900" />
           </label>
 
-      {/* Top 6-Step Workflow Stage Bar */}
-      <div className="bg-[#1C1D21] text-white rounded-2xl p-3.5 sm:px-6 shadow-sm flex items-center justify-between overflow-x-auto text-xs font-medium">
-        <div className="flex items-center gap-6 sm:gap-10 shrink-0">
-          {/* Step 1: Procurement Verification */}
-          <div className="flex items-center gap-2 text-white">
-            <span className={`w-5 h-5 rounded-full ${isPendingDirector || isDirectorApproved ? 'bg-emerald-600' : 'bg-blue-600'} text-white font-extrabold text-[11px] flex items-center justify-center`}>
-              01
+      {/* Top 6-Step Workflow Progression Bar */}
+      <div className="bg-[#18191E] border border-white/10 text-white rounded-2xl p-4 sm:p-5 shadow-lg space-y-4">
+        {/* Next Required Action Highlight Banner */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/10 text-xs">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <span className="text-gray-400 font-bold uppercase tracking-wider text-[10px]">Current Stage:</span>
+            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black border ${
+              activeWorkflowStage.status === 'blocked'
+                ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                : activeWorkflowStage.status === 'completed'
+                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                  : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+            }`}>
+              <span className={`w-2 h-2 rounded-full ${
+                activeWorkflowStage.status === 'blocked'
+                  ? 'bg-rose-400 animate-pulse'
+                  : activeWorkflowStage.status === 'completed'
+                    ? 'bg-emerald-400'
+                    : 'bg-amber-400 animate-pulse'
+              }`} />
+              <span>Step {activeWorkflowStage.id}: {activeWorkflowStage.title}</span>
             </span>
-            <div className="leading-tight">
-              <div className="font-bold">Generate contract</div>
-              <div className="text-[10px] text-gray-400">{String(user?.name || 'Aditi').split(' ')[0]} (Procurement)</div>
-            </div>
+            <span className="text-gray-400 font-medium hidden sm:inline">•</span>
+            <span className="text-gray-300 font-semibold">
+              <span className="text-gray-500 font-normal">Responsible: </span>
+              {activeWorkflowStage.role} ({activeWorkflowStage.owner})
+            </span>
           </div>
 
-          {/* Step 2: Director Approval */}
-          <div className={`flex items-center gap-2 ${isDirectorApproved ? 'text-white' : isPendingDirector ? 'text-amber-300' : 'text-gray-400'}`}>
-            <span className={`w-5 h-5 rounded-full ${isDirectorApproved ? 'bg-emerald-600 text-white' : isPendingDirector ? 'bg-amber-500 text-black animate-pulse' : 'bg-gray-800 text-gray-300'} font-bold text-[11px] flex items-center justify-center`}>
-              02
+          <div className="flex items-center gap-2 self-start sm:self-auto bg-white/5 border border-white/10 px-3 py-1.5 rounded-xl">
+            <Clock size={13} className="text-amber-400 shrink-0" />
+            <span className="text-[11px] text-gray-200 font-medium">
+              <strong className="text-white font-bold">Next Action: </strong>
+              {activeWorkflowStage.action}
             </span>
-            <div className="leading-tight">
-              <div className="font-bold">Director approval</div>
-              <div className="text-[10px] text-gray-400">Executive Sign-off</div>
-            </div>
           </div>
+        </div>
 
-          {/* Step 3: Countersign */}
-          <div className="flex items-center gap-2 text-gray-400">
-            <span className="w-5 h-5 rounded-full bg-gray-800 text-gray-300 font-bold text-[11px] flex items-center justify-center">
-              03
-            </span>
-            <div className="leading-tight">
-              <div className="font-medium text-gray-300">Countersign</div>
-              <div className="text-[10px] text-gray-500">{String(sowData.supplier_name || 'Vendor').split(' ')[0]}</div>
-            </div>
-          </div>
+        {/* 6-Stage Visual Rail */}
+        <div className="overflow-x-auto no-scrollbar pt-1 pb-1">
+          <div className="flex items-center justify-between min-w-[760px] gap-2">
+            {workflowStages.map((stage, idx) => {
+              const isComp = stage.status === 'completed';
+              const isCurr = stage.status === 'current';
+              const isBlk = stage.status === 'blocked';
 
-          {/* Step 4: Log hours */}
-          <div className="flex items-center gap-2 text-gray-400">
-            <span className="w-5 h-5 rounded-full bg-gray-800 text-gray-300 font-bold text-[11px] flex items-center justify-center">
-              04
-            </span>
-            <div className="leading-tight">
-              <div className="font-medium text-gray-300">Log hours</div>
-              <div className="text-[10px] text-gray-500">{String(sowData.deployed_personnel || 'Worker').split(' ')[0]}</div>
-            </div>
-          </div>
+              return (
+                <React.Fragment key={stage.id}>
+                  {/* Step Item */}
+                  <div
+                    className={`flex items-center gap-3 p-2.5 rounded-xl transition-all ${
+                      isCurr
+                        ? 'bg-white/10 border border-amber-400/50 shadow-md ring-1 ring-amber-400/20'
+                        : isBlk
+                          ? 'bg-rose-950/30 border border-rose-500/40'
+                          : isComp
+                            ? 'bg-white/[0.04] border border-white/10'
+                            : 'bg-transparent opacity-65'
+                    }`}
+                  >
+                    {/* Circle Indicator */}
+                    <div
+                      className={`w-7 h-7 rounded-full flex items-center justify-center font-extrabold text-[11px] shrink-0 ${
+                        isComp
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : isCurr
+                            ? 'bg-amber-400 text-black font-black animate-pulse shadow-md ring-2 ring-amber-300/40'
+                            : isBlk
+                              ? 'bg-rose-600 text-white'
+                              : 'bg-gray-800 text-gray-400 border border-white/10'
+                      }`}
+                    >
+                      {isComp ? <Check size={14} strokeWidth={3} /> : isBlk ? <X size={14} strokeWidth={3} /> : stage.id}
+                    </div>
 
-          {/* Step 5: Approve hours */}
-          <div className="flex items-center gap-2 text-gray-400">
-            <span className="w-5 h-5 rounded-full bg-gray-800 text-gray-300 font-bold text-[11px] flex items-center justify-center">
-              05
-            </span>
-            <div className="leading-tight">
-              <div className="font-medium text-gray-300">Approve hours</div>
-              <div className="text-[10px] text-gray-500">Hiring Manager</div>
-            </div>
-          </div>
+                    {/* Step Details */}
+                    <div className="leading-tight min-w-0 pr-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`text-[12px] font-extrabold truncate ${isCurr ? 'text-white' : isComp ? 'text-gray-100' : isBlk ? 'text-rose-300' : 'text-gray-400'}`}>
+                          {stage.title}
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-gray-400 font-medium truncate mt-0.5">
+                        {stage.role}
+                      </div>
+                      <div className="mt-1">
+                        <span
+                          className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${
+                            isComp
+                              ? 'bg-emerald-500/20 text-emerald-300'
+                              : isCurr
+                                ? 'bg-amber-400/20 text-amber-300'
+                                : isBlk
+                                  ? 'bg-rose-500/20 text-rose-300'
+                                  : 'bg-white/5 text-gray-500'
+                          }`}
+                        >
+                          {stage.statusText}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
 
-          {/* Step 6: Invoice & Pay */}
-          <div className="flex items-center gap-2 text-gray-400">
-            <span className="w-5 h-5 rounded-full bg-gray-800 text-gray-300 font-bold text-[11px] flex items-center justify-center">
-              06
-            </span>
-            <div className="leading-tight">
-              <div className="font-medium text-gray-300">Invoice & Pay</div>
-              <div className="text-[10px] text-gray-500">Finance / AP</div>
-            </div>
+                  {/* Connecting Arrow/Divider between steps */}
+                  {idx < workflowStages.length - 1 && (
+                    <div className="flex items-center justify-center text-gray-600 shrink-0 px-0.5">
+                      <ChevronRight size={14} className={isComp ? 'text-emerald-500' : isCurr ? 'text-amber-400' : 'text-gray-700'} />
+                    </div>
+                  )}
+                </React.Fragment>
+              );
+            })}
           </div>
         </div>
       </div>
