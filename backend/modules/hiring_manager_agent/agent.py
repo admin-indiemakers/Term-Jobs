@@ -3075,6 +3075,43 @@ def request_missing_requisition_details(result: Optional[Dict[str, Any]]) -> Opt
     return result
 
 
+def apply_staffing_model_answer(prompt: str, history: Optional[List[Any]], result: Dict[str, Any], tenant_id: str = "") -> Dict[str, Any]:
+    """Apply an explicit hiring-model answer to the active draft even if AI skips its draft tool."""
+    from modules.requisition.domain.required_details import missing_requisition_details
+
+    model = extract_requisition_hiring_model(prompt)
+    if not model or not isinstance(result, dict):
+        return result
+
+    actions = result.setdefault("executed_actions", [])
+    draft_action = next((
+        action for action in actions
+        if action.get("tool") == "draft_hiring_requisition" and isinstance(action.get("result"), dict)
+    ), None)
+    if draft_action:
+        draft = draft_action["result"]
+    else:
+        draft = requisition_draft_from_history(history)
+        if not draft or "Hiring model" not in missing_requisition_details(draft):
+            return result
+        draft = dict(draft)
+        draft_action = {"tool": "draft_hiring_requisition", "result": draft}
+        actions.append(draft_action)
+
+    draft["hiring_model"] = model
+    missing = missing_requisition_details(draft)
+    draft["missing_required_fields"] = missing
+    draft["is_complete"] = not missing
+    if tenant_id:
+        draft["require_director_approval"] = _get_tenant_company_context(tenant_id).get("require_director_approval", True)
+    result["reply"] = (
+        f"I updated the hiring model to **{model}**. Please provide the remaining details: {', '.join(missing)}."
+        if missing else
+        f"I updated the hiring model to **{model}**. All required details are complete; review the draft card before submitting it."
+    )
+    return result
+
+
 def requisition_draft_from_history(history: Optional[List[Any]]) -> Optional[Dict[str, Any]]:
     """Read the latest rendered draft card from chat history for a confirmation."""
     for message in reversed(history or []):
@@ -3528,6 +3565,8 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
         return applications
     model_reply = run_model_hiring_chat(prompt, history, current_user)
     if model_reply is not None:
+        tenant_id = str(current_user.get("tenant_id") or "")
+        model_reply = apply_staffing_model_answer(prompt, history, model_reply, tenant_id)
         return request_missing_requisition_details(normalize_fd_engineer_request(prompt, model_reply))
     model_failed = model_available()
 
