@@ -3222,6 +3222,8 @@ def run_model_hiring_chat(prompt, history, current_user):
     """Interpret natural conversation before legacy intent shortcuts execute."""
     if not model_available():
         return None
+    import time
+    completion_deadline = time.monotonic() + 24
     user_id = str(current_user.get("id") or "")
     tenant_id = str(current_user.get("tenant_id") or "")
     user_name = current_user.get("name") or "Hiring Manager"
@@ -3594,7 +3596,10 @@ def run_model_hiring_chat(prompt, history, current_user):
                                 "temperature": 0.3,
                                 "max_tokens": 800
                             }
-                            second_resp = httpx.post(url, headers=active_headers, json=second_payload, timeout=10.0)
+                            remaining = completion_deadline - time.monotonic()
+                            if remaining < 1:
+                                raise TimeoutError("Optional summary budget exhausted")
+                            second_resp = httpx.post(url, headers=active_headers, json=second_payload, timeout=min(6.0, remaining))
                             if second_resp.status_code == 200:
                                 second_content = second_resp.json()["choices"][0]["message"].get("content")
                                 if second_content and len(second_content.strip()) > 10:
@@ -3617,9 +3622,11 @@ def run_model_hiring_chat(prompt, history, current_user):
                     }
         except Exception as groq_err:
             import logging
-            logging.getLogger(__name__).warning("Hiring chat tool execution failed (%s)", type(groq_err).__name__)
+            logging.getLogger(__name__).exception("Hiring chat execution failed")
             if locals().get("executed"):
                 return {"reply": "Some actions completed, but I could not finish the entire request. Review the results below.", "executed_actions": executed}
+
+            return {"reply": "I could not complete this request. Please retry or check its status in the dashboard.", "executed_actions": [], "error_code": "chat_execution_failed"}
 
     return None
 
@@ -3629,6 +3636,17 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
     """Main AI Agent executor for Hiring Manager chat requests with Groq API integration and typo-tolerant fuzzy matching."""
     history = history or []
     current_user = current_user or {}
+    from .read_actions import candidate_reply
+    try:
+        candidates = candidate_reply(prompt, db)
+        if candidates is not None:
+            return candidates
+        if re.search(r'\b(pipeline|hiring\s+(?:stats|summary|overview))\b', prompt, re.I) and not re.search(r'\b(create|draft|edit|update|delete|send|approve|reject)\b', prompt, re.I):
+            return hiring_pipeline_reply(str(current_user.get('id') or ''), str(current_user.get('tenant_id') or ''))
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception('Hiring chat read action failed')
+        return {'reply': 'I could not load your hiring records. Please retry; no changes were made.', 'executed_actions': [], 'error_code': 'hiring_records_unavailable'}
     from .applications import application_reply
     applications = application_reply(prompt, db)
     if applications is not None:
