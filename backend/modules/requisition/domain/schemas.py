@@ -92,6 +92,7 @@ class StructuredRole(BaseModel):
     budget_approved: bool = False  # approval boolean (displayed as "Yes · PO <ref>")
     budget_reference: str = ""  # PO / reference number shown next to the approval
     variance_approved: bool = False  # HR approval recorded for a rate-card variance
+    hiring_model: str = ""  # Direct Hiring / Vendor Managed / other staffing model
 
     # Work setup tab
     work_mode: str = ""  # Remote / Hybrid / Onsite
