@@ -59,7 +59,12 @@ function getNotificationIcon(type = '') {
 function timeAgo(iso) {
   if (!iso) return '';
   try {
-    const then = new Date(iso);
+    let s = String(iso).trim();
+    if (s.includes('T') && !s.endsWith('Z') && !/[+-]\d{2}(:\d{2})?$/.test(s)) {
+      s += 'Z';
+    }
+    const then = new Date(s);
+    if (isNaN(then.getTime())) return '';
     const diff = Date.now() - then.getTime();
     const mins = Math.floor(diff / 60000);
     if (mins < 1) return 'just now';

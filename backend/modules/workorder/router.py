@@ -72,7 +72,16 @@ def _format_datetime(val: Any) -> str | None:
     if not val:
         return None
     if hasattr(val, "isoformat"):
+        if getattr(val, "tzinfo", None) is None:
+            val = val.replace(tzinfo=timezone.utc)
         return val.isoformat()
+    if isinstance(val, str):
+        val_str = val.strip()
+        if not val_str:
+            return None
+        if "T" in val_str and not val_str.endswith("Z") and "+" not in val_str and not (len(val_str) > 19 and "-" in val_str[10:]):
+            return val_str + "Z"
+        return val_str
     return str(val)
 
 

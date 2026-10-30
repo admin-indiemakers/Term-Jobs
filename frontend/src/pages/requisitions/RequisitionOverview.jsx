@@ -96,10 +96,14 @@ function formatDate(iso) {
 }
 
 function timeAgo(iso) {
-  if (!iso) return '2 days ago';
+  if (!iso) return 'Just now';
   try {
-    const d = new Date(iso);
-    if (isNaN(d.getTime())) return '2 days ago';
+    let s = String(iso).trim();
+    if (s.includes('T') && !s.endsWith('Z') && !/[+-]\d{2}(:\d{2})?$/.test(s)) {
+      s += 'Z';
+    }
+    const d = new Date(s);
+    if (isNaN(d.getTime())) return 'Just now';
     const now = new Date();
     const diffSec = Math.max(0, Math.floor((now.getTime() - d.getTime()) / 1000));
     if (diffSec < 60) return 'Just now';
@@ -108,7 +112,7 @@ function timeAgo(iso) {
     if (diffSec < 604800) return `${Math.floor(diffSec / 86400)} days ago`;
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   } catch {
-    return '2 days ago';
+    return 'Just now';
   }
 }
 
