@@ -3088,10 +3088,30 @@ def apply_staffing_model_answer(prompt: str, history: Optional[List[Any]], resul
         action for action in actions
         if action.get("tool") == "draft_hiring_requisition" and isinstance(action.get("result"), dict)
     ), None)
+    prior_draft = requisition_draft_from_history(history)
     if draft_action:
         draft = draft_action["result"]
+        # Models sometimes return a sparse replacement card for a one-field
+        # answer. Keep values from the active card when the replacement only
+        # contains empty/TBC defaults, while still allowing explicit edits.
+        if prior_draft:
+            placeholder = {"", "to be confirmed", "tbd", "n/a", "none"}
+            for key in (
+                "title", "department", "location", "experience_level", "experience",
+                "employment_type", "salary_range", "skills", "job_description",
+                "target_start_date", "openings", "hiring_model", "work_mode",
+            ):
+                current = draft.get(key)
+                prior = prior_draft.get(key)
+                is_placeholder = (
+                    current is None
+                    or (isinstance(current, str) and current.strip().lower() in placeholder)
+                    or (isinstance(current, (list, tuple)) and not current)
+                )
+                if is_placeholder and prior not in (None, ""):
+                    draft[key] = prior
     else:
-        draft = requisition_draft_from_history(history)
+        draft = prior_draft
         if not draft or "Hiring model" not in missing_requisition_details(draft):
             return result
         draft = dict(draft)

@@ -199,6 +199,103 @@ def test_direct_hire_followup_updates_active_draft_when_ai_returns_no_tool_actio
     assert "Direct Hiring" in result["reply"]
 
 
+def test_hiring_model_statement_updates_active_draft_when_ai_skips_draft_tool(monkeypatch):
+    """A natural-language field answer should update the active card, not just the chat text."""
+    from modules.hiring_manager_agent import applications
+
+    draft = {
+        "title": "Business Analyst",
+        "department": "Sales",
+        "location": "Remote",
+        "experience_level": "Entry-level",
+        "employment_type": "Contract",
+        "hiring_model": "To be confirmed",
+        "target_start_date": "November 2026",
+        "skills": ["Excel", "Power BI"],
+        "job_description": "Support business analysis and reporting.",
+    }
+    history = [{
+        "role": "assistant",
+        "content": (
+            "Before this requisition can be published, please provide: Hiring model.\n"
+            f"Draft context: {__import__('json').dumps(draft)}"
+        ),
+    }]
+    monkeypatch.setattr(agent, "model_available", lambda: True)
+    monkeypatch.setattr(agent, "run_model_hiring_chat", lambda *args: {
+        "reply": "I understand.", "executed_actions": []
+    })
+    monkeypatch.setattr(applications, "application_reply", lambda *args: None)
+
+    result = agent.run_hiring_manager_agent_chat(
+        "hiring model is direct hire",
+        history=history,
+        current_user={"id": "test-hm", "tenant_id": "test-tenant"},
+    )
+
+    action = next(
+        action for action in result["executed_actions"]
+        if action["tool"] == "draft_hiring_requisition"
+    )
+    updated = action["result"]
+    assert updated["hiring_model"] == "Direct Hiring"
+    assert "Hiring model" not in updated["missing_required_fields"]
+    assert "Direct Hiring" in result["reply"]
+
+
+def test_hiring_model_answer_merges_sparse_ai_draft_with_active_card(monkeypatch):
+    from modules.hiring_manager_agent import applications
+
+    prior_draft = {
+        "title": "Business Analyst",
+        "department": "Sales",
+        "location": "Remote",
+        "experience_level": "Entry-level",
+        "employment_type": "Contract",
+        "hiring_model": "To be confirmed",
+        "target_start_date": "November 2026",
+        "skills": ["Excel", "Power BI"],
+        "job_description": "Support business analysis and reporting.",
+    }
+    history = [{
+        "role": "assistant",
+        "content": (
+            "Before this requisition can be published, please provide: Hiring model.\n"
+            f"Draft context: {__import__('json').dumps(prior_draft)}"
+        ),
+    }]
+    sparse_draft = {
+        "title": "Business Analyst",
+        "department": "To be confirmed",
+        "location": "To be confirmed",
+        "experience_level": "To be confirmed",
+        "employment_type": "Contract",
+        "hiring_model": "To be confirmed",
+        "target_start_date": "To be confirmed",
+        "skills": "To be confirmed",
+        "job_description": "",
+    }
+    monkeypatch.setattr(agent, "model_available", lambda: True)
+    monkeypatch.setattr(agent, "run_model_hiring_chat", lambda *args: {
+        "reply": "Updated.",
+        "executed_actions": [{"tool": "draft_hiring_requisition", "result": sparse_draft}],
+    })
+    monkeypatch.setattr(applications, "application_reply", lambda *args: None)
+
+    result = agent.run_hiring_manager_agent_chat(
+        "hiring model is direct hire",
+        history=history,
+        current_user={"id": "test-hm", "tenant_id": "test-tenant"},
+    )
+
+    updated = result["executed_actions"][0]["result"]
+    assert updated["hiring_model"] == "Direct Hiring"
+    assert updated["department"] == "Sales"
+    assert updated["location"] == "Remote"
+    assert updated["skills"] == ["Excel", "Power BI"]
+    assert "Hiring model" not in updated["missing_required_fields"]
+
+
 def test_existing_draft_work_mode_does_not_satisfy_staffing_model_requirement():
     draft = {
         "title": "Sales Executive",
