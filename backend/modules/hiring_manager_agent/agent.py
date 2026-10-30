@@ -37,6 +37,7 @@ def _get_tenant_company_context(tenant_id: str = "local") -> Dict[str, Any]:
     overview = ""
     director_name = "Director"
     director_email = ""
+    require_director_approval = True
 
     if not tenant_id or tenant_id in ("local", "all"):
         return {
@@ -48,6 +49,7 @@ def _get_tenant_company_context(tenant_id: str = "local") -> Dict[str, Any]:
             "overview": overview,
             "director_name": director_name,
             "director_email": director_email,
+            "require_director_approval": True,
         }
 
     try:
@@ -67,6 +69,7 @@ def _get_tenant_company_context(tenant_id: str = "local") -> Dict[str, Any]:
                 tech_stack = [s.strip() for s in cp_doc.get("tech_stack") if s]
             if cp_doc.get("location"):
                 location = cp_doc.get("location")
+            require_director_approval = cp_doc.get("require_director_approval", True) is not False
             if cp_doc.get("overview") or cp_doc.get("description"):
                 overview = cp_doc.get("overview") or cp_doc.get("description")
 
@@ -95,6 +98,7 @@ def _get_tenant_company_context(tenant_id: str = "local") -> Dict[str, Any]:
         "overview": overview,
         "director_name": director_name,
         "director_email": director_email,
+        "require_director_approval": require_director_approval,
     }
 
 
@@ -1830,11 +1834,16 @@ def get_candidate_import_guide() -> Dict[str, Any]:
     return {"markdown": markdown}
 
 
-def get_hiring_manager_guide(user_name: str = "Hiring Manager", company_name: str = "your organization", director_name: str = "Director") -> Dict[str, Any]:
+def get_hiring_manager_guide(user_name: str = "Hiring Manager", company_name: str = "your organization", director_name: str = "Director", require_director_approval: bool = True) -> Dict[str, Any]:
     """Provide a comprehensive onboarding and usage guide for Hiring Managers explaining workflows, governance, and capabilities."""
     display_user = user_name if user_name and user_name.lower() not in ("hm", "user", "local", "none", "r") else "Hiring Manager"
     display_company = company_name if company_name and company_name.lower() not in ("local", "all", "none") else "your organization"
     display_director = director_name if director_name and director_name.lower() not in ("none", "") else "the Director"
+    approval_guidance = (
+        f"• **Director Approval:** Your company requires Director approval. When your draft is finalized, click **Send to Director for Approval** (or tell me) to submit it for sign-off by **{display_director}**.\n\n"
+        if require_director_approval else
+        "• **Direct Publication:** Your company allows Hiring Managers to publish finalized requisitions directly; Director approval is not required.\n\n"
+    )
 
     markdown = (
         f"👋 **Welcome to TermJobs, {display_user}!**\n"
@@ -1844,7 +1853,7 @@ def get_hiring_manager_guide(user_name: str = "Hiring Manager", company_name: st
         "**1️⃣ Job Requisitions & Role Drafting**\n"
         "• **AI-Powered Drafting:** Request any role directly in chat (e.g. *\"Draft a Python Backend Engineer with 4 years experience\"*) or pick from pre-configured engineering & product templates.\n"
         "• **Custom Tech Stacks & Edits:** Tailor key skills, role summary, budget, or experience dynamically (e.g. *\"Set key skills to React and TypeScript only\"*).\n"
-        f"• **Mandatory Director Approval:** In TermJobs, Hiring Managers cannot publish jobs directly. When your draft is finalized, click **Send to Director for Approval** (or tell me) to submit it for sign-off by **{display_director}**.\n\n"
+        f"{approval_guidance}"
         "**2️⃣ Candidate Screening & Shortlists**\n"
         "• **Vetted Vendor Submissions:** Review candidates submitted by approved recruitment agencies and staffing partners in your **Shortlisted Candidates** queue.\n"
         "• **AI Match Scoring:** Inspect deep resume match analysis, skills breakdown, and suitability scores.\n"
@@ -1872,6 +1881,7 @@ def get_hiring_manager_guide(user_name: str = "Hiring Manager", company_name: st
             "user_name": display_user,
             "company_name": display_company,
             "director_name": display_director,
+            "require_director_approval": require_director_approval,
             "role": "Hiring Manager"
         }
     }
@@ -3142,6 +3152,7 @@ def run_model_hiring_chat(prompt, history, current_user):
                     "When editing a draft, preserve all unchanged draft fields, especially skills, headcount, start period and experience. "
                     "TermJobs ONLY supports contract jobs. Employment type is always Contract. NEVER ask whether a job is permanent, full-time, or contract, or offer permanent/full-time employment. Ask about contract duration only when needed; never invent a duration. "
                     "Before a requisition can be submitted, the user must provide department, work location, experience level, hiring model (staffing model, such as Direct Hiring or Vendor Managed), target start date, and required skills. Preserve an explicitly stated hiring model exactly and never infer it from a remote/hybrid/on-site location. Do not invent values or treat 'To be confirmed' as complete. If any are missing, show the draft for context and ask one concise follow-up listing only the missing details. Do not imply the requisition is ready to submit until all are provided. "
+                    f"COMPANY REQUISITION FLOW: Director approval is {'REQUIRED' if context.get('require_director_approval', True) else 'DISABLED'} for this company. When disabled, do not offer or claim to send a requisition to the Director; direct the Hiring Manager to Publish Requisition after required details are complete. When enabled, use Director approval before publication. "
                     "Interpret meaning, spelling mistakes, number words, and conversational follow-ups; do not require command keywords. "
                     "For example a staffing need is a draft request even without the word requisition. "
                     "Extract headcount as an integer and preserve timing requirements in target_start_date and the description. "
@@ -3434,7 +3445,7 @@ def run_model_hiring_chat(prompt, history, current_user):
                             executed.append({"tool": "get_ai_assistant_preferences", "result": res})
                             reply_buf.append(res["markdown"])
                         elif fn_name == "get_hiring_manager_guide":
-                            res = get_hiring_manager_guide(user_name=user_name, company_name=company_name, director_name=director_name)
+                            res = get_hiring_manager_guide(user_name=user_name, company_name=company_name, director_name=director_name, require_director_approval=context.get("require_director_approval", True))
                             executed.append({"tool": "get_hiring_manager_guide", "result": res})
                             reply_buf.append(res["markdown"])
 
@@ -3725,7 +3736,7 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
         r")\b"
     )
     if re.search(help_guide_pattern, prompt_lower) or re.fullmatch(r"help(?:\s+me)?[.!?]*", prompt_lower):
-        guide_res = get_hiring_manager_guide(user_name=user_name, company_name=company_name, director_name=director_name)
+        guide_res = get_hiring_manager_guide(user_name=user_name, company_name=company_name, director_name=director_name, require_director_approval=comp_ctx.get("require_director_approval", True))
         return {
             "reply": guide_res["markdown"],
             "executed_actions": [{"tool": "get_hiring_manager_guide", "result": guide_res}]

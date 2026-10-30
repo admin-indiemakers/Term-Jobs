@@ -105,6 +105,24 @@ class TenantCreate(BaseModel):
     location: str = ""
     tech_stack: list[str] = Field(default_factory=list)
     notes: str = ""
+    website: str = Field("", max_length=2048)
+
+    @field_validator("website")
+    @classmethod
+    def validate_website(cls, value):
+        from urllib.parse import urlsplit
+        value = value.strip()
+        if not value:
+            return ""
+        try:
+            url = urlsplit(value)
+            if url.scheme not in ("http", "https") or not url.hostname or url.username or url.password or re.search(r"\s", value):
+                raise ValueError()
+            url.port
+        except ValueError:
+            raise ValueError("Enter a valid website link starting with https:// or http://")
+        return value
+
 
 class TenantResponse(BaseModel):
     id: str
@@ -221,6 +239,8 @@ class CompanyProfileUpdate(BaseModel):
     size: str | None = Field(None, max_length=100)
     location: str | None = Field(None, max_length=255)
     tech_stack: list[str] | None = None
+    website: str | None = Field(None, max_length=2048)
+    require_director_approval: bool | None = None
     notes: str | None = None
     logo_url: str | None = None
     admin_name: str | None = Field(None, min_length=1, max_length=255)
@@ -247,6 +267,8 @@ class CompanyProfileDetailResponse(BaseModel):
     size: str = ""
     location: str = ""
     tech_stack: list[str] = Field(default_factory=list)
+    website: str = ""
+    require_director_approval: bool = True
     notes: str = ""
     logo_url: str = ""
     admin_id: str = ""

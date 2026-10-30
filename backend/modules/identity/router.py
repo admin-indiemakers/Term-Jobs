@@ -367,7 +367,16 @@ def get_current_user(authorization: str | None = Header(default=None), db: Sessi
     return user
 
 def _get_company_profile(tenant_id: str, db: Session) -> CompanyProfile | None:
-    return db.query(CompanyProfile).filter(CompanyProfile.tenant_id == tenant_id).first()
+    # Historical onboarding paths may have left duplicate profiles for a
+    # tenant. Keep profile reads and writes on the same canonical (newest)
+    # record used by requisition creation so workflow settings don't appear to
+    # revert after a refresh.
+    return (
+        db.query(CompanyProfile)
+        .filter(CompanyProfile.tenant_id == tenant_id)
+        .order_by(CompanyProfile.created_at.desc())
+        .first()
+    )
 
 def _tenant_name(tenant_id: str, db: Session) -> str:
     if not tenant_id:
@@ -685,6 +694,8 @@ def get_company_profile(
         size=comp.size if comp else "",
         location=comp.location if comp else "",
         tech_stack=comp.tech_stack if comp and comp.tech_stack else [],
+        website=getattr(comp, "website", "") or "",
+        require_director_approval=getattr(comp, "require_director_approval", True) is not False,
         notes=comp.notes if comp else "",
         logo_url=logo_url,
         admin_id=current_user.id,
@@ -693,6 +704,36 @@ def get_company_profile(
         admin_phone=getattr(current_user, "phone", "") or "",
         admin_role=current_user.role,
     )
+
+
+@router.put("/company/profile/flow-setting")
+def update_company_flow_setting(
+    body: CompanyProfileUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Persist the requisition approval toggle without changing other profile fields."""
+    if current_user.role not in ("Admin", "Super Admin"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only Company Admins can update company flow settings",
+        )
+    if body.require_director_approval is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="require_director_approval is required",
+        )
+    tenant = db.query(Tenant).filter(Tenant.id == current_user.tenant_id).first()
+    if not tenant:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found")
+
+    comp = _get_company_profile(current_user.tenant_id, db)
+    if not comp:
+        comp = CompanyProfile(tenant_id=current_user.tenant_id, name=tenant.name)
+        db.add(comp)
+    comp.require_director_approval = body.require_director_approval
+    db.commit()
+    return {"require_director_approval": comp.require_director_approval is not False}
 
 
 @router.put("/company/profile", response_model=CompanyProfileDetailResponse)
@@ -746,6 +787,8 @@ def update_company_profile(
             industry=body.industry or "",
             size=body.size or "",
             location=body.location or "",
+            website=body.website or "",
+            require_director_approval=body.require_director_approval if body.require_director_approval is not None else True,
             tech_stack=body.tech_stack or [],
             notes=body.notes or "",
             logo_url=body.logo_url or "",
@@ -760,6 +803,10 @@ def update_company_profile(
             comp.size = body.size.strip()
         if body.location is not None:
             comp.location = body.location.strip()
+        if body.website is not None:
+            comp.website = body.website.strip()
+        if body.require_director_approval is not None:
+            comp.require_director_approval = body.require_director_approval
         if body.tech_stack is not None:
             comp.tech_stack = body.tech_stack
         if body.notes is not None:
@@ -813,6 +860,8 @@ def update_company_profile(
         size=comp.size if comp else "",
         location=comp.location if comp else "",
         tech_stack=comp.tech_stack if comp and comp.tech_stack else [],
+        website=getattr(comp, "website", "") or "",
+        require_director_approval=getattr(comp, "require_director_approval", True) is not False,
         notes=comp.notes if comp else "",
         logo_url=logo_url,
         email_delivery=email_delivery,
@@ -1519,6 +1568,7 @@ def create_tenant(
         tenant_id=tenant.id,
         name=tenant.name,
         industry=body.industry,
+        website=body.website,
         size=body.size,
         location=body.location,
         tech_stack=body.tech_stack,

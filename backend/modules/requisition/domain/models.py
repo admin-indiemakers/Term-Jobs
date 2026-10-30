@@ -11,6 +11,8 @@ class CompanyProfile(Model):
         "id": _uuid,
         "tenant_id": "local",
         "name": "",
+        "website": "",
+        "require_director_approval": True,
         "industry": "",
         "size": "",
         "location": "",
@@ -23,6 +25,8 @@ class CompanyProfile(Model):
     id = Column("id")
     tenant_id = Column("tenant_id")
     name = Column("name")
+    website = Column("website")
+    require_director_approval = Column("require_director_approval")
     industry = Column("industry")
     size = Column("size")
     location = Column("location")
@@ -39,6 +43,7 @@ class Requisition(Model):
         "id": _uuid,
         "tenant_id": "local",
         "company_profile_id": None,
+        "client_request_id": None,
         "created_by": None,
         "status": "Draft",
         "title": None,
@@ -75,6 +80,7 @@ class Requisition(Model):
     id = Column("id")
     tenant_id = Column("tenant_id")
     company_profile_id = Column("company_profile_id")
+    client_request_id = Column("client_request_id")
     created_by = Column("created_by")
     status = Column("status")
     title = Column("title")
