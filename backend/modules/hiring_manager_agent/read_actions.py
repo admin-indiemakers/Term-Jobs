@@ -30,3 +30,30 @@ def candidate_reply(prompt, database, requisition_id=None):
                    'requisition_title': titles[str(r['requisition_id'])]} for r in rows]
     return {'reply': f'Found {len(candidates)} candidate application(s) in your authorized requisitions.' if candidates else 'No candidate applications were found for this selection.',
             'executed_actions': [{'tool': 'list_requisition_candidates', 'result': candidates}]}
+
+
+def shortlisted_requisitions_reply(prompt, database):
+    """Join authorized applications to requisitions, instead of listing all candidates."""
+    if not (re.search(r'\b(?:show|list|view|display|get|which)\b', prompt, re.I)
+            and re.search(r'\b(?:requisitions?|jobs?|roles?)\s+(?:with|having|that have)\s+shortlisted\s+candidates?\b', prompt, re.I)):
+        return None
+    if re.search(r'\b(?:reject|approve|delete|schedule|send|update|publish)\b', prompt, re.I):
+        return None
+    requisitions = list(database['requisitions'].find({}))
+    ids = [r['id'] for r in requisitions if r.get('id')]
+    submissions = database['candidate_submissions'].find({'requisition_id': {'$in': ids}})
+    counts = {}
+    for row in submissions:
+        if str(row.get('status') or '').strip().lower() == 'shortlisted':
+            rid = row.get('requisition_id')
+            counts[rid] = counts.get(rid, 0) + 1
+    rows = []
+    fields = ('id', 'title', 'status', 'structured_role', 'department', 'location', 'created_at')
+    for req in requisitions:
+        count = counts.get(req.get('id'), 0)
+        if count:
+            rows.append({**{key: req[key] for key in fields if key in req}, 'shortlisted_count': count})
+    summary = f'Found {len(rows)} requisition(s) with shortlisted candidates.' if rows else 'No requisitions currently have shortlisted candidates.'
+    if rows:
+        summary += '\n\n' + '\n'.join(f"- {r.get('title') or r['id']}: {r['shortlisted_count']} shortlisted" for r in rows)
+    return {'reply': summary, 'executed_actions': [{'tool': 'list_hiring_requisitions', 'result': rows}]}
