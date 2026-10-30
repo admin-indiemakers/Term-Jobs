@@ -3331,7 +3331,8 @@ def run_model_hiring_chat(prompt, history, current_user):
             env_model = getattr(settings, "groq_default_model", None) or os.getenv("GROQ_MODEL")
             model_candidates = list(dict.fromkeys(filter(None, [env_model, "openai/gpt-oss-20b", "openai/gpt-oss-120b"])))
             from .model_transport import request_completion
-            resp, used_model, active_headers = request_completion(url, available_keys, model_candidates, msgs, [] if greeting_only else TOOLS)
+            resp, used_model, active_headers = request_completion(url, available_keys, model_candidates, msgs, [] if greeting_only else TOOLS,
+                budget_seconds=max(0, min(22, completion_deadline - time.monotonic())))
 
             if resp is not None and resp.status_code == 200:
                 data = resp.json()
@@ -3636,8 +3637,11 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
     """Main AI Agent executor for Hiring Manager chat requests with Groq API integration and typo-tolerant fuzzy matching."""
     history = history or []
     current_user = current_user or {}
-    from .read_actions import candidate_reply
+    from .read_actions import candidate_reply, shortlisted_requisitions_reply
     try:
+        requisitions = shortlisted_requisitions_reply(prompt, db)
+        if requisitions is not None:
+            return requisitions
         candidates = candidate_reply(prompt, db)
         if candidates is not None:
             return candidates
@@ -3667,6 +3671,12 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
     # This fallback only creates an incomplete draft from explicit user details;
     # the required-details validator still prevents submission/publishing.
     if model_failed:
+        from .draft_recovery import recover_staffing_request
+        recovered = recover_staffing_request(prompt)
+        if recovered:
+            draft = draft_requisition_preview(**recovered)
+            return {'reply': f"I captured your request for **{draft['title']}**. Please provide: {', '.join(draft['missing_required_fields'])}.",
+                    'executed_actions': [{'tool': 'draft_hiring_requisition', 'result': draft}]}
         last_assistant = ""
         for item in reversed(history):
             if (item.get("sender") or item.get("role")) in ("assistant", "bot"):
@@ -3760,7 +3770,19 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
                 }
 
     if model_failed:
-        return {"reply": "The AI service is temporarily unavailable. Please retry shortly.", "executed_actions": [], "ai_unavailable": True}
+        from .model_transport import last_failure
+        failure = last_failure() or {'error_code': 'ai_unavailable'}
+        messages = {
+            'ai_timeout': 'The assistant took too long to respond. Please retry this message.',
+            'ai_rate_limited': 'The assistant has reached its request limit. Please retry shortly.',
+            'ai_configuration_error': 'The assistant connection needs administrator attention. You can continue in the requisitions dashboard.',
+            'ai_invalid_response': 'The assistant could not interpret this request reliably. Please rephrase it or use the requisitions dashboard.',
+            'ai_request_rejected': 'The assistant could not process this request. Please use the requisitions dashboard while we investigate.',
+        }
+        reply = messages.get(failure['error_code'], 'The assistant could not connect. Please retry this message or use the requisitions dashboard.')
+        if failure.get('reference'):
+            reply += f" Reference: {failure['reference']}."
+        return {'reply': reply, 'executed_actions': [], 'ai_unavailable': True, **failure}
     if not is_hiring_request_in_scope(prompt, history):
         return scope_response()
 
