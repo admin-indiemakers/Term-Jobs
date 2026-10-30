@@ -1496,7 +1496,7 @@ def _chat_requisition_missing_details(prefill: dict | None) -> list[str]:
         "department": prefill.get("department"),
         "location": prefill.get("primary_location") or prefill.get("location"),
         "experience_level": prefill.get("experience_band") or prefill.get("experience"),
-        "hiring_model": prefill.get("work_mode") or prefill.get("hiring_model"),
+        "hiring_model": prefill.get("hiring_model"),
         "target_start_date": prefill.get("start_date") or prefill.get("target_start_date"),
         "skills": prefill.get("must_have_skills") or prefill.get("skills"),
     })
@@ -3838,6 +3838,8 @@ class UpdateRequisitionRoleIn(BaseModel):
     structured_role: dict | None = None
     title: str | None = None
     generated_jd_markdown: str | None = None
+    hiring_model: str | None = None
+    work_mode: str | None = None
 
     @field_validator("structured_role")
     @classmethod
@@ -3866,6 +3868,13 @@ def update_requisition_role(
             db_req.structured_role = cur
             if not body.title and cur.get("title"):
                 db_req.title = cur.get("title")
+        if body.hiring_model is not None or body.work_mode is not None:
+            cur = dict(db_req.structured_role or {})
+            if body.hiring_model is not None:
+                cur["hiring_model"] = body.hiring_model
+            if body.work_mode is not None:
+                cur["work_mode"] = body.work_mode
+            db_req.structured_role = cur
         if body.title:
             db_req.title = body.title
         if body.generated_jd_markdown:

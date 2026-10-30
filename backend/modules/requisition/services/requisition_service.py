@@ -147,6 +147,7 @@ def _structured_role_from_prefill(intent: RoleIntent, prefill: dict | None) -> d
         budget_approved=bool(prefill.get("budget_approved")),
         budget_reference=str(prefill.get("budget_reference") or ""),
         variance_approved=bool(prefill.get("variance_approved")),
+        hiring_model=prefill.get("hiring_model") or "",
         work_mode=prefill.get("work_mode") or "",
         work_locations=locations,
         working_hours=prefill.get("working_hours") or "",

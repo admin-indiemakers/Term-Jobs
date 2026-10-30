@@ -481,12 +481,15 @@ function HiringManagerDashboardContent() {
   );
 
   const resolvedDraftHiringModel = (draft) => {
-    const value = String(draft?.hiring_model || draft?.work_mode || '').trim();
-    const evidence = `${value} ${draft?.summary || ''} ${draft?.job_description || ''} ${draft?.role_summary || ''}`.toLowerCase();
-    if (/\bhybrid\b/.test(evidence)) return 'Hybrid';
-    if (/\b(?:wfh|work\s+from\s+home|remote(?:ly)?)\b/.test(evidence)) return 'Remote';
-    if (/\b(?:wfo|work\s+from\s+(?:the\s+)?office|on[ -]?site|onsite|office[ -]based)\b/.test(evidence)) return 'On-site';
-    if (value && !['to be confirmed', 'tbd', 'n/a', 'none'].includes(value.toLowerCase())) return value;
+    const value = String(draft?.hiring_model || '').trim();
+    const normalized = value.toLowerCase();
+    const workModes = ['wfo', 'onsite', 'on site', 'on-site', 'office', 'office based', 'work from office', 'wfh', 'remote', 'work from home', 'work remotely', 'hybrid'];
+    if (value && !['to be confirmed', 'tbd', 'n/a', 'none', ...workModes].includes(normalized)) return value;
+    const evidence = `${draft?.summary || ''} ${draft?.job_description || ''} ${draft?.role_summary || ''}`.toLowerCase();
+    if (/\bdirect[- ]hir(?:e|ing)\b/.test(evidence)) return 'Direct Hiring';
+    if (/\bdirect[- ]applicant\b/.test(evidence)) return 'Direct Applicant';
+    if (/\bvendor[- ]managed\b|\bvendor\s+management\b/.test(evidence)) return 'Vendor Managed';
+    if (/\bvendor[- ]supplied\b/.test(evidence)) return 'Vendor Supplied';
     return '';
   };
 
@@ -503,7 +506,7 @@ function HiringManagerDashboardContent() {
       [valueFor('department'), 'Department'],
       [valueFor('location', 'primary_location'), 'Work location'],
       [valueFor('experience_level', 'experience', 'experience_band'), 'Required experience'],
-      [resolvedDraftHiringModel(draft) || valueFor('hiring_model', 'work_mode'), 'Hiring model'],
+      [resolvedDraftHiringModel(draft), 'Hiring model'],
       [valueFor('target_start_date', 'start_date'), 'Target start date'],
       [valueFor('skills', 'must_have_skills'), 'Required skills'],
     ].filter(([value]) => !value).map(([, label]) => label);
@@ -887,7 +890,8 @@ function HiringManagerDashboardContent() {
             primary_location: draft.location || '',
             engagement_type: draft.employment_type || '',
             experience_band: draft.experience || '',
-            work_mode: resolvedDraftHiringModel(draft) || '',
+            work_mode: draft.work_mode || (['Remote', 'Hybrid', 'On-site'].includes(draft.hiring_model) ? draft.hiring_model : ''),
+            hiring_model: resolvedDraftHiringModel(draft) || '',
             start_date: draft.target_start_date || '',
             must_have_skills: draft.skills || [],
           },
@@ -1020,7 +1024,8 @@ function HiringManagerDashboardContent() {
           location: updatedDraft.location,
           employment_type: updatedDraft.employment_type,
           experience_level: updatedDraft.experience,
-          work_mode: updatedDraft.hiring_model,
+          hiring_model: updatedDraft.hiring_model,
+          work_mode: updatedDraft.work_mode || (['Remote', 'Hybrid', 'On-site'].includes(updatedDraft.hiring_model) ? updatedDraft.hiring_model : ''),
           start_date: updatedDraft.target_start_date,
           must_have_skills: parsedSkills,
           job_description: finalSummary,
@@ -1307,7 +1312,8 @@ function HiringManagerDashboardContent() {
       location: struct.location || req.location || 'Bangalore, India (Hybrid)',
       experience: struct.experience_level || req.experience_level || 'Senior (4-7 yrs)',
       employment_type: struct.employment_type || req.employment_type || 'Full-Time',
-      hiring_model: struct.hiring_model || (struct.location?.toLowerCase().includes('remote') ? 'Remote' : 'Hybrid'),
+      hiring_model: struct.hiring_model || 'To be confirmed',
+      work_mode: struct.work_mode || '',
       openings: struct.openings || struct.headcount || req.openings || 1,
       target_start_date: struct.target_start_date || req.target_start_date || 'Flexible',
       skills: skillsList,
@@ -1424,7 +1430,8 @@ function HiringManagerDashboardContent() {
           require_director_approval: companyRequiresDirectorApproval ?? (r.require_director_approval !== false),
           id: r.id || `draft-${Date.now()}`,
           experience: r.experience_level || 'To be confirmed',
-          hiring_model: resolvedDraftHiringModel({ ...r, summary: r.job_description }) || r.hiring_model || 'To be confirmed',
+          hiring_model: resolvedDraftHiringModel({ ...r, summary: r.job_description }) || 'To be confirmed',
+          work_mode: r.work_mode || (['Remote', 'Hybrid', 'On-site'].includes(r.hiring_model) ? r.hiring_model : ''),
           target_start_date: r.target_start_date || 'To be confirmed',
           skills: Array.isArray(r.skills) ? r.skills : (r.skills || '').split(',').map(skill => skill.trim()).filter(Boolean),
           summary: r.job_description || '',
@@ -3242,16 +3249,19 @@ function HiringManagerDashboardContent() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-gray-700 mb-1">Hiring Model</label>
-                  <select
+                  <input
+                    list="hiring-model-options"
                     value={editingDraftData.hiring_model || ''}
                     onChange={(e) => setEditingDraftData((prev) => ({ ...prev, hiring_model: e.target.value }))}
+                    placeholder="e.g. Direct Hiring or Vendor Managed"
                     className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-gray-900 text-xs focus:ring-2 focus:ring-black/10 focus:border-gray-500 outline-none"
-                  >
-                    <option value="">Select a hiring model</option>
-                    <option value="Remote">Remote</option>
-                    <option value="Hybrid">Hybrid</option>
-                    <option value="On-site">On-site</option>
-                  </select>
+                  />
+                  <datalist id="hiring-model-options">
+                    <option value="Direct Hiring" />
+                    <option value="Direct Applicant" />
+                    <option value="Vendor Managed" />
+                    <option value="Vendor Supplied" />
+                  </datalist>
                 </div>
                 <div>
                   <label className="block font-semibold text-gray-700 mb-1">Target Start Date</label>
