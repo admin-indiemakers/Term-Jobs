@@ -451,6 +451,7 @@ export default function DashboardLayout() {
 
   const userRole = (user?.role || '').trim();
   const isFinance = isFinanceRole(userRole);
+  const isProcurement = userRole === 'Procurement' || userRole === 'Procurement Team';
   const consoleClass = isFinance ? 'console-finance' : (CONSOLE_CLASS[userRole] || 'console-default');
   const isCompanyAdmin = userRole === 'Admin' || userRole.toLowerCase() === 'admin';
   const isHiringManager = userRole === 'Hiring Manager' || userRole.toLowerCase() === 'hiring manager' || userRole === 'HR';
@@ -514,7 +515,6 @@ export default function DashboardLayout() {
             ? [
               { to: '/dashboard/procurement/finance-approvals', label: 'Payment Tracking', end: false, section: 'WORKSPACE', icon: Icons.Receipt },
               { to: '/dashboard/procurement', label: 'Work Orders', end: true, section: 'WORKSPACE', icon: Icons.Agreements, badge: procurementPendingSows },
-              { to: '/dashboard/requisitions', label: 'Requisitions', end: false, section: 'WORKSPACE', icon: Icons.Requisitions },
               { to: '/dashboard/procurement/profile', label: 'Profile', end: false, section: 'ACCOUNT', icon: User },
             ]
             : isFinance
@@ -963,6 +963,7 @@ export default function DashboardLayout() {
           width: 100% !important;
           display: flex !important;
           align-items: flex-start !important;
+          overflow-x: clip !important;
         }
         .sidebar {
           width: 272px !important;
@@ -975,6 +976,9 @@ export default function DashboardLayout() {
           height: calc(100vh - 32px) !important;
           position: sticky !important;
           top: 16px !important;
+          align-self: flex-start !important;
+          flex-shrink: 0 !important;
+          z-index: 30 !important;
           margin-left: 16px !important;
           margin-top: 16px !important;
           margin-bottom: 16px !important;
@@ -987,18 +991,24 @@ export default function DashboardLayout() {
         .console-hiringmanager.app-shell,
         .console-director.app-shell,
         .console-finance.app-shell,
-        .console-superadmin.app-shell {
+        .console-superadmin.app-shell,
+        .console-recruiter.app-shell,
+        .console-procurement.app-shell,
+        .console-hr.app-shell {
           background-color: transparent !important;
           width: 100% !important;
           max-width: 100vw !important;
           min-height: 100vh !important;
-          overflow-x: hidden !important;
+          overflow-x: clip !important;
           position: relative !important;
         }
         .console-hiringmanager .sidebar,
         .console-director .sidebar,
         .console-finance .sidebar,
-        .console-superadmin .sidebar {
+        .console-superadmin .sidebar,
+        .console-recruiter .sidebar,
+        .console-procurement .sidebar,
+        .console-hr .sidebar {
           width: 240px !important;
           min-width: 240px !important;
           max-width: 240px !important;
@@ -1014,6 +1024,9 @@ export default function DashboardLayout() {
             inset 0 0 24px rgba(255, 255, 255, 0.02) !important;
           position: sticky !important;
           top: 14px !important;
+          align-self: flex-start !important;
+          flex-shrink: 0 !important;
+          z-index: 30 !important;
           margin: 14px 0 14px 14px !important;
           overflow: visible !important;
           padding: 16px 12px 14px 12px !important;
@@ -1288,24 +1301,31 @@ export default function DashboardLayout() {
           </header>
         )}
 
-        {/* Mobile hamburger header for Super Admin, Company Admin, Hiring Manager & Director on small devices */}
-        {(isCompanyAdmin || isHiringManager || isDirector || isSuperAdmin) && !location.pathname.endsWith('/hiring-manager') && (
+        {/* Mobile hamburger header for all portals on small devices */}
+        {(isCompanyAdmin || isHiringManager || isDirector || isSuperAdmin || isFinance || isProcurement) && !location.pathname.endsWith('/hiring-manager') && (
           <div className="lg:hidden flex items-center justify-between mx-3 py-2 border-b border-black/[0.06] bg-transparent shrink-0">
             <button
               type="button"
               onClick={() => setIsMobileMenuOpen(true)}
+              aria-label="Open Navigation Menu"
               className="p-1.5 text-black hover:bg-white rounded-xl cursor-pointer"
             >
               <Menu size={20} />
             </button>
             <div className="text-xs font-bold text-gray-900">
-              {isSuperAdmin ? 'Super Admin Console' : `${user?.tenant_name || 'Term Jobs'} ${isCompanyAdmin ? 'Admin' : isDirector ? 'Director' : 'Hiring'}`}
+              {isSuperAdmin
+                ? 'Super Admin Console'
+                : isFinance
+                  ? `${user?.tenant_name || 'Term Jobs'} Finance`
+                  : isProcurement
+                    ? `${user?.tenant_name || 'Term Jobs'} Procurement`
+                    : `${user?.tenant_name || 'Term Jobs'} ${isCompanyAdmin ? 'Admin' : isDirector ? 'Director' : 'Hiring'}`}
             </div>
             <NotificationBell />
           </div>
         )}
 
-        <main className={`content-area ${isFixedMode ? 'p-0 h-full max-h-full overflow-hidden' : isCandidateWorkstation ? 'h-[calc(100vh-28px)] max-h-[calc(100vh-28px)] my-[14px] mr-3.5 sm:mr-4 ml-2 sm:ml-3 p-0 flex flex-col min-w-0 flex-1 overflow-hidden' : `${(isCompanyAdmin || isHiringManager || isDirector || isSuperAdmin) ? 'pt-6 sm:pt-8 lg:pt-9' : 'pt-1.5'} px-3 sm:px-6 pb-6 w-full max-w-none min-w-0 flex-1`}`}>
+        <main className={`content-area ${isFixedMode ? 'p-0 h-full max-h-full overflow-hidden' : isCandidateWorkstation ? 'h-[calc(100vh-28px)] max-h-[calc(100vh-28px)] my-[14px] mr-3.5 sm:mr-4 ml-2 sm:ml-3 p-0 flex flex-col min-w-0 flex-1 overflow-hidden' : `${(isCompanyAdmin || isHiringManager || isDirector || isSuperAdmin || isFinance || isProcurement) ? 'pt-6 sm:pt-8 lg:pt-9' : 'pt-1.5'} px-3 sm:px-6 pb-6 w-full max-w-none min-w-0 flex-1`}`}>
           <Outlet />
         </main>
       </div>

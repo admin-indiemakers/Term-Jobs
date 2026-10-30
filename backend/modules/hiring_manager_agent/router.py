@@ -228,7 +228,7 @@ def hiring_manager_agent_chat(
 
 @router.get("/flow-settings")
 def get_hiring_manager_flow_settings(current_user: User = Depends(get_current_user)):
-    """Expose the current tenant requisition policy to Hiring Manager UI."""
+    """Return the authenticated tenant's requisition approval policy."""
     if current_user.role not in ("Hiring Manager", "Admin", "HR", "Director"):
         raise HTTPException(status_code=403, detail="Company hiring staff access required")
     from modules.requisition.domain.models import CompanyProfile
