@@ -162,6 +162,43 @@ def test_explicit_hiring_model_is_saved_on_draft_separately_from_remote_work_mod
     assert "Hiring model" not in draft["missing_required_fields"]
 
 
+def test_direct_hire_followup_updates_active_draft_when_ai_returns_no_tool_action(monkeypatch):
+    from modules.hiring_manager_agent import applications
+
+    draft = {
+        "title": "QA Tester",
+        "department": "Engineering",
+        "location": "Remote",
+        "experience_level": "Fresher",
+        "employment_type": "Contract",
+        "hiring_model": "To be confirmed",
+        "target_start_date": "November 2026",
+        "skills": ["Good ability in testing"],
+        "job_description": "Perform functional and regression testing.",
+    }
+    history = [{
+        "role": "assistant",
+        "content": (
+            "Before this requisition can be published, please provide: Hiring model.\n"
+            f"Draft context: {__import__('json').dumps(draft)}"
+        ),
+    }]
+    monkeypatch.setattr(agent, "model_available", lambda: True)
+    monkeypatch.setattr(agent, "run_model_hiring_chat", lambda *args: {"reply": "Okay.", "executed_actions": []})
+    monkeypatch.setattr(applications, "application_reply", lambda *args: None)
+
+    result = agent.run_hiring_manager_agent_chat(
+        "i need direct hire",
+        history=history,
+        current_user={"id": "test-hm", "tenant_id": "test-tenant"},
+    )
+
+    updated = result["executed_actions"][0]["result"]
+    assert updated["hiring_model"] == "Direct Hiring"
+    assert updated["missing_required_fields"] == []
+    assert "Direct Hiring" in result["reply"]
+
+
 def test_existing_draft_work_mode_does_not_satisfy_staffing_model_requirement():
     draft = {
         "title": "Sales Executive",
