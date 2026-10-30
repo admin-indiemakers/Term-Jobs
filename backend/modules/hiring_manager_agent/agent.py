@@ -484,7 +484,7 @@ TOOLS = [
                     "location": {"type": "string", "description": "Location e.g. Bangalore / Remote"},
                     "employment_type": {"type": "string", "description": "Always Contract; TermJobs only supports contract jobs. Never ask users to choose permanent or full-time employment."},
                     "experience_level": {"type": "string", "description": "Experience level e.g. Senior (4-7 yrs)"},
-                    "hiring_model": {"type": "string", "description": "Hiring model, such as Remote, Hybrid, or On-site"},
+                    "hiring_model": {"type": "string", "description": "Staffing model the user requested, such as Direct Hiring, Direct Applicant, Vendor Managed, or Vendor Supplied. Preserve the stated model exactly; this is separate from work mode and location."},
                     "salary_range": {"type": "string", "description": "Target salary budget e.g. $120,000 - $150,000 / yr"},
                     "skills": {"type": "string", "description": "Required skills / tech stack e.g. React, Node.js, Python"},
                     "job_description": {"type": "string", "description": "Brief description of responsibilities & key duties"},
@@ -520,7 +520,7 @@ TOOLS = [
                     "location": {"type": "string", "description": "Location e.g. Bengaluru / Hybrid"},
                     "employment_type": {"type": "string", "description": "Employment type e.g. Contract (6 Months)"},
                     "experience_level": {"type": "string", "description": "Experience level e.g. Mid (2-5 yrs)"},
-                    "hiring_model": {"type": "string", "description": "Hiring model: Remote, Hybrid, or On-site"},
+                    "hiring_model": {"type": "string", "description": "Staffing model the user requested, such as Direct Hiring, Direct Applicant, Vendor Managed, or Vendor Supplied. This is separate from work mode and location."},
                     "salary_range": {"type": "string", "description": "Salary range e.g. ₹1,500 - ₹2,200 / hr"},
                     "skills": {"type": "string", "description": "Required tech stack / skills"},
                     "job_description": {"type": "string", "description": "Job description"},
@@ -1010,7 +1010,24 @@ def list_hiring_requisitions(user_id: str, tenant_id: str, status_filter: str = 
 
 
 def normalize_requisition_hiring_model(value: str = "", *context: str) -> str:
-    """Normalize common work-location shorthand without confusing it with city."""
+    """Normalize staffing model names without treating work mode as a staffing model."""
+    supplied = str(value or "").strip()
+    normalized = supplied.lower().replace("_", " ").strip()
+    explicit_model = extract_requisition_hiring_model(supplied, *context)
+    if explicit_model:
+        return explicit_model
+    # These values belong to work_mode. Old drafts sometimes stored them in
+    # hiring_model; consider them missing so the user can supply a staffing model.
+    if normalized in {"wfo", "onsite", "on site", "on-site", "office", "office based", "work from office",
+                     "wfh", "remote", "work from home", "work remotely", "hybrid"}:
+        return ""
+    if supplied and normalized not in {"to be confirmed", "tbd", "n/a", "none"}:
+        return supplied
+    return ""
+
+
+def normalize_requisition_work_mode(value: str = "", *context: str) -> str:
+    """Normalize work arrangement shorthand independently from hiring model."""
     supplied = str(value or "").strip()
     normalized = supplied.lower().replace("_", " ").strip()
     if normalized in {"wfo", "onsite", "on site", "on-site", "office", "office based", "work from office"}:
@@ -1026,8 +1043,21 @@ def normalize_requisition_hiring_model(value: str = "", *context: str) -> str:
         return "Remote"
     if re.search(r"\b(?:wfo|work\s+from\s+(?:the\s+)?office|on[ -]?site|onsite|office[ -]based)\b", evidence):
         return "On-site"
-    if supplied and normalized not in {"to be confirmed", "tbd", "n/a", "none"}:
-        return supplied
+    return ""
+
+
+def extract_requisition_hiring_model(*texts: str) -> str:
+    """Return a canonical staffing model explicitly stated in chat text."""
+    text = " ".join(str(value or "") for value in texts)
+    patterns = (
+        (r"\bdirect[- ]hir(?:e|ing)\b", "Direct Hiring"),
+        (r"\bdirect[- ]applicant\b", "Direct Applicant"),
+        (r"\bvendor[- ]managed\b|\bvendor\s+management\b", "Vendor Managed"),
+        (r"\bvendor[- ]supplied\b", "Vendor Supplied"),
+    )
+    for pattern, label in patterns:
+        if re.search(pattern, text, re.I):
+            return label
     return ""
 
 
@@ -1053,7 +1083,7 @@ def draft_requisition_preview(title: str, department: str = "", location: str = 
     # Clean any accidental "Number of openings: X" or "openings: X" appended into role summary
     clean_jd = re.sub(r"\b(?:number\s+of\s+)?openings?\s*[:=]?\s*\d+\.?", "", raw_jd, flags=re.IGNORECASE).strip()
     clean_jd = re.sub(r"\s{2,}", " ", clean_jd).strip()
-    normalized_hiring_model = normalize_requisition_hiring_model(hiring_model, job_description, location)
+    normalized_hiring_model = normalize_requisition_hiring_model(hiring_model, job_description)
 
     is_complete = bool(title and title.strip())
 
@@ -1117,7 +1147,7 @@ def submit_requisition_for_director_approval(
     target_start_date: str = "",
 ):
     """Save a requisition using the tenant's configured approval and publication flow."""
-    hiring_model = normalize_requisition_hiring_model(hiring_model, job_description, location)
+    hiring_model = normalize_requisition_hiring_model(hiring_model, job_description)
     approval_required = _get_tenant_company_context(tenant_id).get("require_director_approval", True)
     from modules.requisition.domain.required_details import missing_requisition_details
     missing = missing_requisition_details({
@@ -1151,7 +1181,8 @@ def submit_requisition_for_director_approval(
         "location": location or "Bangalore / Hybrid Remote",
         "employment_type": contract_employment_type(employment_type),
         "experience_level": experience_level or "Mid-Level",
-        "work_mode": hiring_model,
+        "hiring_model": hiring_model,
+        "work_mode": normalize_requisition_work_mode(location),
         "start_date": target_start_date,
         "salary_range": salary_range or "₹1,500 - ₹2,200 / hr",
         "openings": num_openings,
@@ -3011,8 +3042,7 @@ def request_missing_requisition_details(result: Optional[Dict[str, Any]]) -> Opt
             draft["hiring_model"] = normalize_requisition_hiring_model(
                 draft.get("hiring_model", ""),
                 draft.get("job_description") or draft.get("summary") or draft.get("role_summary", ""),
-                draft.get("location", ""),
-            ) or draft.get("hiring_model") or "To be confirmed"
+            ) or "To be confirmed"
             missing = missing_requisition_details(draft)
             draft["missing_required_fields"] = missing
             draft["is_complete"] = not missing
@@ -3060,7 +3090,7 @@ def requisition_submission_values(draft: Dict[str, Any]) -> Dict[str, Any]:
         "skills": skills,
         "job_description": draft.get("job_description") or draft.get("summary", ""),
         "openings": draft.get("openings", 1),
-        "hiring_model": draft.get("hiring_model") or draft.get("work_mode", ""),
+        "hiring_model": draft.get("hiring_model", ""),
         "target_start_date": draft.get("target_start_date") or draft.get("start_date", ""),
     }
 
@@ -3111,7 +3141,7 @@ def run_model_hiring_chat(prompt, history, current_user):
                     "Never resume a failed or earlier action unless the latest message requests it or supplies the requested details. "
                     "When editing a draft, preserve all unchanged draft fields, especially skills, headcount, start period and experience. "
                     "TermJobs ONLY supports contract jobs. Employment type is always Contract. NEVER ask whether a job is permanent, full-time, or contract, or offer permanent/full-time employment. Ask about contract duration only when needed; never invent a duration. "
-                    "Before a requisition can be submitted, the user must provide department, work location, experience level, hiring model (Remote/Hybrid/On-site), target start date, and required skills. Do not invent these values or treat 'To be confirmed' as complete. If any are missing, show the draft for context and ask one concise follow-up listing only the missing details (for example: 'What key skills are required, and when should the person start?'). Do not imply the requisition is ready to submit until all are provided. "
+                    "Before a requisition can be submitted, the user must provide department, work location, experience level, hiring model (staffing model, such as Direct Hiring or Vendor Managed), target start date, and required skills. Preserve an explicitly stated hiring model exactly and never infer it from a remote/hybrid/on-site location. Do not invent values or treat 'To be confirmed' as complete. If any are missing, show the draft for context and ask one concise follow-up listing only the missing details. Do not imply the requisition is ready to submit until all are provided. "
                     "Interpret meaning, spelling mistakes, number words, and conversational follow-ups; do not require command keywords. "
                     "For example a staffing need is a draft request even without the word requisition. "
                     "Extract headcount as an integer and preserve timing requirements in target_start_date and the description. "
@@ -3241,7 +3271,8 @@ def run_model_hiring_chat(prompt, history, current_user):
                                     fn_args[field] = "To be confirmed"
                             prior_draft = requisition_draft_from_history(history) or {}
                             history_text = prior_draft.get("job_description") or prior_draft.get("summary") or ""
-                            fn_args["hiring_model"] = normalize_requisition_hiring_model(
+                            explicit_model = extract_requisition_hiring_model(prompt) or extract_requisition_hiring_model(fn_args.get("hiring_model", "")) or extract_requisition_hiring_model(history_text)
+                            fn_args["hiring_model"] = explicit_model or normalize_requisition_hiring_model(
                                 fn_args.get("hiring_model", ""), fn_args.get("job_description", ""), prompt, history_text
                             ) or fn_args.get("hiring_model", "")
                             res = draft_requisition_preview(**fn_args)
@@ -3316,7 +3347,8 @@ def run_model_hiring_chat(prompt, history, current_user):
                                 fn_args.setdefault(field, "To be confirmed")
                             prior_draft = requisition_draft_from_history(history) or {}
                             history_text = prior_draft.get("job_description") or prior_draft.get("summary") or ""
-                            fn_args["hiring_model"] = normalize_requisition_hiring_model(
+                            explicit_model = extract_requisition_hiring_model(prompt) or extract_requisition_hiring_model(fn_args.get("hiring_model", "")) or extract_requisition_hiring_model(history_text)
+                            fn_args["hiring_model"] = explicit_model or normalize_requisition_hiring_model(
                                 fn_args.get("hiring_model", ""), fn_args.get("job_description", ""), prompt, history_text
                             ) or fn_args.get("hiring_model", "")
                             res = draft_requisition_preview(**fn_args)
@@ -3500,9 +3532,9 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
             updated_draft["hiring_model"] = updated_draft.get("hiring_model") or "To be confirmed"
             updated_draft["skills"] = updated_draft.get("skills") or "To be confirmed"
 
-            model_match = re.search(r"\b(direct\s+hire|vendor[- ]managed|direct\s+applicant|vendor\s+supplied)\b", prompt, re.I)
-            if model_match:
-                updated_draft["hiring_model"] = re.sub(r"\s+", " ", model_match.group(1)).title()
+            explicit_model = extract_requisition_hiring_model(prompt)
+            if explicit_model:
+                updated_draft["hiring_model"] = explicit_model
 
             skills_match = re.search(r"\b(?:need|needs|require|requires|skills?\s*(?:are|:))\s+(.+)$", prompt, re.I)
             if skills_match:

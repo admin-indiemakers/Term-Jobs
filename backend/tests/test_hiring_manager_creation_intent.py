@@ -117,10 +117,21 @@ def test_requisition_draft_is_recovered_from_chat_history():
     ("Hybrid", "Hybrid"),
 ])
 def test_requisition_work_mode_shorthand_is_normalized(shorthand, expected):
-    assert agent.normalize_requisition_hiring_model(shorthand) == expected
+    assert agent.normalize_requisition_work_mode(shorthand) == expected
 
 
-def test_wfo_in_role_summary_fills_hiring_model_without_replacing_city():
+@pytest.mark.parametrize(("phrase", "expected"), [
+    ("hiring model - direct hiring", "Direct Hiring"),
+    ("direct hire", "Direct Hiring"),
+    ("vendor-managed", "Vendor Managed"),
+])
+def test_explicit_staffing_model_is_captured_independently_of_remote_location(phrase, expected):
+    assert agent.normalize_requisition_hiring_model(
+        "To be confirmed", phrase, "Location: REMOTE"
+    ) == expected
+
+
+def test_work_mode_in_role_summary_does_not_fill_staffing_model_or_replace_city():
     draft = agent.draft_requisition_preview(
         title="Sales Executive",
         department="Sales",
@@ -132,11 +143,26 @@ def test_wfo_in_role_summary_fills_hiring_model_without_replacing_city():
     )
 
     assert draft["location"] == "Calicut"
-    assert draft["hiring_model"] == "On-site"
+    assert draft["hiring_model"] == "To be confirmed"
+    assert "Hiring model" in draft["missing_required_fields"]
+
+
+def test_explicit_hiring_model_is_saved_on_draft_separately_from_remote_work_mode():
+    draft = agent.draft_requisition_preview(
+        title="Backend Developer",
+        department="Engineering",
+        location="Remote",
+        experience_level="Junior (0-1 years)",
+        skills="Node.js, Python",
+        hiring_model="direct hiring",
+        target_start_date="November 2026",
+    )
+
+    assert draft["hiring_model"] == "Direct Hiring"
     assert "Hiring model" not in draft["missing_required_fields"]
 
 
-def test_existing_draft_work_mode_is_recovered_from_its_role_summary():
+def test_existing_draft_work_mode_does_not_satisfy_staffing_model_requirement():
     draft = {
         "title": "Sales Executive",
         "department": "Sales",
@@ -155,8 +181,8 @@ def test_existing_draft_work_mode_is_recovered_from_its_role_summary():
 
     normalized = agent.request_missing_requisition_details(result)
 
-    assert draft["hiring_model"] == "On-site"
-    assert draft["missing_required_fields"] == []
+    assert draft["hiring_model"] == "To be confirmed"
+    assert draft["missing_required_fields"] == ["Hiring model"]
 
 
 def test_model_outage_still_applies_answers_to_missing_draft_fields(monkeypatch):
@@ -192,7 +218,7 @@ def test_model_outage_still_applies_answers_to_missing_draft_fields(monkeypatch)
     )
 
     updated = result["executed_actions"][0]["result"]
-    assert updated["hiring_model"] == "Direct Hire"
+    assert updated["hiring_model"] == "Direct Hiring"
     assert updated["skills"] == ["Python"]
     assert updated["missing_required_fields"] == []
     assert "AI service is temporarily unavailable" not in result["reply"]

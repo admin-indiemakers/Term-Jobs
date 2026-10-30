@@ -147,6 +147,7 @@ def test_prefill_is_saved_and_guided_only_asks_real_gaps(service, company_profil
         "ceiling_internal": 2_100_000,
         "rate_card_cap": 1_950_000,
         "work_locations": ["Bangalore"],
+        "hiring_model": "Direct Hiring",
         "work_mode": "Hybrid",
         "client_site_access": True,
         "hiring_manager": "Arun Deshpande",
@@ -167,6 +168,8 @@ def test_prefill_is_saved_and_guided_only_asks_real_gaps(service, company_profil
         assert saved.structured_role["rate_band"] == [1_700_000, 1_950_000]
         assert saved.structured_role["ceiling_internal"] == 2_100_000
         assert saved.structured_role["rate_card_cap"] == 1_950_000
+        assert saved.structured_role["hiring_model"] == "Direct Hiring"
+        assert saved.structured_role["work_mode"] == "Hybrid"
         assert saved.structured_role["client_site_access"] is True
 
     _, interrupt = service.start_intake(req.id)
