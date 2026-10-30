@@ -296,6 +296,48 @@ def test_hiring_model_answer_merges_sparse_ai_draft_with_active_card(monkeypatch
     assert "Hiring model" not in updated["missing_required_fields"]
 
 
+def test_explicit_director_send_uses_configured_publication_flow(monkeypatch):
+    from modules.hiring_manager_agent import applications
+
+    draft = {
+        "title": "Senior React Developer",
+        "department": "Engineering",
+        "location": "Kozhikode",
+        "experience_level": "Mid (2-5 yrs)",
+        "employment_type": "Contract",
+        "hiring_model": "Direct Hiring",
+        "target_start_date": "November 2026",
+        "skills": ["React"],
+        "job_description": "Build and maintain React applications.",
+    }
+    history = [{
+        "role": "assistant",
+        "content": f"Review this draft. Draft context: {__import__('json').dumps(draft)}",
+    }]
+    submit = Mock(return_value={
+        "req_id": "req-published",
+        "title": "Senior React Developer",
+        "status": "Published",
+        "require_director_approval": False,
+        "message": "Job Requisition 'Senior React Developer' has been published directly according to your company's flow settings.",
+    })
+    monkeypatch.setattr(agent, "model_available", lambda: True)
+    monkeypatch.setattr(agent, "run_model_hiring_chat", lambda *args: pytest.fail("AI must not handle submission confirmation"))
+    monkeypatch.setattr(agent, "submit_requisition_for_director_approval", submit)
+    monkeypatch.setattr(applications, "application_reply", lambda *args: None)
+
+    result = agent.run_hiring_manager_agent_chat(
+        "send to director for approval",
+        history=history,
+        current_user={"id": "test-hm", "tenant_id": "test-tenant", "name": "Manager"},
+    )
+
+    submit.assert_called_once()
+    assert result["executed_actions"][0]["result"]["status"] == "Published"
+    assert "published directly" in result["reply"]
+    assert "sent to the Director" not in result["reply"]
+
+
 def test_existing_draft_work_mode_does_not_satisfy_staffing_model_requirement():
     draft = {
         "title": "Sales Executive",

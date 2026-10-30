@@ -3143,6 +3143,62 @@ def requisition_draft_from_history(history: Optional[List[Any]]) -> Optional[Dic
     return None
 
 
+def director_submission_intent(prompt: str, history: Optional[List[Any]]) -> bool:
+    """Recognize an explicit send request or a yes to the active draft's send prompt."""
+    normalized = re.sub(r"\s+", " ", str(prompt or "").strip().lower()).strip(" .!?")
+    if re.search(
+        r"\b(?:send|submit)\b.*\b(?:director|approval)\b|\b(?:send|submit)\s+for\s+approval\b",
+        normalized,
+    ) and not re.search(r"\b(?:all|every)\s+requisitions\b", normalized):
+        return True
+    if not re.fullmatch(r"(?:yes|yeah|yep|yup|ok|okay|please|go ahead|do it|proceed|confirm)", normalized):
+        return False
+    for item in reversed(history or []):
+        if (item.get("sender") or item.get("role")) in ("assistant", "bot", "ai"):
+            last_assistant = str(item.get("text") or item.get("content") or "").lower()
+            return any(phrase in last_assistant for phrase in (
+                "send this to the director", "send to director", "director for approval",
+                "submit for approval", "submit to the director",
+            ))
+    return False
+
+
+def submit_active_requisition_for_configured_workflow(
+    prompt: str,
+    history: Optional[List[Any]],
+    current_user: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    """Process explicit chat submission deterministically using the tenant policy."""
+    if not director_submission_intent(prompt, history):
+        return None
+    draft = requisition_draft_from_history(history)
+    if not draft:
+        return {
+            "reply": "I couldn't find the active requisition draft. Create or reopen its draft card, then submit it from the card.",
+            "executed_actions": [],
+        }
+
+    from modules.requisition.domain.required_details import missing_requisition_details
+    submission_args = requisition_submission_values(draft)
+    missing = missing_requisition_details(submission_args)
+    if missing:
+        return {
+            "reply": f"I can't submit this requisition yet. Please provide: **{', '.join(missing)}**. You can reply with the details together or edit the draft card.",
+            "executed_actions": [],
+        }
+
+    result = submit_requisition_for_director_approval(
+        **submission_args,
+        user_id=str(current_user.get("id") or ""),
+        user_name=str(current_user.get("name") or "Hiring Manager"),
+        tenant_id=str(current_user.get("tenant_id") or ""),
+    )
+    return request_missing_requisition_details({
+        "reply": result.get("error") or result.get("message") or "The requisition workflow could not be completed. Please try again.",
+        "executed_actions": [{"tool": "submit_for_director_approval", "result": result}],
+    })
+
+
 def requisition_submission_values(draft: Dict[str, Any]) -> Dict[str, Any]:
     skills = draft.get("skills", draft.get("must_have_skills", ""))
     if isinstance(skills, (list, tuple, set)):
@@ -3577,6 +3633,11 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
     applications = application_reply(prompt, db)
     if applications is not None:
         return applications
+    deterministic_submission = submit_active_requisition_for_configured_workflow(
+        prompt, history, current_user
+    )
+    if deterministic_submission is not None:
+        return deterministic_submission
     model_reply = run_model_hiring_chat(prompt, history, current_user)
     if model_reply is not None:
         tenant_id = str(current_user.get("tenant_id") or "")
