@@ -2124,8 +2124,8 @@ export default function DirectorDashboard({ view = 'overview' }) {
               <h3 className="font-extrabold text-base text-gray-900">
                 {rejectModalReq.title || 'Untitled Requisition'}
               </h3>
-                              <p className="mt-1 text-[10px] text-gray-600 break-words">Hiring Manager: {r.hiring_manager_name || 'Unavailable'}</p>
-                              {r.hiring_manager_email && <p className="text-[10px] text-gray-500 break-all">{r.hiring_manager_email}</p>}
+              <p className="mt-1 text-[10px] text-gray-600 break-words">Hiring Manager: {rejectModalReq.hiring_manager_name || 'Unavailable'}</p>
+              {rejectModalReq.hiring_manager_email && <p className="text-[10px] text-gray-500 break-all">{rejectModalReq.hiring_manager_email}</p>}
               <p className="text-xs text-gray-500 font-medium mt-0.5">
                 REQ #{rejectModalReq.id.slice(0, 8)} • This feedback will be sent directly to the Hiring Manager to guide their revisions.
               </p>
