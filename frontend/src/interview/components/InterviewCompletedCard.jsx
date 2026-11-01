@@ -52,8 +52,8 @@ export function InterviewCompletedCard({ round, invitationToken = '', onBack }) 
     }
   }, [round?.id, round?.candidate_email, invitationToken]);
 
-  const companyName = round?.company_name || round?.vendor_company_name || 'Bearitt';
-  const companyInitial = (companyName || 'B').trim()[0].toUpperCase();
+  const companyName = round?.company_name || 'Hiring company';
+  const companyInitial = (companyName || 'H').trim()[0].toUpperCase();
   const positionTitle = round?.requisition_title || round?.round_name || 'Senior Product Designer';
 
   // Sanitize round name to prevent duplicate "AI Interview Interview"

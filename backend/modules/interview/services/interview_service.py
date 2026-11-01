@@ -1398,17 +1398,19 @@ def get_round_by_id(round_id: str) -> Optional[dict]:
         rdoc["remaining_seconds"] = exp_info["remaining_seconds"]
 
         # Ensure role title and company name are always resolved accurately
-        req_id = r.requisition_id
-        if req_id and (not rdoc.get("requisition_title") or rdoc.get("requisition_title") in ("Position", "Candidate Role")):
-            from modules.requisition.domain.models import Requisition
-            req_model = session.get(Requisition, req_id)
-            if req_model and req_model.title:
-                rdoc["requisition_title"] = req_model.title
-            if req_model and (not rdoc.get("company_name") or rdoc.get("company_name") in ("Hiring Partner", "Enterprise Partner")):
-                rdoc["company_name"] = req_model.company_name or "Bearitt"
-
+        from modules.requisition.domain.models import Requisition, CompanyProfile
+        from modules.identity.domain.models import Tenant
+        req = session.get(Requisition, r.requisition_id) if r.requisition_id else None
+        if req:
+            if not rdoc.get("requisition_title") or rdoc.get("requisition_title") in ("Position", "Candidate Role"):
+                rdoc["requisition_title"] = req.title or rdoc.get("requisition_title")
+            profile = session.get(CompanyProfile, req.company_profile_id) if req.company_profile_id else None
+            tenant = session.get(Tenant, req.tenant_id) if req.tenant_id else None
+            company = (profile.name if profile and profile.tenant_id == req.tenant_id else "") or (tenant.name if tenant else "") or getattr(req, "company_name", "")
+            if company:
+                rdoc["company_name"] = company
         if not rdoc.get("company_name"):
-            rdoc["company_name"] = "Bearitt"
+            rdoc["company_name"] = "Hiring company"
         return rdoc
 
 
