@@ -7,6 +7,7 @@ REQUIRED_REQUISITION_DETAILS = (
     ("hiring_model", "Hiring model"),
     ("target_start_date", "Target start date"),
     ("skills", "Required skills"),
+    ("submission_deadline", "Application due date"),
 )
 
 

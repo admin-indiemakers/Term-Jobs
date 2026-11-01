@@ -1509,6 +1509,7 @@ def _chat_requisition_missing_details(prefill: dict | None) -> list[str]:
         "experience_level": prefill.get("experience_band") or prefill.get("experience"),
         "hiring_model": prefill.get("hiring_model"),
         "target_start_date": prefill.get("start_date") or prefill.get("target_start_date"),
+        "submission_deadline": prefill.get("submission_deadline"),
         "skills": prefill.get("must_have_skills") or prefill.get("skills"),
     })
 
@@ -2097,11 +2098,7 @@ def list_public_requisitions() -> list[dict]:
             role = r.structured_role or {}
 
             # Calculate application due date / submission deadline
-            due_date = (
-                role.get("submission_deadline")
-                or _format_datetime(getattr(r, "shortlist_deadline", None))
-                or _add_48h(r.approved_at or r.created_at)
-            )
+            due_date = role.get("submission_deadline")
 
             # Do not show closed or expired roles
             if due_date:
@@ -2127,6 +2124,7 @@ def list_public_requisitions() -> list[dict]:
             # Sanitize role: public fields only, omit internal pricing/margin variances
             public_role = {
                 "title": role.get("title") or r.title,
+                "job_description": role.get("job_description") or role.get("role_summary") or role.get("summary") or (r.intent or {}).get("description") or "",
                 "job_family": role.get("job_family") or "General",
                 "must_have_skills": role.get("must_have_skills") or [],
                 "nice_to_have_skills": role.get("nice_to_have_skills") or [],
@@ -2178,11 +2176,7 @@ def get_public_requisition(requisition_id: str) -> dict:
         role = r.structured_role or {}
 
         # Check deadline - do not show closed or expired roles
-        due_date = (
-            role.get("submission_deadline")
-            or _format_datetime(getattr(r, "shortlist_deadline", None))
-            or _add_48h(r.approved_at or r.created_at)
-        )
+        due_date = role.get("submission_deadline")
         if due_date:
             try:
                 now_utc = datetime.now(timezone.utc)
@@ -2216,6 +2210,7 @@ def get_public_requisition(requisition_id: str) -> dict:
 
         public_role = {
             "title": role.get("title") or r.title,
+            "job_description": role.get("job_description") or role.get("role_summary") or role.get("summary") or (r.intent or {}).get("description") or "",
             "job_family": role.get("job_family") or "General",
             "must_have_skills": role.get("must_have_skills") or [],
             "nice_to_have_skills": role.get("nice_to_have_skills") or [],
@@ -2291,11 +2286,7 @@ async def apply_to_requisition(
 
         # Verify application deadline has not passed
         s_role = req.structured_role or {}
-        due_date = (
-            s_role.get("submission_deadline")
-            or _format_datetime(getattr(req, "shortlist_deadline", None))
-            or _add_48h(req.approved_at or req.created_at)
-        )
+        due_date = s_role.get("submission_deadline")
         if due_date:
             try:
                 now_utc = datetime.now(timezone.utc)
