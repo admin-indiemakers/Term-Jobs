@@ -975,6 +975,7 @@ function HiringManagerDashboardContent() {
     setEditingDraftData({
       ...draft,
       duration: draft.duration || draft.contract_duration || '',
+      exact_target_start_date: /^\d{4}-\d{2}-\d{2}$/.test(draft.target_start_date || '') ? draft.target_start_date : '',
       messageId,
       skills: rawSkills,
       skillsText: rawSkills.join(', '),
@@ -994,6 +995,7 @@ function HiringManagerDashboardContent() {
 
     const mergedDraft = {
       ...updatedDraft,
+      target_start_date: updatedDraft.exact_target_start_date || updatedDraft.target_start_date,
       skills: parsedSkills,
       summary: finalSummary,
       job_description: finalSummary,
@@ -1029,8 +1031,12 @@ function HiringManagerDashboardContent() {
           experience_level: updatedDraft.experience,
           hiring_model: updatedDraft.hiring_model,
           work_mode: updatedDraft.work_mode || (['Remote', 'Hybrid', 'On-site'].includes(updatedDraft.hiring_model) ? updatedDraft.hiring_model : ''),
-          start_date: updatedDraft.target_start_date,
-          structured_role: { duration: updatedDraft.duration || '', contract_duration: updatedDraft.duration || '' },
+          structured_role: {
+            start_date: mergedDraft.target_start_date,
+            target_start_date: mergedDraft.target_start_date,
+            duration: updatedDraft.duration || '',
+            contract_duration: updatedDraft.duration || '',
+          },
           must_have_skills: parsedSkills,
           job_description: finalSummary,
         },
@@ -1320,7 +1326,7 @@ function HiringManagerDashboardContent() {
       hiring_model: struct.hiring_model || 'To be confirmed',
       work_mode: struct.work_mode || '',
       openings: struct.openings || struct.headcount || req.openings || 1,
-      target_start_date: struct.target_start_date || req.target_start_date || 'Flexible',
+      target_start_date: struct.target_start_date || struct.start_date || req.target_start_date || 'Flexible',
       skills: skillsList,
       summary: struct.job_description || req.generated_jd_markdown || req.summary || `We are seeking an experienced ${req.title} to join our Engineering team and build scalable services.`,
       salary_range: struct.salary_range || req.salary_range || '₹12,00,000 - ₹18,00,000 per annum',
@@ -3279,10 +3285,19 @@ function HiringManagerDashboardContent() {
                   <input
                     type="text"
                     value={editingDraftData.target_start_date || ''}
-                    onChange={(e) => setEditingDraftData((prev) => ({ ...prev, target_start_date: e.target.value }))}
+                    onChange={(e) => setEditingDraftData((prev) => ({ ...prev, target_start_date: e.target.value, exact_target_start_date: '' }))}
                     placeholder="e.g. November 2026"
                     className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-gray-900 placeholder:text-gray-400 text-xs focus:ring-2 focus:ring-black/10 focus:border-gray-500 outline-none transition-colors"
                   />
+                  <label htmlFor="draft-exact-start-date" className="block font-semibold text-gray-700 mt-3 mb-1">Exact Start Date (optional)</label>
+                  <input
+                    id="draft-exact-start-date"
+                    type="date"
+                    value={editingDraftData.exact_target_start_date || ''}
+                    onChange={(e) => setEditingDraftData((prev) => ({ ...prev, exact_target_start_date: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-gray-900 text-xs focus:ring-2 focus:ring-black/10 focus:border-gray-500 outline-none transition-colors"
+                  />
+                  <p className="mt-1 text-[11px] text-gray-500">Choose an exact date if known, or leave blank to use the target month above.</p>
                 </div>
               </div>
 
