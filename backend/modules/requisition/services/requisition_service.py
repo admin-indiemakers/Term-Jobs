@@ -124,7 +124,7 @@ def _structured_role_from_prefill(intent: RoleIntent, prefill: dict | None) -> d
         must_have_skills=prefill.get("must_have_skills") or [],
         nice_to_have_skills=prefill.get("nice_to_have_skills") or [],
         seniority=seniority,
-        location=locations[0] if locations else (prefill.get("location") or ""),
+        location=locations[0] if locations else (prefill.get("primary_location") or prefill.get("location") or ""),
         rate_band=raw_rate_band,
         contract_duration=prefill.get("duration") or prefill.get("contract_duration") or "",
         confidence=0.75,

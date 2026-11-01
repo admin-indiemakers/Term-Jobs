@@ -3322,6 +3322,21 @@ function HiringManagerDashboardContent() {
               </div>
 
               <div>
+                <label htmlFor="draft-work-mode" className="block font-semibold text-gray-700 mb-1">Work Mode</label>
+                <select
+                  id="draft-work-mode"
+                  value={editingDraftData.work_mode || ''}
+                  onChange={(e) => setEditingDraftData((prev) => ({ ...prev, work_mode: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-gray-900 text-xs"
+                >
+                  <option value="">To be confirmed</option>
+                  <option value="On-site">On-site</option>
+                  <option value="Hybrid">Hybrid</option>
+                  <option value="Remote">Remote</option>
+                </select>
+              </div>
+
+              <div>
                 <label htmlFor="draft-application-deadline" className="block font-semibold text-gray-700 mb-1">Application Due Date</label>
                 <input
                   id="draft-application-deadline"

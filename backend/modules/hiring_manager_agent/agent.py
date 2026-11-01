@@ -496,6 +496,7 @@ TOOLS = [
                     "skills": {"type": "string", "description": "Required skills / tech stack e.g. React, Node.js, Python"},
                     "job_description": {"type": "string", "description": "Brief description of responsibilities & key duties"},
                     "openings": {"type": "integer", "description": "Number of open positions/headcount for this role, e.g. 1, 2, 5"},
+                    "work_mode": {"type": "string", "description": "Work arrangement explicitly requested: On-site, Hybrid, or Remote. Preserve user choice separately from hiring model and location."},
                     "submission_deadline": {"type": "string", "description": "Application due date explicitly chosen by the user in YYYY-MM-DD format. Ask if missing; never choose a default."},
                     "duration": {"type": "string", "description": "Contract period stated by the user, e.g. 6 months or 1 year. Never invent a duration."},
                     "target_start_date": {"type": "string", "description": "User requested start date or period; preserve month-level precision, e.g. November 2026"}
@@ -533,6 +534,7 @@ TOOLS = [
                     "salary_range": {"type": "string", "description": "Salary range e.g. ₹1,500 - ₹2,200 / hr"},
                     "skills": {"type": "string", "description": "Required tech stack / skills"},
                     "job_description": {"type": "string", "description": "Job description"},
+                    "work_mode": {"type": "string", "description": "Work arrangement explicitly requested: On-site, Hybrid, or Remote. Preserve user choice separately from hiring model and location."},
                     "submission_deadline": {"type": "string", "description": "Application due date explicitly chosen by the user in YYYY-MM-DD format. Ask if missing; never choose a default."},
                     "duration": {"type": "string", "description": "Contract period stated by the user, e.g. 6 months or 1 year. Never invent a duration."},
                     "target_start_date": {"type": "string", "description": "Target date or month when the hire should start"},
@@ -1072,7 +1074,7 @@ def extract_requisition_hiring_model(*texts: str) -> str:
     return ""
 
 
-def draft_requisition_preview(title: str, department: str = "", location: str = "", employment_type: str = "", experience_level: str = "", salary_range: str = "", skills: str = "", job_description: str = "", openings: Any = 1, target_start_date: str = "", hiring_model: str = "", duration: str = "", submission_deadline: str = ""):
+def draft_requisition_preview(title: str, department: str = "", location: str = "", employment_type: str = "", experience_level: str = "", salary_range: str = "", skills: str = "", job_description: str = "", openings: Any = 1, target_start_date: str = "", hiring_model: str = "", duration: str = "", submission_deadline: str = "", work_mode: str = ""):
     dept = department or "To be confirmed"
     loc = location or "To be confirmed"
     emp_type = contract_employment_type(employment_type)
@@ -1103,6 +1105,7 @@ def draft_requisition_preview(title: str, department: str = "", location: str = 
         "department": dept,
         "location": loc,
         "employment_type": emp_type,
+        "work_mode": normalize_requisition_work_mode(work_mode, location, job_description),
         "duration": duration,
         "submission_deadline": submission_deadline,
         "experience_level": exp,
@@ -1122,7 +1125,7 @@ def draft_requisition_preview(title: str, department: str = "", location: str = 
     return draft
 
 
-def create_hiring_requisition(title: str, department: str = "", location: str = "", employment_type: str = "", experience_level: str = "", salary_range: str = "", skills: str = "", job_description: str = "", user_id: str = "", tenant_id: str = "local", user_name: str = "", openings: Any = 1, hiring_model: str = "", target_start_date: str = "", duration: str = "", submission_deadline: str = ""):
+def create_hiring_requisition(title: str, department: str = "", location: str = "", employment_type: str = "", experience_level: str = "", salary_range: str = "", skills: str = "", job_description: str = "", user_id: str = "", tenant_id: str = "local", user_name: str = "", openings: Any = 1, hiring_model: str = "", target_start_date: str = "", duration: str = "", submission_deadline: str = "", work_mode: str = ""):
     """Advance a Hiring Manager requisition using the company approval-flow setting."""
     return submit_requisition_for_director_approval(
         title=title,
@@ -1141,6 +1144,7 @@ def create_hiring_requisition(title: str, department: str = "", location: str = 
         target_start_date=target_start_date,
         duration=duration,
         submission_deadline=submission_deadline,
+        work_mode=work_mode,
     )
 
 
@@ -1162,6 +1166,7 @@ def submit_requisition_for_director_approval(
     target_start_date: str = "",
     duration: str = "",
     submission_deadline: str = "",
+    work_mode: str = "",
 ):
     """Save a requisition using the tenant's configured approval and publication flow."""
     hiring_model = normalize_requisition_hiring_model(hiring_model, job_description)
@@ -1205,7 +1210,7 @@ def submit_requisition_for_director_approval(
         "employment_type": contract_employment_type(employment_type),
         "experience_level": experience_level or "Mid-Level",
         "hiring_model": hiring_model,
-        "work_mode": normalize_requisition_work_mode(location),
+        "work_mode": normalize_requisition_work_mode(work_mode, location, job_description),
         "start_date": target_start_date,
         "duration": duration,
         "submission_deadline": submission_deadline,
@@ -3243,6 +3248,7 @@ def requisition_submission_values(draft: Dict[str, Any]) -> Dict[str, Any]:
         "target_start_date": draft.get("target_start_date") or draft.get("start_date", ""),
         "duration": draft.get("duration") or draft.get("contract_duration", ""),
         "submission_deadline": draft.get("submission_deadline", ""),
+        "work_mode": draft.get("work_mode", ""),
     }
 
 

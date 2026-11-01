@@ -1425,7 +1425,7 @@ export default function OpenRolesPage({ enabled = true }) {
       return geoMatch.trim();
     }
 
-    const mode = (role.work_mode || 'Remote').trim();
+    const mode = (role.work_mode || 'To be confirmed').trim();
     return mode.toLowerCase() === 'remote' ? 'Remote' : mode;
   };
 
@@ -2351,7 +2351,7 @@ export default function OpenRolesPage({ enabled = true }) {
                 {filteredJobs.map((job) => {
                   const role = job.structured_role || {};
                   const skills = (role.must_have_skills || []).concat(role.nice_to_have_skills || []);
-                  const workMode = role.work_mode || 'Remote';
+                  const workMode = role.work_mode || 'To be confirmed';
                   const isRemote = workMode.toLowerCase() === 'remote';
                   const isHybrid = workMode.toLowerCase() === 'hybrid';
                   const dueDateVal = job.due_date || job.submission_deadline || job.application_due_date || role.submission_deadline;
@@ -3534,7 +3534,7 @@ export default function OpenRolesPage({ enabled = true }) {
                 </h2>
                 <div className="flex flex-wrap items-center gap-2.5 text-xs text-white/60 mt-2">
                   <span className="px-2.5 py-0.5 rounded-full bg-white/[0.06] border border-white/10 text-white/80 font-medium">
-                    {selectedJob.structured_role?.work_mode || 'Remote'}
+                    {selectedJob.structured_role?.work_mode || 'To be confirmed'}
                   </span>
                   <span className="text-white/30">·</span>
                   <span>{selectedJob.structured_role?.duration || '6 Months'}</span>
