@@ -47,7 +47,7 @@ from modules.identity.router import router as identity_router
 from modules.notifications.router import router as notifications_router
 from modules.notifications.services.notification_service import notify_requisition_published
 from modules.requisition.domain import models, schemas
-from modules.requisition.domain.deadline import validate_submission_deadline, validate_start_date, submission_deadline_passed
+from modules.requisition.domain.deadline import validate_submission_deadline, validate_start_date, normalize_start_date, submission_deadline_passed
 from modules.requisition.services.deadline_policy import enforce_approval_deadline, DeadlineExpired
 from modules.requisition.domain.state import StateMachine
 from modules.shared.db import get_session, init_db, _utcnow
@@ -429,6 +429,8 @@ class RequisitionIn(BaseModel):
         start_date = (value or {}).get("start_date")
         if str(start_date or "").strip().lower() not in {"to be confirmed", "tbd"}:
             validate_start_date(start_date)
+            if value is not None and "start_date" in value:
+                value = {**value, "start_date": normalize_start_date(start_date)}
         return value
 
 

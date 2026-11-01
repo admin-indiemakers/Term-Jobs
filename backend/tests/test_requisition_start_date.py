@@ -25,3 +25,24 @@ def test_service_rejects_past_date_before_database_write():
     with pytest.raises(ValueError, match='Start Date cannot be in the past'):
         RequisitionService(session_factory=factory).create('company', RoleIntent(title='Engineer', description='Build APIs'), intake_meta={'prefill': {'start_date': yesterday.isoformat()}})
     factory.assert_not_called()
+
+
+@pytest.mark.parametrize('value', ['Nov 15 2026', 'November 15 2026', 'Nov 15, 2026', 'November 15, 2026', '15 Nov 2026', '15 November 2026'])
+def test_readable_exact_dates_are_normalized_and_validated(value):
+    from modules.requisition.domain.deadline import normalize_start_date
+    assert normalize_start_date(value) == '2026-11-15'
+    validate_start_date(value, today=date(2026, 11, 1))
+    with pytest.raises(ValueError, match='Start Date cannot be in the past'):
+        validate_start_date(value, today=date(2026, 11, 16))
+
+
+@pytest.mark.parametrize('value', ['November 2026', 'Nov 2026', '2026-11', '', None])
+def test_normalization_preserves_month_precision_and_optional_dates(value):
+    from modules.requisition.domain.deadline import normalize_start_date
+    assert normalize_start_date(value) == value
+
+
+@pytest.mark.parametrize('value', ['Nov 31 2026', 'Feb 29 2027'])
+def test_invalid_readable_dates_are_rejected(value):
+    with pytest.raises(ValueError, match='Start Date'):
+        validate_start_date(value, today=date(2026, 11, 1))
