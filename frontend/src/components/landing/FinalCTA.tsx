@@ -1,6 +1,5 @@
 import { motion, useReducedMotion } from "framer-motion";
 import { Link } from "react-router-dom";
-import { Lock } from "lucide-react";
 import { Backdrop } from "./Backdrop";
 import { fadeUp, lineReveal } from "./animations";
 
@@ -70,10 +69,9 @@ export function FinalCTA({
           <button
             type="button"
             onClick={onOpenRolesClick}
-            aria-label="Explore Open Roles (Locked - Coming Soon)"
+            aria-label="Explore Open Roles"
             className="group inline-flex items-center gap-2 sm:gap-2.5 rounded-full bg-white/10 hover:bg-white/18 text-paper px-5 sm:px-7 py-3 sm:py-3.5 text-[0.66rem] sm:text-[0.7rem] font-semibold tracking-[0.18em] uppercase transition-all duration-300 hover:-translate-y-0.5 backdrop-blur-xl border border-white/20 shadow-[0_8px_30px_rgba(0,0,0,0.2),inset_0_1px_1px_rgba(255,255,255,0.15)] active:scale-95 cursor-pointer"
           >
-            <Lock className="w-3 h-3 text-paper/80 opacity-80 shrink-0" />
             <span>Explore Open Roles</span>
             <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
           </button>
