@@ -120,6 +120,7 @@ def _structured_role_from_prefill(intent: RoleIntent, prefill: dict | None) -> d
 
     role = StructuredRole(
         title=title,
+        job_description=prefill.get("job_description") or intent.description or "",
         must_have_skills=prefill.get("must_have_skills") or [],
         nice_to_have_skills=prefill.get("nice_to_have_skills") or [],
         seniority=seniority,

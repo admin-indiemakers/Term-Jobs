@@ -511,6 +511,7 @@ function HiringManagerDashboardContent() {
       [resolvedDraftHiringModel(draft), 'Hiring model'],
       [valueFor('target_start_date', 'start_date'), 'Target start date'],
       [valueFor('skills', 'must_have_skills'), 'Required skills'],
+      [valueFor('submission_deadline'), 'Application due date'],
     ].filter(([value]) => !value).map(([, label]) => label);
   };
 
@@ -895,6 +896,7 @@ function HiringManagerDashboardContent() {
             hiring_model: resolvedDraftHiringModel(draft) || '',
             start_date: draft.target_start_date || '',
             duration: draft.duration || draft.contract_duration || '',
+            submission_deadline: draft.submission_deadline || '',
             must_have_skills: draft.skills || [],
           },
         };
@@ -1033,6 +1035,7 @@ function HiringManagerDashboardContent() {
           work_mode: updatedDraft.work_mode || (['Remote', 'Hybrid', 'On-site'].includes(updatedDraft.hiring_model) ? updatedDraft.hiring_model : ''),
           structured_role: {
             start_date: mergedDraft.target_start_date,
+            submission_deadline: updatedDraft.submission_deadline || '',
             target_start_date: mergedDraft.target_start_date,
             duration: updatedDraft.duration || '',
             contract_duration: updatedDraft.duration || '',
@@ -1323,6 +1326,7 @@ function HiringManagerDashboardContent() {
       experience: struct.experience_level || req.experience_level || 'Senior (4-7 yrs)',
       employment_type: struct.employment_type || req.employment_type || 'Full-Time',
       duration: struct.duration || struct.contract_duration || req.duration || req.contract_duration || '',
+      submission_deadline: struct.submission_deadline || req.submission_deadline || '',
       hiring_model: struct.hiring_model || 'To be confirmed',
       work_mode: struct.work_mode || '',
       openings: struct.openings || struct.headcount || req.openings || 1,
@@ -2597,6 +2601,16 @@ function HiringManagerDashboardContent() {
                                   <div className="flex items-center text-xs">
                                     <div className="flex items-center gap-2 text-gray-500 w-36 shrink-0">
                                       <CalendarCheck size={14} className="text-gray-400" />
+                                      <span>Application Due Date</span>
+                                    </div>
+                                    <span className="font-semibold text-gray-900">
+                                      {msg.requisitionDraft.submission_deadline || 'To be confirmed'}
+                                    </span>
+                                  </div>
+
+                                  <div className="flex items-center text-xs">
+                                    <div className="flex items-center gap-2 text-gray-500 w-36 shrink-0">
+                                      <CalendarCheck size={14} className="text-gray-400" />
                                       <span>Target Start Date</span>
                                     </div>
                                     <span className="font-semibold text-gray-900 truncate">
@@ -3299,6 +3313,17 @@ function HiringManagerDashboardContent() {
                   />
                   <p className="mt-1 text-[11px] text-gray-500">Choose an exact date if known, or leave blank to use the target month above.</p>
                 </div>
+              </div>
+
+              <div>
+                <label htmlFor="draft-application-deadline" className="block font-semibold text-gray-700 mb-1">Application Due Date</label>
+                <input
+                  id="draft-application-deadline"
+                  type="date"
+                  value={editingDraftData.submission_deadline || ''}
+                  onChange={(e) => setEditingDraftData((prev) => ({ ...prev, submission_deadline: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-gray-900 text-xs focus:ring-2 focus:ring-black/10 focus:border-gray-500 outline-none"
+                />
               </div>
 
               <div>

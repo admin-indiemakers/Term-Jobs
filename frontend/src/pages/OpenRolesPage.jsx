@@ -3645,9 +3645,8 @@ export default function OpenRolesPage({ enabled = true }) {
                         dangerouslySetInnerHTML={{ __html: marked.parse(selectedJob.generated_jd_markdown) }}
                       />
                     ) : (
-                      <p className="text-white/60 text-xs">
-                        This is a high-priority contract requisition delivered through the TermJobs platform. Candidates will
-                        collaborate directly with the client engineering leadership.
+                      <p className="text-white/80 text-xs whitespace-pre-wrap leading-relaxed">
+                        {selectedJob.structured_role?.job_description || selectedJob.structured_role?.role_summary || selectedJob.structured_role?.summary || 'Role summary has not been provided.'}
                       </p>
                     )}
 

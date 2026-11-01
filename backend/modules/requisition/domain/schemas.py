@@ -59,6 +59,7 @@ class StructuredRole(BaseModel):
     drafts that predate the tabbed editor.
     """
     title: str
+    job_description: str = ""
     must_have_skills: list[str] = Field(default_factory=list)
     nice_to_have_skills: list[str] = Field(default_factory=list)
     seniority: Seniority
