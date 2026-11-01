@@ -30,8 +30,22 @@ def submission_deadline_passed(role: dict | None, today: date | None = None) -> 
         return False
 
 
+def normalize_start_date(value):
+    """Convert explicit named-month dates to ISO without adding a day to month-only values."""
+    if not isinstance(value, str):
+        return value
+    value = value.strip()
+    for fmt in ("%b %d %Y", "%B %d %Y", "%b %d, %Y", "%B %d, %Y", "%d %b %Y", "%d %B %Y"):
+        try:
+            return datetime.strptime(value, fmt).date().isoformat()
+        except ValueError:
+            continue
+    return value
+
+
 def validate_start_date(value, today: date | None = None) -> None:
     """New requisitions may start today or later in the application timezone."""
+    value = normalize_start_date(value)
     month_value = None
     if isinstance(value, str):
         normalized = value.strip()
