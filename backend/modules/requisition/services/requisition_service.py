@@ -211,6 +211,7 @@ class RequisitionService:
                 intent=intent.model_dump(),
                 intake_meta=intake_meta or {},
                 structured_role=saved_role,
+                generated_jd_markdown=(saved_role or {}).get("job_description") or intent.description or None,
                 vendor_candidate_limit=v_limit or 1,
             )
             session.add(req)
