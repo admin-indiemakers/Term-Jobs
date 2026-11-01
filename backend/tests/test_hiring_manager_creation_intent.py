@@ -174,6 +174,7 @@ def test_direct_hire_followup_updates_active_draft_when_ai_returns_no_tool_actio
         "hiring_model": "To be confirmed",
         "target_start_date": "November 2026",
         "submission_deadline": "2099-11-10",
+        "work_mode": "On-site",
         "skills": ["Good ability in testing"],
         "job_description": "Perform functional and regression testing.",
     }
@@ -213,6 +214,7 @@ def test_hiring_model_statement_updates_active_draft_when_ai_skips_draft_tool(mo
         "hiring_model": "To be confirmed",
         "target_start_date": "November 2026",
         "submission_deadline": "2099-11-10",
+        "work_mode": "On-site",
         "skills": ["Excel", "Power BI"],
         "job_description": "Support business analysis and reporting.",
     }
@@ -257,6 +259,7 @@ def test_hiring_model_answer_merges_sparse_ai_draft_with_active_card(monkeypatch
         "hiring_model": "To be confirmed",
         "target_start_date": "November 2026",
         "submission_deadline": "2099-11-10",
+        "work_mode": "On-site",
         "skills": ["Excel", "Power BI"],
         "job_description": "Support business analysis and reporting.",
     }
@@ -276,6 +279,7 @@ def test_hiring_model_answer_merges_sparse_ai_draft_with_active_card(monkeypatch
         "hiring_model": "To be confirmed",
         "target_start_date": "To be confirmed",
         "submission_deadline": "2099-11-10",
+        "work_mode": "On-site",
         "skills": "To be confirmed",
         "job_description": "",
     }
@@ -312,6 +316,7 @@ def test_explicit_director_send_uses_configured_publication_flow(monkeypatch):
         "hiring_model": "Direct Hiring",
         "target_start_date": "November 2026",
         "submission_deadline": "2099-11-10",
+        "work_mode": "On-site",
         "skills": ["React"],
         "job_description": "Build and maintain React applications.",
     }
@@ -353,6 +358,7 @@ def test_existing_draft_work_mode_does_not_satisfy_staffing_model_requirement():
         "hiring_model": "To be confirmed",
         "target_start_date": "November 2026",
         "submission_deadline": "2099-11-10",
+        "work_mode": "On-site",
         "skills": ["Docker", "PostgreSQL", "REST APIs"],
         "summary": "Work five days WFO in Calicut.",
     }
@@ -382,6 +388,7 @@ def test_model_outage_still_applies_answers_to_missing_draft_fields(monkeypatch)
         "hiring_model": "To be confirmed",
         "target_start_date": "November 2026",
         "submission_deadline": "2099-11-10",
+        "work_mode": "On-site",
         "skills": "To be confirmed",
         "salary_range": "₹1,000 / hr",
         "job_description": "DevOps Engineer contract role.",

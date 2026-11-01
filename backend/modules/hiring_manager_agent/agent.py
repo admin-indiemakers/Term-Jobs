@@ -1177,6 +1177,7 @@ def submit_requisition_for_director_approval(
         "location": location,
         "experience_level": experience_level,
         "hiring_model": hiring_model,
+        "work_mode": normalize_requisition_work_mode(work_mode, location, job_description),
         "target_start_date": target_start_date,
         "submission_deadline": submission_deadline,
         "skills": skills,
@@ -3303,7 +3304,7 @@ def run_model_hiring_chat(prompt, history, current_user):
                     "Before a requisition can be submitted, the user must provide department, work location, experience level, hiring model (staffing model, such as Direct Hiring or Vendor Managed), target start date, and required skills. Preserve an explicitly stated hiring model exactly and never infer it from a remote/hybrid/on-site location. Do not invent values or treat 'To be confirmed' as complete. If any are missing, show the draft for context and ask one concise follow-up listing only the missing details. Do not imply the requisition is ready to submit until all are provided. "
                     "Interpret meaning, spelling mistakes, number words, and conversational follow-ups; do not require command keywords. "
                     "For example a staffing need is a draft request even without the word requisition. "
-                    "Ask for the application due date (submission_deadline) before publishing or submitting. Never invent a deadline or default to tomorrow. "
+                    "Ask for work mode (On-site, Hybrid, or Remote) and the application due date (submission_deadline) before publishing or submitting. Never choose or assume a work mode. Never invent a deadline or default to tomorrow. "
                     "Extract headcount as an integer and preserve timing requirements in target_start_date and the description. "
                     "Use the current date supplied below to interpret relative dates; do not invent a precise day when the user only gives a month. "
                     "Ask a concise clarification when the role or intended action is ambiguous. Never substitute an unrelated approved template for a requested custom role. "
@@ -3720,10 +3721,14 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
         # A user's answer to the draft's missing fields should update that
         # draft even when the model provider is unavailable.
         prior_draft = requisition_draft_from_history(history)
-        if prior_draft and re.search(r"complete the draft|missing details|could you confirm|provide the following", last_assistant, re.I):
+        if prior_draft and re.search(r"complete the draft|missing details|could you confirm|provide the following|please provide", last_assistant, re.I):
             updated_draft = dict(prior_draft)
             updated_draft["hiring_model"] = updated_draft.get("hiring_model") or "To be confirmed"
             updated_draft["skills"] = updated_draft.get("skills") or "To be confirmed"
+
+            explicit_work_mode = normalize_requisition_work_mode(prompt)
+            if explicit_work_mode:
+                updated_draft["work_mode"] = explicit_work_mode
 
             explicit_model = extract_requisition_hiring_model(prompt)
             if explicit_model:

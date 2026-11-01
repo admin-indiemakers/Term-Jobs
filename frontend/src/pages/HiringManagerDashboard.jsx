@@ -512,6 +512,7 @@ function HiringManagerDashboardContent() {
       [valueFor('target_start_date', 'start_date'), 'Target start date'],
       [valueFor('skills', 'must_have_skills'), 'Required skills'],
       [valueFor('submission_deadline'), 'Application due date'],
+      [['on-site', 'on site', 'onsite', 'hybrid', 'remote'].includes(String(draft?.work_mode || '').trim().toLowerCase()) ? draft.work_mode : '', 'Work mode (On-site, Hybrid, or Remote)'],
     ].filter(([value]) => !value).map(([, label]) => label);
   };
 
@@ -2576,6 +2577,16 @@ function HiringManagerDashboardContent() {
                                     </div>
                                     <span className="font-semibold text-gray-900">
                                       {msg.requisitionDraft.duration || msg.requisitionDraft.contract_duration || 'To be confirmed'}
+                                    </span>
+                                  </div>
+
+                                  <div className="flex items-center text-xs">
+                                    <div className="flex items-center gap-2 text-gray-500 w-36 shrink-0">
+                                      <Building2 size={14} className="text-gray-400" />
+                                      <span>Work Mode</span>
+                                    </div>
+                                    <span className="font-semibold text-gray-900">
+                                      {msg.requisitionDraft.work_mode || 'To be confirmed'}
                                     </span>
                                   </div>
 

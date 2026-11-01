@@ -1508,6 +1508,7 @@ def _chat_requisition_missing_details(prefill: dict | None) -> list[str]:
         "location": prefill.get("primary_location") or prefill.get("location"),
         "experience_level": prefill.get("experience_band") or prefill.get("experience"),
         "hiring_model": prefill.get("hiring_model"),
+        "work_mode": prefill.get("work_mode"),
         "target_start_date": prefill.get("start_date") or prefill.get("target_start_date"),
         "submission_deadline": prefill.get("submission_deadline"),
         "skills": prefill.get("must_have_skills") or prefill.get("skills"),
