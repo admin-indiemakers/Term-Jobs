@@ -894,6 +894,7 @@ function HiringManagerDashboardContent() {
             work_mode: draft.work_mode || (['Remote', 'Hybrid', 'On-site'].includes(draft.hiring_model) ? draft.hiring_model : ''),
             hiring_model: resolvedDraftHiringModel(draft) || '',
             start_date: draft.target_start_date || '',
+            duration: draft.duration || draft.contract_duration || '',
             must_have_skills: draft.skills || [],
           },
         };
@@ -973,6 +974,7 @@ function HiringManagerDashboardContent() {
 
     setEditingDraftData({
       ...draft,
+      duration: draft.duration || draft.contract_duration || '',
       messageId,
       skills: rawSkills,
       skillsText: rawSkills.join(', '),
@@ -1028,6 +1030,7 @@ function HiringManagerDashboardContent() {
           hiring_model: updatedDraft.hiring_model,
           work_mode: updatedDraft.work_mode || (['Remote', 'Hybrid', 'On-site'].includes(updatedDraft.hiring_model) ? updatedDraft.hiring_model : ''),
           start_date: updatedDraft.target_start_date,
+          structured_role: { duration: updatedDraft.duration || '', contract_duration: updatedDraft.duration || '' },
           must_have_skills: parsedSkills,
           job_description: finalSummary,
         },
@@ -1313,6 +1316,7 @@ function HiringManagerDashboardContent() {
       location: struct.location || req.location || 'Bangalore, India (Hybrid)',
       experience: struct.experience_level || req.experience_level || 'Senior (4-7 yrs)',
       employment_type: struct.employment_type || req.employment_type || 'Full-Time',
+      duration: struct.duration || struct.contract_duration || req.duration || req.contract_duration || '',
       hiring_model: struct.hiring_model || 'To be confirmed',
       work_mode: struct.work_mode || '',
       openings: struct.openings || struct.headcount || req.openings || 1,
@@ -2556,6 +2560,16 @@ function HiringManagerDashboardContent() {
 
                                   <div className="flex items-center text-xs">
                                     <div className="flex items-center gap-2 text-gray-500 w-36 shrink-0">
+                                      <Clock size={14} className="text-gray-400" />
+                                      <span>Contract Period</span>
+                                    </div>
+                                    <span className="font-semibold text-gray-900">
+                                      {msg.requisitionDraft.duration || msg.requisitionDraft.contract_duration || 'To be confirmed'}
+                                    </span>
+                                  </div>
+
+                                  <div className="flex items-center text-xs">
+                                    <div className="flex items-center gap-2 text-gray-500 w-36 shrink-0">
                                       <Globe size={14} className="text-gray-400" />
                                       <span>Hiring Model</span>
                                     </div>
@@ -3270,6 +3284,18 @@ function HiringManagerDashboardContent() {
                     className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-gray-900 placeholder:text-gray-400 text-xs focus:ring-2 focus:ring-black/10 focus:border-gray-500 outline-none transition-colors"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label htmlFor="draft-contract-period" className="block font-semibold text-gray-700 mb-1">Contract Period</label>
+                <input
+                  id="draft-contract-period"
+                  type="text"
+                  value={editingDraftData.duration || ''}
+                  onChange={(e) => setEditingDraftData((prev) => ({ ...prev, duration: e.target.value, contract_duration: e.target.value }))}
+                  placeholder="e.g. 6 months or 1 year"
+                  className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-gray-900 placeholder:text-gray-400 text-xs focus:ring-2 focus:ring-black/10 focus:border-gray-500 outline-none transition-colors"
+                />
               </div>
 
               <div>

@@ -441,3 +441,14 @@ def test_usage_questions_open_guide_before_creation_or_llm(monkeypatch, prompt):
     assert [a['tool'] for a in result['executed_actions']] == ['get_hiring_manager_guide']
     assert 'how to use TermJobs' in result['reply']
     roles.assert_not_called()
+
+
+@pytest.mark.parametrize("duration", ["6 months", "1 year", ""])
+def test_contract_period_survives_draft_and_submission(duration):
+    draft = agent.draft_requisition_preview(title="Digital Marketing Specialist", duration=duration)
+    assert draft["duration"] == duration
+    assert agent.requisition_submission_values(draft)["duration"] == duration
+
+
+def test_submission_accepts_existing_contract_duration():
+    assert agent.requisition_submission_values({"contract_duration": "12 months"})["duration"] == "12 months"
