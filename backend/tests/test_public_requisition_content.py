@@ -34,5 +34,12 @@ def test_public_list_and_detail_show_summary_and_only_application_deadline(monke
     for result in (app_main.get_public_requisition(req.id), app_main.list_public_requisitions()[0]):
         assert result['generated_jd_markdown'] == summary
         assert result['structured_role']['job_description'] == summary
+        assert result['structured_role']['work_mode'] == ''
         assert result['due_date'] == deadline
         assert result['submission_deadline'] == deadline
+
+
+def test_structured_role_preserves_chat_location_and_work_mode():
+    role = _structured_role_from_prefill(RoleIntent(title='Marketing Specialist'), {'primary_location': 'Kozhikode', 'work_mode': 'On-site'})
+    assert role['location'] == 'Kozhikode'
+    assert role['work_mode'] == 'On-site'

@@ -459,3 +459,10 @@ def test_contract_period_survives_draft_and_submission(duration):
 
 def test_submission_accepts_existing_contract_duration():
     assert agent.requisition_submission_values({"contract_duration": "12 months"})["duration"] == "12 months"
+
+
+@pytest.mark.parametrize('work_mode', ['On-site', 'Remote', 'Hybrid', ''])
+def test_draft_preserves_work_mode_through_submission(work_mode):
+    draft = agent.draft_requisition_preview(title='Marketing Specialist', location='Kozhikode', work_mode=work_mode)
+    assert draft['work_mode'] == work_mode
+    assert agent.requisition_submission_values(draft)['work_mode'] == work_mode
