@@ -2157,7 +2157,7 @@ def list_public_requisitions() -> list[dict]:
                 "submission_deadline": due_date,
                 "application_due_date": due_date,
                 "structured_role": public_role,
-                "generated_jd_markdown": r.generated_jd_markdown or "",
+                "generated_jd_markdown": r.generated_jd_markdown or public_role["job_description"],
                 "created_at": _format_datetime(r.created_at),
             })
         _cache.set("public_requisitions", result, ttl=30)
@@ -2243,7 +2243,7 @@ def get_public_requisition(requisition_id: str) -> dict:
             "submission_deadline": due_date,
             "application_due_date": due_date,
             "structured_role": public_role,
-            "generated_jd_markdown": r.generated_jd_markdown or "",
+            "generated_jd_markdown": r.generated_jd_markdown or public_role["job_description"],
             "created_at": _format_datetime(r.created_at),
         }
 

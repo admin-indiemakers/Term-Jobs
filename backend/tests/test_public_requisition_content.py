@@ -32,6 +32,7 @@ def test_public_list_and_detail_show_summary_and_only_application_deadline(monke
     monkeypatch.setattr(app_main, '_auto_close_expired', lambda: None)
     monkeypatch.setattr(app_main, '_cache', Mock(get=Mock(return_value=None)))
     for result in (app_main.get_public_requisition(req.id), app_main.list_public_requisitions()[0]):
+        assert result['generated_jd_markdown'] == summary
         assert result['structured_role']['job_description'] == summary
         assert result['due_date'] == deadline
         assert result['submission_deadline'] == deadline
