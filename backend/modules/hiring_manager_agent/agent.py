@@ -496,6 +496,7 @@ TOOLS = [
                     "skills": {"type": "string", "description": "Required skills / tech stack e.g. React, Node.js, Python"},
                     "job_description": {"type": "string", "description": "Brief description of responsibilities & key duties"},
                     "openings": {"type": "integer", "description": "Number of open positions/headcount for this role, e.g. 1, 2, 5"},
+                    "duration": {"type": "string", "description": "Contract period stated by the user, e.g. 6 months or 1 year. Never invent a duration."},
                     "target_start_date": {"type": "string", "description": "User requested start date or period; preserve month-level precision, e.g. November 2026"}
                 },
                 "required": ["title"]
@@ -531,6 +532,7 @@ TOOLS = [
                     "salary_range": {"type": "string", "description": "Salary range e.g. ₹1,500 - ₹2,200 / hr"},
                     "skills": {"type": "string", "description": "Required tech stack / skills"},
                     "job_description": {"type": "string", "description": "Job description"},
+                    "duration": {"type": "string", "description": "Contract period stated by the user, e.g. 6 months or 1 year. Never invent a duration."},
                     "target_start_date": {"type": "string", "description": "Target date or month when the hire should start"},
                     "req_id": {"type": "string", "description": "Optional requisition ID if already drafted"}
                 },
@@ -1068,7 +1070,7 @@ def extract_requisition_hiring_model(*texts: str) -> str:
     return ""
 
 
-def draft_requisition_preview(title: str, department: str = "", location: str = "", employment_type: str = "", experience_level: str = "", salary_range: str = "", skills: str = "", job_description: str = "", openings: Any = 1, target_start_date: str = "", hiring_model: str = ""):
+def draft_requisition_preview(title: str, department: str = "", location: str = "", employment_type: str = "", experience_level: str = "", salary_range: str = "", skills: str = "", job_description: str = "", openings: Any = 1, target_start_date: str = "", hiring_model: str = "", duration: str = ""):
     dept = department or "To be confirmed"
     loc = location or "To be confirmed"
     emp_type = contract_employment_type(employment_type)
@@ -1099,6 +1101,7 @@ def draft_requisition_preview(title: str, department: str = "", location: str = 
         "department": dept,
         "location": loc,
         "employment_type": emp_type,
+        "duration": duration,
         "experience_level": exp,
         "salary_range": salary,
         "openings": num_openings,
@@ -1116,7 +1119,7 @@ def draft_requisition_preview(title: str, department: str = "", location: str = 
     return draft
 
 
-def create_hiring_requisition(title: str, department: str = "", location: str = "", employment_type: str = "", experience_level: str = "", salary_range: str = "", skills: str = "", job_description: str = "", user_id: str = "", tenant_id: str = "local", user_name: str = "", openings: Any = 1, hiring_model: str = "", target_start_date: str = ""):
+def create_hiring_requisition(title: str, department: str = "", location: str = "", employment_type: str = "", experience_level: str = "", salary_range: str = "", skills: str = "", job_description: str = "", user_id: str = "", tenant_id: str = "local", user_name: str = "", openings: Any = 1, hiring_model: str = "", target_start_date: str = "", duration: str = ""):
     """Advance a Hiring Manager requisition using the company approval-flow setting."""
     return submit_requisition_for_director_approval(
         title=title,
@@ -1133,6 +1136,7 @@ def create_hiring_requisition(title: str, department: str = "", location: str = 
         openings=openings,
         hiring_model=hiring_model,
         target_start_date=target_start_date,
+        duration=duration,
     )
 
 
@@ -1152,6 +1156,7 @@ def submit_requisition_for_director_approval(
     openings: Any = 1,
     hiring_model: str = "",
     target_start_date: str = "",
+    duration: str = "",
 ):
     """Save a requisition using the tenant's configured approval and publication flow."""
     hiring_model = normalize_requisition_hiring_model(hiring_model, job_description)
@@ -1191,6 +1196,8 @@ def submit_requisition_for_director_approval(
         "hiring_model": hiring_model,
         "work_mode": normalize_requisition_work_mode(location),
         "start_date": target_start_date,
+        "duration": duration,
+        "contract_duration": duration,
         "salary_range": salary_range or "₹1,500 - ₹2,200 / hr",
         "openings": num_openings,
         "headcount": num_openings,
@@ -3099,7 +3106,7 @@ def apply_staffing_model_answer(prompt: str, history: Optional[List[Any]], resul
             for key in (
                 "title", "department", "location", "experience_level", "experience",
                 "employment_type", "salary_range", "skills", "job_description",
-                "target_start_date", "openings", "hiring_model", "work_mode",
+                "target_start_date", "openings", "hiring_model", "work_mode", "duration", "contract_duration",
             ):
                 current = draft.get(key)
                 prior = prior_draft.get(key)
@@ -3222,6 +3229,7 @@ def requisition_submission_values(draft: Dict[str, Any]) -> Dict[str, Any]:
         "openings": draft.get("openings", 1),
         "hiring_model": draft.get("hiring_model", ""),
         "target_start_date": draft.get("target_start_date") or draft.get("start_date", ""),
+        "duration": draft.get("duration") or draft.get("contract_duration", ""),
     }
 
 
