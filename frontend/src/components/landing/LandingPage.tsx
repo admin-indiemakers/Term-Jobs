@@ -2,7 +2,6 @@ import { Link, useNavigate } from "react-router-dom";
 import { useCallback, useEffect, useState } from "react";
 import { ArrowControl } from "./ArrowControl";
 import { BrandMark } from "./BrandMark";
-import { ComingSoonNotification } from "./ComingSoonNotification";
 import { FeaturesSection } from "./FeaturesSection";
 import { FinalCTA } from "./FinalCTA";
 import { HeroSection } from "./HeroSection";
@@ -19,17 +18,17 @@ const TOTAL = 6;
 const DARK_SECTIONS = new Set([1, 5]);
 
 export function LandingPage({ enabled = true }: { enabled?: boolean }) {
-  const [showComingSoon, setShowComingSoon] = useState(false);
   const [waitlistOpen, setWaitlistOpen] = useState(false);
   const [talentOpen, setTalentOpen] = useState(false);
 
   const navigate = useNavigate();
+  const openRoles = useCallback(() => navigate("/open-roles"), [navigate]);
   const openTalent = useCallback(() => navigate("/open-roles?join=talent-pool&auth=login&source=launchpage"), [navigate]);
   const closeTalent = useCallback(() => setTalentOpen(false), []);
   const openWaitlist = useCallback(() => setWaitlistOpen(true), []);
   const closeWaitlist = useCallback(() => setWaitlistOpen(false), []);
 
-  const isModalActive = showComingSoon || waitlistOpen || talentOpen;
+  const isModalActive = waitlistOpen || talentOpen;
   const { index, goTo, step } = useHorizontalPanels(TOTAL, enabled && !isModalActive);
   const dark = DARK_SECTIONS.has(index);
 
@@ -56,12 +55,12 @@ export function LandingPage({ enabled = true }: { enabled?: boolean }) {
         <WorkflowSection active={index === 2} />
         <TalentSection
           active={index === 3}
-          onOpenRolesClick={() => setShowComingSoon(true)}
+          onOpenRolesClick={openRoles}
         />
         <FeaturesSection active={index === 4} />
         <FinalCTA
           active={index === 5}
-          onOpenRolesClick={() => setShowComingSoon(true)}
+          onOpenRolesClick={openRoles}
         />
       </HorizontalScroller>
 
@@ -80,7 +79,7 @@ export function LandingPage({ enabled = true }: { enabled?: boolean }) {
           <BrandMark
             dark={dark}
             onHomeClick={() => goTo(0)}
-            onOpenRolesClick={() => setShowComingSoon(true)}
+            onOpenRolesClick={openRoles}
             onJoinWaitlist={openWaitlist}
           />
 
@@ -114,16 +113,6 @@ export function LandingPage({ enabled = true }: { enabled?: boolean }) {
           />
         </>
       )}
-
-      {/* Small Coming Soon popup with Join Waitlist navigation */}
-      <ComingSoonNotification
-        isOpen={showComingSoon}
-        onClose={() => setShowComingSoon(false)}
-        onJoinWaitlist={() => {
-          setShowComingSoon(false);
-          openWaitlist();
-        }}
-      />
 
       {/* Waitlist Modal (same modal used by HeroSection onJoinWaitlist) */}
       {talentOpen && <WaitlistModal onClose={closeTalent} talent />}

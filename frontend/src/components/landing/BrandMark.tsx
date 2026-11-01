@@ -1,5 +1,4 @@
 import { Link } from "react-router-dom";
-import { Lock } from "lucide-react";
 import logo from "@/assets/termjobs-logo.png";
 
 export function BrandMark({
@@ -44,14 +43,13 @@ export function BrandMark({
           <button
             type="button"
             onClick={onOpenRolesClick}
-            aria-label="Open Roles (Coming Soon)"
+            aria-label="Open Roles"
             className={`inline-flex items-center gap-1.5 sm:gap-2 rounded-full px-2.5 py-1.5 sm:px-4 sm:py-2 text-[0.58rem] sm:text-[0.65rem] font-bold tracking-[0.12em] sm:tracking-[0.16em] uppercase whitespace-nowrap transition-all duration-300 border backdrop-blur-xl active:scale-95 cursor-pointer ${
               dark
                 ? "bg-white/[0.08] hover:bg-white/[0.14] border-white/20 text-paper shadow-[0_4px_16px_rgba(0,0,0,0.2),inset_0_1px_1px_rgba(255,255,255,0.15)]"
                 : "bg-white/70 hover:bg-white/90 border-ink/12 hover:border-ink/25 text-ink shadow-[0_4px_16px_rgba(0,0,0,0.04),inset_0_1px_1px_rgba(255,255,255,0.8)]"
             }`}
           >
-            <Lock className="w-2.5 h-2.5 opacity-70 shrink-0" />
             <span>Open Roles</span>
           </button>
         )}

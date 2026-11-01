@@ -1,5 +1,4 @@
 import { motion, useReducedMotion } from "framer-motion";
-import { Lock } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Backdrop } from "./Backdrop";
 import { EASE, fadeUp, lineReveal } from "./animations";
@@ -69,10 +68,9 @@ export function TalentSection({
             <button
               type="button"
               onClick={onOpenRolesClick}
-              aria-label="Browse Open Positions (Locked - Coming Soon)"
+              aria-label="Browse Open Positions"
               className="group inline-flex items-center gap-2.5 sm:gap-3 rounded-full bg-ink/90 hover:bg-ink text-paper px-6 sm:px-7 py-3 sm:py-3.5 text-[0.66rem] sm:text-[0.7rem] font-semibold tracking-[0.18em] uppercase transition-all duration-300 hover:-translate-y-0.5 backdrop-blur-xl border border-white/20 shadow-[0_8px_30px_rgba(0,0,0,0.18),inset_0_1px_1px_rgba(255,255,255,0.3)] active:scale-95 cursor-pointer"
             >
-              <Lock className="w-3 h-3 opacity-75 shrink-0" />
               <span>Browse Open Positions</span>
               <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
             </button>
@@ -100,7 +98,6 @@ export function TalentSection({
                   className="mt-5 w-full text-left flex items-center justify-between rounded-xl border border-ink/12 bg-paper px-3 py-2.5 text-xs text-ink-soft hover:border-ink/30 transition cursor-pointer"
                 >
                   <span>Search live roles...</span>
-                  <Lock className="w-3 h-3 opacity-40 shrink-0" />
                 </button>
                 <div className="mt-4 space-y-3">
                   {roles.map((r, i) => (
@@ -119,7 +116,6 @@ export function TalentSection({
                         <div className="text-[0.82rem] font-bold leading-snug">{r.title}</div>
                         <div className="mt-1 text-[0.68rem] text-ink-soft">{r.meta}</div>
                         <div className="mt-2.5 inline-flex items-center gap-1.5 rounded-full bg-ink px-2.5 py-1 text-[0.6rem] font-semibold tracking-[0.1em] text-paper uppercase">
-                          <Lock className="w-2.5 h-2.5 opacity-70 shrink-0" />
                           <span>{r.match}</span>
                         </div>
                       </motion.div>
