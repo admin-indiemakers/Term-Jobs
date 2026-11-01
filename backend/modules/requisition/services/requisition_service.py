@@ -280,6 +280,9 @@ class RequisitionService:
         with self.session_factory() as session:
             req = session.get(models.Requisition, requisition_id)
             enforce_approval_deadline(session, req)
+            from ..domain.required_details import valid_work_mode
+            if not valid_work_mode((req.structured_role or {}).get("work_mode")):
+                raise ValueError("Choose a work mode (On-site, Hybrid, or Remote) before publishing.")
             if rate_card_variance(req.structured_role):
                 raise ValueError(
                     "Your ceiling is above the agreed rate card. HR must approve "
