@@ -1,6 +1,8 @@
 """Per-user Google Calendar connections and company interview events."""
 import hashlib
+import os
 import secrets
+import re
 import time
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode, urlparse
@@ -12,7 +14,7 @@ from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
 from modules.calendar.services import oauth
-from modules.shared.config import settings
+from modules.shared.config import settings, get_active_cluster, current_cluster_var
 
 
 def collections():
@@ -32,9 +34,10 @@ def begin_connection(user, return_origin=None):
     if not oauth.is_configured('google'):
         raise ValueError('Google Calendar is not configured. Set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and the registered calendar callback URL.')
     provider = oauth.get_provider('google')
-    state = secrets.token_urlsafe(32)
+    state = get_active_cluster() + "." + secrets.token_urlsafe(32)
     configured_origin = '{0.scheme}://{0.netloc}'.format(urlparse(settings.calendar_frontend_url))
-    target = return_origin if return_origin in ('https://termjobs.in', 'https://www.termjobs.in', 'http://localhost:5173', 'http://127.0.0.1:5173') else configured_origin
+    allowed_origin = return_origin in ('https://termjobs.in', 'https://www.termjobs.in', 'http://localhost:5173', 'http://127.0.0.1:5173') or bool(re.fullmatch(r'https://(?:term-jobs|termjobs)(?:-git-(?:qa|dev)-[a-z0-9-]+|-(?:qa|dev))\.vercel\.app', return_origin or ''))
+    target = return_origin if allowed_origin else configured_origin
     _, states = collections()
     states.insert_one({'state': state, 'user_id': str(user.id), 'tenant_id': user.tenant_id,
                        'return_origin': target, 'expires_at': datetime.now(timezone.utc) + timedelta(minutes=10)})
@@ -44,6 +47,18 @@ def begin_connection(user, return_origin=None):
 
 
 def finish_connection(state, code, error=None):
+    # Google returns to the registered main-domain callback even for QA/dev.
+    # The random state must be consumed and credentials saved in its source cluster.
+    cluster = state.split('.', 1)[0]
+    token = current_cluster_var.set(cluster) if cluster in ('main', 'dev_qa') else None
+    try:
+        return _finish_connection(state, code, error)
+    finally:
+        if token is not None:
+            current_cluster_var.reset(token)
+
+
+def _finish_connection(state, code, error=None):
     connections, states = collections()
     pending = states.find_one_and_delete({'state': state, 'expires_at': {'$gt': datetime.now(timezone.utc)}})
     if not pending:
@@ -211,6 +226,7 @@ def sync_interview_event(user, interview):
             'transparency': 'opaque',
             'extendedProperties': {'private': {'termjobs_round_id': interview['id']}},
             'reminders': {'useDefault': False, 'overrides': [{'method': 'email', 'minutes': 60}, {'method': 'popup', 'minutes': 10}]}}
+        event_id = interview.get('google_event_id') or hashlib.sha256(str(interview['id']).encode()).hexdigest()[:32]
         base = 'https://www.googleapis.com/calendar/v3/calendars/primary/events'
         with httpx.Client(timeout=30) as client:
             headers = {'Authorization': f'Bearer {access_token}'}
