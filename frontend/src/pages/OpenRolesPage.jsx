@@ -885,6 +885,7 @@ export default function OpenRolesPage({ enabled = true }) {
   const [regTitle, setRegTitle] = useState('');
   const [regSkills, setRegSkills] = useState('');
   const [regResume, setRegResume] = useState(null);
+  const [googleResumeRequired, setGoogleResumeRequired] = useState(false);
 
   // Load Google Identity Services SDK only when auth modal is open
   useEffect(() => {
@@ -998,7 +999,21 @@ export default function OpenRolesPage({ enabled = true }) {
                 console.warn('Could not fetch userinfo directly from Google:', userErr);
               }
 
+              let resumeFields = {};
+              if (regResume) {
+                if (!regResume.size || regResume.size > 10 * 1024 * 1024 || !/\.(pdf|docx)$/i.test(regResume.name)) {
+                  throw new Error('Upload a non-empty PDF or DOCX resume up to 10 MB.');
+                }
+                const encoded = await new Promise((resolve, reject) => {
+                  const reader = new FileReader();
+                  reader.onload = () => resolve(String(reader.result).split(',')[1]);
+                  reader.onerror = reject;
+                  reader.readAsDataURL(regResume);
+                });
+                resumeFields = { resume_base64: encoded, resume_filename: regResume.name };
+              }
               const data = await loginWithGoogle({
+                ...resumeFields,
                 access_token: tokenResponse.access_token,
                 email: userInfo.email,
                 name: userInfo.name,
@@ -1006,6 +1021,12 @@ export default function OpenRolesPage({ enabled = true }) {
                 sub: userInfo.sub,
               });
 
+              if (data?.status === 'resume_required') {
+                setGoogleResumeRequired(true);
+                setAuthError('Upload your resume below, then continue with Google to finish signup.');
+                return;
+              }
+              setGoogleResumeRequired(false);
               setAuthSuccessMsg('Signed in with Google successfully!');
               setTimeout(() => {
                 setShowAuthModal(false);
@@ -5391,6 +5412,16 @@ export default function OpenRolesPage({ enabled = true }) {
                   : 'Join the verified talent network to browse and apply for roles.'}
               </p>
             </div>
+
+            {googleResumeRequired && (
+              <div className="mb-4">
+                <label htmlFor="google-signup-resume" className="block text-xs font-semibold text-neutral-800 mb-2">Resume required to complete Google signup *</label>
+                <input id="google-signup-resume" type="file" accept=".pdf,.docx" required
+                  onChange={(e) => setRegResume(e.target.files?.[0] || null)}
+                  className="w-full text-xs text-neutral-700" />
+                <p className="mt-1 text-xs text-neutral-500">PDF or DOCX, up to 10 MB.</p>
+              </div>
+            )}
 
             {/* 1-Click Google OAuth (Primary Action) */}
             <button

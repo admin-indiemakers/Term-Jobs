@@ -146,7 +146,7 @@ export function CandidateAuthProvider({ children }) {
       throw new Error(data.detail || data.message || data.error || `Google authentication failed (HTTP ${res.status}).`);
     }
 
-    handleAuthSuccess(data.token, data.candidate);
+    if (data.status !== 'resume_required') handleAuthSuccess(data.token, data.candidate);
     return data;
   };
 
