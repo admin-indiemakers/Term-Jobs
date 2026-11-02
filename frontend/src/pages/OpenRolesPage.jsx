@@ -1073,6 +1073,10 @@ export default function OpenRolesPage({ enabled = true }) {
       setAuthError(emailErr);
       return;
     }
+    if (!regResume || regResume.size === 0) {
+      setAuthError('Please upload a non-empty resume file to create your profile.');
+      return;
+    }
     if (regPassword.length < 6) {
       setAuthError('Password must be at least 6 characters long.');
       return;
@@ -5606,10 +5610,11 @@ export default function OpenRolesPage({ enabled = true }) {
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-semibold text-neutral-700 uppercase tracking-wider mb-1">Resume File (PDF/DOCX)</label>
+                  <label className="block text-[10px] font-semibold text-neutral-700 uppercase tracking-wider mb-1">Resume File (PDF/DOCX) *</label>
                   <input
                     type="file"
                     accept=".pdf,.docx,.doc"
+                    required
                     onChange={(e) => setRegResume(e.target.files?.[0] || null)}
                     className="w-full text-xs text-neutral-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border file:border-neutral-200 file:text-xs file:font-semibold file:bg-neutral-100 file:text-neutral-800 hover:file:bg-neutral-200 file:transition cursor-pointer"
                   />
