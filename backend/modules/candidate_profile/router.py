@@ -392,7 +392,9 @@ async def candidate_register(
     summary: str = Form(""),
     resume: UploadFile | None = File(None),
 ) -> dict:
-    """Registers a new candidate talent profile with optional resume upload."""
+    """Register a candidate with a required, non-empty resume upload."""
+    if not resume or not resume.filename:
+        raise HTTPException(status_code=400, detail="A resume file is required to register.")
     email_clean = email.strip().lower()
     # Check if corporate or enterprise email domain is used
     check_candidate_email_allowed(email_clean, is_registration=True)
@@ -420,6 +422,8 @@ async def candidate_register(
 
     if resume and resume.filename:
         content = await resume.read()
+        if not content:
+            raise HTTPException(status_code=400, detail="Uploaded resume file is empty.")
         if content:
             filename = resume.filename
             file_type = "docx" if filename.lower().endswith(".docx") else "pdf"
