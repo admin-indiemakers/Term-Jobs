@@ -47,6 +47,7 @@ import { marked } from 'marked';
 import { useCandidateAuth } from '../context/CandidateAuthContext';
 import SEOHead from '../components/SEOHead';
 import ResumePreviewModal from '../components/ResumePreviewModal';
+import ResumeUploadField from '../components/ResumeUploadField';
 import CandidateEmailEditor from '../components/CandidateEmailEditor';
 import { Backdrop } from '../components/landing/Backdrop';
 import logo from '../assets/termjobs-logo.png';
@@ -1023,7 +1024,7 @@ export default function OpenRolesPage({ enabled = true }) {
 
               if (data?.status === 'resume_required') {
                 setGoogleResumeRequired(true);
-                setAuthError('Upload your resume below, then continue with Google to finish signup.');
+                setAuthError(null);
                 return;
               }
               setGoogleResumeRequired(false);
@@ -5404,22 +5405,22 @@ export default function OpenRolesPage({ enabled = true }) {
                 <span>Candidate Talent Portal</span>
               </div>
               <h3 className="font-display text-xl font-extrabold text-neutral-900 tracking-tight">
-                {authModalTab === 'login' ? (new URLSearchParams(location.search).get('join') === 'talent-pool' ? 'Sign In to Join Talent Pool' : 'Sign In to Open Roles') : 'Create Talent Profile'}
+                {googleResumeRequired ? 'Add your resume' : authModalTab === 'login' ? (new URLSearchParams(location.search).get('join') === 'talent-pool' ? 'Sign In to Join Talent Pool' : 'Sign In to Open Roles') : 'Create Talent Profile'}
               </h3>
               <p className="text-xs text-neutral-500 mt-1">
-                {authModalTab === 'login'
+                {googleResumeRequired ? 'One last step to complete your candidate profile.' : authModalTab === 'login'
                   ? 'Access verified partner requisitions and 1-click apply.'
                   : 'Join the verified talent network to browse and apply for roles.'}
               </p>
             </div>
 
             {googleResumeRequired && (
-              <div className="mb-4">
-                <label htmlFor="google-signup-resume" className="block text-xs font-semibold text-neutral-800 mb-2">Resume required to complete Google signup *</label>
-                <input id="google-signup-resume" type="file" accept=".pdf,.docx" required
-                  onChange={(e) => setRegResume(e.target.files?.[0] || null)}
-                  className="w-full text-xs text-neutral-700" />
-                <p className="mt-1 text-xs text-neutral-500">PDF or DOCX, up to 10 MB.</p>
+              <div className="mb-5">
+                <div className="mb-5 flex items-center justify-center gap-2 text-[11px] font-medium text-neutral-500">
+                  <CheckCircle2 size={14} className="text-emerald-600" />
+                  <span>Google account verified</span><span className="text-neutral-300">/</span><span className="text-neutral-900">Upload resume</span>
+                </div>
+                <ResumeUploadField file={regResume} onChange={file => { setRegResume(file); setAuthError(null); }} disabled={authLoading} required />
               </div>
             )}
 
@@ -5427,13 +5428,14 @@ export default function OpenRolesPage({ enabled = true }) {
             <button
               type="button"
               onClick={() => handleGoogleSignIn()}
-              disabled={authLoading}
-              className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-xl bg-white hover:bg-neutral-50 border border-neutral-300 text-neutral-800 font-bold text-xs tracking-wide shadow-xs active:scale-[0.99] transition cursor-pointer disabled:opacity-50 mb-5"
+              disabled={authLoading || (googleResumeRequired && !regResume)}
+              className={`w-full flex items-center justify-center gap-3 py-3 px-4 rounded-xl border font-bold text-xs tracking-wide shadow-xs active:scale-[0.99] transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed mb-5 ${googleResumeRequired ? 'bg-neutral-900 hover:bg-neutral-800 border-neutral-900 text-white' : 'bg-white hover:bg-neutral-50 border-neutral-300 text-neutral-800'}`}
             >
               <GoogleIcon className="w-4 h-4" />
-              <span>{authLoading ? 'Connecting Google Account…' : 'Continue with Google'}</span>
+              <span>{authLoading ? 'Connecting…' : googleResumeRequired ? 'Continue with resume' : 'Continue with Google'}</span>
             </button>
 
+            {!googleResumeRequired && (<>
             {/* Divider */}
             <div className="relative flex items-center justify-center mb-5">
               <div className="border-t border-neutral-200 w-full" />
@@ -5473,6 +5475,9 @@ export default function OpenRolesPage({ enabled = true }) {
             </div>
 
             {/* Alerts */}
+            </>)}
+            {googleResumeRequired && <button type="button" disabled={authLoading} onClick={() => { setGoogleResumeRequired(false); setAuthError(null); }} className="mb-4 w-full text-center text-xs text-neutral-500 hover:text-neutral-900">Use another sign-in method</button>}
+
             {authError && (
               <div className="p-3 mb-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-start gap-2">
                 <AlertCircle size={15} className="shrink-0 mt-0.5 text-rose-500" />
@@ -5488,7 +5493,7 @@ export default function OpenRolesPage({ enabled = true }) {
             )}
 
             {/* TAB 1: LOGIN FORM */}
-            {authModalTab === 'login' && (
+            {!googleResumeRequired && authModalTab === 'login' && (
               <form onSubmit={handleEmailLogin} className="space-y-3.5">
                 <div>
                   <label className="block text-[11px] font-semibold text-neutral-700 uppercase tracking-wider mb-1">
@@ -5542,7 +5547,7 @@ export default function OpenRolesPage({ enabled = true }) {
             )}
 
             {/* TAB 2: REGISTER FORM */}
-            {authModalTab === 'register' && (
+            {!googleResumeRequired && authModalTab === 'register' && (
               <form onSubmit={handleRegisterSubmit} className="space-y-3">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <div>
@@ -5640,16 +5645,7 @@ export default function OpenRolesPage({ enabled = true }) {
                   />
                 </div>
 
-                <div>
-                  <label className="block text-[10px] font-semibold text-neutral-700 uppercase tracking-wider mb-1">Resume File (PDF/DOCX) *</label>
-                  <input
-                    type="file"
-                    accept=".pdf,.docx,.doc"
-                    required
-                    onChange={(e) => setRegResume(e.target.files?.[0] || null)}
-                    className="w-full text-xs text-neutral-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border file:border-neutral-200 file:text-xs file:font-semibold file:bg-neutral-100 file:text-neutral-800 hover:file:bg-neutral-200 file:transition cursor-pointer"
-                  />
-                </div>
+                <ResumeUploadField file={regResume} onChange={file => { setRegResume(file); setAuthError(null); }} disabled={authLoading} required />
 
                 <button
                   type="submit"
