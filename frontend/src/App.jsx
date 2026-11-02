@@ -75,6 +75,7 @@ const TimesheetApprovals = lazyWithRetry(() => import('./pages/workforce/Timeshe
 const ExpenseApprovals = lazyWithRetry(() => import('./pages/workforce/ExpenseApprovals'));
 const Workers = lazyWithRetry(() => import('./pages/workforce/Workers'));
 const AdminAccounts = lazyWithRetry(() => import('./pages/AdminAccounts'));
+const SuperAdminRequisitions = lazyWithRetry(() => import('./pages/SuperAdminRequisitions'));
 const SuperAdminCandidatePool = lazyWithRetry(() => import('./pages/SuperAdminCandidatePool'));
 const SuperAdminCandidateManagement = lazyWithRetry(() => import('./pages/SuperAdminCandidateManagement'));
 const SuperAdminOutreachControl = lazyWithRetry(() => import('./pages/SuperAdminOutreachControl'));
@@ -373,6 +374,7 @@ export default function App() {
             <Route path="finance/approvals" element={<FinanceApprovals />} />
             <Route path="finance/profile" element={<UserProfileSettings portalTitle="Finance Officer Profile" />} />
             <Route path="superadmin" element={<SuperAdminDashboard />} />
+            <Route path="superadmin/requisitions" element={<SuperAdminRouteGuard><SuperAdminRequisitions /></SuperAdminRouteGuard>} />
             <Route path="superadmin/chat" element={<AiChat />} />
             <Route path="superadmin/onboard" element={<OnboardCompany />} />
             <Route path="superadmin/onboard-vendor" element={<OnboardVendor />} />
