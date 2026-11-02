@@ -528,6 +528,7 @@ export default function DashboardLayout() {
                   { to: '/dashboard/superadmin', label: 'Dashboard', end: true, section: 'WORKSPACE', icon: Icons.Dashboard },
                   { to: '/dashboard/interviews', label: 'Interviews & AI Scores', end: false, section: 'WORKSPACE', icon: Icons.Interviews },
                   { to: '/dashboard/superadmin/chat', label: 'AI Chat', end: true, section: 'WORKSPACE', icon: Icons.Chat },
+                  { to: '/dashboard/superadmin/requisitions', label: 'Company Requisitions', end: false, section: 'WORKSPACE', icon: Icons.Requisitions },
                   { to: '/dashboard/superadmin/candidate-management', label: 'Candidate Management', end: false, section: 'CANDIDATE MANAGEMENT', icon: Icons.Accepted, badge: superAdminSelectedCount },
                   { to: '/dashboard/superadmin/candidate-management?tab=billing', label: 'Candidate Billing', end: false, section: 'CANDIDATE MANAGEMENT', icon: Icons.Receipt },
                   { to: '/dashboard/superadmin/candidates', label: 'Candidate Pool', end: false, section: 'CANDIDATE MANAGEMENT', icon: Icons.Diamond, count: superAdminCandidateCount },
