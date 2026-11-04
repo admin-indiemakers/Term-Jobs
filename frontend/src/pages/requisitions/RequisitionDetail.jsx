@@ -76,7 +76,7 @@ function formatCustomDate(iso, defaultText = '25 Sept 2026, 6:19 am') {
   }
 }
 
-function StatusPill({ status }) {
+function StatusPill({ status, approvalRequired = true }) {
   if (isPublishedStatus(status)) {
     return (
       <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
@@ -86,6 +86,14 @@ function StatusPill({ status }) {
     );
   }
   if (isPendingApprovalStatus(status)) {
+    if (!approvalRequired) {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+          <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+          Ready to Publish
+        </span>
+      );
+    }
     return (
       <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
         <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
@@ -386,7 +394,7 @@ export default function RequisitionDetail() {
       } catch (e) {
         await request(`/requisitions/${id}/approve`, { method: 'POST', token });
       }
-      setInfo('Requisition submitted to Director for approval!');
+      setInfo(req?.require_director_approval === false ? 'Requisition published successfully!' : 'Requisition submitted to Director for approval!');
       load();
     } catch (err) {
       setError(err.message || 'Failed to submit requisition for Director approval');
@@ -455,7 +463,8 @@ export default function RequisitionDetail() {
   const titleDisplay = editForm.title || req.title || structuredRole?.title || '';
   const deptDisplay = editForm.department || req.department || structuredRole?.department || '';
   const createdDateDisplay = formatCustomDate(req.created_at, '25 Sept 2026, 6:19 am');
-  const isApproved = isPublishedStatus(status) || isCompletedStatus(status) || (Boolean(req.director_approved) && !isPendingApprovalStatus(status) && !isDraftedStatus(status));
+  const approvalRequired = req.require_director_approval !== false;
+  const isApproved = approvalRequired && (isPublishedStatus(status) || isCompletedStatus(status) || (Boolean(req.director_approved) && !isPendingApprovalStatus(status) && !isDraftedStatus(status)));
   const approvalDateRaw = isApproved ? (req.director_approved_at || req.approved_at || req.updated_at) : null;
   const approvedDateDisplay = approvalDateRaw ? formatCustomDate(approvalDateRaw, '') : null;
 
@@ -482,7 +491,7 @@ export default function RequisitionDetail() {
               <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight leading-tight">
                 {titleDisplay}
               </h1>
-              <StatusPill status={status} />
+              <StatusPill status={status} approvalRequired={approvalRequired} />
             </div>
 
             {/* Subtitle */}
@@ -558,7 +567,7 @@ export default function RequisitionDetail() {
 
                   {status !== 'Published' && (
                     user?.role === 'Hiring Manager' ? (
-                      status === 'Pending Approval' || status === 'PendingApproval' ? (
+                      (status === 'Pending Approval' || status === 'PendingApproval') && req?.require_director_approval !== false ? (
                         <div className="w-full px-3 py-1.5 text-xs text-amber-700 bg-amber-50 rounded-xl flex items-center gap-2 font-medium">
                           <Clock size={13} className="text-amber-600" />
                           <span>Awaiting Director Approval</span>
@@ -573,7 +582,7 @@ export default function RequisitionDetail() {
                           className="w-full px-3 py-1.5 text-xs text-gray-700 hover:text-black hover:bg-gray-100/80 rounded-xl transition-colors flex items-center gap-2 font-medium cursor-pointer"
                         >
                           <ShieldCheck size={13} className="text-gray-500" />
-                          <span>Submit for Director Approval</span>
+                          <span>{req?.require_director_approval === false ? 'Publish Requisition' : 'Submit for Director Approval'}</span>
                         </button>
                       )
                     ) : (
@@ -855,7 +864,7 @@ export default function RequisitionDetail() {
                 <div>
                   <div className="text-sm font-bold text-gray-900 leading-tight">Director Approval</div>
                   <div className="text-xs text-gray-400 mt-0.5">
-                    {approvedDateDisplay || (isApproved ? 'Approved' : 'Pending Approval')}
+                    {!approvalRequired ? 'Not required by company setting' : (approvedDateDisplay || (isApproved ? 'Approved' : 'Pending Approval'))}
                   </div>
                 </div>
                 <div className="absolute left-3 top-6 w-[1.5px] h-7 bg-gray-200" />

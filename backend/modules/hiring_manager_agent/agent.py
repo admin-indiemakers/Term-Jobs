@@ -59,7 +59,10 @@ def _get_tenant_company_context(tenant_id: str = "local") -> Dict[str, Any]:
             company_name = t_doc.get("name")
 
         # 2. Company profile record
-        cp_doc = db["company_profiles"].find_one({"$or": [{"tenant_id": tenant_id}, {"id": tenant_id}]})
+        cp_doc = db["company_profiles"].find_one(
+            {"$or": [{"tenant_id": tenant_id}, {"id": tenant_id}]},
+            sort=[("created_at", -1)],
+        )
         if cp_doc:
             if cp_doc.get("name") or cp_doc.get("company_name"):
                 company_name = cp_doc.get("name") or cp_doc.get("company_name")
@@ -518,7 +521,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "submit_for_director_approval",
-            "description": "Submit a drafted or new job requisition to the Director for official review and approval.",
+            "description": "Advance a drafted or new requisition according to the company flow setting: submit it for Director approval when required, or publish it directly when approval is disabled.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -1227,7 +1230,7 @@ def submit_requisition_for_director_approval(
         if existing and (existing.tenant_id != tenant_id or str(existing.created_by) != str(user_id)):
             return {'error': 'Requisition is outside your authorized hiring-manager scope.'}
         if existing:
-            existing.status = "Pending Approval"
+            existing.status = initial_status
             existing.director_approved = False
             existing.structured_role = structured_role
             if job_description:
@@ -1238,7 +1241,7 @@ def submit_requisition_for_director_approval(
                 id=new_id,
                 tenant_id=tenant_id,
                 created_by=user_id,
-                status="Pending Approval",
+                status=initial_status,
                 title=title,
                 structured_role=structured_role,
                 generated_jd_markdown=job_description or f"Requisition for {title}",
@@ -1266,7 +1269,7 @@ def submit_requisition_for_director_approval(
                 "created_by_name": hm_display_name,
                 "hiring_manager": hm_display_name,
                 "hiring_manager_name": hm_display_name,
-                "status": "Pending Approval",
+                "status": initial_status,
                 "title": title,
                 "openings": num_openings,
                 "headcount": num_openings,
@@ -1285,29 +1288,39 @@ def submit_requisition_for_director_approval(
     except Exception as e:
         print("[HM AGENT] Error saving requisition in MongoDB:", e)
 
-    # Create in-app Director Notification
+    if not approval_required:
+        try:
+            from modules.notifications.services.notification_service import notify_requisition_published
+            from modules.requisition.events import emit_requisition_published
+            notify_requisition_published(new_id)
+            emit_requisition_published(new_id, structured_role=structured_role)
+        except Exception as e:
+            print("[HM AGENT] Error dispatching direct-publication events:", e)
+
+    # Notify a Director only when this company's configured workflow requires approval.
     try:
-        db["notifications"].insert_one({
-            "id": str(uuid.uuid4()),
-            "tenant_id": tenant_id,
-            "type": "requisition_approval_request",
-            "title": f"New Requisition Approval Request: {title}",
-            "message": f"{user_name or 'Hiring Manager'} submitted a new requisition '{title}' for your review and approval.",
-            "requisition_id": new_id,
-            "target_role": "Director",
-            "status": "unread",
-            "created_at": now_iso
-        })
+        if approval_required:
+            db["notifications"].insert_one({
+                "id": str(uuid.uuid4()),
+                "tenant_id": tenant_id,
+                "type": "requisition_approval_request",
+                "title": f"New Requisition Approval Request: {title}",
+                "message": f"{user_name or 'Hiring Manager'} submitted a new requisition '{title}' for your review and approval.",
+                "requisition_id": new_id,
+                "target_role": "Director",
+                "status": "unread",
+                "created_at": now_iso
+            })
     except Exception as e:
         print("[HM AGENT] Error dispatching Director notification:", e)
 
     return {
         "req_id": new_id,
         "title": title,
-        "status": "Pending Approval",
+        "status": initial_status,
         "department": department or "Engineering & Product",
-        "director_notified": True,
-        "message": f"Job Requisition '{title}' has been submitted to the Director for approval. The Director has been notified!"
+        "director_notified": approval_required,
+        "message": (f"Job Requisition '{title}' has been submitted to the Director for approval. The Director has been notified!" if approval_required else f"Job Requisition '{title}' has been published directly according to your company's flow settings.")
     }
 
 
@@ -1873,7 +1886,7 @@ def get_hiring_manager_guide(user_name: str = "Hiring Manager", company_name: st
     markdown = (
         f"👋 **Welcome to TermJobs, {display_user}!**\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"As the **Hiring Manager** for **{display_company}**, you have full control over role requirements, candidate evaluation, interview orchestration, and workforce operations—with approval oversight from **{display_director}**.\n\n"
+        f"As the **Hiring Manager** for **{display_company}**, you have full control over role requirements, candidate evaluation, interview orchestration, and workforce operations.\n\n"
         "Here is your end-to-end playbook on how to use TermJobs:\n\n"
         "**1️⃣ Job Requisitions & Role Drafting**\n"
         "• **AI-Powered Drafting:** Request any role directly in chat (e.g. *\"Draft a Python Backend Engineer with 4 years experience\"*) or pick from pre-configured engineering & product templates.\n"
@@ -3334,7 +3347,7 @@ def run_model_hiring_chat(prompt, history, current_user):
                     "- If the user asks generally to create a requisition without specifying a role (e.g. 'can u create a requisition', 'create a req', 'new job', 'can u create a requsion'), ALWAYS call `show_role_selection_dropdown`.\n"
                     "- If the user wants to change, set, or edit any field of an active draft (e.g. number of openings/headcount, key skills, role summary, budget, location, experience), ALWAYS call `draft_hiring_requisition` with the updated field and previous draft values. When changing openings (e.g. 'change number of opening to 2', 'set openings to 3'), pass `openings: 2` (or the requested integer) directly to `draft_hiring_requisition`. NEVER append 'Number of openings' into the role summary or job description text.\n"
                     "- When the user asks about 'requisitions', 'active requisitions', 'live requisitions', 'open requisitions', or 'job directory', ALWAYS call the `list_hiring_requisitions` tool.\n"
-                    "- Only call `submit_for_director_approval` when the user explicitly asks to send or submit the requisition to the Director for approval.\n"
+                    "- Follow the company flow setting when discussing requisition submission: only describe Director approval as required when enabled for this tenant.\n"
                     "CRITICAL FOR CANDIDATE INQUIRIES:\n"
                     "- When the user asks about 'shortlist', 'shortlisted candidates', or 'screening', ALWAYS call `list_shortlisted_candidates`.\n"
                     "- When the user asks about 'onboarding', 'onboarding candidates', or 'provisioning/checklist issues', ALWAYS call `list_onboarding_issues`.\n"

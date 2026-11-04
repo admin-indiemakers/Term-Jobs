@@ -187,6 +187,9 @@ function HiringManagerDashboardContent() {
 
   // Real AI Chat States
   const [messages, setMessages] = useState([]);
+  const [submittingRequisitionCards, setSubmittingRequisitionCards] = useState(() => new Set());
+  const submittingRequisitionCardsRef = useRef(new Set());
+  const [companyRequiresDirectorApproval, setCompanyRequiresDirectorApproval] = useState(null);
   const [isAiTyping, setIsAiTyping] = useState(false);
   const [isListening, setIsListening] = useState(false);
 
@@ -195,9 +198,6 @@ function HiringManagerDashboardContent() {
   const [selectedCandidateProfile, setSelectedCandidateProfile] = useState(null);
   const [resumeError, setResumeError] = useState('');
   const [resumeLoading, setResumeLoading] = useState(false);
-  const [submittingRequisitionCards, setSubmittingRequisitionCards] = useState(() => new Set());
-  const submittingRequisitionCardsRef = useRef(new Set());
-  const [companyRequiresDirectorApproval, setCompanyRequiresDirectorApproval] = useState(null);
 
   // Dynamic Right Panel / AI Connected Output View State
   const [activePanel, setActivePanel] = useState({
@@ -880,6 +880,7 @@ function HiringManagerDashboardContent() {
         }
 
         const payload = {
+          client_request_id: messageId,
           company_profile_id: profileId,
           title: draft.title,
           description: draft.summary || `${draft.title} requirement`,
@@ -909,9 +910,7 @@ function HiringManagerDashboardContent() {
         });
 
         const newReqId = res?.id || res?.requisition_id;
-        if (!newReqId && !draft.id?.startsWith('draft-')) {
-          throw new Error('The requisition was not saved. Please try again.');
-        }
+        if (!newReqId) throw new Error('The requisition was created, but its ID was not returned. Refresh the requisition list to continue.');
 
         // Creation already enters the configured workflow. Only call the
         // publish transition for an off-policy tenant if an older backend
@@ -934,8 +933,9 @@ function HiringManagerDashboardContent() {
                   requisitionDraft: {
                     ...m.requisitionDraft,
                     id: newReqId || m.requisitionDraft.id,
-                    isSubmittedForApproval: finalApprovalRequired,
-                    status: isPublished ? 'Published' : 'Pending Approval',
+                    require_director_approval: finalApprovalRequired,
+                    isSubmittedForApproval: finalApprovalRequired && !isPublished,
+                    status: workflowResult?.status || (finalApprovalRequired ? 'PendingApproval' : 'Published'),
                   },
                 }
               : m
@@ -945,9 +945,9 @@ function HiringManagerDashboardContent() {
         const confirmMsg = {
           id: `ai-approval-${Date.now()}`,
           sender: 'ai',
-          text: isPublished
-            ? `**${draft.title}** requisition has been published. Director approval is disabled for your company.`
-            : `**${draft.title}** requisition has been sent to the Director for approval. The role will be published after sign-off.`,
+          text: isPublished || !finalApprovalRequired
+            ? `**${draft.title}** requisition has been published directly according to your company's flow settings.`
+            : `**${draft.title}** requisition has been sent to the Director for approval. Director sign-off is required before it can be published.`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         };
         setMessages((prev) => [...prev, confirmMsg]);
@@ -1073,7 +1073,7 @@ function HiringManagerDashboardContent() {
           body: {
             title: draft.title,
             department: draft.department,
-            experience: draft.experience,
+            experience_level: draft.experience,
             skills: draft.skills,
             location: draft.location,
             employment_type: draft.employment_type,
@@ -1101,7 +1101,7 @@ function HiringManagerDashboardContent() {
         const jdNote = {
           id: `ai-jd-${Date.now()}`,
           sender: 'ai',
-          text: `✨ Generated an enhanced enterprise Job Description for **${draft.title}**. The Role Summary in the card above has been updated.`,
+          text: `✨ Generated an enhanced enterprise Job Description for **${draft.title}**${res?.company_website_used ? ' using your company website and profile details' : ' using your company profile details'}. The Role Summary in the card above has been updated.`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         };
         setMessages((prev) => [...prev, jdNote]);
@@ -1445,6 +1445,7 @@ function HiringManagerDashboardContent() {
         const r = draftAction.result;
         reqDraft = {
           ...r,
+          require_director_approval: companyRequiresDirectorApproval ?? (r.require_director_approval !== false),
           id: r.id || `draft-${Date.now()}`,
           experience: r.experience_level || 'To be confirmed',
           hiring_model: resolvedDraftHiringModel({ ...r, summary: r.job_description }) || 'To be confirmed',
@@ -2708,7 +2709,12 @@ function HiringManagerDashboardContent() {
                                     </>
                                   ) : (
                                     <>
-                                      {msg.requisitionDraft.isSubmittedForApproval || msg.requisitionDraft.status === 'Pending Approval' ? (
+                                      {msg.requisitionDraft.status === 'Published' ? (
+                                        <div className="px-3.5 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center gap-1.5 shadow-2xs">
+                                          <CheckCircle2 size={13} className="text-emerald-600" />
+                                          <span>Published</span>
+                                        </div>
+                                      ) : draftRequiresDirectorApproval(msg.requisitionDraft) && (msg.requisitionDraft.isSubmittedForApproval || ['pending approval', 'pendingapproval'].includes(String(msg.requisitionDraft.status || '').toLowerCase())) ? (
                                         <div className="px-3.5 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold flex items-center gap-1.5 shadow-2xs">
                                           <Clock size={13} className="text-amber-600" />
                                           <span>Awaiting Director Approval</span>
@@ -2718,7 +2724,7 @@ function HiringManagerDashboardContent() {
                                           type="button"
                                           disabled={submittingRequisitionCards.has(msg.id) || missingDraftRequirements(msg.requisitionDraft).length > 0}
                                           onClick={() => handleSubmitForApprovalFromCard(msg.requisitionDraft, msg.id)}
-                                          className="px-3.5 py-2 rounded-xl bg-black text-white text-xs font-semibold hover:bg-gray-800 transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
+                                          className="px-3.5 py-2 rounded-xl bg-black text-white text-xs font-semibold hover:bg-gray-800 transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-60 disabled:cursor-wait"
                                         >
                                           {submittingRequisitionCards.has(msg.id) ? <Loader2 size={13} className="animate-spin" /> : !draftRequiresDirectorApproval(msg.requisitionDraft) ? <Sparkles size={13} /> : <ShieldCheck size={13} />}
                                           <span>{submittingRequisitionCards.has(msg.id) ? 'Submitting…' : missingDraftRequirements(msg.requisitionDraft).length > 0 ? 'Complete required details' : !draftRequiresDirectorApproval(msg.requisitionDraft) ? 'Publish Requisition' : 'Send to Director for Approval'}</span>

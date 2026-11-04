@@ -3,6 +3,7 @@ import pytest
 import importlib
 from datetime import datetime, timezone
 from fastapi import BackgroundTasks
+from fastapi import HTTPException
 
 from modules.identity.domain.models import User
 from modules.identity.domain.models import Tenant
@@ -168,7 +169,8 @@ def test_company_can_publish_without_director_when_setting_is_disabled(monkeypat
         session.add(profile)
         req = Requisition(
             id="req-1", tenant_id="tenant-1", company_profile_id=profile.id,
-            status="PendingApproval", title="Engineer", structured_role={"title": "Engineer"},
+            status="PendingApproval", title="Engineer",
+            structured_role={"title": "Engineer", "work_mode": "Remote"},
             director_approved=False,
         )
         session.add(req)
@@ -208,6 +210,7 @@ def test_new_hiring_manager_requisition_is_published_when_approval_toggle_is_off
     result = app_main.create_requisition(
         app_main.RequisitionIn(
             title="Engineer", description="Build systems",
+            prefill={"work_mode": "Remote"},
             client_request_id="ai-card-unique-1",
         ),
         BackgroundTasks(),
@@ -230,6 +233,30 @@ def test_new_hiring_manager_requisition_is_published_when_approval_toggle_is_off
     )
     assert retry["id"] == result["id"]
     assert database["requisitions"].count_documents({"client_request_id": "ai-card-unique-1"}) == 1
+
+
+def test_incomplete_chat_inline_requisition_cannot_be_submitted():
+    manager = User(id="hm-incomplete", tenant_id="tenant-incomplete", role="Hiring Manager", name="Manager")
+    body = app_main.RequisitionIn(
+        title="Forward Deployed Engineer",
+        intake_mode="chat_inline",
+        prefill={
+            "department": "Engineering",
+            "primary_location": "Remote",
+            "experience_band": "Mid (2-5 yrs)",
+            "work_mode": "To be confirmed",
+            "start_date": "To be confirmed",
+            "must_have_skills": ["To be confirmed"],
+        },
+    )
+
+    with pytest.raises(HTTPException) as error:
+        app_main.create_requisition(body, BackgroundTasks(), manager)
+
+    assert error.value.status_code == 422
+    assert "Hiring model" in error.value.detail
+    assert "Target start date" in error.value.detail
+    assert "Required skills" in error.value.detail
 
 
 def test_company_flow_toggle_keeps_director_approval_gate_enabled_by_default(monkeypatch):
