@@ -1727,7 +1727,7 @@ export default function OpenRolesPage({ enabled = true }) {
   const isSelectedJobApplied = Boolean(selectedJobApp);
 
   return (
-    <div className="w-full min-h-screen overflow-x-hidden bg-[#08090b] text-white font-sans selection:bg-emerald-500 selection:text-black relative">
+    <div className="w-full min-h-screen overflow-x-clip bg-[#08090b] text-white font-sans selection:bg-emerald-500 selection:text-black relative">
       {enabled && (
         <SEOHead
           title={isInterviewViewOpen ? "Upcoming Interviews — TermJobs" : "Open Roles & Contract Opportunities — TermJobs"}
@@ -1749,9 +1749,12 @@ export default function OpenRolesPage({ enabled = true }) {
           {/* ============================================================ */}
           {/* LEFT PANEL: LIGHT EDITORIAL COLUMN (HIDDEN ON MOBILE)        */}
           {/* ============================================================ */}
-          <aside className="hidden lg:flex w-full lg:w-[360px] xl:w-[400px] 2xl:w-[430px] shrink-0 bg-paper text-ink border-b lg:border-b-0 lg:border-r border-ink/10 flex-col justify-between relative overflow-hidden lg:h-screen lg:max-h-screen lg:sticky lg:top-0">
+          <aside className="hidden lg:flex w-full lg:w-[360px] xl:w-[400px] 2xl:w-[430px] shrink-0 bg-paper text-ink border-b lg:border-b-0 lg:border-r border-ink/10 flex-col relative self-stretch lg:min-h-screen">
         {/* Light Atmospheric Background Layer - mathematically synced with Landing Page */}
         <Backdrop tone="sidebar" />
+
+        {/* Sticky Editorial Sidebar Content: stays in viewport while left panel stretches with right content */}
+        <div className="relative z-10 w-full flex-1 flex flex-col justify-between lg:sticky lg:top-0 lg:h-screen lg:max-h-screen">
 
         {/* Zone 1: Main Scrollable Editorial Content (takes remaining height, never pushes bottom) */}
         <div className="relative z-10 flex-1 min-h-0 lg:overflow-y-auto custom-scrollbar-none p-6 sm:p-7 xl:p-8 pb-2 flex flex-col justify-between">
@@ -1860,6 +1863,7 @@ export default function OpenRolesPage({ enabled = true }) {
               </div>
             </div>
           </div>
+        </div>
         </div>
       </aside>
 
