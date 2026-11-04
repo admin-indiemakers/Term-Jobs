@@ -165,3 +165,51 @@ def test_public_application_to_managed_posting_saves_resume_in_pool(setup, monke
     assert len(pool['candidates']) == 1
     assert pool['candidates'][0]['applications'][0]['requisition_id'] == req_id
     assert pool['candidates'][0]['has_resume']
+
+
+def test_edit_preserves_applicants_status_and_updates_public_fields(setup):
+    database, _, client, _ = setup
+    body = payload()
+    req_id = client.post('/api/superadmin/requisitions', json=body).json()['id']
+    original = database.requisitions.find_one({'id': req_id})
+    database.candidate_submissions.insert_one({'id': 'application', 'requisition_id': req_id})
+    database.requisitions.update_one({'id': req_id}, {'$set': {'status': 'Closed', 'structured_role.extra': 'preserved'}})
+    body.pop('client_request_id')
+    body.update(company_name='New Client', title='Updated Role', work_mode='Hybrid', job_description='Updated summary', submission_deadline='2099-11-12')
+    response = client.put(f'/api/superadmin/requisitions/{req_id}', json=body)
+    assert response.status_code == 200, response.text
+    assert response.json()['applicants_count'] == 1
+    row = database.requisitions.find_one({'id': req_id})
+    assert row['status'] == 'Closed'
+    assert row['created_at'] == original['created_at']
+    assert row['tenant_id'] == original['tenant_id']
+    assert row['structured_role']['extra'] == 'preserved'
+    assert row['structured_role']['work_mode'] == 'Hybrid'
+    assert row['structured_role']['submission_deadline'] == '2099-11-12'
+    assert row['generated_jd_markdown'] == row['intent']['description'] == row['structured_role']['job_description'] == 'Updated summary'
+    assert row['title'] == row['intent']['title'] == row['structured_role']['title'] == 'Updated Role'
+    assert database.company_profiles.find_one({'id': row['company_profile_id']})['name'] == 'New Client'
+    assert database.company_profiles.find_one({'id': original['company_profile_id']})['name'] == original['company_name']
+    assert database.requisitions.count_documents({}) == 1
+
+
+def test_edit_rejects_invalid_details_and_unmanaged_roles(setup):
+    database, _, client, _ = setup
+    body = payload()
+    req_id = client.post('/api/superadmin/requisitions', json=body).json()['id']
+    body.pop('client_request_id')
+    assert client.put('/api/superadmin/requisitions/missing', json=body).status_code == 404
+    database.requisitions.insert_one({'id': 'unmanaged'})
+    assert client.put('/api/superadmin/requisitions/unmanaged', json=body).status_code == 404
+    body['work_mode'] = ''
+    assert client.put(f'/api/superadmin/requisitions/{req_id}', json=body).status_code == 422
+    assert database.requisitions.find_one({'id': req_id})['structured_role']['work_mode'] == 'On-site'
+
+
+@pytest.mark.parametrize('role', ['Hiring Manager', 'Admin', 'Recruiter', 'Candidate'])
+def test_edit_requires_superadmin(setup, role):
+    _, app, client, _ = setup
+    app.dependency_overrides[get_current_user] = lambda: User(id='other', tenant_id='other', role=role)
+    body = payload()
+    body.pop('client_request_id')
+    assert client.put('/api/superadmin/requisitions/req', json=body).status_code == 403
