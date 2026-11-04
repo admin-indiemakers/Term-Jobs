@@ -24,9 +24,8 @@ router = APIRouter(prefix='/api/superadmin/requisitions', tags=['Super Admin Req
 MANAGED = {'intake_meta.intake_mode': 'superadmin_post'}
 
 
-class PostingIn(BaseModel):
+class PostingDetails(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra='forbid')
-    client_request_id: str = Field(min_length=1, max_length=100)
     company_name: str = Field(min_length=1, max_length=200)
     title: str = Field(min_length=1, max_length=200)
     department: str = Field(min_length=1, max_length=100)
@@ -61,6 +60,23 @@ class PostingIn(BaseModel):
         return values
 
 
+class PostingIn(PostingDetails):
+    client_request_id: str = Field(min_length=1, max_length=100)
+
+
+def posting_role(body: PostingDetails):
+    return {
+        'title': body.title, 'department': body.department, 'location': body.location,
+        'work_locations': [body.location], 'work_mode': body.work_mode,
+        'experience': body.experience, 'experience_level': body.experience,
+        'employment_type': 'Contract', 'engagement_type': 'Contract', 'hiring_model': 'Direct Hiring',
+        'duration': body.duration, 'contract_duration': body.duration, 'headcount': body.headcount,
+        'start_date': body.start_date, 'target_start_date': body.start_date,
+        'submission_deadline': body.submission_deadline, 'must_have_skills': body.skills,
+        'job_description': body.job_description,
+    }
+
+
 def posting_view(row):
     role = row.get('structured_role') or {}
     return {'id': row['id'], 'title': row.get('title'), 'company_name': row.get('company_name'),
@@ -88,16 +104,7 @@ def post_requisition(body: PostingIn, user=Depends(require_superadmin)):
         'id': profile_id, 'tenant_id': user.tenant_id, 'name': body.company_name,
         'created_at': now, 'managed_by_superadmin': True,
     }}, upsert=True)
-    role = {
-        'title': body.title, 'department': body.department, 'location': body.location,
-        'work_locations': [body.location], 'work_mode': body.work_mode,
-        'experience': body.experience, 'experience_level': body.experience,
-        'employment_type': 'Contract', 'engagement_type': 'Contract', 'hiring_model': 'Direct Hiring',
-        'duration': body.duration, 'contract_duration': body.duration, 'headcount': body.headcount,
-        'start_date': body.start_date, 'target_start_date': body.start_date,
-        'submission_deadline': body.submission_deadline, 'must_have_skills': body.skills,
-        'job_description': body.job_description,
-    }
+    role = posting_role(body)
     row = Requisition(id=req_id, tenant_id=user.tenant_id, company_profile_id=profile_id,
         created_by=user.id, title=body.title, status='Published', structured_role=role,
         generated_jd_markdown=body.job_description, intent={'title': body.title, 'description': body.job_description},
@@ -110,6 +117,30 @@ def post_requisition(body: PostingIn, user=Depends(require_superadmin)):
         row = db.requisitions.find_one({'_id': req_id})
     cache.clear()
     return posting_view(row)
+
+
+@router.put('/{requisition_id}')
+def edit_posting(requisition_id: str, body: PostingDetails, user=Depends(require_superadmin)):
+    query = {'id': requisition_id, **MANAGED}
+    existing = db.requisitions.find_one(query)
+    if not existing:
+        raise HTTPException(404, 'Managed requisition not found.')
+    now = _utcnow()
+    profile_id = str(uuid5(NAMESPACE_URL, f"managed-company:{existing['tenant_id']}:{body.company_name.casefold()}"))
+    db.company_profiles.update_one({'id': profile_id}, {'$setOnInsert': {
+        'id': profile_id, 'tenant_id': existing['tenant_id'], 'name': body.company_name,
+        'created_at': now, 'managed_by_superadmin': True,
+    }}, upsert=True)
+    changes = {
+        'title': body.title, 'company_name': body.company_name, 'company_profile_id': profile_id,
+        'generated_jd_markdown': body.job_description,
+        'intent.title': body.title, 'intent.description': body.job_description,
+        'updated_at': now,
+    }
+    changes.update({f'structured_role.{key}': value for key, value in posting_role(body).items()})
+    db.requisitions.update_one(query, {'$set': changes})
+    cache.clear()
+    return posting_view(db.requisitions.find_one(query))
 
 
 @router.get('/{requisition_id}/applicants')
