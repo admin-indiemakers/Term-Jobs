@@ -3,7 +3,7 @@ from typing import Literal
 from uuid import NAMESPACE_URL, uuid5
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, TypeAdapter, field_validator
 from pymongo.errors import DuplicateKeyError
 
 from modules.identity.domain.models import User
@@ -38,6 +38,14 @@ class PostingDetails(BaseModel):
     submission_deadline: str = Field(min_length=1, max_length=10)
     skills: list[str] = Field(min_length=1, max_length=100)
     job_description: str = Field(min_length=1, max_length=30000)
+    internal_link: str = Field(default='', max_length=2048)
+
+    @field_validator('internal_link')
+    @classmethod
+    def valid_internal_link(cls, value):
+        if not value:
+            return ''
+        return str(TypeAdapter(HttpUrl).validate_python(value))
 
     @field_validator('start_date')
     @classmethod
@@ -79,8 +87,9 @@ def posting_role(body: PostingDetails):
 
 def posting_view(row):
     role = row.get('structured_role') or {}
+    private = db.requisition_internal_links.find_one({'_id': row['id']}) or {}
     return {'id': row['id'], 'title': row.get('title'), 'company_name': row.get('company_name'),
-            'status': row.get('status'), 'structured_role': role,
+            'status': row.get('status'), 'structured_role': role, 'internal_link': private.get('url', ''),
             'created_at': row.get('created_at'), 'applicants_count': db.candidate_submissions.count_documents({'requisition_id': row['id']})}
 
 
@@ -115,6 +124,7 @@ def post_requisition(body: PostingIn, user=Depends(require_superadmin)):
         db.requisitions.insert_one(row)
     except DuplicateKeyError:
         row = db.requisitions.find_one({'_id': req_id})
+    db.requisition_internal_links.update_one({'_id': req_id}, {'$setOnInsert': {'url': body.internal_link}}, upsert=True)
     cache.clear()
     return posting_view(row)
 
@@ -139,6 +149,7 @@ def edit_posting(requisition_id: str, body: PostingDetails, user=Depends(require
     }
     changes.update({f'structured_role.{key}': value for key, value in posting_role(body).items()})
     db.requisitions.update_one(query, {'$set': changes})
+    db.requisition_internal_links.update_one({'_id': requisition_id}, {'$set': {'url': body.internal_link}}, upsert=True)
     cache.clear()
     return posting_view(db.requisitions.find_one(query))
 
