@@ -34,11 +34,22 @@ export default function SuperAdminRequisitions() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    try { setRows(await request('/api/superadmin/requisitions', { token, noCache: true })); }
+    try {
+      const nextRows = await request('/api/superadmin/requisitions', { token, noCache: true });
+      setRows(nextRows);
+      setSelected(previous => previous ? nextRows.find(row => row.id === previous.id) || null : null);
+    }
     catch (err) { setError(err.message || 'Could not load requisitions.'); }
     finally { setLoading(false); }
   }, [token]);
-  useEffect(() => { if (token) load(); }, [token, load]);
+  useEffect(() => {
+    if (!token) return;
+    load();
+    const refresh = () => { if (!document.hidden) load(); };
+    const timer = window.setInterval(refresh, 60000);
+    window.addEventListener('focus', refresh);
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', refresh); };
+  }, [token, load]);
   useEffect(() => {
     if (!selected) return;
     let cancelled = false;
@@ -115,11 +126,16 @@ export default function SuperAdminRequisitions() {
             <div className="flex justify-end gap-3"><button type="button" disabled={saving} onClick={() => setShowForm(false)} className="rounded-xl border px-4 py-2.5 text-sm">Cancel</button><button disabled={saving} className="rounded-xl bg-gray-900 px-5 py-2.5 font-semibold text-sm text-white disabled:opacity-50">{saving ? 'Saving…' : editingId ? 'Save Changes' : 'Publish Requisition'}</button></div>
           </form>
         )}
-        <section className="rounded-2xl border bg-white overflow-hidden" aria-label="Posted requisitions">
-          <div className="border-b px-5 py-4 font-semibold">Posted requisitions ({rows.length})</div>
-          {loading ? <p className="p-8 text-gray-500">Loading requisitions…</p> : !rows.length ? <div className="p-10 text-center text-gray-500"><Building2 className="mx-auto mb-3" /><p>No company requisitions posted yet.</p><p className="text-sm mt-1">Use Post Requisition to publish your first role.</p></div> :
-            <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-gray-50 text-gray-500"><tr>{['Role / company', 'Work mode / location', 'Due date', 'Status', 'Applicants', 'Actions'].map(label => <th key={label} className="px-5 py-3 font-medium">{label}</th>)}</tr></thead><tbody className="divide-y">{rows.map(row => <tr key={row.id} className={selected?.id === row.id ? 'bg-gray-50' : ''}><td className="px-5 py-4"><p className="mb-1.5 font-mono text-xs font-semibold text-gray-500" title={row.id}>{requisitionRef(row.id)}</p><button type="button" onClick={() => setSelected({ ...row })} className="text-left font-semibold hover:underline">{row.title}</button><p className="mt-1 text-gray-500">{row.company_name}</p></td><td className="px-5 py-4">{row.structured_role.work_mode}<p className="text-gray-500">{row.structured_role.location}</p></td><td className="px-5 py-4">{row.structured_role.submission_deadline}</td><td className="px-5 py-4">{row.status}</td><td className="px-5 py-4"><button onClick={() => setSelected({ ...row })} className="flex items-center gap-2 rounded-lg border px-3 py-2 hover:bg-gray-100"><Users size={16} /> {row.applicants_count} · View</button></td><td className="px-5 py-4"><button type="button" disabled={saving} onClick={() => editPosting(row)} className="flex items-center gap-2 rounded-lg border px-3 py-2 hover:bg-gray-100"><Pencil size={16} /> Edit</button></td></tr>)}</tbody></table></div>}
+        {['Open', 'Closed'].map(sectionName => {
+          const sectionRows = rows.filter(row => (row.status === 'Closed') === (sectionName === 'Closed'));
+          return (
+        <section key={sectionName} className="rounded-2xl border bg-white overflow-hidden" aria-label={`${sectionName} requisitions`}>
+          <div className="border-b px-5 py-4 font-semibold">{sectionName} requisitions ({sectionRows.length})</div>
+          {loading ? <p className="p-8 text-gray-500">Loading requisitions…</p> : !sectionRows.length ? <div className="p-10 text-center text-gray-500"><Building2 className="mx-auto mb-3" /><p>No {sectionName.toLowerCase()} requisitions.</p><p className="text-sm mt-1">{sectionName === 'Closed' ? 'Expired and manually closed postings appear here. Applicants remain available.' : 'Use Post Requisition to publish a role.'}</p></div> :
+            <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-gray-50 text-gray-500"><tr>{['Role / company', 'Work mode / location', 'Due date', 'Status', 'Applicants', 'Actions'].map(label => <th key={label} className="px-5 py-3 font-medium">{label}</th>)}</tr></thead><tbody className="divide-y">{sectionRows.map(row => <tr key={row.id} className={selected?.id === row.id ? 'bg-gray-50' : ''}><td className="px-5 py-4"><p className="mb-1.5 font-mono text-xs font-semibold text-gray-500" title={row.id}>{requisitionRef(row.id)}</p><button type="button" onClick={() => setSelected({ ...row })} className="text-left font-semibold hover:underline">{row.title}</button><p className="mt-1 text-gray-500">{row.company_name}</p></td><td className="px-5 py-4">{row.structured_role.work_mode}<p className="text-gray-500">{row.structured_role.location}</p></td><td className="px-5 py-4">{row.structured_role.submission_deadline}</td><td className="px-5 py-4">{row.status}</td><td className="px-5 py-4"><button onClick={() => setSelected({ ...row })} className="flex items-center gap-2 rounded-lg border px-3 py-2 hover:bg-gray-100"><Users size={16} /> {row.applicants_count} · View</button></td><td className="px-5 py-4"><button type="button" disabled={saving} onClick={() => editPosting(row)} className="flex items-center gap-2 rounded-lg border px-3 py-2 hover:bg-gray-100"><Pencil size={16} /> Edit</button></td></tr>)}</tbody></table></div>}
         </section>
+          );
+        })}
         {selected && <section className="rounded-2xl border bg-white p-5 sm:p-7 space-y-4">
           <header className="flex flex-wrap justify-between gap-3"><div><p className="mb-1.5 font-mono text-xs font-semibold text-gray-500" title={selected.id}>{requisitionRef(selected.id)}</p><h2 className="font-bold text-lg">Applicants · {selected.title}</h2><p className="text-sm text-gray-500 mt-1">{selected.company_name} · All applicants are automatically included in Candidate Pool.</p></div><div className="flex items-center gap-3"><Link to="/dashboard/superadmin/candidates" className="text-sm font-semibold underline underline-offset-4">Candidate Pool</Link>{selected.status === 'Published' && <><a target="_blank" rel="noreferrer" href="/open-roles" className="text-sm inline-flex gap-1 items-center">Open Roles <ExternalLink size={14} /></a><button type="button" disabled={closing} onClick={closePosting} className="border rounded-lg px-3 py-2 text-sm">{closing ? 'Closing…' : 'Close posting'}</button></>}</div></header>
           {selected.internal_link && <div className="rounded-xl border border-gray-200 bg-gray-50 p-4"><p className="mb-1 text-xs font-semibold text-gray-500">Internal reference · Admin only</p><a href={selected.internal_link} target="_blank" rel="noopener noreferrer" className="inline-flex max-w-full items-center gap-2 text-sm font-medium underline underline-offset-4"><span className="break-all">{selected.internal_link}</span><ExternalLink size={14} className="shrink-0" /></a></div>}

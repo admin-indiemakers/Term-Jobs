@@ -10,7 +10,7 @@ from modules.identity.domain.models import User
 from modules.identity.router import get_current_user
 from modules.shared.cache import cache
 from modules.shared.db import db, _utcnow
-from .domain.deadline import normalize_start_date, validate_start_date, validate_submission_deadline
+from .domain.deadline import normalize_start_date, validate_start_date, validate_submission_deadline, submission_deadline_passed
 from .domain.models import Requisition
 
 
@@ -95,7 +95,17 @@ def posting_view(row):
 
 @router.get('')
 def list_postings(user=Depends(require_superadmin)):
-    rows = db.requisitions.find(MANAGED).sort('created_at', -1)
+    rows = list(db.requisitions.find(MANAGED).sort('created_at', -1))
+    for row in rows:
+        role = row.get('structured_role') or {}
+        if row.get('status') == 'Published' and submission_deadline_passed(role):
+            result = db.requisitions.update_one({
+                'id': row['id'], **MANAGED, 'status': 'Published',
+                'structured_role.submission_deadline': role.get('submission_deadline'),
+            }, {'$set': {'status': 'Closed', 'updated_at': _utcnow()}})
+            if result.modified_count:
+                cache.clear()
+            row.update(db.requisitions.find_one({'id': row['id'], **MANAGED}) or {})
     return [posting_view(row) for row in rows]
 
 

@@ -236,3 +236,45 @@ def test_internal_link_is_optional_editable_and_clearable(setup):
 def test_internal_link_rejects_unsafe_or_invalid_urls(setup, url):
     _, _, client, _ = setup
     assert client.post('/api/superadmin/requisitions', json=payload(internal_link=url)).status_code == 422
+
+
+def test_admin_list_closes_expired_postings_and_preserves_applicants(setup):
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+    database, _, client, _ = setup
+    today = datetime.now(ZoneInfo('Asia/Kolkata')).date()
+    expired = client.post('/api/superadmin/requisitions', json=payload()).json()['id']
+    due_today = client.post('/api/superadmin/requisitions', json=payload()).json()['id']
+    database.requisitions.update_one({'id': expired}, {'$set': {'structured_role.submission_deadline': (today - timedelta(days=1)).isoformat()}})
+    database.requisitions.update_one({'id': due_today}, {'$set': {'structured_role.submission_deadline': today.isoformat()}})
+    database.candidate_submissions.insert_one({'id': 'applicant', 'requisition_id': expired})
+    rows = {row['id']: row for row in client.get('/api/superadmin/requisitions').json()}
+    assert rows[expired]['status'] == 'Closed'
+    assert rows[expired]['applicants_count'] == 1
+    assert rows[due_today]['status'] == 'Published'
+    assert database.requisitions.find_one({'id': expired})['status'] == 'Closed'
+    assert len(client.get(f'/api/superadmin/requisitions/{expired}/applicants').json()) == 1
+
+
+def test_public_expiry_runs_before_cached_listing(setup, monkeypatch):
+    from contextlib import contextmanager
+    from modules.shared.db import Session
+    from fastapi import HTTPException
+    import main
+    database, _, client, _ = setup
+    req_id = client.post('/api/superadmin/requisitions', json=payload()).json()['id']
+    @contextmanager
+    def session_factory():
+        yield Session(database=database)
+    monkeypatch.setattr(main, 'get_session', session_factory)
+    monkeypatch.setattr(main, '_auto_close_last_run', 0)
+    main._cache.clear()
+    assert any(row['id'] == req_id for row in main.list_public_requisitions())
+    database.requisitions.update_one({'id': req_id}, {'$set': {'structured_role.submission_deadline': '2000-01-01'}})
+    monkeypatch.setattr(main, '_auto_close_last_run', 0)
+    assert main.list_public_requisitions() == []
+    assert database.requisitions.find_one({'id': req_id})['status'] == 'Closed'
+    with pytest.raises(HTTPException) as error:
+        main.get_public_requisition(req_id)
+    assert error.value.status_code == 404
+    main._cache.clear()

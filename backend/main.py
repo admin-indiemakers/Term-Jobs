@@ -2034,11 +2034,11 @@ def get_requisitions_overview_metrics(fresh: bool = False, current_user: User = 
 @app.get("/api/public/requisitions")
 def list_public_requisitions() -> list[dict]:
     """Public endpoint listing all live published requisitions across all companies."""
+    _auto_close_expired()
     _cached = _cache.get("public_requisitions")
     if _cached is not None:
         return _cached
 
-    _auto_close_expired()
     with get_session() as session:
         rows = (
             session.query(models.Requisition)
