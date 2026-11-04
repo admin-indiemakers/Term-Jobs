@@ -72,3 +72,35 @@ def test_direct_shortlist_route_is_registered_under_api_prefix(setup):
             main.app.dependency_overrides.pop(get_current_user, None)
         else:
             main.app.dependency_overrides[get_current_user] = previous
+
+
+@pytest.mark.parametrize('status', ['Screened', 'Rejected', 'Withdrawn'])
+def test_sent_history_survives_status_changes_and_closed_requisition(setup, status):
+    db, user = setup
+    direct_shortlist_candidate('one', {'requisition_id': 'req'}, user)
+    db.candidate_submissions.update_one({'id': 'one'}, {'$set': {'status': status}})
+    db.requisitions.update_one({'id': 'req'}, {'$set': {'status': 'Closed'}})
+    before = db.candidate_submissions.find_one({'id': 'one'})
+    response = direct_shortlist_candidate('one', {'requisition_id': 'req'}, user)
+    assert response['sent_to_hiring_manager'] is True
+    assert db.candidate_submissions.find_one({'id': 'one'}) == before
+
+
+def test_unsent_closed_requisition_still_rejected(setup):
+    db, user = setup
+    db.requisitions.update_one({'id': 'req'}, {'$set': {'status': 'Closed'}})
+    with pytest.raises(HTTPException) as error:
+        direct_shortlist_candidate('one', {'requisition_id': 'req'}, user)
+    assert error.value.status_code == 409
+    assert not db.candidate_submissions.find_one({'id': 'one'}).get('sent_to_hiring_manager_at')
+
+
+def test_pool_exposes_persistent_sent_flag_after_refresh(setup):
+    import main
+    db, user = setup
+    direct_shortlist_candidate('one', {'requisition_id': 'req'}, user)
+    db.candidate_submissions.update_one({'id': 'one'}, {'$set': {'status': 'Screened'}})
+    pool = main.get_superadmin_candidate_pool(search=None, source=None, vendor=None, skill=None, current_user=user)
+    applications = [app for candidate in pool['candidates'] for app in candidate['applications']]
+    assert next(app for app in applications if app['submission_id'] == 'one')['sent_to_hiring_manager'] is True
+    assert next(app for app in applications if app['submission_id'] == 'two')['sent_to_hiring_manager'] is False
