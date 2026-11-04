@@ -20,7 +20,7 @@ MAIN_MONGODB_URL = "mongodb+srv://worksarjunm_db_user:Y3fv1MhYgoa94NXT@termjob.b
 
 def detect_branch_name() -> str:
     """Detect current branch from Vercel / CI environment variables or local .git/HEAD."""
-    for var in ("VERCEL_GIT_COMMIT_REF", "GIT_BRANCH", "BRANCH_NAME", "APP_ENV", "ENVIRONMENT"):
+    for var in ("VERCEL_GIT_COMMIT_REF", "GIT_BRANCH", "BRANCH_NAME"):
         val = (os.getenv(var) or "").strip().lower()
         if val:
             return val
@@ -38,33 +38,13 @@ def detect_branch_name() -> str:
 
 
 def is_dev_qa_environment() -> bool:
-    """Detect whether current runtime is Dev or QA environment across local, CI, and Vercel."""
-    branch = detect_branch_name()
-
-    # Rule 1: If branch is explicitly main or master, it is NEVER Dev/QA
-    if branch in ("main", "master", "prod", "production"):
-        return False
-
-    # Rule 2: If branch is explicitly qa or dev
-    if branch in ("qa", "dev") or branch.startswith("qa-") or branch.startswith("dev-"):
-        return True
-
-    # Rule 3: Check Vercel branch URLs with strict boundaries (e.g. -git-qa- or -git-dev-)
-    for url_var in ("VERCEL_URL", "VERCEL_BRANCH_URL"):
-        url_val = (os.getenv(url_var) or "").lower()
-        if "-git-qa-" in url_val or "-git-dev-" in url_val or url_val.startswith("term-jobs-git-qa-") or url_val.startswith("term-jobs-git-dev-"):
-            return True
-
-    # Rule 4: If Vercel Preview and not on main
-    if (os.getenv("VERCEL_ENV") or "").lower() == "preview" and branch not in ("main", "master"):
-        return True
-
-    return False
+    """Only an explicitly identified main branch may use production."""
+    return detect_branch_name() != "main"
 
 
 def get_mongodb_url_for_cluster(cluster: str) -> str:
     """Return MongoDB connection string for specific cluster ('dev_qa' or 'main')."""
-    if cluster == "dev_qa":
+    if cluster == "dev_qa" or is_dev_qa_environment():
         return (
             os.getenv("MONGODB_URL_DEV_QA")
             or os.getenv("MONGODB_URL_DEV")
@@ -81,6 +61,8 @@ def get_mongodb_url_for_cluster(cluster: str) -> str:
 
 def get_active_cluster() -> str:
     """Determine currently active cluster based on request context, branch, or environment."""
+    if is_dev_qa_environment():
+        return "dev_qa"
     ctx_cluster = current_cluster_var.get()
     if ctx_cluster in ("dev_qa", "main"):
         return ctx_cluster

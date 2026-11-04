@@ -89,6 +89,7 @@ def test_reschedule_updates_same_google_event_and_sends_correct_livekit_link(sto
 @pytest.mark.parametrize('cluster', ['main', 'dev_qa'])
 def test_callback_uses_source_cluster_and_restores_request_context(monkeypatch, cluster):
     from modules.shared.config import current_cluster_var, get_active_cluster
+    monkeypatch.setattr("modules.shared.config.detect_branch_name", lambda: "main")
     stores = {key: mongomock.MongoClient()[key] for key in ('main', 'dev_qa')}
     monkeypatch.setattr(calendar, 'collections', lambda: (stores[get_active_cluster()].connections, stores[get_active_cluster()].states))
     monkeypatch.setattr(oauth, 'is_configured', lambda _: True)
@@ -113,6 +114,7 @@ def test_callback_uses_source_cluster_and_restores_request_context(monkeypatch, 
 
 def test_modified_cluster_cannot_consume_another_clusters_state(monkeypatch):
     from modules.shared.config import current_cluster_var, get_active_cluster
+    monkeypatch.setattr("modules.shared.config.detect_branch_name", lambda: "main")
     stores = {key: mongomock.MongoClient()[key] for key in ('main', 'dev_qa')}
     monkeypatch.setattr(calendar, 'collections', lambda: (stores[get_active_cluster()].connections, stores[get_active_cluster()].states))
     from datetime import timedelta
@@ -125,6 +127,7 @@ def test_modified_cluster_cannot_consume_another_clusters_state(monkeypatch):
 def test_preview_callback_saves_credentials_only_in_preview_cluster(monkeypatch):
     from modules.shared.config import current_cluster_var, get_active_cluster
     from datetime import timedelta
+    monkeypatch.setattr("modules.shared.config.detect_branch_name", lambda: "main")
     stores = {key: mongomock.MongoClient()[key] for key in ('main', 'dev_qa')}
     monkeypatch.setattr(calendar, 'collections', lambda: (stores[get_active_cluster()].connections, stores[get_active_cluster()].states))
     state = 'dev_qa.random-secret'
