@@ -104,3 +104,14 @@ def test_pool_exposes_persistent_sent_flag_after_refresh(setup):
     applications = [app for candidate in pool['candidates'] for app in candidate['applications']]
     assert next(app for app in applications if app['submission_id'] == 'one')['sent_to_hiring_manager'] is True
     assert next(app for app in applications if app['submission_id'] == 'two')['sent_to_hiring_manager'] is False
+
+
+def test_pool_returns_requisition_status_without_losing_closed_history(setup):
+    import main
+    db, user = setup
+    db.requisitions.update_one({'id': 'req'}, {'$set': {'status': 'Closed'}})
+    pool = main.get_superadmin_candidate_pool(search=None, source=None, vendor=None, skill=None, current_user=user)
+    applications = [app for candidate in pool['candidates'] for app in candidate['applications']]
+    assert len(applications) == 2
+    assert all(app['requisition_status'] == 'Closed' for app in applications)
+    assert all(not app['requisition_deleted'] for app in applications)

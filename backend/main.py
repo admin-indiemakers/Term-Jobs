@@ -2755,13 +2755,13 @@ def get_superadmin_candidate_pool(
     req_ids = list({s.get("requisition_id") for s in submissions if s.get("requisition_id")})
     req_map = {}
     if req_ids:
-        for r in db["requisitions"].find({"id": {"$in": req_ids}}, {"id": 1, "title": 1, "company_name": 1, "company_profile_id": 1, "client_name": 1}):
+        for r in db["requisitions"].find({"id": {"$in": req_ids}}, {"id": 1, "title": 1, "company_name": 1, "company_profile_id": 1, "client_name": 1, "status": 1, "is_deleted": 1}):
             comp_name = r.get("company_name") or r.get("client_name") or ""
             if not comp_name and r.get("company_profile_id"):
                 cp = db["company_profiles"].find_one({"id": r["company_profile_id"]}, {"name": 1})
                 if cp:
                     comp_name = cp.get("name", "")
-            req_map[r["id"]] = {"title": r.get("title", "Open Role"), "company": comp_name or "Enterprise Partner"}
+            req_map[r["id"]] = {"title": r.get("title", "Open Role"), "company": comp_name or "Enterprise Partner", "status": r.get("status"), "is_deleted": bool(r.get("is_deleted"))}
 
     # Consolidated index by email or ID
     cand_dict: dict[str, dict] = {}
@@ -2829,6 +2829,8 @@ def get_superadmin_candidate_pool(
         app_entry = {
             "submission_id": sub_id,
             "requisition_id": s.get("requisition_id"),
+            "requisition_status": req_info.get("status"),
+            "requisition_deleted": req_info.get("is_deleted", not bool(req_info)),
             "requisition_title": req_info.get("title") or s.get("requisition_title") or "Open Role",
             "company_name": req_info.get("company") or s.get("company_name") or "Enterprise Partner",
             "match_score": submission_match_score(s, submissions),
