@@ -1,3 +1,4 @@
+import ResumePreviewModal from '../../components/ResumePreviewModal';
 import CompanyInterviewScheduleCard from '../components/CompanyInterviewScheduleCard';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -76,6 +77,20 @@ export function HiringManagerInterviews() {
   const [errorMsg, setErrorMsg] = useState('');
   const [poolCandidates, setPoolCandidates] = useState([]);
   const [poolError, setPoolError] = useState('');
+  const [resumeApplication, setResumeApplication] = useState(null);
+  const [sendingApplications, setSendingApplications] = useState({});
+  const [sentApplications, setSentApplications] = useState({});
+  const sendApplication = async (application) => {
+    setSendingApplications(prev => ({ ...prev, [application.id]: true }));
+    setPoolError('');
+    try {
+      await request(`/api/candidates/${encodeURIComponent(application.submissionId)}/direct-shortlist`, {
+        method: 'POST', token, body: { requisition_id: application.requisitionId },
+      });
+      setSentApplications(prev => ({ ...prev, [application.id]: true }));
+    } catch (error) { setPoolError(error.message || 'Could not send candidate. Please retry.'); }
+    finally { setSendingApplications(prev => ({ ...prev, [application.id]: false })); }
+  };
 
   // Shortlist dispatch & 48h countdown state
   const [shortlistStatus, setShortlistStatus] = useState(null);
@@ -403,6 +418,12 @@ export function HiringManagerInterviews() {
         id: `${candidate.id}-${application.submission_id}`,
         name: candidate.candidate_name,
         title: application.requisition_title,
+        submissionId: application.submission_id,
+        requisitionId: application.requisition_id,
+        candidateId: candidate.id,
+        filename: candidate.filename,
+        hasResume: candidate.has_resume,
+        status: application.status,
         score: Math.max(0, Math.min(100, Number(application.match_score))),
       }))
   );
@@ -666,8 +687,8 @@ export function HiringManagerInterviews() {
             </div>
             <button type="button" onClick={() => navigate('/dashboard/superadmin/candidates')} className="text-xs font-bold text-zinc-800 underline cursor-pointer">Open Candidate Pool</button>
           </div>
-          {poolError ? <p role="alert" className="mt-4 text-sm text-rose-700">{poolError}</p>
-            : poolApplications.length === 0 ? <p className="mt-4 text-sm text-zinc-500">No scored applications yet.</p>
+          {poolError && <p role="alert" className="mt-4 text-sm text-rose-700">{poolError}</p>}
+          {poolApplications.length === 0 ? <p className="mt-4 text-sm text-zinc-500">No scored applications yet.</p>
             : <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {poolApplications.map((application) => (
                 <div key={application.id} className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
@@ -681,9 +702,16 @@ export function HiringManagerInterviews() {
                   <div role="meter" aria-label={`${application.name} resume match`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={application.score} className="mt-3 h-2 overflow-hidden rounded-full bg-zinc-200">
                     <div className="h-full rounded-full bg-zinc-900" style={{ width: `${application.score}%` }} />
                   </div>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <button type="button" disabled={!application.hasResume} onClick={() => setResumeApplication(application)} className="flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs font-semibold disabled:opacity-40"><FileText size={14} /> View Resume</button>
+                    <button type="button" disabled={!application.submissionId || !application.requisitionId || sendingApplications[application.id] || sentApplications[application.id] || ['Shortlisted', 'Accepted', 'Under Review', 'Offer Extended', 'Offer Accepted', 'Hired', 'Rejected', 'Withdrawn'].includes(application.status)} onClick={() => sendApplication(application)} className="rounded-lg bg-zinc-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">
+                      {sendingApplications[application.id] ? 'Sending…' : sentApplications[application.id] || ['Shortlisted', 'Accepted', 'Under Review', 'Offer Extended', 'Offer Accepted', 'Hired'].includes(application.status) ? 'Sent to Hiring Manager' : ['Rejected', 'Withdrawn'].includes(application.status) ? application.status : 'Send to Hiring Manager'}
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>}
+          {resumeApplication && <ResumePreviewModal token={token} candidateId={resumeApplication.candidateId} filename={resumeApplication.filename} onClose={() => setResumeApplication(null)} />}
         </section>
       )}
 
