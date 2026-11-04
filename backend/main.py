@@ -182,28 +182,9 @@ async def vercel_routing_middleware(request: Request, call_next):
 
     print(f" [CORS LOG] {request.method} {request.url.path} | Origin: {origin} | AllowedHeaders: {allowed_headers}")
 
-    # Dynamic DB routing: detect whether the incoming request is targeting QA/Dev or Main
-    host = (request.headers.get("x-forwarded-host") or request.headers.get("host") or "").lower()
-    referer = (request.headers.get("referer") or "").lower()
-    origin_header = (origin or "").lower()
-    combined = f"{host} {referer} {origin_header}"
-
-    qa_dev_keywords = (
-        "-git-qa-", "-git-dev-", "git-qa", "git-dev",
-        "term-jobs-git-qa", "term-jobs-git-dev",
-        "term-jobs-qa", "term-jobs-dev",
-        "termjobs-qa", "termjobs-dev",
-        "-qa.", "-dev.",
-    )
-    if any(kw in combined for kw in qa_dev_keywords):
-        target_cluster = "dev_qa"
-    elif any(kw in combined for kw in ("termjobs.in", "term-jobs-git-main", "-git-main-")):
-        target_cluster = "main"
-    else:
-        from modules.shared.config import is_dev_qa_environment
-        target_cluster = "dev_qa" if is_dev_qa_environment() else "main"
-
-    from modules.shared.config import current_cluster_var
+    # Deployment branch is authoritative; client headers cannot select production.
+    from modules.shared.config import current_cluster_var, is_dev_qa_environment
+    target_cluster = "dev_qa" if is_dev_qa_environment() else "main"
     token = current_cluster_var.set(target_cluster)
 
     try:
