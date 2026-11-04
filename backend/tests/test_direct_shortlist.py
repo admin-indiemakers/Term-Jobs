@@ -54,3 +54,21 @@ def test_terminal_application_not_reopened(setup, status):
     with pytest.raises(HTTPException) as error:
         direct_shortlist_candidate('one', {'requisition_id': 'req'}, user)
     assert error.value.status_code == 409
+
+
+def test_direct_shortlist_route_is_registered_under_api_prefix(setup):
+    from fastapi.testclient import TestClient
+    from modules.identity.router import get_current_user
+    import main
+    db, user = setup
+    previous = main.app.dependency_overrides.get(get_current_user)
+    main.app.dependency_overrides[get_current_user] = lambda: user
+    try:
+        response = TestClient(main.app).post('/api/candidates/one/direct-shortlist', json={'requisition_id': 'req'})
+        assert response.status_code == 200, response.text
+        assert response.json()['status'] == 'Shortlisted'
+    finally:
+        if previous is None:
+            main.app.dependency_overrides.pop(get_current_user, None)
+        else:
+            main.app.dependency_overrides[get_current_user] = previous
