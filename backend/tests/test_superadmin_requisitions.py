@@ -116,7 +116,7 @@ def test_posting_is_visible_on_public_board_with_correct_company(setup, monkeypa
     from modules.shared.db import Session
     import main
     database, _, client, _ = setup
-    req_id = client.post('/api/superadmin/requisitions', json=payload()).json()['id']
+    req_id = client.post('/api/superadmin/requisitions', json=payload(internal_link='https://internal.example/client-brief')).json()['id']
     @contextmanager
     def session_factory():
         yield Session(database=database)
@@ -127,7 +127,10 @@ def test_posting_is_visible_on_public_board_with_correct_company(setup, monkeypa
     assert len(listings) == 1
     assert listings[0]['id'] == req_id
     assert listings[0]['company_name'] == 'Asimovx Technology AB'
+    assert 'internal.example' not in str(listings)
     detail = main.get_public_requisition(req_id)
+    assert 'internal.example' not in str(detail)
+    assert 'internal.example' not in str(database.requisitions.find_one({'id': req_id}))
     assert detail['generated_jd_markdown'] == 'Build digital campaigns for our client.'
     assert detail['structured_role']['work_mode'] == 'On-site'
     assert detail['structured_role']['location'] == 'Kozhikode'
@@ -213,3 +216,23 @@ def test_edit_requires_superadmin(setup, role):
     body = payload()
     body.pop('client_request_id')
     assert client.put('/api/superadmin/requisitions/req', json=body).status_code == 403
+
+
+def test_internal_link_is_optional_editable_and_clearable(setup):
+    database, _, client, _ = setup
+    body = payload(internal_link='https://internal.example/brief')
+    result = client.post('/api/superadmin/requisitions', json=body).json()
+    assert result['internal_link'] == body['internal_link']
+    assert client.get('/api/superadmin/requisitions').json()[0]['internal_link'] == body['internal_link']
+    body.pop('client_request_id')
+    body['internal_link'] = 'https://internal.example/updated'
+    assert client.put(f"/api/superadmin/requisitions/{result['id']}", json=body).json()['internal_link'] == body['internal_link']
+    body['internal_link'] = ''
+    assert client.put(f"/api/superadmin/requisitions/{result['id']}", json=body).json()['internal_link'] == ''
+    assert client.post('/api/superadmin/requisitions', json=payload()).json()['internal_link'] == ''
+
+
+@pytest.mark.parametrize('url', ['javascript:alert(1)', 'data:text/html,test', 'file:///tmp/file', 'not-a-link'])
+def test_internal_link_rejects_unsafe_or_invalid_urls(setup, url):
+    _, _, client, _ = setup
+    assert client.post('/api/superadmin/requisitions', json=payload(internal_link=url)).status_code == 422
