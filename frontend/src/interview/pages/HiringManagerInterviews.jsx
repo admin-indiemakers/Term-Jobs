@@ -311,7 +311,7 @@ export function HiringManagerInterviews() {
   useEffect(() => {
     if (!token || user?.role !== 'Super Admin') return;
     let cancelled = false;
-    request('/api/superadmin/candidate-pool', { token })
+    request('/api/superadmin/candidate-pool', { token, noCache: true })
       .then((result) => {
         if (!cancelled) {
           setPoolCandidates(Array.isArray(result?.candidates) ? result.candidates : []);
@@ -424,6 +424,7 @@ export function HiringManagerInterviews() {
         filename: candidate.filename,
         hasResume: candidate.has_resume,
         status: application.status,
+        sent: application.sent_to_hiring_manager === true,
         score: Math.max(0, Math.min(100, Number(application.match_score))),
       }))
   );
@@ -704,8 +705,8 @@ export function HiringManagerInterviews() {
                   </div>
                   <div className="mt-4 flex flex-wrap gap-2">
                     <button type="button" disabled={!application.hasResume} onClick={() => setResumeApplication(application)} className="flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 disabled:opacity-40"><FileText size={14} /> View Resume</button>
-                    <button type="button" disabled={!application.submissionId || !application.requisitionId || sendingApplications[application.id] || sentApplications[application.id] || ['Shortlisted', 'Accepted', 'Under Review', 'Offer Extended', 'Offer Accepted', 'Hired', 'Rejected', 'Withdrawn'].includes(application.status)} onClick={() => sendApplication(application)} className="rounded-lg bg-zinc-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">
-                      {sendingApplications[application.id] ? 'Sending…' : sentApplications[application.id] || ['Shortlisted', 'Accepted', 'Under Review', 'Offer Extended', 'Offer Accepted', 'Hired'].includes(application.status) ? 'Sent to Hiring Manager' : ['Rejected', 'Withdrawn'].includes(application.status) ? application.status : 'Send to Hiring Manager'}
+                    <button type="button" disabled={!application.submissionId || !application.requisitionId || sendingApplications[application.id] || sentApplications[application.id] || application.sent || ['Shortlisted', 'Accepted', 'Under Review', 'Offer Extended', 'Offer Accepted', 'Hired', 'Rejected', 'Withdrawn'].includes(application.status)} onClick={() => sendApplication(application)} className="rounded-lg bg-zinc-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">
+                      {sendingApplications[application.id] ? 'Sending…' : sentApplications[application.id] || application.sent || ['Shortlisted', 'Accepted', 'Under Review', 'Offer Extended', 'Offer Accepted', 'Hired'].includes(application.status) ? 'Sent' : ['Rejected', 'Withdrawn'].includes(application.status) ? application.status : 'Send to Hiring Manager'}
                     </button>
                   </div>
                 </div>

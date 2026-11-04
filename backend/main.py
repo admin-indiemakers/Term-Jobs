@@ -2834,6 +2834,7 @@ def get_superadmin_candidate_pool(
             "match_score": submission_match_score(s, submissions),
             "recommendation": s.get("recommendation"),
             "status": s.get("status") or "Submitted",
+            "sent_to_hiring_manager": bool(s.get("sent_to_hiring_manager_at") or s.get("manual_shortlist") or s.get("status") in ("Shortlisted", "Accepted", "Under Review", "Offer Extended", "Offer Accepted", "Hired")),
             "applied_at": created_val.isoformat() if hasattr(created_val, "isoformat") else str(created_val or ""),
         }
 

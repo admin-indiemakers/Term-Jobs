@@ -1695,24 +1695,26 @@ def direct_shortlist_candidate(submission_id: str, body: dict, current_user: Use
     submission = db.candidate_submissions.find_one(query)
     if not submission or not body.get('requisition_id'):
         raise HTTPException(404, 'Candidate application not found for this requisition.')
+    status = submission.get('status')
+    # Delivery history survives later workflow changes and requisition closure.
+    if submission.get('sent_to_hiring_manager_at') or submission.get('manual_shortlist') or status in ('Shortlisted', 'Accepted', 'Under Review', 'Offer Extended', 'Offer Accepted', 'Hired'):
+        return {'id': submission_id, 'status': status, 'sent_to_hiring_manager': True, 'message': 'Candidate already sent to the hiring manager.'}
     req = db.requisitions.find_one({'id': submission['requisition_id']})
     if not req or req.get('is_deleted') or req.get('status') in ('Closed', 'Cancelled', 'Rejected', 'Draft'):
         raise HTTPException(409, 'This requisition is not available for shortlisting.')
-    status = submission.get('status')
     if status in ('Rejected', 'Withdrawn'):
         raise HTTPException(409, 'Rejected or withdrawn applications cannot be sent directly.')
-    if status in ('Shortlisted', 'Accepted', 'Under Review', 'Offer Extended', 'Offer Accepted', 'Hired') and (submission.get('manual_shortlist') or status != 'Shortlisted'):
-        return {'id': submission_id, 'status': status, 'message': 'Candidate is already in the hiring pipeline.'}
     now = _utcnow()
     result = db.candidate_submissions.update_one({**query, 'status': status}, {'$set': {
         'status': 'Shortlisted', 'manual_shortlist': True,
         'manual_shortlist_reason': 'Directly shortlisted by Super Admin',
         'manual_shortlisted_by': current_user.id, 'shortlisted_at': now, 'updated_at': now,
+        'sent_to_hiring_manager_at': now,
     }})
     if not result.matched_count:
         raise HTTPException(409, 'Application changed. Refresh and try again.')
     cache.clear()
-    return {'id': submission_id, 'status': 'Shortlisted', 'message': 'Candidate sent to the hiring manager shortlist.'}
+    return {'id': submission_id, 'status': 'Shortlisted', 'sent_to_hiring_manager': True, 'message': 'Candidate sent to the hiring manager shortlist.'}
 
 
 @router.post("/shortlist")
