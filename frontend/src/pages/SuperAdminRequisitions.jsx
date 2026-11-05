@@ -5,6 +5,7 @@ import { Building2, Plus, Users, Eye, FileText, X, RefreshCw, ExternalLink, Penc
 import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import ResumePreviewModal from '../components/ResumePreviewModal';
+import RequisitionDashboard from '../components/admin/RequisitionDashboard';
 
 const emptyForm = () => ({ client_request_id: crypto.randomUUID(), company_name: '', title: '', department: '', location: '', work_mode: '', experience: '', duration: '', headcount: 1, start_date: '', submission_deadline: '', skills: '', job_description: '', internal_link: '' });
 const fields = [
@@ -20,6 +21,7 @@ export default function SuperAdminRequisitions() {
   const { token } = useAuth();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [showForm, setShowForm] = useState(false);
@@ -63,6 +65,7 @@ export default function SuperAdminRequisitions() {
     try {
       const nextRows = await request('/api/superadmin/requisitions', { token, noCache: true });
       setRows(nextRows);
+      setHasLoaded(true);
       setSelected(previous => previous ? nextRows.find(row => row.id === previous.id) || null : null);
     }
     catch (err) { setError(err.message || 'Could not load requisitions.'); }
@@ -134,6 +137,7 @@ export default function SuperAdminRequisitions() {
         </AdminPageHeader>
         {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
         {success && <div role="status" className="rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-800">{success}</div>}
+        <RequisitionDashboard rows={rows} ready={hasLoaded} loading={loading} onReview={openReview} />
         {showForm && (
           <form onSubmit={publish} className="rounded-2xl border bg-white p-5 sm:p-7 space-y-5">
             <div className="flex justify-between items-center"><h2 className="text-lg font-bold">{editingId ? 'Edit company requisition' : 'Post a company requisition'}</h2><button type="button" aria-label="Close posting form" disabled={saving} onClick={() => setShowForm(false)}><X size={20} /></button></div>

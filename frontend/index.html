@@ -59,7 +59,7 @@
           if (!isPublicJobPage || hasSession) return;
           var isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
           var base = isLocal ? 'http://' + location.hostname + ':8000' : '';
-          var url = base + '/api/public/requisitions';
+          var url = base + '/api/public/requisitions/page?page=1&page_size=8';
           window.__PREFETCHED_REQUISITIONS__ = fetch(url, { cache: 'no-store', headers: { 'Accept': 'application/json' } })
             .then(function(r) { return r.ok ? r.json() : null; })
             .catch(function() { return null; });

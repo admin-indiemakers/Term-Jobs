@@ -1,4 +1,4 @@
-import { loadOpenRoles } from '../utils/loadOpenRoles';
+import { loadOpenRolesPage } from '../utils/loadOpenRoles';
 import { trackRoleView } from '../utils/trackRoleView';
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -162,6 +162,14 @@ export default function OpenRolesPage({ enabled = true }) {
   const [selectedLocation, setSelectedLocation] = useState('ALL');
   const [selectedOpportunityCategory, setSelectedOpportunityCategory] = useState('ALL');
   const [currentPage, setCurrentPage] = useState(1);
+  const [rolePage, setRolePage] = useState({ total: 0, total_pages: 1, filtered_total: 0, categories: [], filters: { families: [], locations: [] }, stats: { roles: 0, companies: 0 } });
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const rolesPrefetch = useRef(undefined);
+  useEffect(() => {
+    if (searchQuery.trim() === debouncedSearch) return;
+    const timer = setTimeout(() => { setDebouncedSearch(searchQuery.trim()); setCurrentPage(1); }, 250);
+    return () => clearTimeout(timer);
+  }, [searchQuery, debouncedSearch]);
   const [savedJobIds, setSavedJobIds] = useState(() => {
     try {
       const saved = localStorage.getItem('tj_saved_jobs');
@@ -1392,103 +1400,36 @@ export default function OpenRolesPage({ enabled = true }) {
     setLoading(true);
     setError(null);
     try { sessionStorage.removeItem('tj_cached_requisitions'); } catch {}
-    const prefetched = window.__PREFETCHED_REQUISITIONS__;
-    window.__PREFETCHED_REQUISITIONS__ = null;
-    loadOpenRoles(request, prefetched)
-      .then((rows) => { if (!cancelled) setRequisitions(rows); })
+    if (rolesPrefetch.current === undefined) {
+      rolesPrefetch.current = window.__PREFETCHED_REQUISITIONS__ || null;
+      window.__PREFETCHED_REQUISITIONS__ = null;
+    }
+    const prefetched = rolesPrefetch.current;
+    loadOpenRolesPage(request, { page: currentPage, q: debouncedSearch, workMode: selectedWorkMode, family: selectedFamily, location: selectedLocation, category: selectedOpportunityCategory }, prefetched)
+      .then((data) => {
+        if (cancelled) return;
+        setRolePage(data);
+        setRequisitions(data.items);
+        if (selectedOpportunityCategory !== 'ALL' && !data.categories.some(item => item.id === selectedOpportunityCategory)) {
+          setSelectedOpportunityCategory('ALL');
+          setCurrentPage(1);
+          return;
+        }
+        if (currentPage > data.total_pages) setCurrentPage(data.total_pages);
+      })
       .catch((err) => {
         if (!cancelled) {
           setRequisitions([]);
           setError(err.message || 'Could not load open roles.');
         }
       })
-      .finally(() => { if (!cancelled) setLoading(false); });
+      .finally(() => { rolesPrefetch.current = null; if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [enabled]);
+  }, [enabled, currentPage, debouncedSearch, selectedWorkMode, selectedFamily, selectedLocation, selectedOpportunityCategory]);
 
-  // Filtered job list
-  const filteredJobs = useMemo(() => {
-    return requisitions.filter((job) => {
-      // 1. Exclude closed roles (only Published roles are displayed)
-      const status = (job.status || '').toLowerCase();
-      if (status && status !== 'published') return false;
-
-      // 2. Exclude expired roles whose application due date has passed
-      const dueDateVal = job.due_date || job.submission_deadline || job.application_due_date || job.structured_role?.submission_deadline;
-      const dueInfo = formatDueDate(dueDateVal);
-      if (dueInfo && dueInfo.isExpired) return false;
-
-      const role = job.structured_role || {};
-      const title = (job.title || '').toLowerCase();
-      const comp = (job.company_name || '').toLowerCase();
-      const desc = (job.generated_jd_markdown || '').toLowerCase();
-      const skills = (role.must_have_skills || []).concat(role.nice_to_have_skills || []).map((s) => s.toLowerCase());
-
-      const query = searchQuery.trim().toLowerCase();
-      const matchesSearch =
-        !query ||
-        title.includes(query) ||
-        comp.includes(query) ||
-        desc.includes(query) ||
-        skills.some((s) => s.includes(query));
-
-      const matchesWorkMode =
-        selectedWorkMode === 'ALL' || (role.work_mode || '').toLowerCase() === selectedWorkMode.toLowerCase();
-      const matchesFamily =
-        selectedFamily === 'ALL' || role.job_family === selectedFamily;
-
-      const locVal = Array.isArray(role.location)
-        ? role.location.join(' ')
-        : (role.location || job.location || job.company_location || '');
-      const matchesLocation =
-        selectedLocation === 'ALL' || locVal.toLowerCase().includes(selectedLocation.toLowerCase());
-
-      return matchesSearch && matchesWorkMode && matchesFamily && matchesLocation;
-    });
-  }, [requisitions, searchQuery, selectedWorkMode, selectedFamily, selectedLocation]);
-
-  // Job families for filter pills
-  const availableFamilies = useMemo(() => {
-    const set = new Set();
-    requisitions.forEach((j) => {
-      if (j.structured_role?.job_family) set.add(j.structured_role.job_family);
-    });
-    return Array.from(set);
-  }, [requisitions]);
-
-  // Locations for filter dropdown - strictly geographic locations (Work modes like Remote/Hybrid/Onsite are handled by All Modes)
-  const availableLocations = useMemo(() => {
-    const WORK_MODES = new Set([
-      'remote',
-      'hybrid',
-      'onsite',
-      'on-site',
-      'in-office',
-      'wfh',
-      'remote / hybrid',
-      'hybrid / remote',
-      'work from home',
-    ]);
-    const set = new Set();
-    requisitions.forEach((j) => {
-      const loc = j.structured_role?.location || j.location || j.company_location;
-      const addGeoLocation = (val) => {
-        if (!val || typeof val !== 'string') return;
-        const trimmed = val.trim();
-        if (!trimmed) return;
-        if (!WORK_MODES.has(trimmed.toLowerCase())) {
-          set.add(trimmed);
-        }
-      };
-
-      if (Array.isArray(loc)) {
-        loc.forEach((l) => addGeoLocation(l));
-      } else if (loc && typeof loc === 'string') {
-        addGeoLocation(loc);
-      }
-    });
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [requisitions]);
+  // Options and counts describe the full result set, not just the current page.
+  const availableFamilies = rolePage.filters.families;
+  const availableLocations = rolePage.filters.locations;
 
   // Guard: if selectedLocation ever holds a work mode, reset it to 'ALL'
   useEffect(() => {
@@ -1520,55 +1461,6 @@ export default function OpenRolesPage({ enabled = true }) {
     return mode.toLowerCase() === 'remote' ? 'Remote' : mode;
   };
 
-  const getJobCategory = useCallback((job) => {
-    const role = job.structured_role || {};
-    // 1. Prefer real stored family from database
-    const rawFamily = (role.job_family || job.job_family || '').trim();
-    if (rawFamily && rawFamily.toLowerCase() !== 'general' && rawFamily.toLowerCase() !== 'other') {
-      return rawFamily;
-    }
-    const rawCategory = (job.category || '').trim();
-    if (rawCategory && rawCategory.toLowerCase() !== 'general') {
-      return rawCategory;
-    }
-
-    // 2. Classify strictly by real role title
-    const title = (job.title || '').toLowerCase();
-    if (title.includes('qa') || title.includes('test') || title.includes('quality')) {
-      return 'QA & Testing';
-    }
-    if (
-      title.includes('developer') ||
-      title.includes('engineer') ||
-      title.includes('programmer') ||
-      title.includes('frontend') ||
-      title.includes('backend') ||
-      title.includes('full stack') ||
-      title.includes('web') ||
-      title.includes('mobile') ||
-      title.includes('software')
-    ) {
-      return 'Development';
-    }
-    if (title.includes('devops') || title.includes('cloud') || title.includes('infrastructure') || title.includes('sre')) {
-      return 'DevOps';
-    }
-    if (title.includes('design') || title.includes('ui') || title.includes('ux')) {
-      return 'Design';
-    }
-    if (title.includes('human resource') || title.includes('hr ') || title.startsWith('hr') || title.includes('recruiter') || title.includes('talent')) {
-      return 'HR';
-    }
-    if (title.includes('sales') || title.includes('business dev') || title.includes('marketing')) {
-      return 'Sales';
-    }
-    if (title.includes('service') || title.includes('operation') || title.includes('ops') || title.includes('field service') || title.includes('logistics')) {
-      return 'Operations';
-    }
-
-    return 'Other';
-  }, []);
-
   const getExperienceDisplay = useCallback((job) => {
     const role = job.structured_role || {};
     if (role.experience && typeof role.experience === 'string' && role.experience.trim()) {
@@ -1587,55 +1479,13 @@ export default function OpenRolesPage({ enabled = true }) {
     return '';
   }, []);
 
-  // Category tabs dynamically derived ONLY from real data with count > 0
-  const categoryTabs = useMemo(() => {
-    const countMap = new Map();
-
-    filteredJobs.forEach((job) => {
-      const cat = getJobCategory(job);
-      if (cat) {
-        countMap.set(cat, (countMap.get(cat) || 0) + 1);
-      }
-    });
-
-    const tabs = [{ id: 'ALL', label: 'All Roles', count: filteredJobs.length }];
-
-    Array.from(countMap.entries())
-      .filter(([_, count]) => count > 0)
-      .sort((a, b) => b[1] - a[1])
-      .forEach(([id, count]) => {
-        tabs.push({ id, label: id, count });
-      });
-
-    return tabs;
-  }, [filteredJobs, getJobCategory]);
-
-  // Keep selected category valid if search or filters narrow down the list
-  useEffect(() => {
-    if (selectedOpportunityCategory !== 'ALL') {
-      const exists = categoryTabs.some((t) => t.id === selectedOpportunityCategory);
-      if (!exists) {
-        setSelectedOpportunityCategory('ALL');
-        setCurrentPage(1);
-      }
-    }
-  }, [categoryTabs, selectedOpportunityCategory]);
-
-  const categoryFilteredJobs = useMemo(() => {
-    if (selectedOpportunityCategory === 'ALL') {
-      return filteredJobs;
-    }
-    return filteredJobs.filter((job) => getJobCategory(job) === selectedOpportunityCategory);
-  }, [filteredJobs, selectedOpportunityCategory, getJobCategory]);
-
+  const categoryTabs = [{ id: 'ALL', label: 'All Roles', count: rolePage.filtered_total }, ...rolePage.categories];
   const ROLES_PER_PAGE = 8;
-  const totalPages = Math.max(1, Math.ceil(categoryFilteredJobs.length / ROLES_PER_PAGE));
-  const activePage = Math.min(currentPage, totalPages);
-
-  const paginatedJobs = useMemo(() => {
-    const startIdx = (activePage - 1) * ROLES_PER_PAGE;
-    return categoryFilteredJobs.slice(startIdx, startIdx + ROLES_PER_PAGE);
-  }, [categoryFilteredJobs, activePage]);
+  const totalPages = rolePage.total_pages;
+  const activePage = currentPage;
+  const paginatedJobs = requisitions;
+  const pageStart = Math.max(1, Math.min(activePage - 2, totalPages - 4));
+  const visiblePages = Array.from({ length: Math.min(5, totalPages) }, (_, index) => pageStart + index);
 
   const handleOpenJob = (job) => {
     setSelectedJob(job);
@@ -2089,7 +1939,7 @@ export default function OpenRolesPage({ enabled = true }) {
               <div className="flex flex-col items-center justify-center p-2 sm:p-2.5 rounded-xl bg-black/[0.02] hover:bg-black/[0.04] border border-neutral-900/15 hover:border-neutral-900/30 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.7)] transition-all group cursor-default">
                 <Briefcase size={13} className="text-neutral-500 group-hover:text-neutral-900 transition-colors shrink-0" />
                 <div className="text-sm sm:text-base font-extrabold text-neutral-900 tracking-tight leading-none my-1">
-                  {requisitions.length}
+                  {rolePage.stats.roles}
                 </div>
                 <div className="text-[8.5px] sm:text-[9.5px] font-bold text-neutral-500 uppercase tracking-wider leading-tight text-center">
                   Open Roles
@@ -2100,7 +1950,7 @@ export default function OpenRolesPage({ enabled = true }) {
               <div className="flex flex-col items-center justify-center p-2 sm:p-2.5 rounded-xl bg-black/[0.02] hover:bg-black/[0.04] border border-neutral-900/15 hover:border-neutral-900/30 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.7)] transition-all group cursor-default">
                 <Building2 size={13} className="text-neutral-500 group-hover:text-neutral-900 transition-colors shrink-0" />
                 <div className="text-sm sm:text-base font-extrabold text-neutral-900 tracking-tight leading-none my-1">
-                  {new Set(requisitions.map((r) => r.company_name).filter(Boolean)).size}
+                  {rolePage.stats.companies}
                 </div>
                 <div className="text-[8.5px] sm:text-[9.5px] font-bold text-neutral-500 uppercase tracking-wider leading-tight text-center">
                   Partners
@@ -2496,7 +2346,7 @@ export default function OpenRolesPage({ enabled = true }) {
                 <div className="relative flex-1 sm:flex-initial">
                   <select
                     value={selectedWorkMode}
-                    onChange={(e) => setSelectedWorkMode(e.target.value)}
+                    onChange={(e) => { setSelectedWorkMode(e.target.value); setCurrentPage(1); }}
                     className="w-full sm:w-auto appearance-none bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.1] rounded-xl pl-6 pr-5 py-1.5 text-[11px] text-white/90 font-medium cursor-pointer focus:outline-none focus:border-white/30 transition shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]"
                   >
                     <option value="ALL" className="bg-zinc-950 text-white">All Modes</option>
@@ -2512,7 +2362,7 @@ export default function OpenRolesPage({ enabled = true }) {
                 <div className="relative flex-1 sm:flex-initial">
                   <select
                     value={selectedFamily}
-                    onChange={(e) => setSelectedFamily(e.target.value)}
+                    onChange={(e) => { setSelectedFamily(e.target.value); setCurrentPage(1); }}
                     className="w-full sm:w-auto appearance-none bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.1] rounded-xl pl-6 pr-5 py-1.5 text-[11px] text-white/90 font-medium cursor-pointer focus:outline-none focus:border-white/30 transition max-w-[130px] truncate shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]"
                   >
                     <option value="ALL" className="bg-zinc-950 text-white">All Depts</option>
@@ -2530,7 +2380,7 @@ export default function OpenRolesPage({ enabled = true }) {
                 <div className="relative flex-1 sm:flex-initial hidden md:block">
                   <select
                     value={selectedLocation}
-                    onChange={(e) => setSelectedLocation(e.target.value)}
+                    onChange={(e) => { setSelectedLocation(e.target.value); setCurrentPage(1); }}
                     className="w-full sm:w-auto appearance-none bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.1] rounded-xl pl-6 pr-5 py-1.5 text-[11px] text-white/90 font-medium cursor-pointer focus:outline-none focus:border-white/30 transition max-w-[115px] truncate shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]"
                   >
                     <option value="ALL" className="bg-zinc-950 text-white">All Locations</option>
@@ -2624,7 +2474,7 @@ export default function OpenRolesPage({ enabled = true }) {
                   Retry
                 </button>
               </div>
-            ) : categoryFilteredJobs.length === 0 ? (
+            ) : rolePage.total === 0 ? (
               <div className="py-16 px-6 rounded-3xl bg-[#0B0D12] border border-white/[0.08] text-center max-w-xl mx-auto my-8 backdrop-blur-md">
                 <div className="w-12 h-12 rounded-2xl bg-white/[0.05] border border-white/10 flex items-center justify-center text-neutral-400 mx-auto mb-3">
                   <Search size={22} />
@@ -2819,7 +2669,7 @@ export default function OpenRolesPage({ enabled = true }) {
                 {/* Table Footer: Count & Pagination */}
                 <div className="mt-4 pt-3 border-t border-white/[0.06] flex items-center justify-between px-2 text-xs">
                   <div className="text-neutral-400 font-medium text-[11.5px]">
-                    Showing {paginatedJobs.length} of {categoryFilteredJobs.length} roles
+                    Showing {(activePage - 1) * ROLES_PER_PAGE + 1}–{(activePage - 1) * ROLES_PER_PAGE + paginatedJobs.length} of {rolePage.total} roles
                   </div>
                   <div className="flex items-center gap-1.5">
                     <button
@@ -2831,11 +2681,13 @@ export default function OpenRolesPage({ enabled = true }) {
                     >
                       <ChevronLeft size={13} />
                     </button>
-                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                    {visiblePages.map((page) => (
                       <button
                         key={page}
                         type="button"
                         onClick={() => setCurrentPage(page)}
+                        aria-label={`Page ${page}`}
+                        aria-current={activePage === page ? 'page' : undefined}
                         className={`w-7 h-7 rounded-full text-xs font-semibold flex items-center justify-center transition cursor-pointer ${
                           activePage === page
                             ? 'bg-white text-black font-bold shadow-sm'

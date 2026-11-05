@@ -26,6 +26,15 @@ public_views_router = APIRouter(prefix='/api/public/requisitions', tags=['Role v
 MANAGED = {'intake_meta.intake_mode': 'superadmin_post'}
 
 
+@public_views_router.get('/page')
+def public_roles_page(page: int = Query(1, ge=1, le=100000), page_size: int = Query(8, ge=1, le=50),
+                      q: str = Query('', max_length=200), work_mode: str = Query('', max_length=100),
+                      family: str = Query('', max_length=200), location: str = Query('', max_length=200),
+                      category: str = Query('', max_length=200)):
+    from .public_listing import public_listing
+    return public_listing(page, page_size, q, work_mode, family, location, category)
+
+
 class RoleViewIn(BaseModel):
     model_config = ConfigDict(extra='forbid')
     visitor_id: str = Field(pattern=r'^[a-zA-Z0-9-]{1,100}$')

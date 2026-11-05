@@ -332,6 +332,8 @@ app.include_router(workforce_router, prefix="/api", tags=["Workforce"])
 app.include_router(workforce_router, tags=["Workforce"])
 app.include_router(workorder_router)
 app.include_router(superadmin_agent_router)
+from modules.superadmin_agent.overview import router as superadmin_overview_router
+app.include_router(superadmin_overview_router)
 from modules.requisition.superadmin_router import router as superadmin_requisitions_router, public_views_router
 app.include_router(superadmin_requisitions_router)
 app.include_router(public_views_router)
