@@ -33,6 +33,6 @@ test('existing chunks are served from disk and dashboard HTML is revalidated', (
   assert.equal(resolve('/index.html', new Set(['/index.html'])).headers['Cache-Control'], 'no-cache');
 });
 
-test('API requests retain the backend proxy', () => {
-  assert.equal(resolve('/api/auth/me').dest, 'https://term-jobs-j8ja-seven.vercel.app/api/auth/me');
+test('API requests use the environment-verifying server proxy', () => {
+  assert.equal(resolve('/api/auth/me').dest, '/api/proxy?__path=auth/me');
 });

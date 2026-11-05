@@ -186,6 +186,9 @@ async def vercel_routing_middleware(request: Request, call_next):
     # Deployment branch is authoritative; client headers cannot select production.
     from modules.shared.config import current_cluster_var, is_dev_qa_environment
     target_cluster = "dev_qa" if is_dev_qa_environment() else "main"
+    from modules.shared.database_access import rejects_environment_request
+    if request.method != 'OPTIONS' and rejects_environment_request(request.headers, target_cluster):
+        return JSONResponse(status_code=403, content={'detail': 'This frontend cannot access this database environment. Use the matching QA/dev backend.'}, headers=_get_cors_headers(request))
     token = current_cluster_var.set(target_cluster)
 
     try:
@@ -272,6 +275,13 @@ async def http_exception_handler(request: Request, exc: HTTPException):
         content={"detail": exc.detail},
         headers=_get_cors_headers(request),
     )
+
+@app.get('/api/environment')
+def api_environment():
+    """Allow proxies to verify isolation without accessing a database or credentials."""
+    from modules.shared.config import get_active_cluster
+    return JSONResponse({'active_cluster': get_active_cluster()}, headers={'Cache-Control': 'no-store'})
+
 
 @app.get("/health")
 @app.get("/api/health")

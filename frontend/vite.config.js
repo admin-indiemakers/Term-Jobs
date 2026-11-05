@@ -10,6 +10,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export default defineConfig({
   // Keep application CSS render-blocking so refresh never paints unstyled content.
   plugins: [react(), tailwindcss()],
+  // Interview routes are lazy loaded; prepare their media dependency at startup.
+  optimizeDeps: {
+    include: ['livekit-client'],
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
