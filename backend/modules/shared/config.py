@@ -55,7 +55,8 @@ def get_mongodb_url_for_cluster(cluster: str) -> str:
             or DEV_QA_MONGODB_URL
         )
         from urllib.parse import urlsplit
-        production_urls = [os.getenv(key) for key in ('MONGODB_URL_MAIN', 'MONGODB_URL_PROD', 'MONGODB_URL')]
+        # Preview's generic URL may itself be a testing URL, not a production URL.
+        production_urls = [os.getenv(key) for key in ('MONGODB_URL_MAIN', 'MONGODB_URL_PROD')]
         testing_host = urlsplit(testing_url).hostname
         if testing_host and (testing_host in PRODUCTION_MONGODB_HOSTS or any(urlsplit(url).hostname == testing_host for url in production_urls if url)):
             raise RuntimeError('QA/dev database configuration points to a production database host. Connection refused.')

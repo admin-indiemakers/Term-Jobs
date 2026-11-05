@@ -80,6 +80,15 @@ def test_qa_rejects_production_host_even_with_different_credentials(monkeypatch)
         config.get_mongodb_url_for_cluster('dev_qa')
 
 
+def test_qa_generic_testing_url_is_not_misidentified_as_production(monkeypatch):
+    monkeypatch.setattr(config, 'detect_branch_name', lambda: 'qa')
+    monkeypatch.setenv('MONGODB_URL', 'mongodb://testing')
+    monkeypatch.setenv('MONGODB_URL_DEV_QA', 'mongodb://testing')
+    monkeypatch.delenv('MONGODB_URL_MAIN', raising=False)
+    monkeypatch.delenv('MONGODB_URL_PROD', raising=False)
+    assert config.get_mongodb_url_for_cluster('dev_qa') == 'mongodb://testing'
+
+
 @pytest.mark.parametrize('headers', [
     {'origin': 'http://localhost:5173'},
     {'origin': 'https://term-jobs-git-qa-team.vercel.app'},
