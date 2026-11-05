@@ -167,6 +167,7 @@ export async function request(path, {
         headers,
         body: payloadBody !== undefined ? (isFormData || typeof payloadBody === 'string' ? payloadBody : JSON.stringify(payloadBody)) : undefined,
         signal: controller.signal,
+        cache: forceRefresh || noCache ? 'no-store' : 'default',
       });
     } catch (err) {
       // Network / CORS errors are always logged (no credentials in these logs)

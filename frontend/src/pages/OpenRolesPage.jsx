@@ -1,3 +1,4 @@
+import { loadOpenRoles } from '../utils/loadOpenRoles';
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
@@ -150,20 +151,9 @@ export default function OpenRolesPage({ enabled = true }) {
     return pendingOutreach.length;
   }, [outreachHistory, outreachActionStatus]);
 
-  // Job search & filters - hydrate instantly from session cache if available (0ms render)
-  const [requisitions, setRequisitions] = useState(() => {
-    try {
-      const cached = sessionStorage.getItem('tj_cached_requisitions');
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed?.data) && parsed.data.length > 0) {
-          return parsed.data;
-        }
-      }
-    } catch (e) {}
-    return [];
-  });
-  const [loading, setLoading] = useState(() => requisitions.length === 0);
+  // Jobs must come from the current backend, never an unverified legacy cache.
+  const [requisitions, setRequisitions] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedWorkMode, setSelectedWorkMode] = useState('ALL');
@@ -1387,69 +1377,25 @@ export default function OpenRolesPage({ enabled = true }) {
     }
   }, [candidateUser, selectedJob]);
 
-  // Fetch published requisitions only when Open Roles is active/enabled
+  // Fetch current-environment roles and show failures instead of stale rows.
   useEffect(() => {
     if (!enabled) return;
-
     let cancelled = false;
-    if (requisitions.length === 0) {
-      setLoading(true);
-    }
+    setLoading(true);
     setError(null);
-
-    const onDataLoaded = (data) => {
-      if (cancelled) return;
-      if (Array.isArray(data)) {
-        setRequisitions(data);
-        setLoading(false);
-        try {
-          sessionStorage.setItem('tj_cached_requisitions', JSON.stringify({ t: Date.now(), data }));
-        } catch (e) {}
-      }
-    };
-
-    // 1. Consume early speculatively prefetched request from <head> if present
-    if (typeof window !== 'undefined' && window.__PREFETCHED_REQUISITIONS__) {
-      const earlyPromise = window.__PREFETCHED_REQUISITIONS__;
-      window.__PREFETCHED_REQUISITIONS__ = null; // consume once
-      earlyPromise
-        .then((data) => {
-          if (data && Array.isArray(data) && data.length > 0) {
-            onDataLoaded(data);
-          } else {
-            // fallback to client request
-            return request('/api/public/requisitions').then(onDataLoaded);
-          }
-        })
-        .catch(() => {
-          request('/api/public/requisitions').then(onDataLoaded).catch((err) => {
-            if (!cancelled) {
-              if (requisitions.length === 0) setError(err.message || 'Could not load open roles.');
-              setLoading(false);
-            }
-          });
-        });
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    // 2. Standard request with fresh data fetch
-    request('/api/public/requisitions', { forceRefresh: true, noCache: true })
-      .then(onDataLoaded)
+    try { sessionStorage.removeItem('tj_cached_requisitions'); } catch {}
+    const prefetched = window.__PREFETCHED_REQUISITIONS__;
+    window.__PREFETCHED_REQUISITIONS__ = null;
+    loadOpenRoles(request, prefetched)
+      .then((rows) => { if (!cancelled) setRequisitions(rows); })
       .catch((err) => {
-        console.error('Error fetching public requisitions:', err);
         if (!cancelled) {
-          if (requisitions.length === 0) {
-            setError(err.message || 'Could not load open roles.');
-          }
-          setLoading(false);
+          setRequisitions([]);
+          setError(err.message || 'Could not load open roles.');
         }
-      });
-
-    return () => {
-      cancelled = true;
-    };
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [enabled]);
 
   // Filtered job list
