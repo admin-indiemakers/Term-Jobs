@@ -887,6 +887,7 @@ export default function OpenRolesPage({ enabled = true }) {
   const [regSkills, setRegSkills] = useState('');
   const [regResume, setRegResume] = useState(null);
   const [googleResumeRequired, setGoogleResumeRequired] = useState(false);
+  const [pendingGooglePayload, setPendingGooglePayload] = useState(null);
 
   // Load Google Identity Services SDK only when auth modal is open
   useEffect(() => {
@@ -986,6 +987,7 @@ export default function OpenRolesPage({ enabled = true }) {
           }
 
           if (tokenResponse.access_token) {
+            setAuthError(null);
             setAuthLoading(true);
             try {
               let userInfo = {};
@@ -1023,11 +1025,20 @@ export default function OpenRolesPage({ enabled = true }) {
               });
 
               if (data?.status === 'resume_required') {
+                setPendingGooglePayload({
+                  access_token: tokenResponse.access_token,
+                  email: userInfo.email,
+                  name: userInfo.name,
+                  picture: userInfo.picture,
+                  sub: userInfo.sub,
+                });
                 setGoogleResumeRequired(true);
                 setAuthError(null);
                 return;
               }
               setGoogleResumeRequired(false);
+              setPendingGooglePayload(null);
+              setAuthError(null);
               setAuthSuccessMsg('Signed in with Google successfully!');
               setTimeout(() => {
                 setShowAuthModal(false);
@@ -1046,10 +1057,20 @@ export default function OpenRolesPage({ enabled = true }) {
         },
         error_callback: (err) => {
           console.warn('Google OAuth token client error:', err);
-          const currentOrigin = window.location.origin;
-          setAuthError(
-            `Google OAuth Error: "${currentOrigin}" is not registered in Google Cloud Console. Please add "${currentOrigin}" to Authorized JavaScript origins.`
-          );
+          if (err?.type === 'popup_closed') {
+            return;
+          }
+          if (err?.type === 'popup_failed_to_open') {
+            setAuthError('Popup was blocked by your browser. Please allow popups for Google Sign-In.');
+            return;
+          }
+          if (err?.type === 'origin_mismatch') {
+            const currentOrigin = window.location.origin;
+            setAuthError(
+              `Google OAuth Error: "${currentOrigin}" is not registered in Google Cloud Console. Please add "${currentOrigin}" to Authorized JavaScript origins.`
+            );
+            return;
+          }
         },
       });
 
@@ -1057,6 +1078,48 @@ export default function OpenRolesPage({ enabled = true }) {
     } catch (err) {
       console.error('Google OAuth trigger error:', err);
       setAuthError('Could not open Google Sign-In popup. Please check your browser popup blocker.');
+    }
+  };
+
+  // Complete Google signup with uploaded resume without reopening Google popup
+  const handleCompleteGoogleRegistration = async () => {
+    if (!regResume) {
+      setAuthError('Please upload your resume file (PDF or DOCX) to complete your profile.');
+      return;
+    }
+    if (!regResume.size || regResume.size > 10 * 1024 * 1024 || !/\.(pdf|docx)$/i.test(regResume.name)) {
+      setAuthError('Upload a non-empty PDF or DOCX resume up to 10 MB.');
+      return;
+    }
+    setAuthLoading(true);
+    setAuthError(null);
+    try {
+      const encoded = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(regResume);
+      });
+
+      const payload = {
+        ...(pendingGooglePayload || {}),
+        resume_base64: encoded,
+        resume_filename: regResume.name,
+      };
+
+      const data = await loginWithGoogle(payload);
+      setGoogleResumeRequired(false);
+      setPendingGooglePayload(null);
+      setAuthError(null);
+      setAuthSuccessMsg('Profile created! Signed in successfully.');
+      setTimeout(() => {
+        setShowAuthModal(false);
+        setAuthSuccessMsg('');
+      }, 600);
+    } catch (err) {
+      setAuthError(err.message || 'Could not complete profile registration.');
+    } finally {
+      setAuthLoading(false);
     }
   };
 
@@ -2159,32 +2222,15 @@ export default function OpenRolesPage({ enabled = true }) {
                 </div>
               ) : (
                 <div className="flex items-center gap-1.5 sm:gap-2.5">
-                  {/* Candidate Auth Pill (Google Icon + Divider + Candidate Sign In) */}
-                  <div className="inline-flex items-center px-2 sm:px-2.5 py-1 rounded-full border border-white/15 bg-white/[0.04] hover:border-white/30 backdrop-blur-md transition-all">
-                    {/* Google Sign In Trigger */}
-                    <button
-                      type="button"
-                      onClick={() => handleGoogleSignIn()}
-                      disabled={authLoading}
-                      className="p-0.5 text-white hover:opacity-85 transition-opacity cursor-pointer disabled:opacity-50 flex items-center justify-center"
-                      title={authLoading ? 'Signing in...' : 'Sign in with Google'}
-                    >
-                      <GoogleIcon className="w-3.5 h-3.5" />
-                    </button>
-
-                    {/* Vertical Divider */}
-                    <div className="h-3 w-px bg-white/20 mx-1.5" />
-
-                    {/* Candidate Email/Password Login Trigger */}
-                    <button
-                      type="button"
-                      onClick={() => { setAuthModalTab('login'); setShowAuthModal(true); }}
-                      className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-medium text-white/90 hover:text-white transition cursor-pointer"
-                    >
-                      <User size={11} className="text-white/70" />
-                      <span>Sign In</span>
-                    </button>
-                  </div>
+                  {/* Candidate Sign In Trigger */}
+                  <button
+                    type="button"
+                    onClick={() => { setAuthModalTab('login'); setShowAuthModal(true); }}
+                    className="inline-flex items-center gap-1 px-2.5 sm:px-3 py-1 rounded-full border border-white/15 bg-white/[0.04] hover:bg-white/[0.08] hover:border-white/30 text-white/90 hover:text-white text-[10px] sm:text-[11px] font-medium transition backdrop-blur-md active:scale-95 cursor-pointer"
+                  >
+                    <User size={11} className="text-white/70" />
+                    <span>Sign In</span>
+                  </button>
 
                   {/* Staff Portal Link */}
                   <Link
@@ -5428,16 +5474,34 @@ export default function OpenRolesPage({ enabled = true }) {
               </div>
             )}
 
-            {/* 1-Click Google OAuth (Primary Action) */}
-            <button
-              type="button"
-              onClick={() => handleGoogleSignIn()}
-              disabled={authLoading || (googleResumeRequired && !regResume)}
-              className={`w-full flex items-center justify-center gap-3 py-3 px-4 rounded-xl border font-bold text-xs tracking-wide shadow-xs active:scale-[0.99] transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed mb-5 ${googleResumeRequired ? 'bg-neutral-900 hover:bg-neutral-800 border-neutral-900 text-white' : 'bg-white hover:bg-neutral-50 border-neutral-300 text-neutral-800'}`}
-            >
-              <GoogleIcon className="w-4 h-4" />
-              <span>{authLoading ? 'Connecting…' : googleResumeRequired ? 'Continue with resume' : 'Continue with Google'}</span>
-            </button>
+            {/* Primary Action Button */}
+            {googleResumeRequired ? (
+              <button
+                type="button"
+                onClick={handleCompleteGoogleRegistration}
+                disabled={authLoading || !regResume}
+                className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-white font-bold text-xs tracking-wide shadow-xs active:scale-[0.99] transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed mb-4"
+              >
+                {authLoading ? (
+                  <span>Saving profile & signing in…</span>
+                ) : (
+                  <>
+                    <CheckCircle2 size={15} className="text-emerald-400" />
+                    <span>Complete Profile & Sign In</span>
+                  </>
+                )}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => handleGoogleSignIn()}
+                disabled={authLoading}
+                className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-xl border border-neutral-300 bg-white hover:bg-neutral-50 text-neutral-800 font-bold text-xs tracking-wide shadow-xs active:scale-[0.99] transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed mb-5"
+              >
+                <GoogleIcon className="w-4 h-4" />
+                <span>{authLoading ? 'Connecting…' : 'Continue with Google'}</span>
+              </button>
+            )}
 
             {!googleResumeRequired && (<>
             {/* Divider */}
@@ -5480,9 +5544,9 @@ export default function OpenRolesPage({ enabled = true }) {
 
             {/* Alerts */}
             </>)}
-            {googleResumeRequired && <button type="button" disabled={authLoading} onClick={() => { setGoogleResumeRequired(false); setAuthError(null); }} className="mb-4 w-full text-center text-xs text-neutral-500 hover:text-neutral-900">Use another sign-in method</button>}
 
-            {authError && (
+
+            {authError && !authSuccessMsg && (
               <div className="p-3 mb-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-start gap-2">
                 <AlertCircle size={15} className="shrink-0 mt-0.5 text-rose-500" />
                 <span className="flex-1">{authError}</span>

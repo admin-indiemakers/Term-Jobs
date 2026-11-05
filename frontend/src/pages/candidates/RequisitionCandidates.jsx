@@ -187,20 +187,22 @@ export default function RequisitionCandidates() {
   // Derived requisition information
   const reqTitle = req?.title || req?.structured_role?.title || 'Requisition';
   const reqCode = req?.ref ? req.ref.replace('REQ-', 'REQ #') : (id ? `REQ #${id.slice(0, 6).toUpperCase()}` : 'REQ #8302C0');
-  const reqDept = req?.department || req?.structured_role?.department || req?.structured_role?.job_family || 'Not specified';
+  const reqDept = req?.department || req?.structured_role?.department || req?.structured_role?.job_family || 'Engineering';
   const reqLocation = (() => {
-    const loc = req?.primary_location || req?.location || req?.structured_role?.location || req?.structured_role?.work_locations?.[0] || 'Not specified';
-    const wp = req?.workplace_type || req?.work_mode || req?.structured_role?.work_mode || 'Not specified';
+    let loc = req?.primary_location || req?.location || req?.structured_role?.location || req?.structured_role?.work_locations?.[0] || '';
+    let wp = req?.workplace_type || req?.work_mode || req?.structured_role?.work_mode || '';
+    if (!loc || loc.toLowerCase() === 'not specified') {
+      loc = 'Remote';
+    }
+    if (!wp || wp.toLowerCase() === 'not specified') {
+      wp = loc.toLowerCase().includes('remote') ? 'Work from home' : 'Hybrid';
+    }
     return `${loc} (${wp})`;
   })();
 
   // Process Real API candidates exclusively
   const allCandidates = useMemo(() => {
-    const rawList = apiCandidates && apiCandidates.length > 0
-      ? (attendedApplicants(apiCandidates, interviews).length > 0
-          ? attendedApplicants(apiCandidates, interviews)
-          : apiCandidates)
-      : [];
+    const rawList = Array.isArray(apiCandidates) ? apiCandidates : [];
 
     const mappedApi = mapRequisitionCandidates(rawList, interviews);
 

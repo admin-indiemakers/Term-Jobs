@@ -235,7 +235,7 @@ export default function GoogleCalendarConnect({ onStatus, onConnected, variant, 
   // ── 2. FULL CARD VIEW (e.g. for modal banners or full headers) ──
   return (
     <div className={`w-full ${className}`}>
-      <div className="w-full bg-white border border-gray-200/90 rounded-2xl p-3 sm:px-4 sm:py-3 flex items-center justify-between gap-3 sm:gap-4 shadow-3xs">
+      <div className="w-full bg-white border border-[#EBEBEB] rounded-2xl p-3.5 sm:px-5 sm:py-4 flex items-center justify-between gap-3 sm:gap-4 shadow-[0_1px_3px_rgba(0,0,0,0.02),0_4px_16px_-4px_rgba(0,0,0,0.03)]">
         {/* Left Side: Icon & Details */}
         <div className="flex items-center gap-3 sm:gap-3.5 min-w-0">
           <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-blue-50/70 border border-blue-100/60 flex items-center justify-center shrink-0 shadow-3xs">
@@ -277,7 +277,7 @@ export default function GoogleCalendarConnect({ onStatus, onConnected, variant, 
               type="button"
               onClick={connect}
               disabled={busy}
-              className="px-3 sm:px-3.5 py-1.5 rounded-xl border border-gray-200/90 hover:bg-gray-50 text-gray-800 text-xs font-semibold flex items-center gap-1.5 transition-all shadow-3xs cursor-pointer shrink-0 disabled:opacity-50"
+              className="px-3.5 py-1.5 rounded-xl border border-[#E4E4E7] hover:bg-[#F4F4F5] text-[#18181B] text-xs font-semibold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer shrink-0 disabled:opacity-50"
             >
               {busy ? (
                 <Loader2 size={13} className="animate-spin text-gray-500" />

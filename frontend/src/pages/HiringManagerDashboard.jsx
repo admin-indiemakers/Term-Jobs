@@ -2022,6 +2022,22 @@ function HiringManagerDashboardContent() {
         fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif",
       }}
     >
+      {/* Aura AI Upgrade Announcement Banner */}
+      <div className="bg-indigo-950 text-white px-4 py-2 text-xs flex items-center justify-between shrink-0 shadow-xs z-30 border-b border-indigo-900">
+        <div className="flex items-center gap-2">
+          <Sparkles size={14} className="text-indigo-300" />
+          <span>
+            <strong>Legacy Assistant Mode</strong>: You are using the classic hiring manager assistant. The upgraded <strong>Aura AI Assistant</strong> is now active.
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={() => navigate('/dashboard/hiring-manager')}
+          className="bg-white text-indigo-950 font-semibold px-2.5 py-1 rounded text-xs hover:bg-indigo-50 transition cursor-pointer"
+        >
+          Switch to Aura AI →
+        </button>
+      </div>
       {/* Mobile navigation keeps account details out of the action row. */}
       <header className="hm-mobile-header lg:hidden shrink-0 z-30">
         <div className="hm-mobile-nav">

@@ -61,6 +61,7 @@ from modules.workorder.router import router as workorder_router
 from modules.superadmin_agent.router import router as superadmin_agent_router
 from modules.company_admin_agent.router import router as company_admin_agent_router
 from modules.hiring_manager_agent.router import router as hiring_manager_agent_router
+from modules.aura_agent.router import router as aura_agent_router
 from modules.billing.router import router as vendor_billing_router
 from modules.superadmin_agent.voice_router import router as voice_router
 from modules.onboarding.offboarding_router import router as offboarding_router
@@ -325,6 +326,7 @@ from modules.requisition.superadmin_router import router as superadmin_requisiti
 app.include_router(superadmin_requisitions_router)
 app.include_router(company_admin_agent_router)
 app.include_router(hiring_manager_agent_router)
+app.include_router(aura_agent_router, prefix="/api/v2/hm-agent", tags=["Aura AI Assistant"])
 app.include_router(vendor_billing_router)
 app.include_router(voice_router)
 app.include_router(offboarding_router, tags=["Offboarding"])
