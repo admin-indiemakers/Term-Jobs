@@ -496,6 +496,9 @@ TOOLS = [
                     "skills": {"type": "string", "description": "Required skills / tech stack e.g. React, Node.js, Python"},
                     "job_description": {"type": "string", "description": "Brief description of responsibilities & key duties"},
                     "openings": {"type": "integer", "description": "Number of open positions/headcount for this role, e.g. 1, 2, 5"},
+                    "work_mode": {"type": "string", "description": "Work arrangement explicitly requested: On-site, Hybrid, or Remote. Preserve user choice separately from hiring model and location."},
+                    "submission_deadline": {"type": "string", "description": "Application due date explicitly chosen by the user in YYYY-MM-DD format. Ask if missing; never choose a default."},
+                    "duration": {"type": "string", "description": "Contract period stated by the user, e.g. 6 months or 1 year. Never invent a duration."},
                     "target_start_date": {"type": "string", "description": "User requested start date or period; preserve month-level precision, e.g. November 2026"}
                 },
                 "required": ["title"]
@@ -531,6 +534,9 @@ TOOLS = [
                     "salary_range": {"type": "string", "description": "Salary range e.g. ₹1,500 - ₹2,200 / hr"},
                     "skills": {"type": "string", "description": "Required tech stack / skills"},
                     "job_description": {"type": "string", "description": "Job description"},
+                    "work_mode": {"type": "string", "description": "Work arrangement explicitly requested: On-site, Hybrid, or Remote. Preserve user choice separately from hiring model and location."},
+                    "submission_deadline": {"type": "string", "description": "Application due date explicitly chosen by the user in YYYY-MM-DD format. Ask if missing; never choose a default."},
+                    "duration": {"type": "string", "description": "Contract period stated by the user, e.g. 6 months or 1 year. Never invent a duration."},
                     "target_start_date": {"type": "string", "description": "Target date or month when the hire should start"},
                     "req_id": {"type": "string", "description": "Optional requisition ID if already drafted"}
                 },
@@ -1068,7 +1074,7 @@ def extract_requisition_hiring_model(*texts: str) -> str:
     return ""
 
 
-def draft_requisition_preview(title: str, department: str = "", location: str = "", employment_type: str = "", experience_level: str = "", salary_range: str = "", skills: str = "", job_description: str = "", openings: Any = 1, target_start_date: str = "", hiring_model: str = ""):
+def draft_requisition_preview(title: str, department: str = "", location: str = "", employment_type: str = "", experience_level: str = "", salary_range: str = "", skills: str = "", job_description: str = "", openings: Any = 1, target_start_date: str = "", hiring_model: str = "", duration: str = "", submission_deadline: str = "", work_mode: str = ""):
     dept = department or "To be confirmed"
     loc = location or "To be confirmed"
     emp_type = contract_employment_type(employment_type)
@@ -1099,6 +1105,9 @@ def draft_requisition_preview(title: str, department: str = "", location: str = 
         "department": dept,
         "location": loc,
         "employment_type": emp_type,
+        "work_mode": normalize_requisition_work_mode(work_mode, location, job_description),
+        "duration": duration,
+        "submission_deadline": submission_deadline,
         "experience_level": exp,
         "salary_range": salary,
         "openings": num_openings,
@@ -1116,7 +1125,7 @@ def draft_requisition_preview(title: str, department: str = "", location: str = 
     return draft
 
 
-def create_hiring_requisition(title: str, department: str = "", location: str = "", employment_type: str = "", experience_level: str = "", salary_range: str = "", skills: str = "", job_description: str = "", user_id: str = "", tenant_id: str = "local", user_name: str = "", openings: Any = 1, hiring_model: str = "", target_start_date: str = ""):
+def create_hiring_requisition(title: str, department: str = "", location: str = "", employment_type: str = "", experience_level: str = "", salary_range: str = "", skills: str = "", job_description: str = "", user_id: str = "", tenant_id: str = "local", user_name: str = "", openings: Any = 1, hiring_model: str = "", target_start_date: str = "", duration: str = "", submission_deadline: str = "", work_mode: str = ""):
     """Advance a Hiring Manager requisition using the company approval-flow setting."""
     return submit_requisition_for_director_approval(
         title=title,
@@ -1133,6 +1142,9 @@ def create_hiring_requisition(title: str, department: str = "", location: str = 
         openings=openings,
         hiring_model=hiring_model,
         target_start_date=target_start_date,
+        duration=duration,
+        submission_deadline=submission_deadline,
+        work_mode=work_mode,
     )
 
 
@@ -1152,6 +1164,9 @@ def submit_requisition_for_director_approval(
     openings: Any = 1,
     hiring_model: str = "",
     target_start_date: str = "",
+    duration: str = "",
+    submission_deadline: str = "",
+    work_mode: str = "",
 ):
     """Save a requisition using the tenant's configured approval and publication flow."""
     hiring_model = normalize_requisition_hiring_model(hiring_model, job_description)
@@ -1162,7 +1177,9 @@ def submit_requisition_for_director_approval(
         "location": location,
         "experience_level": experience_level,
         "hiring_model": hiring_model,
+        "work_mode": normalize_requisition_work_mode(work_mode, location, job_description),
         "target_start_date": target_start_date,
+        "submission_deadline": submission_deadline,
         "skills": skills,
     })
     if missing:
@@ -1171,6 +1188,11 @@ def submit_requisition_for_director_approval(
             "missing_required_fields": missing,
             "require_director_approval": approval_required,
         }
+    from modules.requisition.domain.deadline import validate_submission_deadline
+    try:
+        validate_submission_deadline(submission_deadline)
+    except ValueError as error:
+        return {"error": str(error)}
     initial_status = "PendingApproval" if approval_required else "Published"
     session = get_session()
     now_iso = _utcnow_iso()
@@ -1189,8 +1211,11 @@ def submit_requisition_for_director_approval(
         "employment_type": contract_employment_type(employment_type),
         "experience_level": experience_level or "Mid-Level",
         "hiring_model": hiring_model,
-        "work_mode": normalize_requisition_work_mode(location),
+        "work_mode": normalize_requisition_work_mode(work_mode, location, job_description),
         "start_date": target_start_date,
+        "duration": duration,
+        "submission_deadline": submission_deadline,
+        "contract_duration": duration,
         "salary_range": salary_range or "₹1,500 - ₹2,200 / hr",
         "openings": num_openings,
         "headcount": num_openings,
@@ -1852,6 +1877,11 @@ def get_hiring_manager_guide(user_name: str = "Hiring Manager", company_name: st
     display_user = user_name if user_name and user_name.lower() not in ("hm", "user", "local", "none", "r") else "Hiring Manager"
     display_company = company_name if company_name and company_name.lower() not in ("local", "all", "none") else "your organization"
     display_director = director_name if director_name and director_name.lower() not in ("none", "") else "the Director"
+    approval_guidance = (
+        f"• **Director Approval:** Your company requires Director approval. When your draft is finalized, click **Send to Director for Approval** (or tell me) to submit it for sign-off by **{display_director}**.\n\n"
+        if require_director_approval else
+        "• **Direct Publication:** Your company allows Hiring Managers to publish finalized requisitions directly; Director approval is not required.\n\n"
+    )
 
     markdown = (
         f"👋 **Welcome to TermJobs, {display_user}!**\n"
@@ -1861,8 +1891,8 @@ def get_hiring_manager_guide(user_name: str = "Hiring Manager", company_name: st
         "**1️⃣ Job Requisitions & Role Drafting**\n"
         "• **AI-Powered Drafting:** Request any role directly in chat (e.g. *\"Draft a Python Backend Engineer with 4 years experience\"*) or pick from pre-configured engineering & product templates.\n"
         "• **Custom Tech Stacks & Edits:** Tailor key skills, role summary, budget, or experience dynamically (e.g. *\"Set key skills to React and TypeScript only\"*).\n"
-        + (f"• **Director Approval:** This company requires Director approval. When your draft is finalized, click **Send to Director for Approval** (or tell me) to submit it for sign-off by **{display_director}**.\n\n" if require_director_approval else "• **Direct Publication:** This company allows Hiring Managers to publish finalized requisitions directly; Director approval is not required.\n\n")
-        + "**2️⃣ Candidate Screening & Shortlists**\n"
+        f"{approval_guidance}"
+        "**2️⃣ Candidate Screening & Shortlists**\n"
         "• **Vetted Vendor Submissions:** Review candidates submitted by approved recruitment agencies and staffing partners in your **Shortlisted Candidates** queue.\n"
         "• **AI Match Scoring:** Inspect deep resume match analysis, skills breakdown, and suitability scores.\n"
         "• **Head-to-Head Comparison:** Compare shortlisted candidates side-by-side (e.g. *\"Compare top shortlisted candidates\"*).\n\n"
@@ -1889,6 +1919,7 @@ def get_hiring_manager_guide(user_name: str = "Hiring Manager", company_name: st
             "user_name": display_user,
             "company_name": display_company,
             "director_name": display_director,
+            "require_director_approval": require_director_approval,
             "role": "Hiring Manager"
         }
     }
@@ -3075,6 +3106,63 @@ def request_missing_requisition_details(result: Optional[Dict[str, Any]]) -> Opt
     return result
 
 
+def apply_staffing_model_answer(prompt: str, history: Optional[List[Any]], result: Dict[str, Any], tenant_id: str = "") -> Dict[str, Any]:
+    """Apply an explicit hiring-model answer to the active draft even if AI skips its draft tool."""
+    from modules.requisition.domain.required_details import missing_requisition_details
+
+    model = extract_requisition_hiring_model(prompt)
+    if not model or not isinstance(result, dict):
+        return result
+
+    actions = result.setdefault("executed_actions", [])
+    draft_action = next((
+        action for action in actions
+        if action.get("tool") == "draft_hiring_requisition" and isinstance(action.get("result"), dict)
+    ), None)
+    prior_draft = requisition_draft_from_history(history)
+    if draft_action:
+        draft = draft_action["result"]
+        # Models sometimes return a sparse replacement card for a one-field
+        # answer. Keep values from the active card when the replacement only
+        # contains empty/TBC defaults, while still allowing explicit edits.
+        if prior_draft:
+            placeholder = {"", "to be confirmed", "tbd", "n/a", "none"}
+            for key in (
+                "title", "department", "location", "experience_level", "experience",
+                "employment_type", "salary_range", "skills", "job_description",
+                "target_start_date", "openings", "hiring_model", "work_mode", "duration", "contract_duration", "submission_deadline",
+            ):
+                current = draft.get(key)
+                prior = prior_draft.get(key)
+                is_placeholder = (
+                    current is None
+                    or (isinstance(current, str) and current.strip().lower() in placeholder)
+                    or (isinstance(current, (list, tuple)) and not current)
+                )
+                if is_placeholder and prior not in (None, ""):
+                    draft[key] = prior
+    else:
+        draft = prior_draft
+        if not draft or "Hiring model" not in missing_requisition_details(draft):
+            return result
+        draft = dict(draft)
+        draft_action = {"tool": "draft_hiring_requisition", "result": draft}
+        actions.append(draft_action)
+
+    draft["hiring_model"] = model
+    missing = missing_requisition_details(draft)
+    draft["missing_required_fields"] = missing
+    draft["is_complete"] = not missing
+    if tenant_id:
+        draft["require_director_approval"] = _get_tenant_company_context(tenant_id).get("require_director_approval", True)
+    result["reply"] = (
+        f"I updated the hiring model to **{model}**. Please provide the remaining details: {', '.join(missing)}."
+        if missing else
+        f"I updated the hiring model to **{model}**. All required details are complete; review the draft card before submitting it."
+    )
+    return result
+
+
 def requisition_draft_from_history(history: Optional[List[Any]]) -> Optional[Dict[str, Any]]:
     """Read the latest rendered draft card from chat history for a confirmation."""
     for message in reversed(history or []):
@@ -3093,6 +3181,62 @@ def requisition_draft_from_history(history: Optional[List[Any]]) -> Optional[Dic
     return None
 
 
+def director_submission_intent(prompt: str, history: Optional[List[Any]]) -> bool:
+    """Recognize an explicit send request or a yes to the active draft's send prompt."""
+    normalized = re.sub(r"\s+", " ", str(prompt or "").strip().lower()).strip(" .!?")
+    if re.search(
+        r"\b(?:send|submit)\b.*\b(?:director|approval)\b|\b(?:send|submit)\s+for\s+approval\b",
+        normalized,
+    ) and not re.search(r"\b(?:all|every)\s+requisitions\b", normalized):
+        return True
+    if not re.fullmatch(r"(?:yes|yeah|yep|yup|ok|okay|please|go ahead|do it|proceed|confirm)", normalized):
+        return False
+    for item in reversed(history or []):
+        if (item.get("sender") or item.get("role")) in ("assistant", "bot", "ai"):
+            last_assistant = str(item.get("text") or item.get("content") or "").lower()
+            return any(phrase in last_assistant for phrase in (
+                "send this to the director", "send to director", "director for approval",
+                "submit for approval", "submit to the director",
+            ))
+    return False
+
+
+def submit_active_requisition_for_configured_workflow(
+    prompt: str,
+    history: Optional[List[Any]],
+    current_user: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    """Process explicit chat submission deterministically using the tenant policy."""
+    if not director_submission_intent(prompt, history):
+        return None
+    draft = requisition_draft_from_history(history)
+    if not draft:
+        return {
+            "reply": "I couldn't find the active requisition draft. Create or reopen its draft card, then submit it from the card.",
+            "executed_actions": [],
+        }
+
+    from modules.requisition.domain.required_details import missing_requisition_details
+    submission_args = requisition_submission_values(draft)
+    missing = missing_requisition_details(submission_args)
+    if missing:
+        return {
+            "reply": f"I can't submit this requisition yet. Please provide: **{', '.join(missing)}**. You can reply with the details together or edit the draft card.",
+            "executed_actions": [],
+        }
+
+    result = submit_requisition_for_director_approval(
+        **submission_args,
+        user_id=str(current_user.get("id") or ""),
+        user_name=str(current_user.get("name") or "Hiring Manager"),
+        tenant_id=str(current_user.get("tenant_id") or ""),
+    )
+    return request_missing_requisition_details({
+        "reply": result.get("error") or result.get("message") or "The requisition workflow could not be completed. Please try again.",
+        "executed_actions": [{"tool": "submit_for_director_approval", "result": result}],
+    })
+
+
 def requisition_submission_values(draft: Dict[str, Any]) -> Dict[str, Any]:
     skills = draft.get("skills", draft.get("must_have_skills", ""))
     if isinstance(skills, (list, tuple, set)):
@@ -3109,6 +3253,9 @@ def requisition_submission_values(draft: Dict[str, Any]) -> Dict[str, Any]:
         "openings": draft.get("openings", 1),
         "hiring_model": draft.get("hiring_model", ""),
         "target_start_date": draft.get("target_start_date") or draft.get("start_date", ""),
+        "duration": draft.get("duration") or draft.get("contract_duration", ""),
+        "submission_deadline": draft.get("submission_deadline", ""),
+        "work_mode": draft.get("work_mode", ""),
     }
 
 
@@ -3116,6 +3263,8 @@ def run_model_hiring_chat(prompt, history, current_user):
     """Interpret natural conversation before legacy intent shortcuts execute."""
     if not model_available():
         return None
+    import time
+    completion_deadline = time.monotonic() + 24
     user_id = str(current_user.get("id") or "")
     tenant_id = str(current_user.get("tenant_id") or "")
     user_name = current_user.get("name") or "Hiring Manager"
@@ -3159,8 +3308,10 @@ def run_model_hiring_chat(prompt, history, current_user):
                     "When editing a draft, preserve all unchanged draft fields, especially skills, headcount, start period and experience. "
                     "TermJobs ONLY supports contract jobs. Employment type is always Contract. NEVER ask whether a job is permanent, full-time, or contract, or offer permanent/full-time employment. Ask about contract duration only when needed; never invent a duration. "
                     "Before a requisition can be submitted, the user must provide department, work location, experience level, hiring model (staffing model, such as Direct Hiring or Vendor Managed), target start date, and required skills. Preserve an explicitly stated hiring model exactly and never infer it from a remote/hybrid/on-site location. Do not invent values or treat 'To be confirmed' as complete. If any are missing, show the draft for context and ask one concise follow-up listing only the missing details. Do not imply the requisition is ready to submit until all are provided. "
+                    f"COMPANY REQUISITION FLOW: Director approval is {'REQUIRED' if context.get('require_director_approval', True) else 'DISABLED'} for this company. When disabled, do not offer or claim to send a requisition to the Director; direct the Hiring Manager to Publish Requisition after required details are complete. When enabled, use Director approval before publication. "
                     "Interpret meaning, spelling mistakes, number words, and conversational follow-ups; do not require command keywords. "
                     "For example a staffing need is a draft request even without the word requisition. "
+                    "Ask for work mode (On-site, Hybrid, or Remote) and the application due date (submission_deadline) before publishing or submitting. Never choose or assume a work mode. Never invent a deadline or default to tomorrow. "
                     "Extract headcount as an integer and preserve timing requirements in target_start_date and the description. "
                     "Use the current date supplied below to interpret relative dates; do not invent a precise day when the user only gives a month. "
                     "Ask a concise clarification when the role or intended action is ambiguous. Never substitute an unrelated approved template for a requested custom role. "
@@ -3222,7 +3373,8 @@ def run_model_hiring_chat(prompt, history, current_user):
             env_model = getattr(settings, "groq_default_model", None) or os.getenv("GROQ_MODEL")
             model_candidates = list(dict.fromkeys(filter(None, [env_model, "openai/gpt-oss-20b", "openai/gpt-oss-120b"])))
             from .model_transport import request_completion
-            resp, used_model, active_headers = request_completion(url, available_keys, model_candidates, msgs, [] if greeting_only else TOOLS)
+            resp, used_model, active_headers = request_completion(url, available_keys, model_candidates, msgs, [] if greeting_only else TOOLS,
+                budget_seconds=max(0, min(22, completion_deadline - time.monotonic())))
 
             if resp is not None and resp.status_code == 200:
                 data = resp.json()
@@ -3487,7 +3639,10 @@ def run_model_hiring_chat(prompt, history, current_user):
                                 "temperature": 0.3,
                                 "max_tokens": 800
                             }
-                            second_resp = httpx.post(url, headers=active_headers, json=second_payload, timeout=10.0)
+                            remaining = completion_deadline - time.monotonic()
+                            if remaining < 1:
+                                raise TimeoutError("Optional summary budget exhausted")
+                            second_resp = httpx.post(url, headers=active_headers, json=second_payload, timeout=min(6.0, remaining))
                             if second_resp.status_code == 200:
                                 second_content = second_resp.json()["choices"][0]["message"].get("content")
                                 if second_content and len(second_content.strip()) > 10:
@@ -3510,9 +3665,11 @@ def run_model_hiring_chat(prompt, history, current_user):
                     }
         except Exception as groq_err:
             import logging
-            logging.getLogger(__name__).warning("Hiring chat tool execution failed (%s)", type(groq_err).__name__)
+            logging.getLogger(__name__).exception("Hiring chat execution failed")
             if locals().get("executed"):
                 return {"reply": "Some actions completed, but I could not finish the entire request. Review the results below.", "executed_actions": executed}
+
+            return {"reply": "I could not complete this request. Please retry or check its status in the dashboard.", "executed_actions": [], "error_code": "chat_execution_failed"}
 
     return None
 
@@ -3522,12 +3679,33 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
     """Main AI Agent executor for Hiring Manager chat requests with Groq API integration and typo-tolerant fuzzy matching."""
     history = history or []
     current_user = current_user or {}
+    from .read_actions import candidate_reply, shortlisted_requisitions_reply
+    try:
+        requisitions = shortlisted_requisitions_reply(prompt, db)
+        if requisitions is not None:
+            return requisitions
+        candidates = candidate_reply(prompt, db)
+        if candidates is not None:
+            return candidates
+        if re.search(r'\b(pipeline|hiring\s+(?:stats|summary|overview))\b', prompt, re.I) and not re.search(r'\b(create|draft|edit|update|delete|send|approve|reject)\b', prompt, re.I):
+            return hiring_pipeline_reply(str(current_user.get('id') or ''), str(current_user.get('tenant_id') or ''))
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception('Hiring chat read action failed')
+        return {'reply': 'I could not load your hiring records. Please retry; no changes were made.', 'executed_actions': [], 'error_code': 'hiring_records_unavailable'}
     from .applications import application_reply
     applications = application_reply(prompt, db)
     if applications is not None:
         return applications
+    deterministic_submission = submit_active_requisition_for_configured_workflow(
+        prompt, history, current_user
+    )
+    if deterministic_submission is not None:
+        return deterministic_submission
     model_reply = run_model_hiring_chat(prompt, history, current_user)
     if model_reply is not None:
+        tenant_id = str(current_user.get("tenant_id") or "")
+        model_reply = apply_staffing_model_answer(prompt, history, model_reply, tenant_id)
         return request_missing_requisition_details(normalize_fd_engineer_request(prompt, model_reply))
     model_failed = model_available()
 
@@ -3535,6 +3713,12 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
     # This fallback only creates an incomplete draft from explicit user details;
     # the required-details validator still prevents submission/publishing.
     if model_failed:
+        from .draft_recovery import recover_staffing_request
+        recovered = recover_staffing_request(prompt)
+        if recovered:
+            draft = draft_requisition_preview(**recovered)
+            return {'reply': f"I captured your request for **{draft['title']}**. Please provide: {', '.join(draft['missing_required_fields'])}.",
+                    'executed_actions': [{'tool': 'draft_hiring_requisition', 'result': draft}]}
         last_assistant = ""
         for item in reversed(history):
             if (item.get("sender") or item.get("role")) in ("assistant", "bot"):
@@ -3544,10 +3728,14 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
         # A user's answer to the draft's missing fields should update that
         # draft even when the model provider is unavailable.
         prior_draft = requisition_draft_from_history(history)
-        if prior_draft and re.search(r"complete the draft|missing details|could you confirm|provide the following", last_assistant, re.I):
+        if prior_draft and re.search(r"complete the draft|missing details|could you confirm|provide the following|please provide", last_assistant, re.I):
             updated_draft = dict(prior_draft)
             updated_draft["hiring_model"] = updated_draft.get("hiring_model") or "To be confirmed"
             updated_draft["skills"] = updated_draft.get("skills") or "To be confirmed"
+
+            explicit_work_mode = normalize_requisition_work_mode(prompt)
+            if explicit_work_mode:
+                updated_draft["work_mode"] = explicit_work_mode
 
             explicit_model = extract_requisition_hiring_model(prompt)
             if explicit_model:
@@ -3628,7 +3816,19 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
                 }
 
     if model_failed:
-        return {"reply": "The AI service is temporarily unavailable. Please retry shortly.", "executed_actions": [], "ai_unavailable": True}
+        from .model_transport import last_failure
+        failure = last_failure() or {'error_code': 'ai_unavailable'}
+        messages = {
+            'ai_timeout': 'The assistant took too long to respond. Please retry this message.',
+            'ai_rate_limited': 'The assistant has reached its request limit. Please retry shortly.',
+            'ai_configuration_error': 'The assistant connection needs administrator attention. You can continue in the requisitions dashboard.',
+            'ai_invalid_response': 'The assistant could not interpret this request reliably. Please rephrase it or use the requisitions dashboard.',
+            'ai_request_rejected': 'The assistant could not process this request. Please use the requisitions dashboard while we investigate.',
+        }
+        reply = messages.get(failure['error_code'], 'The assistant could not connect. Please retry this message or use the requisitions dashboard.')
+        if failure.get('reference'):
+            reply += f" Reference: {failure['reference']}."
+        return {'reply': reply, 'executed_actions': [], 'ai_unavailable': True, **failure}
     if not is_hiring_request_in_scope(prompt, history):
         return scope_response()
 

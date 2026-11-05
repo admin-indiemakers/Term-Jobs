@@ -162,6 +162,192 @@ def test_explicit_hiring_model_is_saved_on_draft_separately_from_remote_work_mod
     assert "Hiring model" not in draft["missing_required_fields"]
 
 
+def test_direct_hire_followup_updates_active_draft_when_ai_returns_no_tool_action(monkeypatch):
+    from modules.hiring_manager_agent import applications
+
+    draft = {
+        "title": "QA Tester",
+        "department": "Engineering",
+        "location": "Remote",
+        "experience_level": "Fresher",
+        "employment_type": "Contract",
+        "hiring_model": "To be confirmed",
+        "target_start_date": "November 2026",
+        "submission_deadline": "2099-11-10",
+        "work_mode": "On-site",
+        "skills": ["Good ability in testing"],
+        "job_description": "Perform functional and regression testing.",
+    }
+    history = [{
+        "role": "assistant",
+        "content": (
+            "Before this requisition can be published, please provide: Hiring model.\n"
+            f"Draft context: {__import__('json').dumps(draft)}"
+        ),
+    }]
+    monkeypatch.setattr(agent, "model_available", lambda: True)
+    monkeypatch.setattr(agent, "run_model_hiring_chat", lambda *args: {"reply": "Okay.", "executed_actions": []})
+    monkeypatch.setattr(applications, "application_reply", lambda *args: None)
+
+    result = agent.run_hiring_manager_agent_chat(
+        "i need direct hire",
+        history=history,
+        current_user={"id": "test-hm", "tenant_id": "test-tenant"},
+    )
+
+    updated = result["executed_actions"][0]["result"]
+    assert updated["hiring_model"] == "Direct Hiring"
+    assert updated["missing_required_fields"] == []
+    assert "Direct Hiring" in result["reply"]
+
+
+def test_hiring_model_statement_updates_active_draft_when_ai_skips_draft_tool(monkeypatch):
+    """A natural-language field answer should update the active card, not just the chat text."""
+    from modules.hiring_manager_agent import applications
+
+    draft = {
+        "title": "Business Analyst",
+        "department": "Sales",
+        "location": "Remote",
+        "experience_level": "Entry-level",
+        "employment_type": "Contract",
+        "hiring_model": "To be confirmed",
+        "target_start_date": "November 2026",
+        "submission_deadline": "2099-11-10",
+        "work_mode": "On-site",
+        "skills": ["Excel", "Power BI"],
+        "job_description": "Support business analysis and reporting.",
+    }
+    history = [{
+        "role": "assistant",
+        "content": (
+            "Before this requisition can be published, please provide: Hiring model.\n"
+            f"Draft context: {__import__('json').dumps(draft)}"
+        ),
+    }]
+    monkeypatch.setattr(agent, "model_available", lambda: True)
+    monkeypatch.setattr(agent, "run_model_hiring_chat", lambda *args: {
+        "reply": "I understand.", "executed_actions": []
+    })
+    monkeypatch.setattr(applications, "application_reply", lambda *args: None)
+
+    result = agent.run_hiring_manager_agent_chat(
+        "hiring model is direct hire",
+        history=history,
+        current_user={"id": "test-hm", "tenant_id": "test-tenant"},
+    )
+
+    action = next(
+        action for action in result["executed_actions"]
+        if action["tool"] == "draft_hiring_requisition"
+    )
+    updated = action["result"]
+    assert updated["hiring_model"] == "Direct Hiring"
+    assert "Hiring model" not in updated["missing_required_fields"]
+    assert "Direct Hiring" in result["reply"]
+
+
+def test_hiring_model_answer_merges_sparse_ai_draft_with_active_card(monkeypatch):
+    from modules.hiring_manager_agent import applications
+
+    prior_draft = {
+        "title": "Business Analyst",
+        "department": "Sales",
+        "location": "Remote",
+        "experience_level": "Entry-level",
+        "employment_type": "Contract",
+        "hiring_model": "To be confirmed",
+        "target_start_date": "November 2026",
+        "submission_deadline": "2099-11-10",
+        "work_mode": "On-site",
+        "skills": ["Excel", "Power BI"],
+        "job_description": "Support business analysis and reporting.",
+    }
+    history = [{
+        "role": "assistant",
+        "content": (
+            "Before this requisition can be published, please provide: Hiring model.\n"
+            f"Draft context: {__import__('json').dumps(prior_draft)}"
+        ),
+    }]
+    sparse_draft = {
+        "title": "Business Analyst",
+        "department": "To be confirmed",
+        "location": "To be confirmed",
+        "experience_level": "To be confirmed",
+        "employment_type": "Contract",
+        "hiring_model": "To be confirmed",
+        "target_start_date": "To be confirmed",
+        "submission_deadline": "2099-11-10",
+        "work_mode": "On-site",
+        "skills": "To be confirmed",
+        "job_description": "",
+    }
+    monkeypatch.setattr(agent, "model_available", lambda: True)
+    monkeypatch.setattr(agent, "run_model_hiring_chat", lambda *args: {
+        "reply": "Updated.",
+        "executed_actions": [{"tool": "draft_hiring_requisition", "result": sparse_draft}],
+    })
+    monkeypatch.setattr(applications, "application_reply", lambda *args: None)
+
+    result = agent.run_hiring_manager_agent_chat(
+        "hiring model is direct hire",
+        history=history,
+        current_user={"id": "test-hm", "tenant_id": "test-tenant"},
+    )
+
+    updated = result["executed_actions"][0]["result"]
+    assert updated["hiring_model"] == "Direct Hiring"
+    assert updated["department"] == "Sales"
+    assert updated["location"] == "Remote"
+    assert updated["skills"] == ["Excel", "Power BI"]
+    assert "Hiring model" not in updated["missing_required_fields"]
+
+
+def test_explicit_director_send_uses_configured_publication_flow(monkeypatch):
+    from modules.hiring_manager_agent import applications
+
+    draft = {
+        "title": "Senior React Developer",
+        "department": "Engineering",
+        "location": "Kozhikode",
+        "experience_level": "Mid (2-5 yrs)",
+        "employment_type": "Contract",
+        "hiring_model": "Direct Hiring",
+        "target_start_date": "November 2026",
+        "submission_deadline": "2099-11-10",
+        "work_mode": "On-site",
+        "skills": ["React"],
+        "job_description": "Build and maintain React applications.",
+    }
+    history = [{
+        "role": "assistant",
+        "content": f"Review this draft. Draft context: {__import__('json').dumps(draft)}",
+    }]
+    submit = Mock(return_value={
+        "req_id": "req-published",
+        "title": "Senior React Developer",
+        "status": "Published",
+        "require_director_approval": False,
+        "message": "Job Requisition 'Senior React Developer' has been published directly according to your company's flow settings.",
+    })
+    monkeypatch.setattr(agent, "model_available", lambda: True)
+    monkeypatch.setattr(agent, "run_model_hiring_chat", lambda *args: pytest.fail("AI must not handle submission confirmation"))
+    monkeypatch.setattr(agent, "submit_requisition_for_director_approval", submit)
+    monkeypatch.setattr(applications, "application_reply", lambda *args: None)
+
+    result = agent.run_hiring_manager_agent_chat(
+        "send to director for approval",
+        history=history,
+        current_user={"id": "test-hm", "tenant_id": "test-tenant", "name": "Manager"},
+    )
+
+    submit.assert_called_once()
+    assert result["executed_actions"][0]["result"]["status"] == "Published"
+    assert "published directly" in result["reply"]
+    assert "sent to the Director" not in result["reply"]
+
+
 def test_existing_draft_work_mode_does_not_satisfy_staffing_model_requirement():
     draft = {
         "title": "Sales Executive",
@@ -171,6 +357,8 @@ def test_existing_draft_work_mode_does_not_satisfy_staffing_model_requirement():
         "experience_level": "Mid (2-4 yrs)",
         "hiring_model": "To be confirmed",
         "target_start_date": "November 2026",
+        "submission_deadline": "2099-11-10",
+        "work_mode": "On-site",
         "skills": ["Docker", "PostgreSQL", "REST APIs"],
         "summary": "Work five days WFO in Calicut.",
     }
@@ -199,6 +387,8 @@ def test_model_outage_still_applies_answers_to_missing_draft_fields(monkeypatch)
         "employment_type": "Contract",
         "hiring_model": "To be confirmed",
         "target_start_date": "November 2026",
+        "submission_deadline": "2099-11-10",
+        "work_mode": "On-site",
         "skills": "To be confirmed",
         "salary_range": "₹1,000 / hr",
         "job_description": "DevOps Engineer contract role.",
@@ -265,3 +455,21 @@ def test_usage_questions_open_guide_before_creation_or_llm(monkeypatch, prompt):
     assert [a['tool'] for a in result['executed_actions']] == ['get_hiring_manager_guide']
     assert 'how to use TermJobs' in result['reply']
     roles.assert_not_called()
+
+
+@pytest.mark.parametrize("duration", ["6 months", "1 year", ""])
+def test_contract_period_survives_draft_and_submission(duration):
+    draft = agent.draft_requisition_preview(title="Digital Marketing Specialist", duration=duration)
+    assert draft["duration"] == duration
+    assert agent.requisition_submission_values(draft)["duration"] == duration
+
+
+def test_submission_accepts_existing_contract_duration():
+    assert agent.requisition_submission_values({"contract_duration": "12 months"})["duration"] == "12 months"
+
+
+@pytest.mark.parametrize('work_mode', ['On-site', 'Remote', 'Hybrid', ''])
+def test_draft_preserves_work_mode_through_submission(work_mode):
+    draft = agent.draft_requisition_preview(title='Marketing Specialist', location='Kozhikode', work_mode=work_mode)
+    assert draft['work_mode'] == work_mode
+    assert agent.requisition_submission_values(draft)['work_mode'] == work_mode

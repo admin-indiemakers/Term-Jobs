@@ -1,3 +1,4 @@
+import ResumePreviewModal from '../../components/ResumePreviewModal';
 import CompanyInterviewScheduleCard from '../components/CompanyInterviewScheduleCard';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -76,6 +77,21 @@ export function HiringManagerInterviews() {
   const [errorMsg, setErrorMsg] = useState('');
   const [poolCandidates, setPoolCandidates] = useState([]);
   const [poolError, setPoolError] = useState('');
+  const [matchView, setMatchView] = useState('active');
+  const [resumeApplication, setResumeApplication] = useState(null);
+  const [sendingApplications, setSendingApplications] = useState({});
+  const [sentApplications, setSentApplications] = useState({});
+  const sendApplication = async (application) => {
+    setSendingApplications(prev => ({ ...prev, [application.id]: true }));
+    setPoolError('');
+    try {
+      await request(`/api/candidates/${encodeURIComponent(application.submissionId)}/direct-shortlist`, {
+        method: 'POST', token, body: { requisition_id: application.requisitionId },
+      });
+      setSentApplications(prev => ({ ...prev, [application.id]: true }));
+    } catch (error) { setPoolError(error.message || 'Could not send candidate. Please retry.'); }
+    finally { setSendingApplications(prev => ({ ...prev, [application.id]: false })); }
+  };
 
   // Shortlist dispatch & 48h countdown state
   const [shortlistStatus, setShortlistStatus] = useState(null);
@@ -296,7 +312,7 @@ export function HiringManagerInterviews() {
   useEffect(() => {
     if (!token || user?.role !== 'Super Admin') return;
     let cancelled = false;
-    request('/api/superadmin/candidate-pool', { token })
+    request('/api/superadmin/candidate-pool', { token, noCache: true })
       .then((result) => {
         if (!cancelled) {
           setPoolCandidates(Array.isArray(result?.candidates) ? result.candidates : []);
@@ -398,11 +414,21 @@ export function HiringManagerInterviews() {
   const readyToScheduleCount = acceptedCandidates.filter((c) => c.ready_for_round_1 || c.ready_for_next_round).length;
   const poolApplications = poolCandidates.flatMap((candidate) =>
     (candidate.applications || [])
+      .filter((application) => !application.requisition_deleted)
       .filter((application) => application.match_score != null && Number.isFinite(Number(application.match_score)))
       .map((application) => ({
         id: `${candidate.id}-${application.submission_id}`,
         name: candidate.candidate_name,
         title: application.requisition_title,
+        submissionId: application.submission_id,
+        requisitionId: application.requisition_id,
+        candidateId: candidate.id,
+        filename: candidate.filename,
+        hasResume: candidate.has_resume,
+        status: application.status,
+        closed: ['Closed', 'Cancelled', 'Rejected'].includes(application.requisition_status),
+        requisitionStatus: application.requisition_status,
+        sent: application.sent_to_hiring_manager === true,
         score: Math.max(0, Math.min(100, Number(application.match_score))),
       }))
   );
@@ -666,10 +692,13 @@ export function HiringManagerInterviews() {
             </div>
             <button type="button" onClick={() => navigate('/dashboard/superadmin/candidates')} className="text-xs font-bold text-zinc-800 underline cursor-pointer">Open Candidate Pool</button>
           </div>
-          {poolError ? <p role="alert" className="mt-4 text-sm text-rose-700">{poolError}</p>
-            : poolApplications.length === 0 ? <p className="mt-4 text-sm text-zinc-500">No scored applications yet.</p>
+          <div className="mt-4 flex gap-2" aria-label="Requisition status filter">
+            {['active', 'closed'].map(view => <button key={view} type="button" aria-pressed={matchView === view} onClick={() => { setMatchView(view); setPoolError(''); }} className={`rounded-lg px-3 py-2 text-xs font-semibold ${matchView === view ? 'bg-zinc-900 text-white' : 'bg-zinc-100 text-zinc-700'}`}>{view === 'active' ? 'Active requisitions' : 'Closed requisitions'} ({poolApplications.filter(app => app.closed === (view === 'closed')).length})</button>)}
+          </div>
+          {poolError && <p role="alert" className="mt-4 text-sm text-rose-700">{poolError}</p>}
+          {poolApplications.filter(app => app.closed === (matchView === 'closed')).length === 0 ? <p className="mt-4 text-sm text-zinc-500">No candidate matches for {matchView} requisitions.</p>
             : <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {poolApplications.map((application) => (
+              {poolApplications.filter(app => app.closed === (matchView === 'closed')).map((application) => (
                 <div key={application.id} className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -681,9 +710,16 @@ export function HiringManagerInterviews() {
                   <div role="meter" aria-label={`${application.name} resume match`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={application.score} className="mt-3 h-2 overflow-hidden rounded-full bg-zinc-200">
                     <div className="h-full rounded-full bg-zinc-900" style={{ width: `${application.score}%` }} />
                   </div>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <button type="button" disabled={!application.hasResume} onClick={() => setResumeApplication(application)} className="flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 disabled:opacity-40"><FileText size={14} /> View Resume</button>
+                    <button type="button" disabled={application.closed || !application.submissionId || !application.requisitionId || sendingApplications[application.id] || sentApplications[application.id] || application.sent || ['Shortlisted', 'Accepted', 'Under Review', 'Offer Extended', 'Offer Accepted', 'Hired', 'Rejected', 'Withdrawn'].includes(application.status)} onClick={() => sendApplication(application)} className="rounded-lg bg-zinc-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">
+                      {sendingApplications[application.id] ? 'Sending…' : sentApplications[application.id] || application.sent || ['Shortlisted', 'Accepted', 'Under Review', 'Offer Extended', 'Offer Accepted', 'Hired'].includes(application.status) ? 'Sent' : application.closed ? `Requisition ${application.requisitionStatus.toLowerCase()}` : ['Rejected', 'Withdrawn'].includes(application.status) ? application.status : 'Send to Hiring Manager'}
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>}
+          {resumeApplication && <ResumePreviewModal token={token} candidateId={resumeApplication.candidateId} filename={resumeApplication.filename} onClose={() => setResumeApplication(null)} />}
         </section>
       )}
 

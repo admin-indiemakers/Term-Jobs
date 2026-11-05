@@ -47,6 +47,7 @@ import { marked } from 'marked';
 import { useCandidateAuth } from '../context/CandidateAuthContext';
 import SEOHead from '../components/SEOHead';
 import ResumePreviewModal from '../components/ResumePreviewModal';
+import ResumeUploadField from '../components/ResumeUploadField';
 import CandidateEmailEditor from '../components/CandidateEmailEditor';
 import { Backdrop } from '../components/landing/Backdrop';
 import logo from '../assets/termjobs-logo.png';
@@ -885,6 +886,7 @@ export default function OpenRolesPage({ enabled = true }) {
   const [regTitle, setRegTitle] = useState('');
   const [regSkills, setRegSkills] = useState('');
   const [regResume, setRegResume] = useState(null);
+  const [googleResumeRequired, setGoogleResumeRequired] = useState(false);
 
   // Load Google Identity Services SDK only when auth modal is open
   useEffect(() => {
@@ -998,7 +1000,21 @@ export default function OpenRolesPage({ enabled = true }) {
                 console.warn('Could not fetch userinfo directly from Google:', userErr);
               }
 
+              let resumeFields = {};
+              if (regResume) {
+                if (!regResume.size || regResume.size > 10 * 1024 * 1024 || !/\.(pdf|docx)$/i.test(regResume.name)) {
+                  throw new Error('Upload a non-empty PDF or DOCX resume up to 10 MB.');
+                }
+                const encoded = await new Promise((resolve, reject) => {
+                  const reader = new FileReader();
+                  reader.onload = () => resolve(String(reader.result).split(',')[1]);
+                  reader.onerror = reject;
+                  reader.readAsDataURL(regResume);
+                });
+                resumeFields = { resume_base64: encoded, resume_filename: regResume.name };
+              }
               const data = await loginWithGoogle({
+                ...resumeFields,
                 access_token: tokenResponse.access_token,
                 email: userInfo.email,
                 name: userInfo.name,
@@ -1006,6 +1022,12 @@ export default function OpenRolesPage({ enabled = true }) {
                 sub: userInfo.sub,
               });
 
+              if (data?.status === 'resume_required') {
+                setGoogleResumeRequired(true);
+                setAuthError(null);
+                return;
+              }
+              setGoogleResumeRequired(false);
               setAuthSuccessMsg('Signed in with Google successfully!');
               setTimeout(() => {
                 setShowAuthModal(false);
@@ -1071,6 +1093,10 @@ export default function OpenRolesPage({ enabled = true }) {
     const emailErr = validateCandidateEmail(regEmail);
     if (emailErr) {
       setAuthError(emailErr);
+      return;
+    }
+    if (!regResume || regResume.size === 0) {
+      setAuthError('Please upload a non-empty resume file to create your profile.');
       return;
     }
     if (regPassword.length < 6) {
@@ -1425,7 +1451,7 @@ export default function OpenRolesPage({ enabled = true }) {
       return geoMatch.trim();
     }
 
-    const mode = (role.work_mode || 'Remote').trim();
+    const mode = (role.work_mode || 'To be confirmed').trim();
     return mode.toLowerCase() === 'remote' ? 'Remote' : mode;
   };
 
@@ -1701,7 +1727,7 @@ export default function OpenRolesPage({ enabled = true }) {
   const isSelectedJobApplied = Boolean(selectedJobApp);
 
   return (
-    <div className="w-full min-h-screen overflow-x-hidden bg-[#08090b] text-white font-sans selection:bg-emerald-500 selection:text-black relative">
+    <div className="w-full min-h-screen overflow-x-clip bg-[#08090b] text-white font-sans selection:bg-emerald-500 selection:text-black relative">
       {enabled && (
         <SEOHead
           title={isInterviewViewOpen ? "Upcoming Interviews — TermJobs" : "Open Roles & Contract Opportunities — TermJobs"}
@@ -1723,9 +1749,12 @@ export default function OpenRolesPage({ enabled = true }) {
           {/* ============================================================ */}
           {/* LEFT PANEL: LIGHT EDITORIAL COLUMN (HIDDEN ON MOBILE)        */}
           {/* ============================================================ */}
-          <aside className="hidden lg:flex w-full lg:w-[360px] xl:w-[400px] 2xl:w-[430px] shrink-0 bg-paper text-ink border-b lg:border-b-0 lg:border-r border-ink/10 flex-col justify-between relative overflow-hidden lg:h-screen lg:max-h-screen lg:sticky lg:top-0">
+          <aside className="hidden lg:flex w-full lg:w-[360px] xl:w-[400px] 2xl:w-[430px] shrink-0 bg-paper text-ink border-b lg:border-b-0 lg:border-r border-ink/10 flex-col relative self-stretch lg:min-h-screen">
         {/* Light Atmospheric Background Layer - mathematically synced with Landing Page */}
         <Backdrop tone="sidebar" />
+
+        {/* Sticky Editorial Sidebar Content: stays in viewport while left panel stretches with right content */}
+        <div className="relative z-10 w-full flex-1 flex flex-col justify-between lg:sticky lg:top-0 lg:h-screen lg:max-h-screen">
 
         {/* Zone 1: Main Scrollable Editorial Content (takes remaining height, never pushes bottom) */}
         <div className="relative z-10 flex-1 min-h-0 lg:overflow-y-auto custom-scrollbar-none p-6 sm:p-7 xl:p-8 pb-2 flex flex-col justify-between">
@@ -1834,6 +1863,7 @@ export default function OpenRolesPage({ enabled = true }) {
               </div>
             </div>
           </div>
+        </div>
         </div>
       </aside>
 
@@ -2351,7 +2381,7 @@ export default function OpenRolesPage({ enabled = true }) {
                 {filteredJobs.map((job) => {
                   const role = job.structured_role || {};
                   const skills = (role.must_have_skills || []).concat(role.nice_to_have_skills || []);
-                  const workMode = role.work_mode || 'Remote';
+                  const workMode = role.work_mode || 'To be confirmed';
                   const isRemote = workMode.toLowerCase() === 'remote';
                   const isHybrid = workMode.toLowerCase() === 'hybrid';
                   const dueDateVal = job.due_date || job.submission_deadline || job.application_due_date || role.submission_deadline;
@@ -3534,7 +3564,7 @@ export default function OpenRolesPage({ enabled = true }) {
                 </h2>
                 <div className="flex flex-wrap items-center gap-2.5 text-xs text-white/60 mt-2">
                   <span className="px-2.5 py-0.5 rounded-full bg-white/[0.06] border border-white/10 text-white/80 font-medium">
-                    {selectedJob.structured_role?.work_mode || 'Remote'}
+                    {selectedJob.structured_role?.work_mode || 'To be confirmed'}
                   </span>
                   <span className="text-white/30">·</span>
                   <span>{selectedJob.structured_role?.duration || '6 Months'}</span>
@@ -3645,9 +3675,8 @@ export default function OpenRolesPage({ enabled = true }) {
                         dangerouslySetInnerHTML={{ __html: marked.parse(selectedJob.generated_jd_markdown) }}
                       />
                     ) : (
-                      <p className="text-white/60 text-xs">
-                        This is a high-priority contract requisition delivered through the TermJobs platform. Candidates will
-                        collaborate directly with the client engineering leadership.
+                      <p className="text-white/80 text-xs whitespace-pre-wrap leading-relaxed">
+                        {selectedJob.structured_role?.job_description || selectedJob.structured_role?.role_summary || selectedJob.structured_role?.summary || 'Role summary has not been provided.'}
                       </p>
                     )}
 
@@ -5380,26 +5409,37 @@ export default function OpenRolesPage({ enabled = true }) {
                 <span>Candidate Talent Portal</span>
               </div>
               <h3 className="font-display text-xl font-extrabold text-neutral-900 tracking-tight">
-                {authModalTab === 'login' ? (new URLSearchParams(location.search).get('join') === 'talent-pool' ? 'Sign In to Join Talent Pool' : 'Sign In to Open Roles') : 'Create Talent Profile'}
+                {googleResumeRequired ? 'Add your resume' : authModalTab === 'login' ? (new URLSearchParams(location.search).get('join') === 'talent-pool' ? 'Sign In to Join Talent Pool' : 'Sign In to Open Roles') : 'Create Talent Profile'}
               </h3>
               <p className="text-xs text-neutral-500 mt-1">
-                {authModalTab === 'login'
+                {googleResumeRequired ? 'One last step to complete your candidate profile.' : authModalTab === 'login'
                   ? 'Access verified partner requisitions and 1-click apply.'
                   : 'Join the verified talent network to browse and apply for roles.'}
               </p>
             </div>
 
+            {googleResumeRequired && (
+              <div className="mb-5">
+                <div className="mb-5 flex items-center justify-center gap-2 text-[11px] font-medium text-neutral-500">
+                  <CheckCircle2 size={14} className="text-emerald-600" />
+                  <span>Google account verified</span><span className="text-neutral-300">/</span><span className="text-neutral-900">Upload resume</span>
+                </div>
+                <ResumeUploadField file={regResume} onChange={file => { setRegResume(file); setAuthError(null); }} disabled={authLoading} required />
+              </div>
+            )}
+
             {/* 1-Click Google OAuth (Primary Action) */}
             <button
               type="button"
               onClick={() => handleGoogleSignIn()}
-              disabled={authLoading}
-              className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-xl bg-white hover:bg-neutral-50 border border-neutral-300 text-neutral-800 font-bold text-xs tracking-wide shadow-xs active:scale-[0.99] transition cursor-pointer disabled:opacity-50 mb-5"
+              disabled={authLoading || (googleResumeRequired && !regResume)}
+              className={`w-full flex items-center justify-center gap-3 py-3 px-4 rounded-xl border font-bold text-xs tracking-wide shadow-xs active:scale-[0.99] transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed mb-5 ${googleResumeRequired ? 'bg-neutral-900 hover:bg-neutral-800 border-neutral-900 text-white' : 'bg-white hover:bg-neutral-50 border-neutral-300 text-neutral-800'}`}
             >
               <GoogleIcon className="w-4 h-4" />
-              <span>{authLoading ? 'Connecting Google Account…' : 'Continue with Google'}</span>
+              <span>{authLoading ? 'Connecting…' : googleResumeRequired ? 'Continue with resume' : 'Continue with Google'}</span>
             </button>
 
+            {!googleResumeRequired && (<>
             {/* Divider */}
             <div className="relative flex items-center justify-center mb-5">
               <div className="border-t border-neutral-200 w-full" />
@@ -5439,6 +5479,9 @@ export default function OpenRolesPage({ enabled = true }) {
             </div>
 
             {/* Alerts */}
+            </>)}
+            {googleResumeRequired && <button type="button" disabled={authLoading} onClick={() => { setGoogleResumeRequired(false); setAuthError(null); }} className="mb-4 w-full text-center text-xs text-neutral-500 hover:text-neutral-900">Use another sign-in method</button>}
+
             {authError && (
               <div className="p-3 mb-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-start gap-2">
                 <AlertCircle size={15} className="shrink-0 mt-0.5 text-rose-500" />
@@ -5454,7 +5497,7 @@ export default function OpenRolesPage({ enabled = true }) {
             )}
 
             {/* TAB 1: LOGIN FORM */}
-            {authModalTab === 'login' && (
+            {!googleResumeRequired && authModalTab === 'login' && (
               <form onSubmit={handleEmailLogin} className="space-y-3.5">
                 <div>
                   <label className="block text-[11px] font-semibold text-neutral-700 uppercase tracking-wider mb-1">
@@ -5508,7 +5551,7 @@ export default function OpenRolesPage({ enabled = true }) {
             )}
 
             {/* TAB 2: REGISTER FORM */}
-            {authModalTab === 'register' && (
+            {!googleResumeRequired && authModalTab === 'register' && (
               <form onSubmit={handleRegisterSubmit} className="space-y-3">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <div>
@@ -5606,15 +5649,7 @@ export default function OpenRolesPage({ enabled = true }) {
                   />
                 </div>
 
-                <div>
-                  <label className="block text-[10px] font-semibold text-neutral-700 uppercase tracking-wider mb-1">Resume File (PDF/DOCX)</label>
-                  <input
-                    type="file"
-                    accept=".pdf,.docx,.doc"
-                    onChange={(e) => setRegResume(e.target.files?.[0] || null)}
-                    className="w-full text-xs text-neutral-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border file:border-neutral-200 file:text-xs file:font-semibold file:bg-neutral-100 file:text-neutral-800 hover:file:bg-neutral-200 file:transition cursor-pointer"
-                  />
-                </div>
+                <ResumeUploadField file={regResume} onChange={file => { setRegResume(file); setAuthError(null); }} disabled={authLoading} required />
 
                 <button
                   type="submit"

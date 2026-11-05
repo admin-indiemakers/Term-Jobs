@@ -365,45 +365,44 @@ export default function AcceptedCandidates() {
 
       {/* ── 2. TOP 4 GLASSMORHPIC METRIC CARDS ── */}
       <div className="shrink-0 grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between">
+        <div className="bg-white border border-[#EBEBEB] rounded-2xl p-3.5 sm:p-4 shadow-[0_1px_3px_rgba(0,0,0,0.02),0_4px_16px_-4px_rgba(0,0,0,0.03)] flex flex-col justify-between">
           <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">ACCEPTED</div>
           <div className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight mt-1">{metrics.accepted}</div>
         </div>
-        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between">
+        <div className="bg-white border border-[#EBEBEB] rounded-2xl p-3.5 sm:p-4 shadow-[0_1px_3px_rgba(0,0,0,0.02),0_4px_16px_-4px_rgba(0,0,0,0.03)] flex flex-col justify-between">
           <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">ONBOARDING STARTED</div>
           <div className="text-2xl sm:text-3xl font-extrabold text-amber-600 tracking-tight mt-1">{metrics.started}</div>
         </div>
-        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between">
+        <div className="bg-white border border-[#EBEBEB] rounded-2xl p-3.5 sm:p-4 shadow-[0_1px_3px_rgba(0,0,0,0.02),0_4px_16px_-4px_rgba(0,0,0,0.03)] flex flex-col justify-between">
           <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">ONBOARDING COMPLETE</div>
           <div className="text-2xl sm:text-3xl font-extrabold text-emerald-600 tracking-tight mt-1">{metrics.completed}</div>
         </div>
-        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between">
+        <div className="bg-white border border-[#EBEBEB] rounded-2xl p-3.5 sm:p-4 shadow-[0_1px_3px_rgba(0,0,0,0.02),0_4px_16px_-4px_rgba(0,0,0,0.03)] flex flex-col justify-between">
           <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">OPEN ISSUES</div>
           <div className={`text-2xl sm:text-3xl font-extrabold tracking-tight mt-1 ${metrics.openIssues > 0 ? 'text-red-600' : 'text-gray-900'}`}>{metrics.openIssues}</div>
         </div>
       </div>
 
-      {/* ── 3. NAVIGATION PILL TABS ── */}
-      <div className="shrink-0 flex items-center gap-2">
-
+      {/* ── 3. NAVIGATION PILL TABS WITH LIGHT BORDERS ── */}
+      <div className="shrink-0 inline-flex items-center gap-1.5 p-1 rounded-2xl bg-[#F4F4F5] border border-[#E4E4E7]">
         <button
           type="button"
           onClick={() => navigate('/dashboard/candidates/accepted')}
-          className="px-4 py-1.5 rounded-full text-xs font-bold bg-black text-white shadow-xs transition-all cursor-pointer"
+          className="px-4 py-1.5 rounded-xl text-xs font-bold bg-[#111111] text-white border border-black shadow-xs transition-all cursor-pointer"
         >
           Accepted
         </button>
         <button
           type="button"
           onClick={() => navigate('/dashboard/candidates/onboarding')}
-          className="px-4 py-1.5 rounded-full text-xs font-semibold bg-white/60 hover:bg-white text-gray-700 hover:text-black border border-white/80 backdrop-blur-md shadow-3xs transition-all cursor-pointer"
+          className="px-4 py-1.5 rounded-xl text-xs font-semibold bg-white text-gray-700 hover:text-black border border-[#E4E4E7] hover:border-[#D4D4D8] shadow-2xs transition-all cursor-pointer"
         >
           Onboarding
         </button>
       </div>
 
       {/* ── 4. MAIN GLASSMORHPIC DATA TABLE CONTAINER ── */}
-      <div className="flex-1 min-h-[360px] md:min-h-0 bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between overflow-hidden">
+      <div className="flex-1 min-h-[360px] md:min-h-0 bg-white border border-[#EBEBEB] rounded-2xl p-3.5 sm:p-4 shadow-[0_1px_3px_rgba(0,0,0,0.02),0_4px_16px_-4px_rgba(0,0,0,0.03)] flex flex-col justify-between overflow-hidden">
         {/* Top Controls: Search + Count */}
         <div className="shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 border-b border-black/[0.04]">
           <div className="relative w-full sm:w-80">
@@ -413,7 +412,7 @@ export default function AcceptedCandidates() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search candidate, vendor, or role..."
-              className="w-full pl-9 pr-4 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs placeholder:text-gray-400 transition-all"
+              className="w-full pl-9 pr-4 py-1.5 text-xs text-gray-900 bg-[#F4F4F5]/70 focus-within:bg-white border border-[#E4E4E7] focus:border-[#111111] rounded-xl focus:outline-none shadow-2xs placeholder:text-gray-400 transition-all"
             />
           </div>
 

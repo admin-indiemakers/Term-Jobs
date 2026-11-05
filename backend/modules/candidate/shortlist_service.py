@@ -444,7 +444,11 @@ def dispatch_requisition_shortlist(
 
         # Update SQLite candidates:
         # Strictly promote ONLY attended candidates; reset non-attended Shortlisted back to Screened
+        manual_ids = {row['id'] for row in db['candidate_submissions'].find(
+            {'requisition_id': requisition_id, 'manual_shortlist': True}, {'id': 1})}
         for s in sqlite_subs:
+            if s.id in manual_ids:
+                continue
             email = (s.candidate_email or "").strip().lower()
             attended = s.id in completed_sub_ids or email in completed_emails
             if attended:
@@ -469,6 +473,7 @@ def dispatch_requisition_shortlist(
             demote_query = {
                 "requisition_id": requisition_id,
                 "status": "Shortlisted",
+                "manual_shortlist": {"$ne": True},
             }
             if email_list or sub_id_list:
                 demote_query["$nor"] = (

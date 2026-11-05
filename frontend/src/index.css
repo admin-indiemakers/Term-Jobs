@@ -1,6 +1,7 @@
 @import 'tailwindcss';
 
 @theme {
+  --font-serif: 'Newsreader', 'Playfair Display', 'Georgia', 'Cambria', 'Times New Roman', serif;
   --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
   --font-display: 'Manrope', 'Plus Jakarta Sans', system-ui, sans-serif;
   --color-paper: oklch(0.984 0.002 100);

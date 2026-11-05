@@ -169,7 +169,8 @@ def test_company_can_publish_without_director_when_setting_is_disabled(monkeypat
         session.add(profile)
         req = Requisition(
             id="req-1", tenant_id="tenant-1", company_profile_id=profile.id,
-            status="PendingApproval", title="Engineer", structured_role={"title": "Engineer"},
+            status="PendingApproval", title="Engineer",
+            structured_role={"title": "Engineer", "work_mode": "Remote"},
             director_approved=False,
         )
         session.add(req)
@@ -209,6 +210,7 @@ def test_new_hiring_manager_requisition_is_published_when_approval_toggle_is_off
     result = app_main.create_requisition(
         app_main.RequisitionIn(
             title="Engineer", description="Build systems",
+            prefill={"work_mode": "Remote"},
             client_request_id="ai-card-unique-1",
         ),
         BackgroundTasks(),

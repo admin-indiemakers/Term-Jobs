@@ -10,6 +10,10 @@ import CalendarModal from '../components/CalendarModal';
 import { TermJobsLoader } from '../components/TermJobsLoader';
 import {
   Sparkles,
+  Plus,
+  Hexagon,
+  PanelLeftOpen,
+  PanelLeftClose,
   Menu,
   X,
   Building2,
@@ -221,6 +225,17 @@ export default function DashboardLayout() {
       return next;
     });
   };
+
+  useEffect(() => {
+    const handleToggle = () => toggleSidebar();
+    const handleMobileNav = () => setIsMobileMenuOpen(true);
+    window.addEventListener('toggle_nexus_sidebar', handleToggle);
+    window.addEventListener('open_nexus_mobile_nav', handleMobileNav);
+    return () => {
+      window.removeEventListener('toggle_nexus_sidebar', handleToggle);
+      window.removeEventListener('open_nexus_mobile_nav', handleMobileNav);
+    };
+  }, []);
 
   // Dynamic live count badges for Hiring Manager
   const [hmCounts, setHmCounts] = useState({ requisitions: 0, candidates: 0, openIssues: 0, pendingTimesheets: 0, pendingExpenses: 0 });
@@ -480,6 +495,7 @@ export default function DashboardLayout() {
       : userRole === 'Hiring Manager'
       ? [
         { to: '/dashboard/hiring-manager', label: 'AI Chat', end: true, section: 'WORKSPACE', icon: Icons.Chat },
+        { to: '/dashboard/hiring-manager/legacy', label: 'Legacy Assistant', end: true, section: 'WORKSPACE', icon: Icons.Chat },
         { to: '/dashboard/hiring-manager/chat', label: 'Dashboard', end: true, section: 'WORKSPACE', icon: Icons.Dashboard },
         { to: '/dashboard/requisitions', label: 'Requisitions', end: false, section: 'HIRING', icon: Icons.Requisitions, count: hmCounts.requisitions },
         { to: '/dashboard/requisitions/new', label: 'New Requisition', end: true, section: 'HIRING', icon: Icons.Plus },
@@ -528,6 +544,7 @@ export default function DashboardLayout() {
                   { to: '/dashboard/superadmin', label: 'Dashboard', end: true, section: 'WORKSPACE', icon: Icons.Dashboard },
                   { to: '/dashboard/interviews', label: 'Interviews & AI Scores', end: false, section: 'WORKSPACE', icon: Icons.Interviews },
                   { to: '/dashboard/superadmin/chat', label: 'AI Chat', end: true, section: 'WORKSPACE', icon: Icons.Chat },
+                  { to: '/dashboard/superadmin/requisitions', label: 'Company Requisitions', end: false, section: 'WORKSPACE', icon: Icons.Requisitions },
                   { to: '/dashboard/superadmin/candidate-management', label: 'Candidate Management', end: false, section: 'CANDIDATE MANAGEMENT', icon: Icons.Accepted, badge: superAdminSelectedCount },
                   { to: '/dashboard/superadmin/candidate-management?tab=billing', label: 'Candidate Billing', end: false, section: 'CANDIDATE MANAGEMENT', icon: Icons.Receipt },
                   { to: '/dashboard/superadmin/candidates', label: 'Candidate Pool', end: false, section: 'CANDIDATE MANAGEMENT', icon: Icons.Diamond, count: superAdminCandidateCount },
@@ -908,9 +925,361 @@ export default function DashboardLayout() {
     </div>
   );
 };
+  // Helper to render the NEXUS-styled Hiring Manager Sidebar
+  const renderNexusSidebar = (onLinkClick = null) => {
+    if (isSidebarMinimized) {
+      return (
+        <div className="flex h-full flex-col justify-between items-center py-3 select-none bg-[#FAF8F5] w-full">
+          {/* Top Brand Icon */}
+          <div className="flex flex-col items-center gap-2.5 pb-2 border-b border-[#E8E3D8] w-full px-2">
+            <button
+              type="button"
+              onClick={toggleSidebar}
+              className="size-8 rounded-lg bg-[#111111] text-white flex items-center justify-center shadow-xs hover:bg-[#222222] transition cursor-pointer"
+              title="Expand sidebar"
+            >
+              <Hexagon className="size-4 stroke-[2.5]" />
+            </button>
+            <button
+              type="button"
+              onClick={toggleSidebar}
+              className="size-7 rounded-lg text-[#777777] hover:text-[#111111] hover:bg-[#EFECE5] flex items-center justify-center transition cursor-pointer"
+              title="Expand sidebar"
+            >
+              <PanelLeftOpen className="size-4" />
+            </button>
+          </div>
 
-  const isHiringManagerDashboard = location.pathname === '/dashboard/hiring-manager' || location.pathname === '/dashboard/hiring-manager/';
-  const isFixedMode = isHiringManagerDashboard || isAiChatPage;
+          {/* Quick Action Button in Minimized mode */}
+          <div className="py-2">
+            <Link
+              to="/dashboard/requisitions/new"
+              onClick={onLinkClick}
+              className="size-9 rounded-lg bg-[#111111] hover:bg-[#222222] text-white flex items-center justify-center shadow-2xs transition-all active:scale-95"
+              title="New Requisition"
+            >
+              <Plus className="size-4 stroke-[2.5]" />
+            </Link>
+          </div>
+
+          {/* Navigation icons in Minimized mode */}
+          <nav className="flex-1 w-full flex flex-col items-center gap-1 overflow-y-auto px-1 py-1 custom-scrollbar">
+            {navItems.map((item) => {
+              const IconComp = item.icon;
+              const isItemActive = item.to === '/dashboard/requisitions'
+                ? location.pathname.startsWith('/dashboard/requisitions') && location.pathname !== '/dashboard/requisitions/new'
+                : item.end
+                  ? location.pathname === item.to
+                  : item.to ? location.pathname.startsWith(item.to) : false;
+
+              return (
+                <div key={item.label} className="relative group/item flex items-center justify-center w-full">
+                  <Link
+                    to={item.to}
+                    onClick={onLinkClick}
+                    title={item.label}
+                    className={`size-9 rounded-lg flex items-center justify-center transition-all relative ${
+                      isItemActive
+                        ? 'bg-[#EAE5D9] text-[#111111] font-semibold border border-[#DDD5C7] shadow-2xs'
+                        : 'text-[#666666] hover:bg-[#F2EFE9] hover:text-[#111111] border border-transparent hover:border-[#E8E3D8]'
+                    }`}
+                  >
+                    {IconComp && (
+                      <IconComp size={16} className={isItemActive ? 'text-[#111111]' : 'text-[#777777]'} />
+                    )}
+                    {item.badge > 0 && (
+                      <span className="absolute top-1 right-1 size-2 rounded-full bg-red-600 ring-2 ring-[#FAF8F5]" />
+                    )}
+                  </Link>
+                  {/* Tooltip */}
+                  <div className="absolute left-full ml-2.5 px-2.5 py-1 bg-[#1C1A17] text-white text-[11px] font-medium rounded-lg shadow-xl pointer-events-none whitespace-nowrap opacity-0 group-hover/item:opacity-100 transition-opacity duration-150 z-50 flex items-center gap-1.5">
+                    <span>{item.label}</span>
+                    {item.badge > 0 && (
+                      <span className="px-1.5 py-0.2 rounded-full bg-red-600 text-[9.5px] text-white font-mono">
+                        {item.badge}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </nav>
+
+          {/* Bottom user avatar in Minimized mode */}
+          <div className="pt-2 border-t border-[#E8E3D8] w-full flex flex-col items-center gap-2">
+            <div
+              className="size-8 rounded-full bg-[#111111] text-white flex items-center justify-center font-bold text-xs shadow-2xs uppercase cursor-pointer"
+              title={user?.name || 'Hiring Manager'}
+            >
+              {user?.logo_url ? (
+                <img src={user.logo_url} alt="Logo" className="size-full object-contain rounded-full" />
+              ) : (
+                initials(user?.name)
+              )}
+            </div>
+            <button
+              onClick={handleLogout}
+              type="button"
+              title="Sign out"
+              className="p-1.5 rounded-lg text-[#777777] hover:text-red-600 hover:bg-rose-50 transition cursor-pointer"
+            >
+              <Icons.Logout width={14} height={14} />
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex h-full flex-col select-none bg-[#FAF8F5] w-full">
+        {/* Workspace Branding Header */}
+        <div className="flex items-center justify-between gap-2 px-3 pb-2.5 pt-3 border-b border-[#E8E3D8] mb-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-[#111111] text-white font-bold text-xs shadow-xs">
+              {user?.logo_url ? (
+                <img src={user.logo_url} alt="Logo" className="size-full object-contain p-0.5 rounded-lg" />
+              ) : (
+                <Hexagon className="size-4 stroke-[2.5]" />
+              )}
+            </div>
+            <div className="min-w-0 flex-1 leading-tight text-left">
+              <span className="block text-sm font-bold tracking-tight text-[#111111] truncate">Term Jobs</span>
+              <span className="block truncate text-[11px] text-[#777777] font-normal">{user?.tenant_name || 'Hiring Workspace'}</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            className="size-7 rounded-lg text-[#777777] hover:text-[#111111] hover:bg-[#EFECE5] flex items-center justify-center transition cursor-pointer shrink-0"
+            title="Collapse sidebar"
+          >
+            <PanelLeftClose className="size-4" />
+          </button>
+        </div>
+
+        {/* Primary CTA Button */}
+        <div className="px-3 pb-2.5">
+          <Link
+            to="/dashboard/requisitions/new"
+            onClick={onLinkClick}
+            className="w-full bg-[#111111] hover:bg-[#222222] text-white text-xs font-semibold h-9 rounded-lg gap-2 cursor-pointer shadow-2xs flex items-center justify-center transition-all active:scale-[0.98]"
+          >
+            <Plus className="size-4 stroke-[2.5]" />
+            <span>New Requisition</span>
+          </Link>
+        </div>
+
+        {/* Grouped Nav Items */}
+        <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 pb-3 custom-scrollbar" aria-label="Main">
+          {(() => {
+            let lastSection = null;
+            return navItems.map((item) => {
+              const showSection = item.section && item.section !== lastSection;
+              if (item.section) lastSection = item.section;
+              const IconComp = item.icon;
+              const isItemActive = item.to === '/dashboard/requisitions'
+                ? location.pathname.startsWith('/dashboard/requisitions') && location.pathname !== '/dashboard/requisitions/new'
+                : item.end
+                  ? location.pathname === item.to
+                  : item.to ? location.pathname.startsWith(item.to) : false;
+
+              return (
+                <React.Fragment key={item.label}>
+                  {showSection && (
+                    <p className="px-2.5 pt-3.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-[#888888] select-none">
+                      {item.section}
+                    </p>
+                  )}
+                  <Link
+                    to={item.to}
+                    onClick={onLinkClick}
+                    className={`flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-xs transition-colors select-none ${
+                      isItemActive
+                        ? 'bg-[#EAE5D9] font-semibold text-[#111111] border border-[#DDD5C7] shadow-2xs'
+                        : 'text-[#666666] hover:bg-[#F2EFE9] hover:text-[#111111] border border-transparent hover:border-[#E8E3D8]'
+                    }`}
+                  >
+                    {IconComp && (
+                      <IconComp
+                        size={16}
+                        className={`shrink-0 ${isItemActive ? 'text-[#111111]' : 'text-[#777777]'}`}
+                      />
+                    )}
+                    <span className="flex-1 truncate">{item.label}</span>
+                    {item.badge > 0 && (
+                      <span className="rounded-full bg-red-600 px-1.5 text-[10px] font-semibold text-white">
+                        {item.badge}
+                      </span>
+                    )}
+                    {item.count !== undefined && item.badge <= 0 && (
+                      <span className={`text-[10.5px] font-medium ${isItemActive ? 'text-[#111111]' : 'text-[#888888]'}`}>
+                        {item.count}
+                      </span>
+                    )}
+                  </Link>
+                </React.Fragment>
+              );
+            });
+          })()}
+        </nav>
+
+        {/* Anchored User Profile Footer */}
+        <div className="border-t border-[#E8E3D8] p-2 bg-[#FAF8F5] shrink-0">
+          <div className="flex items-center justify-between gap-2 p-1.5 rounded-lg hover:bg-[#EFECE5] transition-colors">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="size-8 rounded-full bg-[#111111] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs uppercase">
+                {user?.logo_url ? (
+                  <img src={user.logo_url} alt="Logo" className="size-full object-contain rounded-full" />
+                ) : (
+                  initials(user?.name)
+                )}
+              </div>
+              <div className="min-w-0 flex-1 leading-tight text-left">
+                <span className="block truncate text-xs font-semibold text-[#111111]">{user?.name || 'Hiring Manager'}</span>
+                <span className="block truncate text-[11px] text-[#777777]">{userRole}</span>
+              </div>
+            </div>
+            <button
+              onClick={handleLogout}
+              type="button"
+              title="Sign out"
+              className="p-1.5 rounded-lg text-[#777777] hover:text-red-600 hover:bg-rose-50 transition-colors cursor-pointer shrink-0"
+            >
+              <Icons.Logout width={14} height={14} />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+
+  const isHiringManagerDashboard = location.pathname.startsWith('/dashboard/hiring-manager');
+  const isAiWorkspacePage = location.pathname === '/dashboard/hiring-manager';
+  const isFixedMode = isAiWorkspacePage || isAiChatPage;
+  // Dedicated NEXUS-styled Framework for Hiring Manager
+  if (isHiringManager) {
+    return (
+      <div className="h-screen w-full overflow-hidden bg-white p-2 sm:p-3 text-[#111111] font-sans antialiased">
+        <div className="flex h-full w-full overflow-hidden rounded-[20px] sm:rounded-[28px] md:rounded-[32px] border border-[#DDD7CB] bg-[#FAF8F5] text-[#111111] shadow-[0_14px_45px_-10px_rgba(0,0,0,0.13),0_6px_18px_-2px_rgba(0,0,0,0.06),0_1px_3px_rgba(0,0,0,0.05)] relative">
+          {/* Desktop Persistent Sidebar */}
+          <aside
+            className={`hidden lg:flex flex-col h-full border-r border-[#E8E3D8] bg-[#FAF8F5] transition-[width,margin] duration-200 z-20 shrink-0 ${
+              isSidebarMinimized ? 'w-[68px]' : 'w-[265px]'
+            }`}
+          >
+            {renderNexusSidebar()}
+          </aside>
+
+          {/* Mobile Drawer */}
+          {isMobileMenuOpen && (
+            <div className="fixed inset-0 z-50 lg:hidden flex animate-in fade-in duration-200">
+              <div
+                className="fixed inset-0 bg-black/40 backdrop-blur-xs"
+                onClick={() => setIsMobileMenuOpen(false)}
+              />
+              <div className="relative w-72 max-w-[82vw] h-full bg-[#FAF8F5] text-[#111111] border-r border-[#E8E3D8] p-3 flex flex-col z-60 shadow-2xl animate-in slide-in-from-left duration-200">
+                <div className="flex items-center justify-between pb-2 border-b border-[#E8E3D8] mb-2 shrink-0">
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#888888]">Navigation</span>
+                  <button
+                    type="button"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="p-1 rounded-lg text-[#777777] hover:text-[#111111] hover:bg-[#EFECE5] cursor-pointer"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+                <div className="flex-1 min-h-0 overflow-y-auto">
+                  {renderNexusSidebar(() => setIsMobileMenuOpen(false))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Right Workspace Main Area - Pure white executive canvas */}
+          <div className="flex-1 flex flex-col h-full min-w-0 bg-white relative overflow-hidden select-text">
+            {/* Top Compact Header hidden per user request to make page clean & premium */}
+            {false && (
+            <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-[#E8E3D8] bg-[#FAF8F5] px-3 md:px-5 z-20 select-none">
+              <div className="flex items-center gap-2 flex-1 max-w-lg min-w-0">
+                <button
+                  type="button"
+                  onClick={() => setIsMobileMenuOpen(true)}
+                  className="lg:hidden p-1.5 text-[#777777] hover:text-[#111111] hover:bg-[#EFECE5] rounded-lg cursor-pointer"
+                  aria-label="Open Navigation"
+                >
+                  <Menu size={18} />
+                </button>
+                <button
+                  type="button"
+                  onClick={toggleSidebar}
+                  className="hidden lg:inline-flex size-8 items-center justify-center rounded-lg text-[#777777] hover:text-[#111111] hover:bg-[#EFECE5] transition cursor-pointer"
+                  title={isSidebarMinimized ? "Expand sidebar" : "Collapse sidebar"}
+                >
+                  {isSidebarMinimized ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {}}
+                  className="flex h-8 w-full max-w-xs sm:max-w-sm md:max-w-md items-center gap-2 rounded-full border border-[#E8E3D8] bg-[#FAF8F5] hover:bg-[#EFECE5] px-3.5 text-xs text-[#7A7369] transition-colors cursor-pointer"
+                >
+                  <Search size={14} className="text-[#888888] shrink-0" />
+                  <span className="flex-1 text-left truncate">Search operations, candidates, jobs…</span>
+                  <kbd className="hidden sm:inline rounded border border-[#E8E3D8] bg-white px-1.5 text-[10px] font-medium text-[#888888]">⌘K</kbd>
+                </button>
+              </div>
+
+              {/* Right Controls */}
+              <div className="flex items-center gap-2 shrink-0">
+                <NotificationBell />
+                {!isHiringManagerDashboard && (
+                  <Link
+                    to="/dashboard/hiring-manager"
+                    className="hidden sm:inline-flex items-center gap-1.5 h-7.5 px-3 rounded-full text-xs font-semibold border border-[#E8E3D8] bg-white hover:bg-[#F4F1EA] text-[#111111] transition shadow-2xs"
+                    title="Open Aura AI Copilot"
+                  >
+                    <Sparkles size={13} className="text-[#111111]" />
+                    <span>Aura AI</span>
+                  </Link>
+                )}
+                <span className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-1 text-[10.5px] font-bold text-[#48433C] bg-white border border-[#E8E3D8] rounded-full shadow-2xs">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  SECURE
+                </span>
+                <button
+                  onClick={handleLogout}
+                  type="button"
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl border border-[#E8E3D8] bg-white hover:bg-rose-50 hover:text-rose-600 text-[#48433C] text-xs font-semibold transition-all shadow-2xs cursor-pointer"
+                  title="Sign out of TermJobs"
+                >
+                  <Icons.Logout width={13} height={13} />
+                  <span className="hidden sm:inline">Sign out</span>
+                </button>
+              </div>
+            </header>
+            )}
+
+            {/* Main Content Area */}
+            {isAiWorkspacePage ? (
+              <main className="flex-1 min-h-0 flex flex-col overflow-hidden relative bg-white">
+                <Outlet />
+              </main>
+            ) : (
+              <main className="flex-1 overflow-y-auto min-h-0 bg-white p-4 sm:p-6 lg:p-8 custom-scrollbar">
+                <div className="mx-auto max-w-[1360px] w-full">
+                  <Outlet />
+                </div>
+              </main>
+            )}
+          </div>
+        </div>
+
+        <AssistantWidget isOpen={isAssistantOpen} setIsOpen={setIsAssistantOpen} />
+        <CalendarModal isOpen={isGlobalCalendarOpen} onClose={() => setIsGlobalCalendarOpen(false)} />
+      </div>
+    );
+  }
+
 
   return (
     <div className={`app-shell ${consoleClass} ${isAiChatPage ? 'ai-chat-mode' : ''} ${isFixedMode ? 'ai-fixed-mode h-screen max-h-screen overflow-hidden' : ''}`}>
@@ -1193,12 +1562,13 @@ export default function DashboardLayout() {
           display: flex !important;
           flex-direction: column !important;
           overflow: hidden !important;
+          background: #FAF8F5 !important;
         }
         .app-shell.ai-fixed-mode .content-area {
           flex: 1 1 0% !important;
           min-height: 0 !important;
-          height: auto !important;
-          max-height: none !important;
+          height: 100% !important;
+          max-height: 100% !important;
           width: calc(100% - 28px) !important;
           max-width: calc(100% - 28px) !important;
           margin: 14px 14px 14px 14px !important;
@@ -1207,6 +1577,7 @@ export default function DashboardLayout() {
           box-sizing: border-box !important;
           display: flex !important;
           flex-direction: column !important;
+          background: #FAF8F5 !important;
         }
         @media (max-width: 1023px) {
           .sidebar {
@@ -1227,12 +1598,13 @@ export default function DashboardLayout() {
             display: flex !important;
             flex-direction: column !important;
             overflow: hidden !important;
+            background: #FAF8F5 !important;
           }
           .app-shell.ai-fixed-mode .content-area {
             flex: 1 1 0% !important;
             min-height: 0 !important;
-            height: auto !important;
-            max-height: none !important;
+            height: 100% !important;
+            max-height: 100% !important;
             width: calc(100% - 16px) !important;
             max-width: calc(100% - 16px) !important;
             margin: 8px 8px 8px 8px !important;
@@ -1241,6 +1613,7 @@ export default function DashboardLayout() {
             box-sizing: border-box !important;
             display: flex !important;
             flex-direction: column !important;
+            background: #FAF8F5 !important;
           }
         }
       `}</style>
@@ -1302,7 +1675,7 @@ export default function DashboardLayout() {
         )}
 
         {/* Mobile hamburger header for all portals on small devices */}
-        {(isCompanyAdmin || isHiringManager || isDirector || isSuperAdmin || isFinance || isProcurement) && !location.pathname.endsWith('/hiring-manager') && (
+        {(isCompanyAdmin || isHiringManager || isDirector || isSuperAdmin || isFinance || isProcurement) && !location.pathname.startsWith('/dashboard/hiring-manager') && (
           <div className="lg:hidden flex items-center justify-between mx-3 py-2 border-b border-black/[0.06] bg-transparent shrink-0">
             <button
               type="button"

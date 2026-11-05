@@ -477,7 +477,9 @@ function HiringManagerDashboardContent() {
   }, [token]);
 
   const draftRequiresDirectorApproval = (draft) => (
-    companyRequiresDirectorApproval ?? (draft?.require_director_approval !== false)
+    typeof draft?.require_director_approval === 'boolean'
+      ? draft.require_director_approval
+      : (companyRequiresDirectorApproval ?? true)
   );
 
   const resolvedDraftHiringModel = (draft) => {
@@ -509,6 +511,8 @@ function HiringManagerDashboardContent() {
       [resolvedDraftHiringModel(draft), 'Hiring model'],
       [valueFor('target_start_date', 'start_date'), 'Target start date'],
       [valueFor('skills', 'must_have_skills'), 'Required skills'],
+      [valueFor('submission_deadline'), 'Application due date'],
+      [['on-site', 'on site', 'onsite', 'hybrid', 'remote'].includes(String(draft?.work_mode || '').trim().toLowerCase()) ? draft.work_mode : '', 'Work mode (On-site, Hybrid, or Remote)'],
     ].filter(([value]) => !value).map(([, label]) => label);
   };
 
@@ -893,6 +897,8 @@ function HiringManagerDashboardContent() {
             work_mode: draft.work_mode || (['Remote', 'Hybrid', 'On-site'].includes(draft.hiring_model) ? draft.hiring_model : ''),
             hiring_model: resolvedDraftHiringModel(draft) || '',
             start_date: draft.target_start_date || '',
+            duration: draft.duration || draft.contract_duration || '',
+            submission_deadline: draft.submission_deadline || '',
             must_have_skills: draft.skills || [],
           },
         };
@@ -909,13 +915,12 @@ function HiringManagerDashboardContent() {
         // Creation already enters the configured workflow. Only call the
         // publish transition for an off-policy tenant if an older backend
         // returned the draft in a non-published state.
-        const workflowResult = !approvalRequired && res?.status !== 'Published'
-          ? await request(`/requisitions/${newReqId}/submit-for-approval`, { method: 'POST', token })
+        const normalizedStatus = String(res?.status || '').toLowerCase().replace(/[ _-]/g, '');
+        const workflowResult = !approvalRequired && normalizedStatus !== 'published'
+          ? await request(`/api/requisitions/${newReqId}/publish`, { method: 'POST', token })
           : res;
-        const isPublished = workflowResult?.status === 'Published';
-        const finalApprovalRequired = typeof workflowResult?.require_director_approval === 'boolean'
-          ? workflowResult.require_director_approval
-          : approvalRequired;
+        const isPublished = String(workflowResult?.status || '').toLowerCase().replace(/[ _-]/g, '') === 'published';
+        const finalApprovalRequired = approvalRequired;
         window.dispatchEvent(new CustomEvent('refresh-hm-data'));
         window.dispatchEvent(new CustomEvent('tj-requisitions-updated'));
 
@@ -972,6 +977,8 @@ function HiringManagerDashboardContent() {
 
     setEditingDraftData({
       ...draft,
+      duration: draft.duration || draft.contract_duration || '',
+      exact_target_start_date: /^\d{4}-\d{2}-\d{2}$/.test(draft.target_start_date || '') ? draft.target_start_date : '',
       messageId,
       skills: rawSkills,
       skillsText: rawSkills.join(', '),
@@ -991,6 +998,7 @@ function HiringManagerDashboardContent() {
 
     const mergedDraft = {
       ...updatedDraft,
+      target_start_date: updatedDraft.exact_target_start_date || updatedDraft.target_start_date,
       skills: parsedSkills,
       summary: finalSummary,
       job_description: finalSummary,
@@ -1026,7 +1034,13 @@ function HiringManagerDashboardContent() {
           experience_level: updatedDraft.experience,
           hiring_model: updatedDraft.hiring_model,
           work_mode: updatedDraft.work_mode || (['Remote', 'Hybrid', 'On-site'].includes(updatedDraft.hiring_model) ? updatedDraft.hiring_model : ''),
-          start_date: updatedDraft.target_start_date,
+          structured_role: {
+            start_date: mergedDraft.target_start_date,
+            submission_deadline: updatedDraft.submission_deadline || '',
+            target_start_date: mergedDraft.target_start_date,
+            duration: updatedDraft.duration || '',
+            contract_duration: updatedDraft.duration || '',
+          },
           must_have_skills: parsedSkills,
           job_description: finalSummary,
         },
@@ -1312,10 +1326,12 @@ function HiringManagerDashboardContent() {
       location: struct.location || req.location || 'Bangalore, India (Hybrid)',
       experience: struct.experience_level || req.experience_level || 'Senior (4-7 yrs)',
       employment_type: struct.employment_type || req.employment_type || 'Full-Time',
+      duration: struct.duration || struct.contract_duration || req.duration || req.contract_duration || '',
+      submission_deadline: struct.submission_deadline || req.submission_deadline || '',
       hiring_model: struct.hiring_model || 'To be confirmed',
       work_mode: struct.work_mode || '',
       openings: struct.openings || struct.headcount || req.openings || 1,
-      target_start_date: struct.target_start_date || req.target_start_date || 'Flexible',
+      target_start_date: struct.target_start_date || struct.start_date || req.target_start_date || 'Flexible',
       skills: skillsList,
       summary: struct.job_description || req.generated_jd_markdown || req.summary || `We are seeking an experienced ${req.title} to join our Engineering team and build scalable services.`,
       salary_range: struct.salary_range || req.salary_range || '₹12,00,000 - ₹18,00,000 per annum',
@@ -1323,7 +1339,7 @@ function HiringManagerDashboardContent() {
   }, []);
 
   // Real AI Agent Chat Trigger
-  const handleSendPrompt = async (promptText) => {
+  const handleSendPrompt = async (promptText, chatAction = null) => {
     const text = (promptText || promptInput).trim();
     if (!text || isAiTyping) return;
 
@@ -1346,6 +1362,7 @@ function HiringManagerDashboardContent() {
         timeout: 30000,
         body: {
           prompt: text,
+          ...(chatAction || {}),
           history: messages.slice(-10).map((m) => ({
             role: m.sender === 'user' ? 'user' : 'assistant',
             content: m.text + (m.requisitionDraft ? `\nDraft context: ${JSON.stringify(m.requisitionDraft)}` : ''),
@@ -1386,6 +1403,7 @@ function HiringManagerDashboardContent() {
       let candCards = null;
       const candidateAction = executedActions.find(
         (a) =>
+          a.tool === 'list_requisition_candidates' ||
           a.tool === 'list_shortlisted_candidates' ||
           a.tool === 'compare_shortlisted_candidates' ||
           a.tool === 'screen_candidates_summary'
@@ -2004,6 +2022,22 @@ function HiringManagerDashboardContent() {
         fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif",
       }}
     >
+      {/* Aura AI Upgrade Announcement Banner */}
+      <div className="bg-indigo-950 text-white px-4 py-2 text-xs flex items-center justify-between shrink-0 shadow-xs z-30 border-b border-indigo-900">
+        <div className="flex items-center gap-2">
+          <Sparkles size={14} className="text-indigo-300" />
+          <span>
+            <strong>Legacy Assistant Mode</strong>: You are using the classic hiring manager assistant. The upgraded <strong>Aura AI Assistant</strong> is now active.
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={() => navigate('/dashboard/hiring-manager')}
+          className="bg-white text-indigo-950 font-semibold px-2.5 py-1 rounded text-xs hover:bg-indigo-50 transition cursor-pointer"
+        >
+          Switch to Aura AI →
+        </button>
+      </div>
       {/* Mobile navigation keeps account details out of the action row. */}
       <header className="hm-mobile-header lg:hidden shrink-0 z-30">
         <div className="hm-mobile-nav">
@@ -2554,6 +2588,26 @@ function HiringManagerDashboardContent() {
 
                                   <div className="flex items-center text-xs">
                                     <div className="flex items-center gap-2 text-gray-500 w-36 shrink-0">
+                                      <Clock size={14} className="text-gray-400" />
+                                      <span>Contract Period</span>
+                                    </div>
+                                    <span className="font-semibold text-gray-900">
+                                      {msg.requisitionDraft.duration || msg.requisitionDraft.contract_duration || 'To be confirmed'}
+                                    </span>
+                                  </div>
+
+                                  <div className="flex items-center text-xs">
+                                    <div className="flex items-center gap-2 text-gray-500 w-36 shrink-0">
+                                      <Building2 size={14} className="text-gray-400" />
+                                      <span>Work Mode</span>
+                                    </div>
+                                    <span className="font-semibold text-gray-900">
+                                      {msg.requisitionDraft.work_mode || 'To be confirmed'}
+                                    </span>
+                                  </div>
+
+                                  <div className="flex items-center text-xs">
+                                    <div className="flex items-center gap-2 text-gray-500 w-36 shrink-0">
                                       <Globe size={14} className="text-gray-400" />
                                       <span>Hiring Model</span>
                                     </div>
@@ -2569,6 +2623,16 @@ function HiringManagerDashboardContent() {
                                     </div>
                                     <span className="font-semibold text-gray-900 truncate">
                                       {msg.requisitionDraft.openings}
+                                    </span>
+                                  </div>
+
+                                  <div className="flex items-center text-xs">
+                                    <div className="flex items-center gap-2 text-gray-500 w-36 shrink-0">
+                                      <CalendarCheck size={14} className="text-gray-400" />
+                                      <span>Application Due Date</span>
+                                    </div>
+                                    <span className="font-semibold text-gray-900">
+                                      {msg.requisitionDraft.submission_deadline || 'To be confirmed'}
                                     </span>
                                   </div>
 
@@ -2652,7 +2716,7 @@ function HiringManagerDashboardContent() {
 
                                       <button
                                         type="button"
-                                        onClick={() => handleSendPrompt(`Show candidates for ${msg.requisitionDraft.title}`)}
+                                        onClick={() => handleSendPrompt(`Show candidates for ${msg.requisitionDraft.title}`, msg.requisitionDraft.id ? { action: 'list_requisition_candidates', requisition_id: msg.requisitionDraft.id } : null)}
                                         className="px-3.5 py-2 rounded-xl bg-white border border-gray-200 text-xs font-semibold text-gray-800 hover:bg-gray-50 transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
                                       >
                                         <Users size={13} className="text-gray-500" />
@@ -2917,7 +2981,7 @@ function HiringManagerDashboardContent() {
                                         </button>
                                         <button
                                           type="button"
-                                          onClick={() => handleSendPrompt(`Show candidates for ${req.title}`)}
+                                          onClick={() => handleSendPrompt(`Show candidates for ${req.title}`, { action: 'list_requisition_candidates', requisition_id: req.id })}
                                           className="px-3 py-1.5 rounded-xl bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 text-xs font-semibold transition-colors cursor-pointer"
                                         >
                                           Candidates
@@ -3268,11 +3332,58 @@ function HiringManagerDashboardContent() {
                   <input
                     type="text"
                     value={editingDraftData.target_start_date || ''}
-                    onChange={(e) => setEditingDraftData((prev) => ({ ...prev, target_start_date: e.target.value }))}
+                    onChange={(e) => setEditingDraftData((prev) => ({ ...prev, target_start_date: e.target.value, exact_target_start_date: '' }))}
                     placeholder="e.g. November 2026"
                     className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-gray-900 placeholder:text-gray-400 text-xs focus:ring-2 focus:ring-black/10 focus:border-gray-500 outline-none transition-colors"
                   />
+                  <label htmlFor="draft-exact-start-date" className="block font-semibold text-gray-700 mt-3 mb-1">Exact Start Date (optional)</label>
+                  <input
+                    id="draft-exact-start-date"
+                    type="date"
+                    value={editingDraftData.exact_target_start_date || ''}
+                    onChange={(e) => setEditingDraftData((prev) => ({ ...prev, exact_target_start_date: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-gray-900 text-xs focus:ring-2 focus:ring-black/10 focus:border-gray-500 outline-none transition-colors"
+                  />
+                  <p className="mt-1 text-[11px] text-gray-500">Choose an exact date if known, or leave blank to use the target month above.</p>
                 </div>
+              </div>
+
+              <div>
+                <label htmlFor="draft-work-mode" className="block font-semibold text-gray-700 mb-1">Work Mode</label>
+                <select
+                  id="draft-work-mode"
+                  value={editingDraftData.work_mode || ''}
+                  onChange={(e) => setEditingDraftData((prev) => ({ ...prev, work_mode: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-gray-900 text-xs"
+                >
+                  <option value="">To be confirmed</option>
+                  <option value="On-site">On-site</option>
+                  <option value="Hybrid">Hybrid</option>
+                  <option value="Remote">Remote</option>
+                </select>
+              </div>
+
+              <div>
+                <label htmlFor="draft-application-deadline" className="block font-semibold text-gray-700 mb-1">Application Due Date</label>
+                <input
+                  id="draft-application-deadline"
+                  type="date"
+                  value={editingDraftData.submission_deadline || ''}
+                  onChange={(e) => setEditingDraftData((prev) => ({ ...prev, submission_deadline: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-gray-900 text-xs focus:ring-2 focus:ring-black/10 focus:border-gray-500 outline-none"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="draft-contract-period" className="block font-semibold text-gray-700 mb-1">Contract Period</label>
+                <input
+                  id="draft-contract-period"
+                  type="text"
+                  value={editingDraftData.duration || ''}
+                  onChange={(e) => setEditingDraftData((prev) => ({ ...prev, duration: e.target.value, contract_duration: e.target.value }))}
+                  placeholder="e.g. 6 months or 1 year"
+                  className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-gray-900 placeholder:text-gray-400 text-xs focus:ring-2 focus:ring-black/10 focus:border-gray-500 outline-none transition-colors"
+                />
               </div>
 
               <div>

@@ -37,6 +37,8 @@ class CandidateLoginRequest(BaseModel):
 
 
 class GoogleAuthRequest(BaseModel):
+    resume_base64: str | None = None
+    resume_filename: str | None = None
     credential: str | None = None
     access_token: str | None = None
     email: str | None = None
@@ -267,11 +269,26 @@ async def google_candidate_auth(payload: GoogleAuthRequest) -> dict:
             {"candidate_email": verified_email}, {"google_login_email": verified_email},
         ]})
 
+    uploaded_resume = None
+    if payload.resume_base64:
+        try:
+            if len(payload.resume_base64) > 14 * 1024 * 1024:
+                raise ValueError
+            contents = base64.b64decode(payload.resume_base64, validate=True)
+            filename = os.path.basename(payload.resume_filename or "")
+            if not contents or len(contents) > 10 * 1024 * 1024 or not filename.lower().endswith((".pdf", ".docx")):
+                raise ValueError
+            uploaded_resume = {"resume_pdf": base64.b64encode(contents).decode("ascii"), "filename": filename}
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="Upload a non-empty PDF or DOCX resume up to 10 MB.") from None
+    if not (candidate or {}).get("resume_pdf") and not uploaded_resume:
+        return {"status": "resume_required", "message": "Upload your resume to finish Google signup."}
+
     if candidate:
         # Prevent existing enterprise staff account from logging into candidate portal via google
         check_candidate_email_allowed(verified_email, is_registration=False)
         # Update google profile info if not set
-        updates = {"updated_at": now_utc}
+        updates = {"updated_at": now_utc, **(uploaded_resume or {})}
         if verified_picture and not candidate.get("picture"):
             updates["picture"] = verified_picture
         if google_sub and not candidate.get("google_sub"):
@@ -311,6 +328,7 @@ async def google_candidate_auth(payload: GoogleAuthRequest) -> dict:
             "created_at": now_utc,
             "updated_at": now_utc,
         }
+        candidate.update(uploaded_resume or {})
         db["candidates"].insert_one(candidate)
 
     # Generate candidate JWT token
@@ -392,7 +410,9 @@ async def candidate_register(
     summary: str = Form(""),
     resume: UploadFile | None = File(None),
 ) -> dict:
-    """Registers a new candidate talent profile with optional resume upload."""
+    """Register a candidate with a required, non-empty resume upload."""
+    if not resume or not resume.filename:
+        raise HTTPException(status_code=400, detail="A resume file is required to register.")
     email_clean = email.strip().lower()
     # Check if corporate or enterprise email domain is used
     check_candidate_email_allowed(email_clean, is_registration=True)
@@ -420,6 +440,8 @@ async def candidate_register(
 
     if resume and resume.filename:
         content = await resume.read()
+        if not content:
+            raise HTTPException(status_code=400, detail="Uploaded resume file is empty.")
         if content:
             filename = resume.filename
             file_type = "docx" if filename.lower().endswith(".docx") else "pdf"

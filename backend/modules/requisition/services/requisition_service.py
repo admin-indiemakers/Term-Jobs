@@ -15,7 +15,7 @@ from ...shared.db import _utcnow, get_session
 from .. import events
 from ..agent.graph import JobRequirementAgent
 from ..domain import models
-from ..domain.deadline import validate_submission_deadline, validate_start_date
+from ..domain.deadline import validate_submission_deadline, validate_start_date, normalize_start_date
 from .deadline_policy import enforce_approval_deadline
 from ..domain.schemas import (
     RequisitionStatus,
@@ -120,10 +120,11 @@ def _structured_role_from_prefill(intent: RoleIntent, prefill: dict | None) -> d
 
     role = StructuredRole(
         title=title,
+        job_description=prefill.get("job_description") or intent.description or "",
         must_have_skills=prefill.get("must_have_skills") or [],
         nice_to_have_skills=prefill.get("nice_to_have_skills") or [],
         seniority=seniority,
-        location=locations[0] if locations else (prefill.get("location") or ""),
+        location=locations[0] if locations else (prefill.get("primary_location") or prefill.get("location") or ""),
         rate_band=raw_rate_band,
         contract_duration=prefill.get("duration") or prefill.get("contract_duration") or "",
         confidence=0.75,
@@ -196,6 +197,8 @@ class RequisitionService:
         prefill = dict((intake_meta or {}).get("prefill") or {})
         validate_submission_deadline(prefill.get("submission_deadline"))
         validate_start_date(prefill.get("start_date"))
+        if "start_date" in prefill:
+            prefill["start_date"] = normalize_start_date(prefill["start_date"])
         saved_role = _structured_role_from_prefill(intent, prefill)
         with self.session_factory() as session:
             v_limit = saved_role.get("vendor_candidate_limit") if isinstance(saved_role, dict) else getattr(saved_role, "vendor_candidate_limit", 1)
@@ -208,6 +211,7 @@ class RequisitionService:
                 intent=intent.model_dump(),
                 intake_meta=intake_meta or {},
                 structured_role=saved_role,
+                generated_jd_markdown=(saved_role or {}).get("job_description") or intent.description or None,
                 vendor_candidate_limit=v_limit or 1,
             )
             session.add(req)
@@ -276,6 +280,9 @@ class RequisitionService:
         with self.session_factory() as session:
             req = session.get(models.Requisition, requisition_id)
             enforce_approval_deadline(session, req)
+            from ..domain.required_details import valid_work_mode
+            if not valid_work_mode((req.structured_role or {}).get("work_mode")):
+                raise ValueError("Choose a work mode (On-site, Hybrid, or Remote) before publishing.")
             if rate_card_variance(req.structured_role):
                 raise ValueError(
                     "Your ceiling is above the agreed rate card. HR must approve "

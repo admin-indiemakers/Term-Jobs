@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { API_BASE_URL, request, clearApiCache } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import NotificationBell from '../components/NotificationBell';
@@ -64,6 +64,12 @@ export default function SuperAdminCandidatePool() {
 
   // Modals and Inspector
   const [selectedCandidateForModal, setSelectedCandidateForModal] = useState(null);
+  const [applicationsCandidateId, setApplicationsCandidateId] = useState('');
+  const applicationsSection = useRef(null);
+  const viewApplications = (candidate) => {
+    setApplicationsCandidateId(candidate.id);
+    applicationsSection.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
   const [inspectCandidate, setInspectCandidate] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [deleteCandidateTarget, setDeleteCandidateTarget] = useState(null);
@@ -640,6 +646,35 @@ export default function SuperAdminCandidatePool() {
           </div>
         </div>
 
+        <section ref={applicationsSection} aria-label="Applied requisitions" className="border-b border-gray-200 bg-gray-50/70 p-4 sm:p-6 scroll-mt-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="flex items-center gap-2 text-sm font-bold text-gray-900"><Briefcase size={17} /> Applied Requisitions</h2>
+              <p className="mt-1 text-xs text-gray-500">Select a candidate to see every requisition they have applied to.</p>
+            </div>
+            <select aria-label="Candidate application history" value={applicationsCandidateId} onChange={e => setApplicationsCandidateId(e.target.value)} className="max-w-full rounded-xl border border-gray-300 bg-white p-2.5 text-xs text-gray-800">
+              <option value="">Choose a candidate</option>
+              {filteredCandidates.map(candidate => <option key={candidate.id} value={candidate.id}>{candidate.candidate_name} · {candidate.candidate_email || candidate.id}</option>)}
+            </select>
+          </div>
+          {(() => {
+            const candidate = filteredCandidates.find(item => item.id === applicationsCandidateId);
+            if (!candidate) return <p className="mt-4 text-xs text-gray-500">Choose a candidate above or use View applications in their row.</p>;
+            const applications = candidate.applications || [];
+            return <div className="mt-4">
+              <h3 className="mb-3 text-xs font-semibold text-gray-800">{candidate.candidate_name} · {applications.length} application{applications.length === 1 ? '' : 's'}</h3>
+              {!applications.length ? <p className="rounded-xl border border-gray-200 bg-white p-4 text-xs text-gray-500">This candidate is in the talent pool and has not applied to a requisition yet.</p> :
+                <div className="grid gap-3 lg:grid-cols-2">{applications.map(application => <article key={application.submission_id || application.requisition_id} className="rounded-xl border border-gray-200 bg-white p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div><p className="font-mono text-[11px] text-gray-500" title={application.requisition_id}>{application.requisition_id ? `REQ-${application.requisition_id.slice(0, 6).toUpperCase()}` : 'Requisition ID unavailable'}</p><h4 className="mt-1 text-sm font-semibold text-gray-900">{application.requisition_title}</h4><p className="mt-1 text-xs text-gray-500">{application.company_name}</p></div>
+                    <span className="rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700">{application.status || 'Submitted'}</span>
+                  </div>
+                  <p className="mt-3 text-xs text-gray-500">Applied: {application.applied_at && !Number.isNaN(Date.parse(application.applied_at)) ? new Date(application.applied_at).toLocaleDateString() : 'Date unavailable'}</p>
+                </article>)}</div>}
+            </div>;
+          })()}
+        </section>
+
         {loading ? (
           <div className="py-20 flex flex-col items-center justify-center gap-3 text-gray-400">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black"></div>
@@ -664,7 +699,7 @@ export default function SuperAdminCandidatePool() {
                   <tr className="border-b border-gray-100 bg-gray-50/60 text-gray-400 uppercase text-[10px] font-extrabold tracking-wider">
                     <th className="py-3 px-4">Candidate Profile</th>
                     <th className="py-3 px-4">Channel / Vendor</th>
-                    <th className="py-3 px-4">Target Role & Applications</th>
+                    <th className="py-3 px-4">Applied Requisitions</th>
                     <th className="py-3 px-4">Core Competencies</th>
                     <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
@@ -740,6 +775,7 @@ export default function SuperAdminCandidatePool() {
 
                         {/* Applications Column */}
                         <td className="py-3.5 px-4 min-w-[220px]">
+                          <button type="button" onClick={() => viewApplications(cand)} className="mb-2 flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-800 hover:bg-gray-100"><Briefcase size={13} /> View applications ({apps.length})</button>
                           {apps.length === 0 ? (
                             <div className="text-gray-400 text-[11px] italic">
                               General Talent Pool (No active requisition)
@@ -891,6 +927,7 @@ export default function SuperAdminCandidatePool() {
                       )}
                     </div>
 
+                    <button type="button" onClick={() => viewApplications(cand)} className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-800"><Briefcase size={13} /> View applications ({apps.length})</button>
                     {/* Applications / Target Role */}
                     {apps.length > 0 && (<div className="space-y-2 max-h-56 overflow-y-auto pr-1">
   {apps.map((app) => (

@@ -503,7 +503,7 @@ export default function OnboardingManagement() {
 
       {/* 4 Bento Metric Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 flex-shrink-0">
-        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex items-center justify-between">
+        <div className="bg-white border border-[#EBEBEB] rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex items-center justify-between">
           <div>
             <div className="text-[10.5px] font-bold text-gray-400 uppercase tracking-wider">Accepted Hires</div>
             <div className="text-xl font-black text-gray-900 mt-0.5">{metrics.accepted}</div>
@@ -514,7 +514,7 @@ export default function OnboardingManagement() {
           </div>
         </div>
 
-        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex items-center justify-between">
+        <div className="bg-white border border-[#EBEBEB] rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex items-center justify-between">
           <div>
             <div className="text-[10.5px] font-bold text-gray-400 uppercase tracking-wider">In Progress</div>
             <div className="text-xl font-black text-amber-600 mt-0.5">{metrics.inProgress}</div>
@@ -525,7 +525,7 @@ export default function OnboardingManagement() {
           </div>
         </div>
 
-        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex items-center justify-between">
+        <div className="bg-white border border-[#EBEBEB] rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex items-center justify-between">
           <div>
             <div className="text-[10.5px] font-bold text-gray-400 uppercase tracking-wider">Completed</div>
             <div className="text-xl font-black text-emerald-600 mt-0.5">{metrics.completed}</div>
@@ -536,7 +536,7 @@ export default function OnboardingManagement() {
           </div>
         </div>
 
-        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex items-center justify-between">
+        <div className="bg-white border border-[#EBEBEB] rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex items-center justify-between">
           <div>
             <div className="text-[10.5px] font-bold text-gray-400 uppercase tracking-wider">Open Issues</div>
             <div className="text-xl font-black text-rose-600 mt-0.5">{metrics.openIssues}</div>
@@ -550,19 +550,19 @@ export default function OnboardingManagement() {
 
       {/* Navigation Pills & Search Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 flex-shrink-0">
-        <div className="flex items-center gap-1.5 p-1 bg-white/40 backdrop-blur-xl border border-white/70 rounded-2xl shadow-2xs">
+        <div className="flex items-center gap-1.5 p-1 bg-white/40 backdrop-blur-xl border border-[#EBEBEB] rounded-2xl shadow-2xs">
 
           <button
             type="button"
             onClick={() => navigate('/dashboard/candidates/accepted')}
-            className="px-4 py-1.5 rounded-xl text-xs font-bold text-gray-600 hover:text-black hover:bg-white/60 transition cursor-pointer"
+            className="px-4 py-1.5 rounded-xl text-xs font-semibold bg-white text-gray-700 hover:text-black border border-[#E4E4E7] hover:border-[#D4D4D8] shadow-2xs transition cursor-pointer"
           >
             Accepted
           </button>
           <button
             type="button"
             onClick={() => navigate('/dashboard/candidates/onboarding')}
-            className="px-4 py-1.5 rounded-xl text-xs font-bold bg-black text-white shadow-xs transition cursor-pointer"
+            className="px-4 py-1.5 rounded-xl text-xs font-bold bg-[#111111] text-white border border-black shadow-xs transition cursor-pointer"
           >
             Onboarding
           </button>
@@ -575,13 +575,13 @@ export default function OnboardingManagement() {
             placeholder="Search candidate, requisition, vendor..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3.5 py-1.5 bg-white/50 backdrop-blur-xl border border-white/80 rounded-xl text-xs text-gray-800 placeholder-gray-400 focus:outline-hidden focus:ring-1 focus:ring-black shadow-2xs transition"
+            className="w-full pl-9 pr-3.5 py-1.5 bg-white/50 backdrop-blur-xl border border-[#E4E4E7] rounded-xl text-xs text-gray-800 placeholder-gray-400 focus:outline-hidden focus:ring-1 focus:ring-black shadow-2xs transition"
           />
         </div>
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 min-h-0 bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col overflow-hidden">
+      <div className="flex-1 min-h-0 bg-white border border-[#EBEBEB] rounded-2xl shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col overflow-hidden">
         {error && (
           <div className="m-3 p-3 bg-rose-50 border border-rose-200/80 rounded-xl text-xs text-rose-700 font-medium flex items-center gap-2">
             <AlertCircle size={15} />

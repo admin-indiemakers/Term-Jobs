@@ -47,7 +47,7 @@ from modules.identity.router import router as identity_router
 from modules.notifications.router import router as notifications_router
 from modules.notifications.services.notification_service import notify_requisition_published
 from modules.requisition.domain import models, schemas
-from modules.requisition.domain.deadline import validate_submission_deadline, validate_start_date, submission_deadline_passed
+from modules.requisition.domain.deadline import validate_submission_deadline, validate_start_date, normalize_start_date, submission_deadline_passed
 from modules.requisition.services.deadline_policy import enforce_approval_deadline, DeadlineExpired
 from modules.requisition.domain.state import StateMachine
 from modules.shared.db import get_session, init_db, _utcnow
@@ -61,6 +61,7 @@ from modules.workorder.router import router as workorder_router
 from modules.superadmin_agent.router import router as superadmin_agent_router
 from modules.company_admin_agent.router import router as company_admin_agent_router
 from modules.hiring_manager_agent.router import router as hiring_manager_agent_router
+from modules.aura_agent.router import router as aura_agent_router
 from modules.billing.router import router as vendor_billing_router
 from modules.superadmin_agent.voice_router import router as voice_router
 from modules.onboarding.offboarding_router import router as offboarding_router
@@ -182,28 +183,9 @@ async def vercel_routing_middleware(request: Request, call_next):
 
     print(f" [CORS LOG] {request.method} {request.url.path} | Origin: {origin} | AllowedHeaders: {allowed_headers}")
 
-    # Dynamic DB routing: detect whether the incoming request is targeting QA/Dev or Main
-    host = (request.headers.get("x-forwarded-host") or request.headers.get("host") or "").lower()
-    referer = (request.headers.get("referer") or "").lower()
-    origin_header = (origin or "").lower()
-    combined = f"{host} {referer} {origin_header}"
-
-    qa_dev_keywords = (
-        "-git-qa-", "-git-dev-", "git-qa", "git-dev",
-        "term-jobs-git-qa", "term-jobs-git-dev",
-        "term-jobs-qa", "term-jobs-dev",
-        "termjobs-qa", "termjobs-dev",
-        "-qa.", "-dev.",
-    )
-    if any(kw in combined for kw in qa_dev_keywords):
-        target_cluster = "dev_qa"
-    elif any(kw in combined for kw in ("termjobs.in", "term-jobs-git-main", "-git-main-")):
-        target_cluster = "main"
-    else:
-        from modules.shared.config import is_dev_qa_environment
-        target_cluster = "dev_qa" if is_dev_qa_environment() else "main"
-
-    from modules.shared.config import current_cluster_var
+    # Deployment branch is authoritative; client headers cannot select production.
+    from modules.shared.config import current_cluster_var, is_dev_qa_environment
+    target_cluster = "dev_qa" if is_dev_qa_environment() else "main"
     token = current_cluster_var.set(target_cluster)
 
     try:
@@ -340,8 +322,11 @@ app.include_router(workforce_router, prefix="/api", tags=["Workforce"])
 app.include_router(workforce_router, tags=["Workforce"])
 app.include_router(workorder_router)
 app.include_router(superadmin_agent_router)
+from modules.requisition.superadmin_router import router as superadmin_requisitions_router
+app.include_router(superadmin_requisitions_router)
 app.include_router(company_admin_agent_router)
 app.include_router(hiring_manager_agent_router)
+app.include_router(aura_agent_router, prefix="/api/v2/hm-agent", tags=["Aura AI Assistant"])
 app.include_router(vendor_billing_router)
 app.include_router(voice_router)
 app.include_router(offboarding_router, tags=["Offboarding"])
@@ -429,6 +414,8 @@ class RequisitionIn(BaseModel):
         start_date = (value or {}).get("start_date")
         if str(start_date or "").strip().lower() not in {"to be confirmed", "tbd"}:
             validate_start_date(start_date)
+            if value is not None and "start_date" in value:
+                value = {**value, "start_date": normalize_start_date(start_date)}
         return value
 
 
@@ -1506,7 +1493,9 @@ def _chat_requisition_missing_details(prefill: dict | None) -> list[str]:
         "location": prefill.get("primary_location") or prefill.get("location"),
         "experience_level": prefill.get("experience_band") or prefill.get("experience"),
         "hiring_model": prefill.get("hiring_model"),
+        "work_mode": prefill.get("work_mode"),
         "target_start_date": prefill.get("start_date") or prefill.get("target_start_date"),
+        "submission_deadline": prefill.get("submission_deadline"),
         "skills": prefill.get("must_have_skills") or prefill.get("skills"),
     })
 
@@ -2047,11 +2036,11 @@ def get_requisitions_overview_metrics(fresh: bool = False, current_user: User = 
 @app.get("/api/public/requisitions")
 def list_public_requisitions() -> list[dict]:
     """Public endpoint listing all live published requisitions across all companies."""
+    _auto_close_expired()
     _cached = _cache.get("public_requisitions")
     if _cached is not None:
         return _cached
 
-    _auto_close_expired()
     with get_session() as session:
         rows = (
             session.query(models.Requisition)
@@ -2095,11 +2084,7 @@ def list_public_requisitions() -> list[dict]:
             role = r.structured_role or {}
 
             # Calculate application due date / submission deadline
-            due_date = (
-                role.get("submission_deadline")
-                or _format_datetime(getattr(r, "shortlist_deadline", None))
-                or _add_48h(r.approved_at or r.created_at)
-            )
+            due_date = role.get("submission_deadline")
 
             # Do not show closed or expired roles
             if due_date:
@@ -2125,13 +2110,14 @@ def list_public_requisitions() -> list[dict]:
             # Sanitize role: public fields only, omit internal pricing/margin variances
             public_role = {
                 "title": role.get("title") or r.title,
+                "job_description": role.get("job_description") or role.get("role_summary") or role.get("summary") or (r.intent or {}).get("description") or "",
                 "job_family": role.get("job_family") or "General",
                 "must_have_skills": role.get("must_have_skills") or [],
                 "nice_to_have_skills": role.get("nice_to_have_skills") or [],
                 "seniority_level": role.get("seniority_level") or "Mid-Senior",
                 "experience": role.get("experience") or "3+ years",
                 "headcount": role.get("headcount") or 1,
-                "work_mode": role.get("work_mode") or "Remote",
+                "work_mode": role.get("work_mode") or "",
                 "location": role.get("location") or ["Remote"],
                 "engagement_type": role.get("engagement_type") or "Contract",
                 "duration": role.get("duration") or "6 months",
@@ -2157,7 +2143,7 @@ def list_public_requisitions() -> list[dict]:
                 "submission_deadline": due_date,
                 "application_due_date": due_date,
                 "structured_role": public_role,
-                "generated_jd_markdown": r.generated_jd_markdown or "",
+                "generated_jd_markdown": r.generated_jd_markdown or public_role["job_description"],
                 "created_at": _format_datetime(r.created_at),
             })
         _cache.set("public_requisitions", result, ttl=30)
@@ -2176,11 +2162,7 @@ def get_public_requisition(requisition_id: str) -> dict:
         role = r.structured_role or {}
 
         # Check deadline - do not show closed or expired roles
-        due_date = (
-            role.get("submission_deadline")
-            or _format_datetime(getattr(r, "shortlist_deadline", None))
-            or _add_48h(r.approved_at or r.created_at)
-        )
+        due_date = role.get("submission_deadline")
         if due_date:
             try:
                 now_utc = datetime.now(timezone.utc)
@@ -2214,13 +2196,14 @@ def get_public_requisition(requisition_id: str) -> dict:
 
         public_role = {
             "title": role.get("title") or r.title,
+            "job_description": role.get("job_description") or role.get("role_summary") or role.get("summary") or (r.intent or {}).get("description") or "",
             "job_family": role.get("job_family") or "General",
             "must_have_skills": role.get("must_have_skills") or [],
             "nice_to_have_skills": role.get("nice_to_have_skills") or [],
             "seniority_level": role.get("seniority_level") or "Mid-Senior",
             "experience": role.get("experience") or "3+ years",
             "headcount": role.get("headcount") or 1,
-            "work_mode": role.get("work_mode") or "Remote",
+            "work_mode": role.get("work_mode") or "",
             "location": role.get("location") or ["Remote"],
             "engagement_type": role.get("engagement_type") or "Contract",
             "duration": role.get("duration") or "6 months",
@@ -2246,7 +2229,7 @@ def get_public_requisition(requisition_id: str) -> dict:
             "submission_deadline": due_date,
             "application_due_date": due_date,
             "structured_role": public_role,
-            "generated_jd_markdown": r.generated_jd_markdown or "",
+            "generated_jd_markdown": r.generated_jd_markdown or public_role["job_description"],
             "created_at": _format_datetime(r.created_at),
         }
 
@@ -2289,11 +2272,7 @@ async def apply_to_requisition(
 
         # Verify application deadline has not passed
         s_role = req.structured_role or {}
-        due_date = (
-            s_role.get("submission_deadline")
-            or _format_datetime(getattr(req, "shortlist_deadline", None))
-            or _add_48h(req.approved_at or req.created_at)
-        )
+        due_date = s_role.get("submission_deadline")
         if due_date:
             try:
                 now_utc = datetime.now(timezone.utc)
@@ -2778,13 +2757,13 @@ def get_superadmin_candidate_pool(
     req_ids = list({s.get("requisition_id") for s in submissions if s.get("requisition_id")})
     req_map = {}
     if req_ids:
-        for r in db["requisitions"].find({"id": {"$in": req_ids}}, {"id": 1, "title": 1, "company_name": 1, "company_profile_id": 1, "client_name": 1}):
+        for r in db["requisitions"].find({"id": {"$in": req_ids}}, {"id": 1, "title": 1, "company_name": 1, "company_profile_id": 1, "client_name": 1, "status": 1, "is_deleted": 1}):
             comp_name = r.get("company_name") or r.get("client_name") or ""
             if not comp_name and r.get("company_profile_id"):
                 cp = db["company_profiles"].find_one({"id": r["company_profile_id"]}, {"name": 1})
                 if cp:
                     comp_name = cp.get("name", "")
-            req_map[r["id"]] = {"title": r.get("title", "Open Role"), "company": comp_name or "Enterprise Partner"}
+            req_map[r["id"]] = {"title": r.get("title", "Open Role"), "company": comp_name or "Enterprise Partner", "status": r.get("status"), "is_deleted": bool(r.get("is_deleted"))}
 
     # Consolidated index by email or ID
     cand_dict: dict[str, dict] = {}
@@ -2852,11 +2831,14 @@ def get_superadmin_candidate_pool(
         app_entry = {
             "submission_id": sub_id,
             "requisition_id": s.get("requisition_id"),
+            "requisition_status": req_info.get("status"),
+            "requisition_deleted": req_info.get("is_deleted", not bool(req_info)),
             "requisition_title": req_info.get("title") or s.get("requisition_title") or "Open Role",
             "company_name": req_info.get("company") or s.get("company_name") or "Enterprise Partner",
             "match_score": submission_match_score(s, submissions),
             "recommendation": s.get("recommendation"),
             "status": s.get("status") or "Submitted",
+            "sent_to_hiring_manager": bool(s.get("sent_to_hiring_manager_at") or s.get("manual_shortlist") or s.get("status") in ("Shortlisted", "Accepted", "Under Review", "Offer Extended", "Offer Accepted", "Hired")),
             "applied_at": created_val.isoformat() if hasattr(created_val, "isoformat") else str(created_val or ""),
         }
 

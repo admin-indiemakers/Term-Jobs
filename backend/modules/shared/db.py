@@ -67,8 +67,10 @@ def _create_mongo_client(url: str) -> MongoClient:
 
 
 def _get_client(cluster: str | None = None) -> MongoClient:
-    from .config import get_active_cluster, get_mongodb_url_for_cluster
+    from .config import get_active_cluster, get_mongodb_url_for_cluster, is_dev_qa_environment
     target_cluster = cluster if cluster in ("dev_qa", "main") else get_active_cluster()
+    if is_dev_qa_environment():
+        target_cluster = "dev_qa"
     if target_cluster not in _clients:
         url = get_mongodb_url_for_cluster(target_cluster)
         _clients[target_cluster] = _create_mongo_client(url)

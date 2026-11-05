@@ -128,6 +128,8 @@ def _fetch_company_website_context(website: str) -> str:
 
 class HiringManagerChatRequest(BaseModel):
     prompt: str
+    action: str | None = None
+    requisition_id: str | None = None
     history: list[dict] | None = None
     user_name: str | None = "Hiring Manager"
     user_role: str | None = "Hiring Manager"
@@ -145,6 +147,20 @@ def hiring_manager_agent_chat(
         raise HTTPException(status_code=403, detail='Company hiring staff access required')
     if not data.prompt.strip():
         raise HTTPException(status_code=400, detail="Prompt is required.")
+    if data.action is not None:
+        if data.action != 'list_requisition_candidates' or not data.requisition_id:
+            raise HTTPException(status_code=400, detail='A supported action and requisition ID are required.')
+        from modules.shared.db import db as raw_db
+        from .scope import hiring_scope, ScopedDatabase
+        from .read_actions import candidate_reply
+        with hiring_scope(raw_db, {'id': str(current_user.id), 'tenant_id': current_user.tenant_id}):
+            try:
+                result = candidate_reply(data.prompt, ScopedDatabase(raw_db), data.requisition_id)
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception('Hiring candidate action failed')
+                raise HTTPException(status_code=503, detail='Could not load candidate records. Please retry.')
+        return {**result, 'status': 'success'}
     if not model_available() and not is_hiring_request_in_scope(data.prompt, data.history):
         return {**scope_response(), 'status': 'success'}
     from modules.shared.db import db as raw_db

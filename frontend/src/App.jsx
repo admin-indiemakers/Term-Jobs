@@ -39,6 +39,7 @@ const HiringManagerTelegramLogin = lazyWithRetry(() => import('./pages/HiringMan
 const DirectorLogin = lazyWithRetry(() => import('./pages/DirectorLogin'));
 const RecruiterDashboard = lazyWithRetry(() => import('./pages/RecruiterDashboard'));
 const HiringManagerDashboard = lazyWithRetry(() => import('./pages/HiringManagerDashboard'));
+const HiringManagerAuraChat = lazyWithRetry(() => import('./pages/HiringManagerAuraChat'));
 const AdminDashboard = lazyWithRetry(() => import('./pages/AdminDashboard'));
 const ManageDirectors = lazyWithRetry(() => import('./pages/ManageDirectors'));
 const ManageHiringManagers = lazyWithRetry(() => import('./pages/ManageHiringManagers'));
@@ -79,6 +80,7 @@ const TimesheetApprovals = lazyWithRetry(() => import('./pages/workforce/Timeshe
 const ExpenseApprovals = lazyWithRetry(() => import('./pages/workforce/ExpenseApprovals'));
 const Workers = lazyWithRetry(() => import('./pages/workforce/Workers'));
 const AdminAccounts = lazyWithRetry(() => import('./pages/AdminAccounts'));
+const SuperAdminRequisitions = lazyWithRetry(() => import('./pages/SuperAdminRequisitions'));
 const SuperAdminCandidatePool = lazyWithRetry(() => import('./pages/SuperAdminCandidatePool'));
 const SuperAdminCandidateManagement = lazyWithRetry(() => import('./pages/SuperAdminCandidateManagement'));
 const SuperAdminOutreachControl = lazyWithRetry(() => import('./pages/SuperAdminOutreachControl'));
@@ -321,7 +323,8 @@ export default function App() {
           >
             <Route index element={<DashboardIndex />} />
             <Route path="interviews" element={<HiringManagerInterviews />} />
-            <Route path="hiring-manager" element={<HiringManagerDashboard />} />
+            <Route path="hiring-manager" element={<HiringManagerAuraChat />} />
+              <Route path="hiring-manager/legacy" element={<HiringManagerDashboard />} />
             <Route path="hiring-manager/chat" element={<HiringManagerChat />} />
             <Route path="requisitions" element={<RequisitionRouteGuard><RequisitionOverview /></RequisitionRouteGuard>} />
             <Route path="requisitions/published" element={<RequisitionRouteGuard><RequisitionOverview section="published" /></RequisitionRouteGuard>} />
@@ -388,6 +391,7 @@ export default function App() {
             <Route path="finance/approvals" element={<FinanceApprovals />} />
             <Route path="finance/profile" element={<UserProfileSettings portalTitle="Finance Officer Profile" />} />
             <Route path="superadmin" element={<SuperAdminDashboard />} />
+            <Route path="superadmin/requisitions" element={<SuperAdminRouteGuard><SuperAdminRequisitions /></SuperAdminRouteGuard>} />
             <Route path="superadmin/chat" element={<AiChat />} />
             <Route path="superadmin/onboard" element={<OnboardCompany />} />
             <Route path="superadmin/onboard-vendor" element={<OnboardVendor />} />

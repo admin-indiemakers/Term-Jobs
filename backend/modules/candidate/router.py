@@ -1684,6 +1684,39 @@ def get_shortlist_quota(
         }
 
 
+@router.post("/{submission_id}/direct-shortlist")
+def direct_shortlist_candidate(submission_id: str, body: dict, current_user: User = Depends(get_current_user)):
+    """Explicit Super Admin override to send one existing application to its manager."""
+    if current_user.role != 'Super Admin':
+        raise HTTPException(403, 'Super Admin access required.')
+    from modules.shared.db import db, _utcnow
+    from modules.shared.cache import cache
+    query = {'id': submission_id, 'requisition_id': body.get('requisition_id')}
+    submission = db.candidate_submissions.find_one(query)
+    if not submission or not body.get('requisition_id'):
+        raise HTTPException(404, 'Candidate application not found for this requisition.')
+    status = submission.get('status')
+    # Delivery history survives later workflow changes and requisition closure.
+    if submission.get('sent_to_hiring_manager_at') or submission.get('manual_shortlist') or status in ('Shortlisted', 'Accepted', 'Under Review', 'Offer Extended', 'Offer Accepted', 'Hired'):
+        return {'id': submission_id, 'status': status, 'sent_to_hiring_manager': True, 'message': 'Candidate already sent to the hiring manager.'}
+    req = db.requisitions.find_one({'id': submission['requisition_id']})
+    if not req or req.get('is_deleted') or req.get('status') in ('Closed', 'Cancelled', 'Rejected', 'Draft'):
+        raise HTTPException(409, 'This requisition is not available for shortlisting.')
+    if status in ('Rejected', 'Withdrawn'):
+        raise HTTPException(409, 'Rejected or withdrawn applications cannot be sent directly.')
+    now = _utcnow()
+    result = db.candidate_submissions.update_one({**query, 'status': status}, {'$set': {
+        'status': 'Shortlisted', 'manual_shortlist': True,
+        'manual_shortlist_reason': 'Directly shortlisted by Super Admin',
+        'manual_shortlisted_by': current_user.id, 'shortlisted_at': now, 'updated_at': now,
+        'sent_to_hiring_manager_at': now,
+    }})
+    if not result.matched_count:
+        raise HTTPException(409, 'Application changed. Refresh and try again.')
+    cache.clear()
+    return {'id': submission_id, 'status': 'Shortlisted', 'sent_to_hiring_manager': True, 'message': 'Candidate sent to the hiring manager shortlist.'}
+
+
 @router.post("/shortlist")
 def shortlist_candidate(
     body: dict,
