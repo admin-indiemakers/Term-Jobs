@@ -2159,32 +2159,15 @@ export default function OpenRolesPage({ enabled = true }) {
                 </div>
               ) : (
                 <div className="flex items-center gap-1.5 sm:gap-2.5">
-                  {/* Candidate Auth Pill (Google Icon + Divider + Candidate Sign In) */}
-                  <div className="inline-flex items-center px-2 sm:px-2.5 py-1 rounded-full border border-white/15 bg-white/[0.04] hover:border-white/30 backdrop-blur-md transition-all">
-                    {/* Google Sign In Trigger */}
-                    <button
-                      type="button"
-                      onClick={() => handleGoogleSignIn()}
-                      disabled={authLoading}
-                      className="p-0.5 text-white hover:opacity-85 transition-opacity cursor-pointer disabled:opacity-50 flex items-center justify-center"
-                      title={authLoading ? 'Signing in...' : 'Sign in with Google'}
-                    >
-                      <GoogleIcon className="w-3.5 h-3.5" />
-                    </button>
-
-                    {/* Vertical Divider */}
-                    <div className="h-3 w-px bg-white/20 mx-1.5" />
-
-                    {/* Candidate Email/Password Login Trigger */}
-                    <button
-                      type="button"
-                      onClick={() => { setAuthModalTab('login'); setShowAuthModal(true); }}
-                      className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-medium text-white/90 hover:text-white transition cursor-pointer"
-                    >
-                      <User size={11} className="text-white/70" />
-                      <span>Sign In</span>
-                    </button>
-                  </div>
+                  {/* Candidate Sign In Trigger */}
+                  <button
+                    type="button"
+                    onClick={() => { setAuthModalTab('login'); setShowAuthModal(true); }}
+                    className="inline-flex items-center gap-1 px-2.5 sm:px-3 py-1 rounded-full border border-white/15 bg-white/[0.04] hover:bg-white/[0.08] hover:border-white/30 text-white/90 hover:text-white text-[10px] sm:text-[11px] font-medium transition backdrop-blur-md active:scale-95 cursor-pointer"
+                  >
+                    <User size={11} className="text-white/70" />
+                    <span>Sign In</span>
+                  </button>
 
                   {/* Staff Portal Link */}
                   <Link
