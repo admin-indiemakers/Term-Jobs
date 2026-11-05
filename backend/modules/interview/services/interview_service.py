@@ -170,87 +170,34 @@ def send_interview_invitation_email(
     if candidate_portal_link:
         candidate_portal_link = re.sub(r"https?://(localhost|127\.0\.0\.1)(:\d+)?", domain, candidate_portal_link)
     
-    join_label = "🤖 Start AI Interview" if "/interview/ai/" in meeting_link else "🎥 Join TermJobs Video Interview Room"
+    from html import escape
+    from modules.shared.email_layout import light_email, email_paragraph, email_details, email_note, email_button, email_link
+
+    is_ai = "/interview/ai/" in meeting_link
     subject = f"Interview Invitation: {round_name} for {requisition_title} at {company_name}"
-    
-    html = f"""<!DOCTYPE html>
-<html>
-<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #1e293b;">
-  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
-    <tr>
-      <td style="padding: 24px 32px; background-color: #0f172a; text-align: left;">
-        <span style="font-size: 20px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px;">TermJobs</span>
-        <span style="font-size: 11px; font-weight: 700; color: #38bdf8; background: rgba(56,189,248,0.15); padding: 3px 8px; border-radius: 6px; margin-left: 8px; text-transform: uppercase;">Interview Portal</span>
-      </td>
-    </tr>
-    <tr>
-      <td style="padding: 32px;">
-        <h2 style="font-size: 20px; font-weight: 800; color: #0f172a; margin: 0 0 12px 0;">Interview Invitation Confirmed</h2>
-        <p style="font-size: 14px; line-height: 1.6; color: #475569; margin: 0 0 20px 0;">
-          Hi <strong>{candidate_name}</strong>,<br/>
-          You have been scheduled for <strong>{round_name}</strong> for the <strong>{requisition_title}</strong> role at <strong>{company_name}</strong>.
-        </p>
-
-        <!-- Meeting Details Box -->
-        <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
-          <table width="100%" border="0" cellspacing="0" cellpadding="6">
-            <tr>
-              <td style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase; width: 35%;">Role</td>
-              <td style="font-size: 14px; color: #0f172a; font-weight: 800;">{requisition_title}</td>
-            </tr>
-            <tr>
-              <td style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Hiring Company</td>
-              <td style="font-size: 14px; color: #0f172a; font-weight: 700;">{company_name}</td>
-            </tr>
-            <tr>
-              <td style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Scheduled Date</td>
-              <td style="font-size: 14px; color: #0f172a; font-weight: 700;">📅 {scheduled_date or 'To Be Decided'}</td>
-            </tr>
-            <tr>
-              <td style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Scheduled Time</td>
-              <td style="font-size: 14px; color: #0f172a; font-weight: 700;">⏰ {scheduled_time or 'TBD'} ({duration_minutes} minutes)</td>
-            </tr>
-            <tr>
-              <td style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Candidate Passcode</td>
-              <td style="font-size: 16px; color: #059669; font-weight: 900; font-family: monospace;">🔑 {passcode}</td>
-            </tr>
-          </table>
-        </div>
-
-        <!-- Link Expiration Banner -->
-        <div style="background-color: #fef2f2; border: 1px solid #fecaca; border-radius: 10px; padding: 12px 16px; margin-bottom: 24px; font-size: 13px; color: #991b1b; line-height: 1.5;">
-          ⏱️ <strong>Link Expiration Notice:</strong> This AI interview link and passcode are strictly valid for <strong>10 hours</strong> from delivery. Please complete your interview within this window.
-        </div>
-
-        <!-- Join Video Room Button -->
-        <div style="text-align: center; margin-bottom: 24px;">
-          <a href="{meeting_link}" target="_blank" style="background-color: #0f172a; color: #ffffff; font-size: 14px; font-weight: 800; text-decoration: none; padding: 14px 28px; border-radius: 10px; display: inline-block; box-shadow: 0 4px 10px rgba(15,23,42,0.25);">
-            {join_label}
-          </a>
-        </div>
-
-        <!-- Secondary Portal Link -->
-        <div style="text-align: center; margin-bottom: 24px;">
-          <a href="{candidate_portal_link}" target="_blank" style="color: #2563eb; font-size: 13px; font-weight: 700; text-decoration: underline;">
-            Or log in to your Candidate Interview Portal
-          </a>
-        </div>
-
-        {f'<div style="background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 12px 16px; border-radius: 6px; font-size: 13px; color: #92400e; margin-bottom: 20px;"><strong>Special Instructions:</strong> {instructions}</div>' if instructions else ''}
-
-        <div style="font-size: 12px; color: #94a3b8; line-height: 1.5; border-top: 1px solid #e2e8f0; padding-top: 16px;">
-          Please join a few minutes prior to the scheduled time using Google Chrome, Safari, or Microsoft Edge. Grant camera and microphone access when prompted.
-        </div>
-      </td>
-    </tr>
-    <tr>
-      <td style="padding: 16px; background-color: #f8fafc; border-top: 1px solid #e2e8f0; text-align: center; font-size: 11px; color: #94a3b8;">
-        TermJobs AI Talent & Interview Platform &copy; {datetime.now().year}
-      </td>
-    </tr>
-  </table>
-</body>
-</html>"""
+    content = email_paragraph(f"Hi {escape(candidate_name or 'Candidate')},")
+    content += email_paragraph(
+        f"You’re invited to <strong>{escape(round_name)}</strong> for the "
+        f"<strong>{escape(requisition_title)}</strong> role at <strong>{escape(company_name)}</strong>. "
+        "Your interview details are below."
+    )
+    content += email_details([
+        ('Position', requisition_title), ('Company', company_name), ('Interview', round_name),
+        ('Date', scheduled_date or 'To be confirmed'), ('Time', scheduled_time or 'To be confirmed'),
+        ('Duration', f'{duration_minutes} minutes'), ('Your passcode', passcode),
+    ])
+    if is_ai:
+        content += email_note('Your interview window', 'Your AI interview link and passcode are valid for 10 hours from delivery. Complete your interview within this window.')
+    if instructions:
+        content += email_note('Before your interview', instructions)
+    content += email_button('Start AI interview' if is_ai else 'Join interview', meeting_link)
+    content += email_paragraph(email_link('Open candidate interview portal', candidate_portal_link), secondary=True)
+    content += email_paragraph('Use Chrome, Safari, or Microsoft Edge. Choose a quiet place and allow camera and microphone access when prompted.', secondary=True)
+    html = light_email(
+        title='Your interview invitation', category='Candidate interviews', content=content,
+        preheader=f'Your {round_name} invitation for {requisition_title} at {company_name}.',
+        footer='You received this email because the hiring team invited you to an interview through TermJobs.',
+    )
 
     return send_email_via_gmail(candidate_email, subject, html)
 
@@ -291,144 +238,36 @@ def send_interviewer_invitation_email(
 
     subject = f"Interview Scheduled: {round_name} with {candidate_name} for {requisition_title}"
 
-    resume_row = ""
-    if candidate_resume_link:
-        resume_row = f"""
-            <tr>
-              <td style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Resume</td>
-              <td style="font-size: 14px; font-weight: 700;">
-                <a href="{candidate_resume_link}" target="_blank" style="color: #0284c7; text-decoration: underline;">📄 View Candidate Resume</a>
-              </td>
-            </tr>
-        """
+    from html import escape
+    from modules.shared.email_layout import light_email, email_paragraph, email_details, email_note, email_button, email_link
 
-    score_row = ""
-    if candidate_match_score:
-        score_row = f"""
-            <tr>
-              <td style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Match Score</td>
-              <td style="font-size: 14px; color: #059669; font-weight: 800;">{candidate_match_score}% Match</td>
-            </tr>
-        """
-
-    phone_row = ""
-    if candidate_phone and candidate_phone != "Not provided":
-        phone_row = f"""
-            <tr>
-              <td style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Phone</td>
-              <td style="font-size: 14px; color: #0f172a; font-weight: 700;">{candidate_phone}</td>
-            </tr>
-        """
-
-    message_content = instructions.strip() if instructions and instructions.strip() else (
-        f"You have been assigned to conduct the {round_name} session for candidate {candidate_name} applying for the {requisition_title} role at {company_name}. "
-        "Please review the candidate's profile, resume, and experience prior to the interview. "
-        "Join the session 5 minutes prior to the scheduled time using the 'Enter Interview Room' button below. "
-        "During or following the interview, submit your scorecard and qualitative assessment in the platform."
+    rows = [('Candidate', candidate_name), ('Candidate email', candidate_email)]
+    if candidate_phone and candidate_phone != 'Not provided':
+        rows.append(('Phone', candidate_phone))
+    if candidate_match_score is not None:
+        rows.append(('Resume match', f'{candidate_match_score}%'))
+    rows += [
+        ('Position', requisition_title), ('Company', company_name),
+        ('Interview', f"{round_name} ({round_type or 'Interview'})"),
+        ('Date', scheduled_date or 'To be confirmed'), ('Time', scheduled_time or 'To be confirmed'),
+        ('Duration', f'{duration_minutes} minutes'), ('Format', 'Online video interview'),
+    ]
+    content = email_paragraph(f"Hi {escape(interviewer_name or 'Interviewer')},")
+    content += email_paragraph(
+        f"You’re assigned to interview <strong>{escape(candidate_name)}</strong> for the "
+        f"<strong>{escape(requisition_title)}</strong> role at <strong>{escape(company_name)}</strong>."
     )
-    instructions_block = f"""
-    <div style="background-color: #f0fdf4; border-left: 4px solid #16a34a; padding: 14px 18px; border-radius: 8px; font-size: 13px; color: #166534; margin-bottom: 24px; line-height: 1.6;">
-      <strong>Message from Hiring Team & Interview Focus:</strong><br/>
-      <div style="margin-top: 6px; color: #15803d;">{message_content}</div>
-    </div>
-    """
-
-    html = f"""<!DOCTYPE html>
-<html>
-<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #1e293b;">
-  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
-    <tr>
-      <td style="padding: 24px 32px; background-color: #0f172a; text-align: left;">
-        <span style="font-size: 20px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px;">TermJobs</span>
-        <span style="font-size: 11px; font-weight: 700; color: #38bdf8; background: rgba(56,189,248,0.15); padding: 3px 8px; border-radius: 6px; margin-left: 8px; text-transform: uppercase;">Interviewer Assignment</span>
-      </td>
-    </tr>
-    <tr>
-      <td style="padding: 32px;">
-        <h2 style="font-size: 20px; font-weight: 800; color: #0f172a; margin: 0 0 12px 0;">Interview Scheduled & Assigned</h2>
-        <p style="font-size: 14px; line-height: 1.6; color: #475569; margin: 0 0 20px 0;">
-          Hi <strong>{interviewer_name}</strong>,<br/>
-          You have been confirmed as the interviewer for <strong>{round_name}</strong> with candidate <strong>{candidate_name}</strong> for the <strong>{requisition_title}</strong> role at <strong>{company_name}</strong>.
-        </p>
-
-        <!-- Meeting & Candidate Details Box -->
-        <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
-          <table width="100%" border="0" cellspacing="0" cellpadding="6">
-            <tr>
-              <td style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase; width: 35%;">Candidate</td>
-              <td style="font-size: 14px; color: #0f172a; font-weight: 800;">{candidate_name}</td>
-            </tr>
-            <tr>
-              <td style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Candidate Email</td>
-              <td style="font-size: 14px; color: #0f172a; font-weight: 700;">{candidate_email}</td>
-            </tr>
-            {phone_row}
-            {score_row}
-            {resume_row}
-            <tr>
-              <td style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Role</td>
-              <td style="font-size: 14px; color: #0f172a; font-weight: 800;">{requisition_title}</td>
-            </tr>
-            <tr>
-              <td style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Hiring Company</td>
-              <td style="font-size: 14px; color: #0f172a; font-weight: 700;">{company_name}</td>
-            </tr>
-            <tr>
-              <td style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Round Name</td>
-              <td style="font-size: 14px; color: #0f172a; font-weight: 800;">{round_name} ({round_type or 'Interview'})</td>
-            </tr>
-            <tr>
-              <td style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Scheduled Date</td>
-              <td style="font-size: 14px; color: #0f172a; font-weight: 700;">📅 {scheduled_date or 'To Be Decided'}</td>
-            </tr>
-            <tr>
-              <td style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Scheduled Time</td>
-              <td style="font-size: 14px; color: #0f172a; font-weight: 700;">⏰ {scheduled_time or 'TBD'} ({duration_minutes} minutes)</td>
-            </tr>
-            <tr>
-              <td style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Format</td>
-              <td style="font-size: 14px; color: #0f172a; font-weight: 700;">🎥 Online LiveKit Video Meeting (TermJobs)</td>
-            </tr>
-          </table>
-        </div>
-
-        {instructions_block}
-
-        <!-- Join Meeting Button -->
-        <div style="text-align: center; margin-bottom: 12px;">
-          <a href="{meeting_link}" target="_blank" style="background-color: #0f172a; color: #ffffff; font-size: 14px; font-weight: 800; text-decoration: none; padding: 14px 28px; border-radius: 10px; display: inline-block; box-shadow: 0 4px 10px rgba(15,23,42,0.25);">
-            🎥 Enter Interview Room as Interviewer
-          </a>
-        </div>
-        <p style="font-size: 12px; color: #64748b; text-align: center; margin: 0 0 24px 0; word-break: break-all;">
-          Direct Room Link: <a href="{meeting_link}" target="_blank" style="color: #0284c7; text-decoration: underline;">{meeting_link}</a>
-        </p>
-
-        <!-- Secondary Portal Link -->
-        <div style="text-align: center; margin-bottom: 24px; padding: 12px; background: #f8fafc; border-radius: 8px; border: 1px dashed #cbd5e1;">
-          <a href="{staff_portal_link}" target="_blank" style="color: #2563eb; font-size: 13px; font-weight: 700; text-decoration: underline;">
-            📋 Open Interviewer Staff Portal & Evaluation Forms
-          </a>
-        </div>
-
-        <div style="background-color: #f1f5f9; border-radius: 10px; padding: 14px 18px; margin-bottom: 20px; font-size: 12px; color: #475569; line-height: 1.6;">
-          <strong>Interviewer Checklist:</strong>
-          <ul style="margin: 6px 0 0 0; padding-left: 20px;">
-            <li>Please enter the interview room 5 minutes prior to the start time.</li>
-            <li>Ensure camera and microphone permissions are granted in your browser.</li>
-            <li>You can score competencies and submit evaluation rubrics directly within the room or via the staff portal.</li>
-          </ul>
-        </div>
-      </td>
-    </tr>
-    <tr>
-      <td style="padding: 16px; background-color: #f8fafc; border-top: 1px solid #e2e8f0; text-align: center; font-size: 11px; color: #94a3b8;">
-        TermJobs AI Talent & Interview Platform &copy; {datetime.now().year}
-      </td>
-    </tr>
-  </table>
-</body>
-</html>"""
+    content += email_details(rows)
+    if candidate_resume_link:
+        content += email_paragraph(email_link('View candidate resume', candidate_resume_link))
+    content += email_note('Prepare for your interview', instructions.strip() if instructions and instructions.strip() else 'Review the candidate’s profile and resume, then join five minutes before the scheduled time. Allow camera and microphone access and submit your scorecard after the interview.')
+    content += email_button('Enter interview room', meeting_link)
+    content += email_paragraph(email_link('Open interviewer portal & evaluation forms', staff_portal_link), secondary=True)
+    html = light_email(
+        title='Your interview assignment', category='Interviewer scheduling', content=content,
+        preheader=f'{round_name} with {candidate_name} for {requisition_title}.',
+        footer='You received this email because you were assigned an interview through TermJobs.',
+    )
 
     return send_email_via_gmail(interviewer_email, subject, html)
 

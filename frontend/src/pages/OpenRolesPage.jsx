@@ -1,4 +1,5 @@
 import { loadOpenRoles } from '../utils/loadOpenRoles';
+import { trackRoleView } from '../utils/trackRoleView';
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
@@ -189,6 +190,13 @@ export default function OpenRolesPage({ enabled = true }) {
 
   // Modal states
   const [selectedJob, setSelectedJob] = useState(null);
+  const viewedJobId = selectedJob?.id;
+  const viewerToken = candidateAuth?.candidateToken;
+  useEffect(() => {
+    if (!viewedJobId) return;
+    // Analytics failure must not prevent reading or applying to a role.
+    trackRoleView(API_BASE_URL, viewedJobId, viewerToken).catch(() => {});
+  }, [viewedJobId, viewerToken]);
   const [modalActiveTab, setModalActiveTab] = useState('job_details');
   const [expandedSections, setExpandedSections] = useState({
     company: false,

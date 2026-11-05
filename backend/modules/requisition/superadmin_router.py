@@ -1,8 +1,9 @@
 """Platform-managed requisitions posted on behalf of client companies."""
 from typing import Literal
+from datetime import timezone
 from uuid import NAMESPACE_URL, uuid5
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, TypeAdapter, field_validator
 from pymongo.errors import DuplicateKeyError
 
@@ -21,7 +22,57 @@ def require_superadmin(user: User = Depends(get_current_user)):
 
 
 router = APIRouter(prefix='/api/superadmin/requisitions', tags=['Super Admin Requisitions'], dependencies=[Depends(require_superadmin)])
+public_views_router = APIRouter(prefix='/api/public/requisitions', tags=['Role views'])
 MANAGED = {'intake_meta.intake_mode': 'superadmin_post'}
+
+
+class RoleViewIn(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    visitor_id: str = Field(pattern=r'^[a-zA-Z0-9-]{1,100}$')
+
+
+async def optional_viewer(authorization: str | None = Header(None)):
+    if not authorization:
+        return None
+    from modules.candidate_profile.router import get_current_candidate
+    return await get_current_candidate(authorization)
+
+
+@public_views_router.post('/{requisition_id}/views', status_code=204)
+def record_role_view(requisition_id: str, body: RoleViewIn, candidate=Depends(optional_viewer)):
+    row = db.requisitions.find_one({'id': requisition_id, 'status': 'Published'}, {'structured_role': 1})
+    if not row or submission_deadline_passed(row.get('structured_role') or {}):
+        raise HTTPException(404, 'Published job requisition not found.')
+    email = (candidate.get('candidate_email') or '').strip().lower() if candidate else ''
+    identity = f'candidate:{email}' if email else f'anonymous:{body.visitor_id}'
+    view_id = str(uuid5(NAMESPACE_URL, f'role-view:{requisition_id}:{identity}'))
+    now = _utcnow()
+    # Deterministic primary key prevents refreshes/concurrent opens from adding viewers.
+    db.requisition_views.update_one({'_id': view_id}, {
+        '$setOnInsert': {'requisition_id': requisition_id, 'first_viewed_at': now},
+        '$set': {'last_viewed_at': now, 'candidate_id': candidate.get('id') if candidate else None,
+                 'candidate_email': email, 'candidate_name': (candidate.get('candidate_name') or 'Candidate') if candidate else ''},
+    }, upsert=True)
+
+
+@router.get('/{requisition_id}/viewers')
+def list_viewers(requisition_id: str, page: int = Query(1, ge=1), user=Depends(require_superadmin)):
+    if not db.requisitions.find_one({'id': requisition_id, **MANAGED}, {'_id': 1}):
+        raise HTTPException(404, 'Managed requisition not found.')
+    query = {'requisition_id': requisition_id}
+    total = db.requisition_views.count_documents(query)
+    anonymous = db.requisition_views.count_documents({**query, 'candidate_email': ''})
+    applied = {str(row.get('candidate_email') or '').strip().lower() for row in
+               db.candidate_submissions.find(query, {'candidate_email': 1})}
+    page_size = 50
+    rows = db.requisition_views.find(query).sort([('last_viewed_at', -1), ('_id', 1)]).skip((page - 1) * page_size).limit(page_size)
+    return {'total': total, 'anonymous_count': anonymous, 'identified_count': total - anonymous,
+            'page': page, 'page_size': page_size, 'has_more': page * page_size < total,
+            'viewers': [{'id': row['_id'], 'candidate_name': row.get('candidate_name') or 'Anonymous visitor',
+                         'candidate_email': row.get('candidate_email') or '',
+                         'first_viewed_at': row['first_viewed_at'].replace(tzinfo=timezone.utc).isoformat(),
+                         'last_viewed_at': row['last_viewed_at'].replace(tzinfo=timezone.utc).isoformat(),
+                         'has_applied': bool(row.get('candidate_email') and row['candidate_email'] in applied)} for row in rows]}
 
 
 class PostingDetails(BaseModel):
@@ -90,7 +141,8 @@ def posting_view(row):
     private = db.requisition_internal_links.find_one({'_id': row['id']}) or {}
     return {'id': row['id'], 'title': row.get('title'), 'company_name': row.get('company_name'),
             'status': row.get('status'), 'structured_role': role, 'internal_link': private.get('url', ''),
-            'created_at': row.get('created_at'), 'applicants_count': db.candidate_submissions.count_documents({'requisition_id': row['id']})}
+            'created_at': row.get('created_at'), 'applicants_count': db.candidate_submissions.count_documents({'requisition_id': row['id']}),
+            'viewers_count': db.requisition_views.count_documents({'requisition_id': row['id']})}
 
 
 @router.get('')
