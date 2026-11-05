@@ -609,9 +609,10 @@ function RequisitionDetailDrawer({
             <button
               type="button"
               onClick={() => setActiveTab('overview')}
-              className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer whitespace-nowrap ${activeTab === 'overview'
-                  ? 'bg-black text-white shadow-xs'
-                  : 'text-gray-600 hover:text-black hover:bg-gray-100'
+              className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer whitespace-nowrap ${
+                  activeTab === 'overview'
+                    ? 'bg-black text-white border border-black shadow-xs'
+                    : 'bg-white text-gray-700 hover:text-black border border-[#E4E4E7] hover:border-[#D4D4D8] shadow-2xs'
                 }`}
             >
               Overview
@@ -1622,6 +1623,34 @@ export default function RequisitionOverview({ section }) {
         </div>}
       </div>
 
+      {/* -- 2. SECTION PILL TABS WITH FADED LINE BORDERS -- */}
+      <div className="shrink-0 flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5">
+        <div className="inline-flex items-center gap-1.5 p-1 rounded-2xl bg-[#F4F4F5] border border-[#E4E4E7] shadow-2xs">
+          {Object.entries(SECTION_CONFIG).map(([key, cfg]) => {
+            const isActive = activeTab === key;
+            const IconComponent = cfg.icon;
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => {
+                  setActiveTab(key);
+                  navigate(cfg.to);
+                }}
+                className={`px-4 py-1.5 rounded-xl text-xs transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                  isActive
+                    ? 'bg-[#111111] text-white border border-black shadow-xs font-bold'
+                    : 'bg-white text-gray-700 hover:text-black border border-[#E4E4E7] hover:border-[#D4D4D8] shadow-2xs font-semibold'
+                }`}
+              >
+                {IconComponent && <IconComponent size={13} className={isActive ? 'text-white' : 'text-gray-500'} />}
+                <span>{cfg.title}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Notifications / Alerts */}
       {error && (
         <div className="p-3 bg-red-50/90 border border-red-200/80 rounded-2xl text-xs text-red-700 flex items-center gap-2 shadow-2xs shrink-0">
@@ -1681,7 +1710,7 @@ export default function RequisitionOverview({ section }) {
               navigate(user?.role === 'Recruiter' ? '/dashboard/recruiter/candidates' : '/dashboard/candidates');
             }}
             title="View candidate pool & applicants"
-            className="snap-start shrink-0 w-[122px] sm:w-[136px] lg:w-full h-[66px] sm:h-[72px] lg:h-[102px] p-2 sm:p-2.5 lg:p-3 rounded-2xl border border-white/70 bg-white/40 backdrop-blur-2xl flex flex-col justify-between text-left transition-all cursor-pointer group shadow-[0_4px_20px_0_rgba(0,0,0,0.02),inset_0_1px_1px_rgba(255,255,255,0.85)] hover:bg-white/70 hover:border-black/20 active:scale-95"
+            className="snap-start shrink-0 w-[122px] sm:w-[136px] lg:w-full h-[66px] sm:h-[72px] lg:h-[102px] p-2 sm:p-2.5 lg:p-3 rounded-2xl border border-[#EBE8E1] bg-white flex flex-col justify-between text-left transition-all cursor-pointer group shadow-[0_1px_3px_rgba(0,0,0,0.02),0_4px_16px_-4px_rgba(0,0,0,0.03)] hover:border-black/20 active:scale-95"
           >
             <div className="flex items-center justify-between w-full">
               <div className="w-5.5 h-5.5 sm:w-6 sm:h-6 lg:w-7.5 lg:h-7.5 rounded-lg lg:rounded-xl bg-white/70 backdrop-blur-md border border-white/80 flex items-center justify-center text-gray-700 shadow-3xs shrink-0 group-hover:scale-105 transition-transform">
@@ -1706,7 +1735,7 @@ export default function RequisitionOverview({ section }) {
               navigate(user?.role === 'Recruiter' ? '/dashboard/recruiter/shortlisted' : '/dashboard/candidates');
             }}
             title="View shortlisted candidates"
-            className="snap-start shrink-0 w-[122px] sm:w-[136px] lg:w-full h-[66px] sm:h-[72px] lg:h-[102px] p-2 sm:p-2.5 lg:p-3 rounded-2xl border border-white/70 bg-white/40 backdrop-blur-2xl flex flex-col justify-between text-left transition-all cursor-pointer group shadow-[0_4px_20px_0_rgba(0,0,0,0.02),inset_0_1px_1px_rgba(255,255,255,0.85)] hover:bg-white/70 hover:border-black/20 active:scale-95"
+            className="snap-start shrink-0 w-[122px] sm:w-[136px] lg:w-full h-[66px] sm:h-[72px] lg:h-[102px] p-2 sm:p-2.5 lg:p-3 rounded-2xl border border-[#EBE8E1] bg-white flex flex-col justify-between text-left transition-all cursor-pointer group shadow-[0_1px_3px_rgba(0,0,0,0.02),0_4px_16px_-4px_rgba(0,0,0,0.03)] hover:border-black/20 active:scale-95"
           >
             <div className="flex items-center justify-between w-full">
               <div className="w-5.5 h-5.5 sm:w-6 sm:h-6 lg:w-7.5 lg:h-7.5 rounded-lg lg:rounded-xl bg-white/70 backdrop-blur-md border border-white/80 flex items-center justify-center text-gray-700 shadow-3xs shrink-0 group-hover:scale-105 transition-transform">
@@ -1731,7 +1760,7 @@ export default function RequisitionOverview({ section }) {
               navigate('/dashboard/interviews');
             }}
             title="View scheduled interviews & AI evaluations"
-            className="snap-start shrink-0 w-[122px] sm:w-[136px] lg:w-full h-[66px] sm:h-[72px] lg:h-[102px] p-2 sm:p-2.5 lg:p-3 rounded-2xl border border-white/70 bg-white/40 backdrop-blur-2xl flex flex-col justify-between text-left transition-all cursor-pointer group shadow-[0_4px_20px_0_rgba(0,0,0,0.02),inset_0_1px_1px_rgba(255,255,255,0.85)] hover:bg-white/70 hover:border-black/20 active:scale-95"
+            className="snap-start shrink-0 w-[122px] sm:w-[136px] lg:w-full h-[66px] sm:h-[72px] lg:h-[102px] p-2 sm:p-2.5 lg:p-3 rounded-2xl border border-[#EBE8E1] bg-white flex flex-col justify-between text-left transition-all cursor-pointer group shadow-[0_1px_3px_rgba(0,0,0,0.02),0_4px_16px_-4px_rgba(0,0,0,0.03)] hover:border-black/20 active:scale-95"
           >
             <div className="flex items-center justify-between w-full">
               <div className="w-5.5 h-5.5 sm:w-6 sm:h-6 lg:w-7.5 lg:h-7.5 rounded-lg lg:rounded-xl bg-white/70 backdrop-blur-md border border-white/80 flex items-center justify-center text-gray-700 shadow-3xs shrink-0 group-hover:scale-105 transition-transform">
@@ -1756,7 +1785,7 @@ export default function RequisitionOverview({ section }) {
               navigate(user?.role === 'Recruiter' ? '/dashboard/recruiter/accepted' : '/dashboard/candidates/accepted');
             }}
             title="View accepted & hired candidates"
-            className="snap-start shrink-0 w-[122px] sm:w-[136px] lg:w-full h-[66px] sm:h-[72px] lg:h-[102px] p-2 sm:p-2.5 lg:p-3 rounded-2xl border border-white/70 bg-white/40 backdrop-blur-2xl flex flex-col justify-between text-left transition-all cursor-pointer group shadow-[0_4px_20px_0_rgba(0,0,0,0.02),inset_0_1px_1px_rgba(255,255,255,0.85)] hover:bg-white/70 hover:border-black/20 active:scale-95"
+            className="snap-start shrink-0 w-[122px] sm:w-[136px] lg:w-full h-[66px] sm:h-[72px] lg:h-[102px] p-2 sm:p-2.5 lg:p-3 rounded-2xl border border-[#EBE8E1] bg-white flex flex-col justify-between text-left transition-all cursor-pointer group shadow-[0_1px_3px_rgba(0,0,0,0.02),0_4px_16px_-4px_rgba(0,0,0,0.03)] hover:border-black/20 active:scale-95"
           >
             <div className="flex items-center justify-between w-full">
               <div className="w-5.5 h-5.5 sm:w-6 sm:h-6 lg:w-7.5 lg:h-7.5 rounded-lg lg:rounded-xl bg-white/70 backdrop-blur-md border border-white/80 flex items-center justify-center text-gray-700 shadow-3xs shrink-0 group-hover:scale-105 transition-transform">
@@ -1776,7 +1805,7 @@ export default function RequisitionOverview({ section }) {
         </div>
 
         {/* Left: Main Glassmorphic Table Card (order-2 on mobile, order-1 on desktop) */}
-        <div className="order-2 lg:order-1 flex-1 min-w-0 min-h-0 lg:min-h-[calc(100vh-260px)] bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between overflow-hidden">
+        <div className="order-2 lg:order-1 flex-1 min-w-0 min-h-0 lg:min-h-[calc(100vh-260px)] bg-white border border-[#EBE8E1] rounded-2xl p-3 sm:p-4 shadow-[0_1px_3px_rgba(0,0,0,0.02),0_4px_16px_-4px_rgba(0,0,0,0.03)] flex flex-col justify-between overflow-hidden">
           {/* Table Top Controls Row: Search Bar + Section / Department Filters */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-black/[0.04] shrink-0">
             {/* Search Input Bar with ⌘K Badge */}
@@ -1788,7 +1817,7 @@ export default function RequisitionOverview({ section }) {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search by title, role, or department..."
-                className="w-full pl-9 pr-4 sm:pr-12 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs placeholder:text-gray-400 transition-all"
+                className="w-full pl-9 pr-4 sm:pr-12 py-1.5 text-xs text-gray-900 bg-[#F4F4F5]/70 focus-within:bg-white border border-[#E4E4E7] focus:border-[#111111] rounded-xl focus:outline-none shadow-2xs placeholder:text-gray-400 transition-all"
               />
               <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none hidden sm:block">
                 <span className="text-[10px] font-bold text-gray-400 px-1.5 py-0.5 rounded-md bg-white/80 border border-gray-200/80 shadow-3xs">
@@ -1808,7 +1837,7 @@ export default function RequisitionOverview({ section }) {
                     setShowDeptDropdown(false);
                     setShowStatusDropdown(false);
                   }}
-                  className="w-full sm:w-auto px-3 py-1.5 rounded-xl bg-white/60 backdrop-blur-md border border-white/80 text-xs font-semibold text-gray-700 hover:text-black hover:bg-white transition-all flex items-center justify-between sm:justify-start gap-2 shadow-3xs cursor-pointer"
+                  className="w-full sm:w-auto px-3 py-1.5 rounded-xl bg-white border border-[#E4E4E7] hover:border-[#D4D4D8] text-xs font-semibold text-gray-700 hover:text-black transition-all flex items-center justify-between sm:justify-start gap-2 shadow-2xs cursor-pointer"
                 >
                   <span className="truncate">{SECTION_CONFIG[activeTab]?.title || 'All Requisitions'}</span>
                   <ChevronDown size={13} className="text-gray-400 shrink-0" />
@@ -1852,7 +1881,7 @@ export default function RequisitionOverview({ section }) {
                     setShowSectionDropdown(false);
                     setShowStatusDropdown(false);
                   }}
-                  className="w-full sm:w-auto px-3 py-1.5 rounded-xl bg-white/60 backdrop-blur-md border border-white/80 text-xs font-semibold text-gray-700 hover:text-black hover:bg-white transition-all flex items-center justify-between sm:justify-start gap-2 shadow-3xs cursor-pointer"
+                  className="w-full sm:w-auto px-3 py-1.5 rounded-xl bg-white border border-[#E4E4E7] hover:border-[#D4D4D8] text-xs font-semibold text-gray-700 hover:text-black transition-all flex items-center justify-between sm:justify-start gap-2 shadow-2xs cursor-pointer"
                 >
                   <span className="truncate">{selectedDept}</span>
                   <ChevronDown size={13} className="text-gray-400 shrink-0" />

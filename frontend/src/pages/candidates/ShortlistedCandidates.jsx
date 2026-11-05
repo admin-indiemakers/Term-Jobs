@@ -191,36 +191,36 @@ export default function ShortlistedCandidates() {
       {/* ── 2. TOP 4 GLASSMORHPIC METRIC CARDS ── */}
       <div className="shrink-0 grid grid-cols-2 lg:grid-cols-4 gap-3">
         {/* SHORTLISTED */}
-        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between">
+        <div className="bg-white border border-[#EBEBEB] rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between">
           <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">SHORTLISTED</div>
           <div className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight mt-1">{stats.shortlisted}</div>
         </div>
 
         {/* STRONG MATCHES */}
-        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between">
+        <div className="bg-white border border-[#EBEBEB] rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between">
           <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">STRONG MATCHES (≥70%)</div>
           <div className="text-2xl sm:text-3xl font-extrabold text-emerald-600 tracking-tight mt-1">{stats.strong}</div>
         </div>
 
         {/* MODERATE MATCHES */}
-        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between">
+        <div className="bg-white border border-[#EBEBEB] rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between">
           <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">MODERATE MATCHES</div>
           <div className="text-2xl sm:text-3xl font-extrabold text-amber-600 tracking-tight mt-1">{stats.moderate}</div>
         </div>
 
         {/* AVG MATCH SCORE */}
-        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between">
+        <div className="bg-white border border-[#EBEBEB] rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between">
           <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">AVG MATCH SCORE</div>
           <div className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight mt-1">{stats.avgMatch}%</div>
         </div>
       </div>
 
-      {/* ── 3. NAVIGATION PILL TABS ── */}
-      <div className="shrink-0 flex items-center gap-2">
+      {/* -- 3. NAVIGATION PILL TABS WITH FADED BORDERS -- */}
+      <div className="shrink-0 inline-flex items-center gap-1.5 p-1 rounded-2xl bg-[#F4F4F5] border border-[#E4E4E7] shadow-2xs">
         <button
           type="button"
           onClick={() => navigate('/dashboard/candidates')}
-          className="px-4 py-1.5 rounded-full text-xs font-bold bg-black text-white shadow-xs transition-all cursor-pointer"
+          className="px-4 py-1.5 rounded-xl text-xs font-bold bg-[#111111] text-white border border-black shadow-xs transition-all cursor-pointer"
         >
           Shortlisted
         </button>
@@ -228,7 +228,7 @@ export default function ShortlistedCandidates() {
         <button
           type="button"
           onClick={() => navigate('/dashboard/candidates/accepted')}
-          className="px-4 py-1.5 rounded-full text-xs font-semibold bg-white/60 hover:bg-white text-gray-700 hover:text-black border border-white/80 backdrop-blur-md shadow-3xs transition-all cursor-pointer flex items-center gap-1.5"
+          className="px-4 py-1.5 rounded-xl text-xs font-semibold bg-white text-gray-700 hover:text-black border border-[#E4E4E7] hover:border-[#D4D4D8] shadow-2xs transition-all cursor-pointer flex items-center gap-1.5"
         >
           <span>Accepted</span>
           {acceptedCount > 0 && (
@@ -241,7 +241,7 @@ export default function ShortlistedCandidates() {
         <button
           type="button"
           onClick={() => navigate('/dashboard/candidates/onboarding')}
-          className="px-4 py-1.5 rounded-full text-xs font-semibold bg-white/60 hover:bg-white text-gray-700 hover:text-black border border-white/80 backdrop-blur-md shadow-3xs transition-all cursor-pointer"
+          className="px-4 py-1.5 rounded-xl text-xs font-semibold bg-white text-gray-700 hover:text-black border border-[#E4E4E7] hover:border-[#D4D4D8] shadow-2xs transition-all cursor-pointer"
         >
           Onboarding
         </button>
@@ -249,14 +249,14 @@ export default function ShortlistedCandidates() {
         <button
           type="button"
           onClick={() => navigate('/dashboard/interviews')}
-          className="px-4 py-1.5 rounded-full text-xs font-semibold bg-white/60 hover:bg-white text-gray-700 hover:text-black border border-white/80 backdrop-blur-md shadow-3xs transition-all cursor-pointer"
+          className="px-4 py-1.5 rounded-xl text-xs font-semibold bg-white text-gray-700 hover:text-black border border-[#E4E4E7] hover:border-[#D4D4D8] shadow-2xs transition-all cursor-pointer"
         >
           Interviews
         </button>
       </div>
 
       {/* ── 4. MAIN GLASSMORHPIC CANDIDATES CONTAINER ── */}
-      <div className="flex-1 min-h-[360px] md:min-h-0 bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between overflow-hidden">
+      <div className="flex-1 min-h-[360px] md:min-h-0 bg-white border border-[#EBEBEB] rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between overflow-hidden">
         {/* Top Controls: Search + Count */}
         <div className="shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 border-b border-black/[0.04]">
           <div className="relative w-full sm:w-80">

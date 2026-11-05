@@ -39,6 +39,7 @@ const HiringManagerTelegramLogin = lazyWithRetry(() => import('./pages/HiringMan
 const DirectorLogin = lazyWithRetry(() => import('./pages/DirectorLogin'));
 const RecruiterDashboard = lazyWithRetry(() => import('./pages/RecruiterDashboard'));
 const HiringManagerDashboard = lazyWithRetry(() => import('./pages/HiringManagerDashboard'));
+const HiringManagerAuraChat = lazyWithRetry(() => import('./pages/HiringManagerAuraChat'));
 const AdminDashboard = lazyWithRetry(() => import('./pages/AdminDashboard'));
 const ManageDirectors = lazyWithRetry(() => import('./pages/ManageDirectors'));
 const ManageHiringManagers = lazyWithRetry(() => import('./pages/ManageHiringManagers'));
@@ -322,7 +323,8 @@ export default function App() {
           >
             <Route index element={<DashboardIndex />} />
             <Route path="interviews" element={<HiringManagerInterviews />} />
-            <Route path="hiring-manager" element={<HiringManagerDashboard />} />
+            <Route path="hiring-manager" element={<HiringManagerAuraChat />} />
+              <Route path="hiring-manager/legacy" element={<HiringManagerDashboard />} />
             <Route path="hiring-manager/chat" element={<HiringManagerChat />} />
             <Route path="requisitions" element={<RequisitionRouteGuard><RequisitionOverview /></RequisitionRouteGuard>} />
             <Route path="requisitions/published" element={<RequisitionRouteGuard><RequisitionOverview section="published" /></RequisitionRouteGuard>} />

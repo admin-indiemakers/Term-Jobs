@@ -1,10 +1,15 @@
-export function upcomingInterviewRounds(rounds, requisitions, now = new Date()) {
-  const requisitionIds = new Set(requisitions.map(row => String(row.id)));
+export function upcomingInterviewRounds(rounds = [], requisitions = [], now = new Date()) {
+  if (!Array.isArray(rounds)) return [];
+  const reqList = Array.isArray(requisitions) ? requisitions : [];
+  const hasReqFilter = reqList.length > 0;
+  const requisitionIds = new Set(reqList.map(row => String(row?.id || row?.requisition_id || '')));
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const seen = new Set();
   return rounds.filter(round => {
+    if (!round) return false;
     const id = round.id || round.round_id;
-    if (!id || seen.has(id) || !requisitionIds.has(String(round.requisition_id))) return false;
+    if (!id || seen.has(id)) return false;
+    if (hasReqFilter && round.requisition_id && !requisitionIds.has(String(round.requisition_id))) return false;
     if (!round.candidate_submission_id && !round.candidate_id) return false;
     if (!['scheduled', 'confirmed'].includes(String(round.status || '').toLowerCase())) return false;
     if (!round.scheduled_date) return false;
@@ -14,10 +19,13 @@ export function upcomingInterviewRounds(rounds, requisitions, now = new Date()) 
       : new Date(round.scheduled_date);
     if (Number.isNaN(date.getTime()) || date < today) return false;
     if (/^\d{1,2}:\d{2}(?:\s*[AP]M)?$/i.test(round.scheduled_time || '')) {
-      const [, hour, minute, period] = round.scheduled_time.match(/^(\d{1,2}):(\d{2})(?:\s*([AP]M))?$/i);
-      const h = period ? Number(hour) % 12 + (period.toUpperCase() === 'PM' ? 12 : 0) : Number(hour);
-      date.setHours(h, Number(minute), 0, 0);
-      if (date < now) return false;
+      const match = round.scheduled_time.match(/^(\d{1,2}):(\d{2})(?:\s*([AP]M))?$/i);
+      if (match) {
+        const [, hour, minute, period] = match;
+        const h = period ? Number(hour) % 12 + (period.toUpperCase() === 'PM' ? 12 : 0) : Number(hour);
+        date.setHours(h, Number(minute), 0, 0);
+        if (date < now) return false;
+      }
     }
     seen.add(id);
     return true;
