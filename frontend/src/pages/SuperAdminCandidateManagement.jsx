@@ -1,3 +1,4 @@
+import AdminPageHeader from '../components/admin/AdminPageHeader';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { request, clearApiCache } from '../api/client';
@@ -8,29 +9,22 @@ import CandidateOfferLetterSection from '../components/CandidateOfferLetterSecti
 import { isValidCompanyName } from '../utils/adminDashboard';
 import {
   Building2,
-  Users,
   Search,
-  Filter,
   CheckCircle2,
   Sparkles,
-  Calendar,
   Briefcase,
   UserCheck,
-  Bell,
   RefreshCw,
-  ExternalLink,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
   TrendingUp,
   Award,
-  Layers,
   Trash2,
   X,
   PlusCircle,
   FileText,
   Receipt,
-  DollarSign,
   Zap,
   LogOut
 } from 'lucide-react';
@@ -235,42 +229,8 @@ export default function SuperAdminCandidateManagement() {
   };
 
   return (
-    <div className="w-full min-w-0 pb-16 space-y-4 text-left" style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}>
-      {/* Top Header: Unboxed, Transparent, Clean Big Typography */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 shrink-0">
-        <div>
-          <div className="text-[10px] font-extrabold text-emerald-800 tracking-wider uppercase mb-1 flex items-center gap-1.5 flex-wrap">
-            <span className="bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">TERM JOBS</span>
-            <span>•</span>
-            <span>SUPER ADMIN CONSOLE</span>
-            <span>•</span>
-            <span className="text-emerald-700 font-black">
-              {activeTab === 'billing'
-                ? 'CANDIDATE BILLING & WORK ORDERS'
-                : activeTab === 'contracts'
-                ? 'EMPLOYMENT CONTRACTS & OFFER LETTERS'
-                : 'CANDIDATE MANAGEMENT'}
-            </span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight leading-none flex items-center gap-2 sm:gap-2.5 flex-wrap">
-            {activeTab === 'billing'
-              ? 'Candidate Billing & Work Orders'
-              : activeTab === 'contracts'
-              ? 'Employment Contracts & Offer Letters'
-              : 'Candidate Selections'}
-            <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 text-xs font-bold border border-emerald-200/80">
-              {activeTab === 'billing' ? 'Work Orders & SOW' : activeTab === 'contracts' ? '5-Page Legal PDF' : 'Live Feed'}
-            </span>
-          </h1>
-          <p className="text-xs sm:text-[13px] text-gray-500 font-normal mt-1 max-w-2xl">
-            {activeTab === 'billing'
-              ? 'Candidate work order timesheets, contractor billings, approved overtime, and client SOW disbursements.'
-              : activeTab === 'contracts'
-              ? 'Review, customize CTC salary breakdowns & legal terms, and issue formal 5-page employment agreements to selected candidates.'
-              : 'Real-time feed and oversight of candidates shortlisted and selected by hiring managers across partner companies.'}
-          </p>
-        </div>
-
+    <div className="admin-page text-left" style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}>
+      <AdminPageHeader title={activeTab === 'billing' ? 'Billing & work orders' : activeTab === 'contracts' ? 'Employment contracts' : 'Candidate selections'} section="Placements" description={activeTab === 'billing' ? 'Manage timesheets, contractor billing, and work orders.' : activeTab === 'contracts' ? 'Review terms, salary details, and employment agreements.' : 'Review candidate selections made by hiring managers across partner companies.'}>
         {/* Top Right Actions: Notification Bell, Refresh, 48h Shortlists, Simulate Selection & Sign out */}
         <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 flex-wrap">
           <NotificationBell />
@@ -326,7 +286,7 @@ export default function SuperAdminCandidateManagement() {
             <span className="hidden sm:inline">Sign out</span>
           </button>
         </div>
-      </div>
+      </AdminPageHeader>
 
       {/* Primary Navigation Tabs - Rounded Glassmorphic Tab Bar Container */}
       <div className="w-fit max-w-full inline-flex items-center gap-1.5 p-1.5 rounded-2xl bg-white/40 backdrop-blur-2xl border border-white/70 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] overflow-x-auto no-scrollbar">

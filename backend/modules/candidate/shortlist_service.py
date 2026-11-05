@@ -286,21 +286,27 @@ def generate_and_rank_requisition_shortlist(requisition_id: str) -> Dict[str, An
 
             # Algorithm Weighting:
             # Composite = 60% AI interview score + 40% resume score (only if interview completed)
-            # If no completed interview → candidate is NOT eligible for HM shortlist.
-            resume_score = float(sub.match_score) if sub.match_score is not None else 0.0
-            if best_interview_score is not None:
+            # Older ranked records may have lost their original resume score.
+            source_submission = db['candidate_submissions'].find_one({'id': sub_id}) or {}
+            resume_value = sub.resume_match_score
+            if resume_value is None and source_submission.get('interview_score') is None and sub.composite_score is None:
+                resume_value = sub.match_score
+            resume_score = float(resume_value) if resume_value is not None else 0.0
+            if resume_value is None:
+                composite_score = float(sub.composite_score if sub.composite_score is not None else (sub.match_score or 0))
+            elif best_interview_score is not None:
                 composite_score = round(0.6 * best_interview_score + 0.4 * resume_score, 1)
             else:
                 # Keep raw resume score for display in pool but do NOT shortlist without interview
                 composite_score = round(resume_score, 1)
 
-            # Update candidate match_score to reflect composite algorithmic score
-            sub.match_score = composite_score
-
-            # ── STRICT GATE: candidate must have COMPLETED the AI screening interview ──
-            # Having a good resume score alone is NOT enough — they must have attended the interview.
+            # Preserve resume fit; repeated ranking must not blend its own previous result.
+            sub.resume_match_score = resume_value
+            sub.composite_score = composite_score
+            # Automatic shortlisting requires interview evidence; admin overrides persist.
             is_qualified = (
-                has_completed_interview
+                source_submission.get('manual_shortlist') is True
+                or has_completed_interview
                 or (best_interview_score is not None and has_passed_round)
             )
 
@@ -314,6 +320,8 @@ def generate_and_rank_requisition_shortlist(requisition_id: str) -> Dict[str, An
                     sub.status = "Screened"
 
             sub.updated_at = now
+            sub.interview_score = best_interview_score
+            sub.shortlisted_at = now_iso if is_qualified else None
             session.add(sub)
 
             ranked_candidates.append({
@@ -332,7 +340,8 @@ def generate_and_rank_requisition_shortlist(requisition_id: str) -> Dict[str, An
                 db["candidate_submissions"].update_one(
                     {"$or": [{"id": sub_id}, {"candidate_email": email, "requisition_id": requisition_id}]},
                     {"$set": {
-                        "match_score": composite_score,
+                        "resume_match_score": resume_value,
+                        "composite_score": composite_score,
                         "interview_score": best_interview_score,
                         "status": sub.status,
                         "shortlisted_at": now_iso if is_qualified else None,

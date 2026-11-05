@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { parseSlotToMinutes } from '../utils/interviewSchedule';
+import { isAiInterviewRound } from '../interview/utils/interviewMode';
 import {
   Search,
   Briefcase,
@@ -509,6 +510,13 @@ export default function OpenRolesPage({ enabled = true }) {
         style: 'text-teal-400 bg-teal-950/50 border-teal-500/40',
       };
     }
+    if (windowInfo?.endDate && new Date() > windowInfo.endDate) {
+      return {
+        text: 'Window ended',
+        icon: '◷',
+        style: 'text-amber-400 bg-amber-950/40 border-amber-500/30',
+      };
+    }
     if (windowInfo?.startDate) {
       const now = new Date();
       const diffMs = windowInfo.startDate.getTime() - now.getTime();
@@ -587,15 +595,12 @@ export default function OpenRolesPage({ enabled = true }) {
     return list.map((round) => {
       const isCancelled = round.status === 'Cancelled' || round.status === 'Rejected';
       const isExplicitCompleted = round.status === 'Completed' || round.status === 'Evaluated';
-      const isAiOnDemand = round.round_type === 'AI' || (round.round_name && round.round_name.toLowerCase().includes('ai fast-track'));
+      const isAiOnDemand = isAiInterviewRound(round);
       const isManualLive = round.status === 'In Progress' || round.status === 'Live';
 
       const windowInfo = getInterviewWindow(round.scheduled_date, round.scheduled_time, round.duration_minutes || 45);
       const startDate = windowInfo?.startDate;
       const endDate = windowInfo?.endDate;
-
-      // Has this interview window passed in real time?
-      const hasEndedByTime = Boolean(endDate && now.getTime() > endDate.getTime());
 
       // Is interview currently live?
       const isLiveNow = !isCancelled && !isExplicitCompleted && (
@@ -607,7 +612,7 @@ export default function OpenRolesPage({ enabled = true }) {
       let finalStatus = 'Upcoming';
       if (isCancelled) {
         finalStatus = 'Cancelled';
-      } else if (isExplicitCompleted || (hasEndedByTime && !isAiOnDemand)) {
+      } else if (isExplicitCompleted) {
         finalStatus = 'Completed';
       } else {
         finalStatus = 'Upcoming';

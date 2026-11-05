@@ -1663,6 +1663,9 @@ async def analyze_round_communication(
             sub.updated_at = datetime.now(timezone.utc)
             session._track(sub)
 
+        # Flush models before adding result metadata directly to the same collection.
+        session.commit()
+
         # 2. Update MongoDB candidate submissions
         try:
             mongo_or = []
@@ -1677,6 +1680,11 @@ async def analyze_round_communication(
             mongo_or.append({"round_id": r.id})
 
             if mongo_or:
+                # Keep the original resume fit before adding the first interview result.
+                db["candidate_submissions"].update_many(
+                    {"$or": mongo_or, "resume_match_score": None, "interview_score": None},
+                    [{"$set": {"resume_match_score": "$match_score"}}],
+                )
                 db["candidate_submissions"].update_many(
                     {"$or": mongo_or},
                     {"$set": {

@@ -1,3 +1,5 @@
+import CandidateApplicationActions from '../components/admin/CandidateApplicationActions';
+import AdminPageHeader, { AdminMetric } from '../components/admin/AdminPageHeader';
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { API_BASE_URL, request, clearApiCache } from '../api/client';
 import { useAuth } from '../context/AuthContext';
@@ -5,7 +7,6 @@ import NotificationBell from '../components/NotificationBell';
 import {
   Users,
   Search,
-  Filter,
   FileText,
   Download,
   Eye,
@@ -17,14 +18,12 @@ import {
   AlertCircle,
   RefreshCw,
   Layers,
-  Sparkles,
   Phone,
   Mail,
   Globe,
   X,
   UserCheck,
   Briefcase,
-  GraduationCap,
   LogOut
 } from 'lucide-react';
 import { validatePhone } from '../utils/phoneValidation';
@@ -41,6 +40,10 @@ const getSkillsArray = (skills) => {
   return [];
 };
 
+const applicationFitLabel = (app) => app.resume_match_score != null
+  ? `${Math.round(app.resume_match_score)}% Resume match`
+  : app.match_score != null ? `${Math.round(app.match_score)}% Saved fit · resume score unavailable` : 'Resume match unavailable';
+
 export default function SuperAdminCandidatePool() {
   const { token, logout } = useAuth();
   const [candidates, setCandidates] = useState([]);
@@ -55,6 +58,28 @@ export default function SuperAdminCandidatePool() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [applicationAction, setApplicationAction] = useState('');
+
+  const handleApplicationAction = async (application, action) => {
+    setApplicationAction(`${application.submission_id}:${action}`);
+    setError('');
+    setSuccess('');
+    try {
+      const result = await request(`/api/candidates/${encodeURIComponent(application.submission_id)}/${action}`, {
+        token, method: 'POST', body: { requisition_id: application.requisition_id },
+      });
+      setSuccess(result.message);
+      await fetchPoolData(true);
+    } catch (err) {
+      setError(err.message || 'Could not update this application.');
+    } finally {
+      setApplicationAction('');
+    }
+  };
+
+  const renderApplicationActions = (application) => (
+    <CandidateApplicationActions application={application} applicationAction={applicationAction} onAction={handleApplicationAction} />
+  );
 
   // Search and Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -371,27 +396,8 @@ export default function SuperAdminCandidatePool() {
   }, [candidates, selectedSource, selectedVendor, selectedSkill, searchTerm]);
 
   return (
-    <div className="w-full min-w-0 pb-16 space-y-5 text-left" style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}>
-      {/* Top Header: Unboxed, Transparent, Clean Big Typography */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 shrink-0">
-        <div>
-          <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <span className="text-[10px] font-extrabold text-teal-800 tracking-wider uppercase bg-teal-500/10 border border-teal-500/20 px-2.5 py-0.5 rounded-full">
-              Global Talent Repository
-            </span>
-            <span className="text-xs text-gray-400 font-semibold flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              Live Synchronized
-            </span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight leading-none">
-            Platform Candidate Pool
-          </h1>
-          <p className="text-xs sm:text-[13px] text-gray-500 font-normal mt-1 max-w-2xl">
-            Centralized talent intelligence aggregating every candidate registered via public job portal and submitted across all vendor partner agencies.
-          </p>
-        </div>
-
+    <div className="admin-page text-left" style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}>
+      <AdminPageHeader title="Candidate pool" section="Hiring" description="Review talent, inspect resumes, and manage each application in one place.">
         {/* Top Right Actions: Notification Bell, Refresh, Export CSV, + Add Candidate & Sign out */}
         <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 flex-wrap">
           <NotificationBell />
@@ -409,6 +415,7 @@ export default function SuperAdminCandidatePool() {
           <button
             type="button"
             onClick={handleExportCSV}
+            aria-label="Export candidates as CSV"
             className="px-3 py-1.5 rounded-xl border border-white/80 bg-white/70 hover:bg-white text-gray-800 text-xs font-bold shadow-2xs transition-all cursor-pointer flex items-center gap-1.5 active:scale-95"
           >
             <Download size={13} />
@@ -434,112 +441,36 @@ export default function SuperAdminCandidatePool() {
             <span className="hidden sm:inline">Sign out</span>
           </button>
         </div>
-      </div>
+      </AdminPageHeader>
 
-      {/* 5 Core Metric Cards - Swipeable horizontal strip on mobile, 5 cols on lg */}
-      <div className="flex flex-row overflow-x-auto snap-x no-scrollbar lg:grid lg:grid-cols-5 gap-2.5 sm:gap-3.5 pb-1 lg:pb-0">
-        {/* Total Candidates */}
-        <div className="w-[145px] sm:w-[165px] lg:w-full shrink-0 snap-start backdrop-blur-2xl bg-white/40 border border-white/70 hover:border-gray-300 rounded-2xl p-3 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between transition-all">
-          <div>
-            <div className="flex items-center justify-between gap-1.5 mb-1.5">
-              <span className="text-[10px] sm:text-[11px] font-bold text-gray-500 uppercase tracking-wider truncate">TOTAL POOL</span>
-              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-white/80 border border-white/90 text-gray-800 flex items-center justify-center shrink-0 shadow-2xs">
-                <Users size={14} />
-              </div>
-            </div>
-            <div className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight my-0.5">
-              {stats.total}
-            </div>
-            <div className="text-[10px] sm:text-xs text-gray-500 font-medium truncate">All registered candidates</div>
-          </div>
-        </div>
+      <section aria-label="Candidate pool metrics" className="admin-metrics" aria-busy={loading}>
+        <AdminMetric label="Total candidates" value={loading ? null : stats.total} icon={Users} detail="All registered talent" />
+        <AdminMetric label="Portal applicants" value={loading ? null : stats.portal_applicants} icon={UserCheck} detail="Applied directly" />
+        <AdminMetric label="Vendor candidates" value={loading ? null : stats.vendor_candidates} icon={Building2} detail="Submitted by partners" />
+        <AdminMetric label="Resumes available" value={loading ? null : stats.resumes_count} icon={FileText} detail={`${stats.contributing_vendors || 0} contributing vendors`} />
+      </section>
 
-        {/* Direct Portal Applicants */}
-        <div className="w-[145px] sm:w-[165px] lg:w-full shrink-0 snap-start backdrop-blur-2xl bg-white/40 border border-white/70 hover:border-emerald-300 rounded-2xl p-3 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between transition-all">
-          <div>
-            <div className="flex items-center justify-between gap-1.5 mb-1.5">
-              <span className="text-[10px] sm:text-[11px] font-bold text-emerald-700 uppercase tracking-wider truncate">PORTAL DIRECT</span>
-              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-emerald-50/80 border border-emerald-200/80 text-emerald-700 flex items-center justify-center shrink-0 shadow-2xs">
-                <UserCheck size={14} />
-              </div>
-            </div>
-            <div className="text-2xl sm:text-3xl font-black text-emerald-600 tracking-tight my-0.5">
-              {stats.portal_applicants}
-            </div>
-            <div className="text-[10px] sm:text-xs text-gray-500 font-medium truncate">Public job board talent</div>
-          </div>
-        </div>
-
-        {/* Vendor Sourced */}
-        <div className="w-[145px] sm:w-[165px] lg:w-full shrink-0 snap-start backdrop-blur-2xl bg-white/40 border border-white/70 hover:border-blue-300 rounded-2xl p-3 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between transition-all">
-          <div>
-            <div className="flex items-center justify-between gap-1.5 mb-1.5">
-              <span className="text-[10px] sm:text-[11px] font-bold text-blue-700 uppercase tracking-wider truncate">VENDOR SOURCED</span>
-              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-blue-50/80 border border-blue-200/80 text-blue-700 flex items-center justify-center shrink-0 shadow-2xs">
-                <Layers size={14} />
-              </div>
-            </div>
-            <div className="text-2xl sm:text-3xl font-black text-blue-600 tracking-tight my-0.5">
-              {stats.vendor_candidates}
-            </div>
-            <div className="text-[10px] sm:text-xs text-gray-500 font-medium truncate">From staffing agencies</div>
-          </div>
-        </div>
-
-        {/* Resumes on File */}
-        <div className="w-[145px] sm:w-[165px] lg:w-full shrink-0 snap-start backdrop-blur-2xl bg-white/40 border border-white/70 hover:border-purple-300 rounded-2xl p-3 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between transition-all">
-          <div>
-            <div className="flex items-center justify-between gap-1.5 mb-1.5">
-              <span className="text-[10px] sm:text-[11px] font-bold text-purple-700 uppercase tracking-wider truncate">VERIFIED RESUMES</span>
-              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-purple-50/80 border border-purple-200/80 text-purple-700 flex items-center justify-center shrink-0 shadow-2xs">
-                <FileText size={14} />
-              </div>
-            </div>
-            <div className="text-2xl sm:text-3xl font-black text-purple-600 tracking-tight my-0.5">
-              {stats.resumes_count}
-            </div>
-            <div className="text-[10px] sm:text-xs text-gray-500 font-medium truncate">100% PDF coverage</div>
-          </div>
-        </div>
-
-        {/* Contributing Vendors */}
-        <div className="w-[145px] sm:w-[165px] lg:w-full shrink-0 snap-start backdrop-blur-2xl bg-white/40 border border-white/70 hover:border-amber-300 rounded-2xl p-3 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between transition-all">
-          <div>
-            <div className="flex items-center justify-between gap-1.5 mb-1.5">
-              <span className="text-[10px] sm:text-[11px] font-bold text-gray-500 uppercase tracking-wider truncate">AGENCIES</span>
-              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-white/80 border border-white/90 text-gray-800 flex items-center justify-center shrink-0 shadow-2xs">
-                <Building2 size={14} />
-              </div>
-            </div>
-            <div className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight my-0.5">
-              {stats.contributing_vendors}
-            </div>
-            <div className="text-[10px] sm:text-xs text-gray-500 font-medium truncate">Partner consultancies</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Error & Success Toasts */}
       {error && (
-        <div className="p-3.5 bg-red-50/90 border border-red-200 rounded-xl text-xs text-red-700 font-medium flex items-center gap-2">
+        <div role="alert" className="p-3.5 bg-red-50/90 border border-red-200 rounded-xl text-xs text-red-700 font-medium flex items-center gap-2">
           <AlertCircle size={15} />
           <span>{error}</span>
         </div>
       )}
       {success && (
-        <div className="p-3 bg-emerald-50/90 border border-emerald-200 rounded-xl text-xs text-emerald-800 font-semibold flex items-center gap-2 shadow-2xs">
+        <div role="status" className="p-3 bg-emerald-50/90 border border-emerald-200 rounded-xl text-xs text-emerald-800 font-semibold flex items-center gap-2 shadow-2xs">
           <CheckCircle2 size={15} />
           <span>{success}</span>
         </div>
       )}
 
       {/* Control Bar: Search & Filter Controls */}
-      <div className="bg-white/70 backdrop-blur-xl border border-white/80 rounded-2xl p-3 sm:p-4 shadow-xs flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+      <div className="admin-pool-toolbar">
         {/* Search Bar */}
-        <div className="relative flex-1 min-w-[240px]">
+        <div className="relative flex-1 min-w-0">
           <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
-            type="text"
+            type="search"
+            aria-label="Search candidates"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Search candidates by name, email, phone, skill, role, vendor..."
@@ -548,6 +479,7 @@ export default function SuperAdminCandidatePool() {
           {searchTerm && (
             <button
               onClick={() => setSearchTerm('')}
+              aria-label="Clear candidate search"
               className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
             >
               <X size={13} />
@@ -561,6 +493,7 @@ export default function SuperAdminCandidatePool() {
           <div className="flex items-center p-1 bg-gray-100/80 border border-gray-200/60 rounded-xl text-[11px] font-bold text-gray-600">
             <button
               type="button"
+              aria-pressed={selectedSource === 'all'}
               onClick={() => setSelectedSource('all')}
               className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
                 selectedSource === 'all' ? 'bg-white text-black shadow-xs font-extrabold' : 'hover:text-black'
@@ -570,6 +503,7 @@ export default function SuperAdminCandidatePool() {
             </button>
             <button
               type="button"
+              aria-pressed={selectedSource === 'portal'}
               onClick={() => setSelectedSource('portal')}
               className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
                 selectedSource === 'portal' ? 'bg-white text-emerald-700 shadow-xs font-extrabold' : 'hover:text-black'
@@ -579,6 +513,7 @@ export default function SuperAdminCandidatePool() {
             </button>
             <button
               type="button"
+              aria-pressed={selectedSource === 'vendor'}
               onClick={() => setSelectedSource('vendor')}
               className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
                 selectedSource === 'vendor' ? 'bg-white text-blue-700 shadow-xs font-extrabold' : 'hover:text-black'
@@ -590,6 +525,7 @@ export default function SuperAdminCandidatePool() {
 
           {/* Vendor Dropdown */}
           <select
+            aria-label="Filter by vendor"
             value={selectedVendor}
             onChange={(e) => setSelectedVendor(e.target.value)}
             className="px-3 py-2 bg-white/80 border border-gray-200/80 rounded-xl text-xs font-medium text-gray-800 focus:outline-none focus:bg-white focus:border-black cursor-pointer shadow-3xs"
@@ -605,6 +541,7 @@ export default function SuperAdminCandidatePool() {
           {/* Skill Filter Dropdown */}
           {allSkills.length > 0 && (
             <select
+              aria-label="Filter by skill"
               value={selectedSkill}
               onChange={(e) => setSelectedSkill(e.target.value)}
               className="px-3 py-2 bg-white/80 border border-gray-200/80 rounded-xl text-xs font-medium text-gray-800 focus:outline-none focus:bg-white focus:border-black cursor-pointer max-w-[180px] shadow-3xs"
@@ -635,30 +572,19 @@ export default function SuperAdminCandidatePool() {
         </div>
       </div>
 
-      {/* Main Candidate Talent Table Container */}
-      <div className="bg-white/70 backdrop-blur-xl border border-white/80 rounded-2xl sm:rounded-3xl shadow-xs overflow-hidden">
-        <div className="p-4 border-b border-gray-100/90 flex items-center justify-between bg-white/40">
-          <div className="text-xs font-bold text-gray-900">
-            Showing <span className="font-extrabold text-black">{filteredCandidates.length}</span> candidates
-          </div>
-          <div className="text-[11px] text-gray-400 font-medium">
-            Click any resume button for instant in-app PDF preview
-          </div>
-        </div>
-
-        <section ref={applicationsSection} aria-label="Applied requisitions" className="border-b border-gray-200 bg-gray-50/70 p-4 sm:p-6 scroll-mt-6">
+        <section ref={applicationsSection} aria-label="Applied requisitions" className="admin-application-review">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="flex items-center gap-2 text-sm font-bold text-gray-900"><Briefcase size={17} /> Applied Requisitions</h2>
-              <p className="mt-1 text-xs text-gray-500">Select a candidate to see every requisition they have applied to.</p>
+              <h2 className="flex items-center gap-2 text-sm font-bold text-gray-900"><Briefcase size={17} /> Application review</h2>
+              <p className="mt-1 text-xs text-gray-500">Select a candidate to review resume fit, email an AI interview link, or send an application to the hiring manager.</p>
             </div>
             <select aria-label="Candidate application history" value={applicationsCandidateId} onChange={e => setApplicationsCandidateId(e.target.value)} className="max-w-full rounded-xl border border-gray-300 bg-white p-2.5 text-xs text-gray-800">
               <option value="">Choose a candidate</option>
-              {filteredCandidates.map(candidate => <option key={candidate.id} value={candidate.id}>{candidate.candidate_name} · {candidate.candidate_email || candidate.id}</option>)}
+              {candidates.map(candidate => <option key={candidate.id} value={candidate.id}>{candidate.candidate_name} · {candidate.candidate_email || candidate.id}</option>)}
             </select>
           </div>
           {(() => {
-            const candidate = filteredCandidates.find(item => item.id === applicationsCandidateId);
+            const candidate = candidates.find(item => item.id === applicationsCandidateId);
             if (!candidate) return <p className="mt-4 text-xs text-gray-500">Choose a candidate above or use View applications in their row.</p>;
             const applications = candidate.applications || [];
             return <div className="mt-4">
@@ -670,10 +596,25 @@ export default function SuperAdminCandidatePool() {
                     <span className="rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700">{application.status || 'Submitted'}</span>
                   </div>
                   <p className="mt-3 text-xs text-gray-500">Applied: {application.applied_at && !Number.isNaN(Date.parse(application.applied_at)) ? new Date(application.applied_at).toLocaleDateString() : 'Date unavailable'}</p>
+                  <p className="mt-2 text-xs font-semibold text-emerald-800">{applicationFitLabel(application)}</p>
+                  {renderApplicationActions(application)}
                 </article>)}</div>}
             </div>;
           })()}
         </section>
+
+      {/* Main Candidate Talent Table Container */}
+      <div className="admin-candidate-list">
+        <div className="p-4 border-b border-gray-100/90 flex items-center justify-between bg-white/40">
+          <div className="text-sm font-semibold text-gray-900" role="status" aria-live="polite">
+            Showing <span className="font-extrabold text-black">{filteredCandidates.length}</span> candidates
+          </div>
+          <div className="text-[11px] text-gray-500 font-medium hidden sm:block">
+            Use View applications to invite or shortlist a candidate
+          </div>
+        </div>
+
+
 
         {loading ? (
           <div className="py-20 flex flex-col items-center justify-center gap-3 text-gray-400">
@@ -787,7 +728,8 @@ export default function SuperAdminCandidatePool() {
       <div className="font-bold text-gray-900 text-xs whitespace-normal">{app.requisition_title}</div>
       <div className="text-[10px] text-gray-500 mt-1">{app.company_name}</div>
       <div className="text-[10px] text-gray-500 break-all mt-1">Requisition: {app.requisition_id || 'Unavailable'}</div>
-      <div className="text-[11px] font-bold text-emerald-800 mt-1">{app.match_score == null ? 'Match score unavailable' : `${Math.round(app.match_score)}% Match Fit`}</div>
+      <div className="text-[11px] font-bold text-emerald-800 mt-1">{applicationFitLabel(app)}</div>
+      <div className="mt-1 text-[11px] text-gray-500">AI interview: {app.ai_interview_status || 'Not invited'}</div>
     </div>
   ))}
 </div>
@@ -935,7 +877,8 @@ export default function SuperAdminCandidatePool() {
       <div className="font-bold text-gray-900 text-xs whitespace-normal">{app.requisition_title}</div>
       <div className="text-[10px] text-gray-500 mt-1">{app.company_name}</div>
       <div className="text-[10px] text-gray-500 break-all mt-1">Requisition: {app.requisition_id || 'Unavailable'}</div>
-      <div className="text-[11px] font-bold text-emerald-800 mt-1">{app.match_score == null ? 'Match score unavailable' : `${Math.round(app.match_score)}% Match Fit`}</div>
+      <div className="text-[11px] font-bold text-emerald-800 mt-1">{applicationFitLabel(app)}</div>
+      <div className="mt-1 text-[11px] text-gray-500">AI interview: {app.ai_interview_status || 'Not invited'}</div>
     </div>
   ))}
 </div>)}
@@ -1251,9 +1194,9 @@ export default function SuperAdminCandidatePool() {
                         </div>
 
                         <div className="flex items-center gap-2 shrink-0">
-                          {app.match_score !== null && (
+                          {app.match_score != null && (
                             <span className="px-2 py-0.5 rounded-full text-[10.5px] font-extrabold bg-gray-100 text-gray-800">
-                              {Math.round(app.match_score)}% Match
+                              {applicationFitLabel(app)}
                             </span>
                           )}
                           <span className="px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-blue-50 text-blue-700 border border-blue-200">

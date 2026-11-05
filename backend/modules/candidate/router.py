@@ -1684,6 +1684,14 @@ def get_shortlist_quota(
         }
 
 
+@router.post("/{submission_id}/email-ai-interview")
+def email_ai_interview(submission_id: str, body: dict, current_user: User = Depends(get_current_user)):
+    if current_user.role != 'Super Admin':
+        raise HTTPException(403, 'Super Admin access required.')
+    from modules.candidate.admin_interview_service import email_application_interview
+    return email_application_interview(submission_id, body.get('requisition_id'), current_user.id)
+
+
 @router.post("/{submission_id}/direct-shortlist")
 def direct_shortlist_candidate(submission_id: str, body: dict, current_user: User = Depends(get_current_user)):
     """Explicit Super Admin override to send one existing application to its manager."""
@@ -1714,6 +1722,11 @@ def direct_shortlist_candidate(submission_id: str, body: dict, current_user: Use
     if not result.matched_count:
         raise HTTPException(409, 'Application changed. Refresh and try again.')
     cache.clear()
+    notify_candidate_shortlisted(
+        requisition_id=submission['requisition_id'],
+        candidate_name=submission.get('candidate_name') or 'Candidate',
+        vendor_name='Super Admin', match_score=submission.get('match_score'),
+    )
     return {'id': submission_id, 'status': 'Shortlisted', 'sent_to_hiring_manager': True, 'message': 'Candidate sent to the hiring manager shortlist.'}
 
 

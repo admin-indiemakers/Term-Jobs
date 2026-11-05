@@ -1,39 +1,29 @@
+import AdminPageHeader, { AdminMetric } from '../components/admin/AdminPageHeader';
 import { useEffect, useState, useMemo } from 'react';
 import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
-import { Link } from 'react-router-dom';
 import NotificationBell from '../components/NotificationBell';
 import ResumePreviewModal from '../components/ResumePreviewModal';
 import {
   Mail,
   Send,
-  Sparkles,
   CheckCircle2,
   XCircle,
   Clock,
   RefreshCw,
   Search,
   Filter,
-  ArrowRight,
   ExternalLink,
   FileText,
   Building2,
-  UserCheck,
   AlertCircle,
   ToggleLeft,
   ToggleRight,
-  Eye,
   Award,
   Zap,
-  ChevronRight,
   ChevronDown,
   Check,
   X,
-  Info,
-  Calendar,
-  Layers,
-  ArrowUpRight,
-  ShieldCheck,
   LogOut
 } from 'lucide-react';
 
@@ -248,7 +238,7 @@ export default function SuperAdminOutreachControl() {
   }, [requisitions, selectedReqId, reqDetails]);
 
   return (
-    <div className="w-full min-w-0 pb-16 space-y-4 text-left font-sans text-gray-900" style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}>
+    <div className="admin-page text-left" style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}>
       {/* Toast Notification */}
       {notification.message && (
         <div
@@ -263,25 +253,7 @@ export default function SuperAdminOutreachControl() {
         </div>
       )}
 
-      {/* Top Header: Unboxed, Transparent, Clean Big Typography */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 shrink-0">
-        <div>
-          <div className="flex items-center gap-2 text-xs font-semibold text-gray-500 mb-1 flex-wrap">
-            <span className="text-purple-800 font-extrabold bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider">
-              SUPER ADMIN • AI OUTREACH ENGINE
-            </span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight leading-none flex items-center gap-2 sm:gap-2.5 flex-wrap">
-            <span>AI Candidate Outreach & Matching</span>
-            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-purple-500/10 border border-purple-500/20 text-purple-700 shadow-3xs">
-              Live Engine
-            </span>
-          </h1>
-          <p className="text-xs sm:text-[13px] text-gray-500 font-medium mt-1">
-            Deterministic Top 20 talent ranking with automated interactive email & Telegram RSVP buttons.
-          </p>
-        </div>
-
+      <AdminPageHeader title="AI candidate outreach" section="Hiring" description="Match candidates to requisitions and manage email and Telegram responses.">
         {/* Global Controls & Actions */}
         <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto shrink-0">
           <NotificationBell />
@@ -353,103 +325,18 @@ export default function SuperAdminOutreachControl() {
             <LogOut size={13} />
           </button>
         </div>
-      </div>
+      </AdminPageHeader>
 
-      {/* 5 KPI Metric Cards - Modern Glassmorphism */}
-      <div className="flex flex-row overflow-x-auto snap-x no-scrollbar lg:grid lg:grid-cols-5 gap-2.5 sm:gap-3.5 pb-1 lg:pb-0">
-        {/* Total Outreach Sent */}
-        <div className="w-[145px] sm:w-[165px] lg:w-full shrink-0 snap-start bg-white/40 backdrop-blur-2xl border border-white/70 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] hover:bg-white/55 rounded-2xl p-3.5 sm:p-4 flex flex-col justify-between transition-all">
-          <div className="flex items-center justify-between gap-1.5 mb-1.5">
-            <span className="text-[10px] sm:text-[11px] font-extrabold text-gray-500 uppercase tracking-wider truncate">
-              OUTREACH SENT
-            </span>
-            <div className="w-7 h-7 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-700 flex items-center justify-center shrink-0">
-              <Mail size={13} />
-            </div>
-          </div>
-          <div className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight my-0.5 leading-none">
-            {stats.total_outreach_sent}
-          </div>
-          <div className="text-[10px] sm:text-[11px] text-gray-500 font-medium truncate mt-1">
-            Multi-channel reach
-          </div>
-        </div>
-
-        {/* Interested & Fast-Tracked */}
-        <div className="w-[145px] sm:w-[165px] lg:w-full shrink-0 snap-start bg-white/40 backdrop-blur-2xl border border-white/70 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] hover:bg-white/55 rounded-2xl p-3.5 sm:p-4 flex flex-col justify-between transition-all">
-          <div className="flex items-center justify-between gap-1.5 mb-1.5">
-            <span className="text-[10px] sm:text-[11px] font-extrabold text-emerald-800 uppercase tracking-wider truncate">
-              INTERESTED
-            </span>
-            <div className="w-7 h-7 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 flex items-center justify-center shrink-0">
-              <CheckCircle2 size={13} />
-            </div>
-          </div>
-          <div className="text-2xl sm:text-3xl font-black text-emerald-600 tracking-tight my-0.5 leading-none">
-            {stats.interested_count}
-          </div>
-          <div className="text-[10px] sm:text-[11px] text-emerald-700/80 font-medium truncate mt-1">
-            1-tap confirmed
-          </div>
-        </div>
-
-        {/* Unavailable */}
-        <div className="w-[145px] sm:w-[165px] lg:w-full shrink-0 snap-start bg-white/40 backdrop-blur-2xl border border-white/70 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] hover:bg-white/55 rounded-2xl p-3.5 sm:p-4 flex flex-col justify-between transition-all">
-          <div className="flex items-center justify-between gap-1.5 mb-1.5">
-            <span className="text-[10px] sm:text-[11px] font-extrabold text-amber-800 uppercase tracking-wider truncate">
-              UNAVAILABLE
-            </span>
-            <div className="w-7 h-7 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-700 flex items-center justify-center shrink-0">
-              <XCircle size={13} />
-            </div>
-          </div>
-          <div className="text-2xl sm:text-3xl font-black text-amber-600 tracking-tight my-0.5 leading-none">
-            {stats.unavailable_count}
-          </div>
-          <div className="text-[10px] sm:text-[11px] text-amber-700/80 font-medium truncate mt-1">
-            Status recorded
-          </div>
-        </div>
-
-        {/* Telegram Alerts Delivered */}
-        <div className="w-[145px] sm:w-[165px] lg:w-full shrink-0 snap-start bg-white/40 backdrop-blur-2xl border border-white/70 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] hover:bg-white/55 rounded-2xl p-3.5 sm:p-4 flex flex-col justify-between transition-all">
-          <div className="flex items-center justify-between gap-1.5 mb-1.5">
-            <span className="text-[10px] sm:text-[11px] font-extrabold text-sky-800 uppercase tracking-wider flex items-center gap-1 truncate">
-              <Send size={10} className="text-[#229ED9] shrink-0" /> TELEGRAM
-            </span>
-            <div className="w-7 h-7 rounded-xl bg-sky-500/10 border border-sky-500/20 text-[#229ED9] flex items-center justify-center shrink-0">
-              <Send size={13} />
-            </div>
-          </div>
-          <div className="text-2xl sm:text-3xl font-black text-sky-900 tracking-tight my-0.5 leading-none">
-            {stats.telegram_sent_count || 0}
-          </div>
-          <div className="text-[10px] sm:text-[11px] text-sky-700/80 font-medium truncate mt-1">
-            {stats.telegram_connected_candidates || 0} linked
-          </div>
-        </div>
-
-        {/* Response Rate */}
-        <div className="w-[145px] sm:w-[165px] lg:w-full shrink-0 snap-start bg-white/40 backdrop-blur-2xl border border-white/70 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] hover:bg-white/55 rounded-2xl p-3.5 sm:p-4 flex flex-col justify-between transition-all">
-          <div className="flex items-center justify-between gap-1.5 mb-1.5">
-            <span className="text-[10px] sm:text-[11px] font-extrabold text-purple-800 uppercase tracking-wider truncate">
-              RSVP RATE
-            </span>
-            <div className="w-7 h-7 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-700 flex items-center justify-center shrink-0">
-              <Zap size={13} />
-            </div>
-          </div>
-          <div className="text-2xl sm:text-3xl font-black text-purple-700 tracking-tight my-0.5 leading-none">
-            {stats.response_rate_percent}%
-          </div>
-          <div className="text-[10px] sm:text-[11px] text-purple-700/80 font-medium truncate mt-1">
-            1-click engagement
-          </div>
-        </div>
-      </div>
+      <section aria-label="Outreach metrics" className="admin-metrics admin-metrics-five" aria-busy={loadingStats}>
+        <AdminMetric label="Outreach sent" value={loadingStats ? null : stats.total_outreach_sent} icon={Mail} detail="Across email and Telegram" />
+        <AdminMetric label="Interested" value={loadingStats ? null : stats.interested_count} icon={CheckCircle2} detail="Candidates who confirmed" />
+        <AdminMetric label="Unavailable" value={loadingStats ? null : stats.unavailable_count} icon={XCircle} detail="Candidates who declined" />
+        <AdminMetric label="Telegram alerts" value={loadingStats ? null : stats.telegram_sent_count || 0} icon={Send} detail={`${stats.telegram_connected_candidates || 0} candidates connected`} />
+        <AdminMetric label="Response rate" value={loadingStats ? null : `${stats.response_rate_percent ?? 0}%`} icon={Zap} detail="Candidate responses" />
+      </section>
 
       {/* Main Workspace: Requisition Selector & Outreach Controller */}
-      <div className="bg-white/40 backdrop-blur-2xl border border-white/70 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] rounded-2xl sm:rounded-3xl p-4 sm:p-5 overflow-hidden space-y-4">
+      <div className="admin-panel overflow-hidden space-y-4">
         {/* Workspace Header / Requisition Selector */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
           {/* Dropdown Selector */}

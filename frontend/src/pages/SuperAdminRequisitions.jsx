@@ -1,6 +1,7 @@
+import AdminPageHeader from '../components/admin/AdminPageHeader';
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Briefcase, Building2, Plus, Users, FileText, X, RefreshCw, ExternalLink, Pencil } from 'lucide-react';
+import { Building2, Plus, Users, FileText, X, RefreshCw, ExternalLink, Pencil } from 'lucide-react';
 import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import ResumePreviewModal from '../components/ResumePreviewModal';
@@ -98,16 +99,14 @@ export default function SuperAdminRequisitions() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 sm:p-8 text-gray-900">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <header className="flex flex-wrap items-start justify-between gap-4">
-          <div><h1 className="text-2xl font-bold flex items-center gap-2"><Briefcase size={25} /> Company Requisitions</h1>
-            <p className="mt-2 text-sm text-gray-500">Post contract roles on behalf of companies and review their applicants.</p></div>
+    <div className="admin-page">
+      <div className="w-full min-w-0 space-y-6">
+        <AdminPageHeader title="Company requisitions" section="Hiring" description="Post contract roles on behalf of companies and review their applicants.">
           <div className="flex gap-2">
             <button type="button" aria-label="Refresh requisitions" onClick={load} disabled={loading} className="rounded-xl border bg-white p-3"><RefreshCw size={18} /></button>
             <button type="button" disabled={saving} onClick={() => { setEditingId(null); setForm(emptyForm()); setShowForm(true); setError(''); setSuccess(''); }} className="flex items-center gap-2 rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white"><Plus size={17} /> Post Requisition</button>
           </div>
-        </header>
+        </AdminPageHeader>
         {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
         {success && <div role="status" className="rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-800">{success}</div>}
         {showForm && (

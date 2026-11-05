@@ -1,3 +1,5 @@
+import { superAdminNavigation, isSuperAdminNavActive } from '../utils/superAdminNavigation';
+import '../styles/superAdmin.css';
 import { isFinanceRole } from '../utils/financeAccess';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
@@ -524,20 +526,11 @@ export default function DashboardLayout() {
                 { to: '/dashboard/finance/profile', label: 'Profile', end: false, section: 'ACCOUNT', icon: User },
               ]
               : (userRole === 'Super Admin' || userRole.toLowerCase() === 'super admin')
-                ? [
-                  { to: '/dashboard/superadmin', label: 'Dashboard', end: true, section: 'WORKSPACE', icon: Icons.Dashboard },
-                  { to: '/dashboard/interviews', label: 'Interviews & AI Scores', end: false, section: 'WORKSPACE', icon: Icons.Interviews },
-                  { to: '/dashboard/superadmin/chat', label: 'AI Chat', end: true, section: 'WORKSPACE', icon: Icons.Chat },
-                  { to: '/dashboard/superadmin/requisitions', label: 'Company Requisitions', end: false, section: 'WORKSPACE', icon: Icons.Requisitions },
-                  { to: '/dashboard/superadmin/candidate-management', label: 'Candidate Management', end: false, section: 'CANDIDATE MANAGEMENT', icon: Icons.Accepted, badge: superAdminSelectedCount },
-                  { to: '/dashboard/superadmin/candidate-management?tab=billing', label: 'Candidate Billing', end: false, section: 'CANDIDATE MANAGEMENT', icon: Icons.Receipt },
-                  { to: '/dashboard/superadmin/candidates', label: 'Candidate Pool', end: false, section: 'CANDIDATE MANAGEMENT', icon: Icons.Diamond, count: superAdminCandidateCount },
-                  { to: '/dashboard/superadmin/outreach', label: 'AI Email Outreach', end: false, section: 'CANDIDATE MANAGEMENT', icon: Icons.Mail },
-                  { action: () => setIsOnboardCompanyModalOpen(true), label: 'Onboard Company', section: 'PLATFORM ONBOARDING', icon: Icons.Plus },
-                  { action: () => setIsOnboardVendorModalOpen(true), label: 'Onboard Vendor', section: 'PLATFORM ONBOARDING', icon: Icons.Plus },
-                  { to: '/dashboard/superadmin/accounts', label: 'Buyer Accounts', end: false, section: 'ACCOUNTS & ADMIN', icon: Icons.Requisitions },
-                  { to: '/dashboard/superadmin/admin-accounts', label: 'Admin Accounts', end: false, section: 'ACCOUNTS & ADMIN', icon: Icons.PortalAccess },
-                ]
+                ? superAdminNavigation({
+                  icons: Icons, selectedCount: superAdminSelectedCount, candidateCount: superAdminCandidateCount,
+                  onboardCompany: () => setIsOnboardCompanyModalOpen(true),
+                  onboardVendor: () => setIsOnboardVendorModalOpen(true),
+                })
                 : [
                   { to: '/dashboard/hr', label: 'Dashboard', end: true, icon: Icons.Dashboard },
                   { to: '/dashboard/interviews', label: 'Interviews & AI Scores', end: false, icon: Icons.Interviews },
@@ -584,7 +577,7 @@ export default function DashboardLayout() {
                 const IconComp = item.icon;
                 const isCandidateMgmtPath = location.pathname.startsWith('/dashboard/superadmin/candidate-management') || location.pathname.startsWith('/dashboard/candidate-management');
                 const isBillingTab = new URLSearchParams(location.search).get('tab') === 'billing';
-                const isItemActive = item.to === '/dashboard/requisitions'
+                const isItemActive = isSuperAdmin ? isSuperAdminNavActive(item, location.pathname, location.search) : item.to === '/dashboard/requisitions'
                   ? location.pathname.startsWith('/dashboard/requisitions') && location.pathname !== '/dashboard/requisitions/new'
                   : item.to === '/dashboard/director'
                     ? location.pathname === '/dashboard/director' || location.pathname === '/dashboard/director/'
@@ -617,6 +610,7 @@ export default function DashboardLayout() {
                     ) : (
                       <Link
                         to={item.to}
+                        aria-current={isItemActive ? 'page' : undefined}
                         onClick={onLinkClick}
                         title={item.label}
                         className={`w-8.5 h-8.5 rounded-xl flex items-center justify-center transition-all relative ${
@@ -783,7 +777,7 @@ export default function DashboardLayout() {
               const isCandidateMgmtPath = location.pathname.startsWith('/dashboard/superadmin/candidate-management') || location.pathname.startsWith('/dashboard/candidate-management');
               const isBillingTab = new URLSearchParams(location.search).get('tab') === 'billing';
 
-              const isItemActive = item.to === '/dashboard/requisitions'
+              const isItemActive = isSuperAdmin ? isSuperAdminNavActive(item, location.pathname, location.search) : item.to === '/dashboard/requisitions'
                 ? location.pathname.startsWith('/dashboard/requisitions') && location.pathname !== '/dashboard/requisitions/new'
                 : item.to === '/dashboard/superadmin/candidate-management?tab=billing'
                   ? isCandidateMgmtPath && isBillingTab
@@ -826,6 +820,7 @@ export default function DashboardLayout() {
                   ) : item.to ? (
                     <Link
                       to={item.to}
+                      aria-current={isItemActive ? 'page' : undefined}
                       onClick={onLinkClick}
                       className={`nav-link ${isItemActive ? 'active-nav-tab' : 'sidebar-nav-btn'}`}
                     >
@@ -914,7 +909,7 @@ export default function DashboardLayout() {
   const isFixedMode = isHiringManagerDashboard || isAiChatPage;
 
   return (
-    <div className={`app-shell ${consoleClass} ${isAiChatPage ? 'ai-chat-mode' : ''} ${isFixedMode ? 'ai-fixed-mode h-screen max-h-screen overflow-hidden' : ''}`}>
+    <div className={`app-shell ${consoleClass} ${isSuperAdmin ? 'superadmin-workspace' : ''} ${isAiChatPage ? 'ai-chat-mode' : ''} ${isFixedMode ? 'ai-fixed-mode h-screen max-h-screen overflow-hidden' : ''}`}>
       <style>{`
         .sidebar a,
         .sidebar button,

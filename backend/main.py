@@ -2753,6 +2753,18 @@ def get_superadmin_candidate_pool(
 
     # Pre-cache requisitions for metadata
     req_ids = list({s.get("requisition_id") for s in submissions if s.get("requisition_id")})
+    from modules.interview.domain.links import is_ai_round
+    ai_by_submission = {}
+    ai_by_email_req = {}
+    for interview in db['interview_rounds'].find({'requisition_id': {'$in': req_ids}}, {
+        'id': 1, 'candidate_submission_id': 1, 'candidate_email': 1, 'requisition_id': 1,
+        'round_name': 1, 'round_type': 1, 'status': 1, 'admin_invite_sent_at': 1,
+        'email_delivery': 1, 'created_at': 1,
+    }).sort('created_at', -1):
+        if is_ai_round(interview) and interview.get('status') != 'Cancelled':
+            ai_by_submission.setdefault((interview.get('candidate_submission_id'), interview.get('requisition_id')), interview)
+            if interview.get('candidate_email'):
+                ai_by_email_req.setdefault((interview['candidate_email'].strip().lower(), interview.get('requisition_id')), interview)
     req_map = {}
     if req_ids:
         for r in db["requisitions"].find({"id": {"$in": req_ids}}, {"id": 1, "title": 1, "company_name": 1, "company_profile_id": 1, "client_name": 1, "status": 1, "is_deleted": 1}):
@@ -2826,6 +2838,8 @@ def get_superadmin_candidate_pool(
 
         req_info = req_map.get(s.get("requisition_id"), {})
         created_val = s.get("created_at")
+        ai_round = ai_by_submission.get((sub_id, s.get('requisition_id'))) or ai_by_email_req.get((email, s.get('requisition_id'))) or {}
+        invite_sent = ai_round.get('admin_invite_sent_at')
         app_entry = {
             "submission_id": sub_id,
             "requisition_id": s.get("requisition_id"),
@@ -2834,6 +2848,10 @@ def get_superadmin_candidate_pool(
             "requisition_title": req_info.get("title") or s.get("requisition_title") or "Open Role",
             "company_name": req_info.get("company") or s.get("company_name") or "Enterprise Partner",
             "match_score": submission_match_score(s, submissions),
+            "resume_match_score": s.get('resume_match_score') if s.get('resume_match_score') is not None else (submission_match_score(s, submissions) if s.get('interview_score') is None and s.get('composite_score') is None else None),
+            "ai_interview_status": ai_round.get('status') or 'Not invited',
+            "ai_invitation_sent_at": invite_sent.isoformat() if hasattr(invite_sent, 'isoformat') else invite_sent,
+            "ai_email_delivery_status": (ai_round.get('email_delivery') or {}).get('status'),
             "recommendation": s.get("recommendation"),
             "status": s.get("status") or "Submitted",
             "sent_to_hiring_manager": bool(s.get("sent_to_hiring_manager_at") or s.get("manual_shortlist") or s.get("status") in ("Shortlisted", "Accepted", "Under Review", "Offer Extended", "Offer Accepted", "Hired")),

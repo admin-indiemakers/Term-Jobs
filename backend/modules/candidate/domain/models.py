@@ -23,6 +23,8 @@ class CandidateSubmission(Model):
         "resume_text": None,
         "jd_text": None,
         "match_score": None,
+        "resume_match_score": None,
+        "composite_score": None,
         "recommendation": None,
         "status": "Screened",
         "summary": None,
@@ -45,6 +47,8 @@ class CandidateSubmission(Model):
     resume_text = Column("resume_text")
     jd_text = Column("jd_text")
     match_score = Column("match_score")
+    resume_match_score = Column("resume_match_score")
+    composite_score = Column("composite_score")
     recommendation = Column("recommendation")
     status = Column("status")
     summary = Column("summary")
