@@ -986,6 +986,7 @@ export default function OpenRolesPage({ enabled = true }) {
           }
 
           if (tokenResponse.access_token) {
+            setAuthError(null);
             setAuthLoading(true);
             try {
               let userInfo = {};
@@ -1028,6 +1029,7 @@ export default function OpenRolesPage({ enabled = true }) {
                 return;
               }
               setGoogleResumeRequired(false);
+              setAuthError(null);
               setAuthSuccessMsg('Signed in with Google successfully!');
               setTimeout(() => {
                 setShowAuthModal(false);
@@ -1046,10 +1048,20 @@ export default function OpenRolesPage({ enabled = true }) {
         },
         error_callback: (err) => {
           console.warn('Google OAuth token client error:', err);
-          const currentOrigin = window.location.origin;
-          setAuthError(
-            `Google OAuth Error: "${currentOrigin}" is not registered in Google Cloud Console. Please add "${currentOrigin}" to Authorized JavaScript origins.`
-          );
+          if (err?.type === 'popup_closed') {
+            return;
+          }
+          if (err?.type === 'popup_failed_to_open') {
+            setAuthError('Popup was blocked by your browser. Please allow popups for Google Sign-In.');
+            return;
+          }
+          if (err?.type === 'origin_mismatch') {
+            const currentOrigin = window.location.origin;
+            setAuthError(
+              `Google OAuth Error: "${currentOrigin}" is not registered in Google Cloud Console. Please add "${currentOrigin}" to Authorized JavaScript origins.`
+            );
+            return;
+          }
         },
       });
 
@@ -5465,7 +5477,7 @@ export default function OpenRolesPage({ enabled = true }) {
             </>)}
             {googleResumeRequired && <button type="button" disabled={authLoading} onClick={() => { setGoogleResumeRequired(false); setAuthError(null); }} className="mb-4 w-full text-center text-xs text-neutral-500 hover:text-neutral-900">Use another sign-in method</button>}
 
-            {authError && (
+            {authError && !authSuccessMsg && (
               <div className="p-3 mb-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-start gap-2">
                 <AlertCircle size={15} className="shrink-0 mt-0.5 text-rose-500" />
                 <span className="flex-1">{authError}</span>
