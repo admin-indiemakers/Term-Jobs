@@ -6,13 +6,14 @@ from fastapi import HTTPException
 
 from modules.interview.domain.links import candidate_interview_link, is_ai_round
 from modules.interview.domain.models import InterviewRound
+from modules.interview.domain.invitation_origin import resolve_admin_invitation_origin
 from modules.interview.services.interview_service import (
-    _generate_candidate_passcode, _resolve_interview_domain,
+    _generate_candidate_passcode,
     send_interview_invitation_email,
 )
 
 
-def email_application_interview(submission_id, requisition_id, admin_id):
+def email_application_interview(submission_id, requisition_id, admin_id, origin=None):
     from modules.shared.db import db
     from modules.shared.cache import cache
 
@@ -27,6 +28,7 @@ def email_application_interview(submission_id, requisition_id, admin_id):
     email = (submission.get('candidate_email') or '').strip().lower()
     if not email:
         raise HTTPException(400, 'This application has no candidate email address.')
+    public_origin = resolve_admin_invitation_origin(origin)
     if submission.get('resume_match_score') is None and submission.get('interview_score') is None and submission.get('composite_score') is None:
         db.candidate_submissions.update_one(
             {'id': submission_id, 'resume_match_score': None, 'interview_score': None, 'composite_score': None},
@@ -82,7 +84,7 @@ def email_application_interview(submission_id, requisition_id, admin_id):
     # An unattended expired invitation gets another 10 hours on the same attempt.
     db.interview_rounds.update_one({'id': round_doc['id']}, {'$set': updates})
     round_doc.update(updates)
-    link = candidate_interview_link(round_doc, _resolve_interview_domain())
+    link = candidate_interview_link(round_doc, public_origin)
     company = req.get('company_name') or req.get('client_name')
     if not company and req.get('company_profile_id'):
         profile = db.company_profiles.find_one({'id': req['company_profile_id']}) or {}
@@ -96,6 +98,7 @@ def email_application_interview(submission_id, requisition_id, admin_id):
             duration_minutes=round_doc.get('duration_minutes') or 45,
             meeting_link=link, candidate_portal_link=link,
             passcode=round_doc.get('candidate_passcode') or '', instructions=round_doc.get('instructions') or '',
+            public_origin=public_origin,
         )
     except Exception:
         delivery = {'status': 'failed', 'reason': 'Email delivery could not be confirmed. Please retry.'}

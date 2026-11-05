@@ -158,12 +158,13 @@ def send_interview_invitation_email(
     candidate_portal_link: str,
     passcode: str,
     instructions: str = "",
+    public_origin: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Sends an official HTML interview invitation with hosted domain meeting link & passcode."""
     from modules.candidate_screening_agent.services.email_service import send_email_via_gmail
     import re
 
-    domain = _resolve_interview_domain()
+    domain = public_origin or _resolve_interview_domain()
     if meeting_link:
         meeting_link = re.sub(r"https?://(localhost|127\.0\.0\.1)(:\d+)?", domain, meeting_link)
     if candidate_portal_link:

@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime, timezone
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request
 from fastapi.responses import FileResponse, Response
 
 from modules.candidate.domain.models import CandidateSubmission, Candidate, ScreeningCache
@@ -1685,11 +1685,12 @@ def get_shortlist_quota(
 
 
 @router.post("/{submission_id}/email-ai-interview")
-def email_ai_interview(submission_id: str, body: dict, current_user: User = Depends(get_current_user)):
+def email_ai_interview(submission_id: str, body: dict, current_user: User = Depends(get_current_user), request: Request = None):
     if current_user.role != 'Super Admin':
         raise HTTPException(403, 'Super Admin access required.')
     from modules.candidate.admin_interview_service import email_application_interview
-    return email_application_interview(submission_id, body.get('requisition_id'), current_user.id)
+    origin = request.headers.get('origin') if request else None
+    return email_application_interview(submission_id, body.get('requisition_id'), current_user.id, origin=origin)
 
 
 @router.post("/{submission_id}/direct-shortlist")

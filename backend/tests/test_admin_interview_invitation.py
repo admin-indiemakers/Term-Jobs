@@ -17,7 +17,7 @@ def setup(monkeypatch):
     monkeypatch.setattr(importlib.import_module('modules.shared.db'), 'db', db)
     sender = Mock(return_value={'status': 'success'})
     monkeypatch.setattr(service, 'send_interview_invitation_email', sender)
-    monkeypatch.setattr(service, '_resolve_interview_domain', lambda: 'https://termjobs.test')
+    monkeypatch.setattr(service, 'resolve_admin_invitation_origin', lambda origin=None: 'https://termjobs.test')
     db.requisitions.insert_one({'id': 'req', 'status': 'Published', 'title': 'Engineer', 'tenant_id': 'company'})
     db.candidate_submissions.insert_one({'id': 'sub', 'requisition_id': 'req', 'candidate_email': 'candidate@example.test', 'candidate_name': 'Candidate', 'status': 'Submitted', 'match_score': 55})
     return db, sender, SimpleNamespace(id='admin', role='Super Admin')
