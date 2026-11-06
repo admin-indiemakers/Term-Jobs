@@ -6,6 +6,7 @@ import re
 import uuid
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
+from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, WebSocket, WebSocketDisconnect, Request, UploadFile, File, Form
 from sqlalchemy import func
 from starlette.requests import HTTPConnection
@@ -803,17 +804,78 @@ async def analyze_communication_endpoint(
     return analysis_result
 
 
+class AzureAiTurnRequest(BaseModel):
+    question: Dict[str, Any]
+    candidate_answer: str
+    follow_ups_used: int = 0
+    max_follow_ups: int = 2
+    previous_turns: Optional[List[Dict[str, Any]]] = None
+
+
 @router.get("/rounds/{round_id}/questions")
 def get_assessment_questions(round_id: str):
+    from modules.interview.services.azure_ai_interview import azure_configured, prepare_round_ai_interview
     from modules.interview.services.assessment import load_questions, RUBRIC_VERSION
     with get_session() as session:
         interview = session.query(InterviewRound).filter(InterviewRound.id == round_id).first()
         if not interview:
             raise HTTPException(status_code=404, detail="Interview not found")
+
+        # When Azure OpenAI is configured, automatically extract facts, match, and generate custom questions
+        if azure_configured():
+            try:
+                questions = prepare_round_ai_interview(interview, session)
+                return {
+                    "questions": questions,
+                    "rubric_version": "azure-gpt-6-luna-v1",
+                    "ai_engine": "azure-gpt-6-luna",
+                }
+            except Exception as exc:
+                logger.warn(f"[Azure AI Question Auto-Prepare Notice] {exc}, falling back to default assessment generator")
+
         try:
             return {"questions": load_questions(session, interview), "rubric_version": RUBRIC_VERSION}
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/rounds/{round_id}/azure-ai-turn")
+def azure_ai_turn_endpoint(round_id: str, body: AzureAiTurnRequest):
+    """Processes candidate answer with gpt-6-luna, detecting STAR and generating adaptive follow-ups."""
+    from modules.interview.services.azure_ai_interview import process_interview_turn
+    with get_session() as session:
+        interview = session.query(InterviewRound).filter(InterviewRound.id == round_id).first()
+        if not interview:
+            raise HTTPException(status_code=404, detail="Interview not found")
+        try:
+            return process_interview_turn(
+                round_obj=interview,
+                session=session,
+                question=body.question,
+                candidate_answer=body.candidate_answer,
+                follow_ups_used=body.follow_ups_used,
+                max_follow_ups=body.max_follow_ups,
+                previous_turns=body.previous_turns or [],
+            )
+        except Exception as exc:
+            logger.error(f"[Azure AI Turn Error] {exc}")
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.post("/rounds/{round_id}/azure-ai-complete")
+def azure_ai_complete_endpoint(round_id: str):
+    """Concludes interview, generates comprehensive recruiter scorecard via gpt-6-luna, and marks Completed."""
+    from modules.interview.services.azure_ai_interview import evaluate_interview_session
+    with get_session() as session:
+        interview = session.query(InterviewRound).filter(InterviewRound.id == round_id).first()
+        if not interview:
+            raise HTTPException(status_code=404, detail="Interview not found")
+        try:
+            scorecard = evaluate_interview_session(interview, session)
+            return {"status": "success", "round_id": round_id, "scorecard": scorecard}
+        except Exception as exc:
+            logger.error(f"[Azure AI Complete Error] {exc}")
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @router.get("/rounds/{round_id}/communication-analysis")
