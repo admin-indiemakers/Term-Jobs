@@ -345,7 +345,7 @@ function FilterDropdown({
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
-        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10.5px] font-medium transition cursor-pointer select-none border ${
+        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition cursor-pointer select-none border ${
           isFiltered
             ? 'bg-white/10 border-white/30 text-white shadow-sm'
             : isOpen
@@ -355,13 +355,13 @@ function FilterDropdown({
       >
         {Icon && (
           <Icon
-            size={11}
+            size={13}
             className={`shrink-0 ${isFiltered ? 'text-white' : 'text-neutral-400'}`}
           />
         )}
-        <span className="truncate max-w-[120px]">{displayLabel}</span>
+        <span className="truncate max-w-[130px]">{displayLabel}</span>
         <ChevronDown
-          size={10}
+          size={12}
           className={`shrink-0 text-neutral-400 transition-transform duration-200 ${
             isOpen ? 'rotate-180 text-white' : ''
           }`}
@@ -1991,7 +1991,7 @@ export default function OpenRolesPage({ enabled = true }) {
       window.__PREFETCHED_REQUISITIONS__ = null;
     }
     const prefetched = rolesPrefetch.current;
-    loadOpenRolesPage(request, { page: currentPage, pageSize: 8, q: debouncedSearch, workMode: selectedWorkMode, family: selectedFamily, location: selectedLocation, category: selectedOpportunityCategory }, prefetched)
+    loadOpenRolesPage(request, { page: currentPage, pageSize: 7, q: debouncedSearch, workMode: selectedWorkMode, family: selectedFamily, location: selectedLocation, category: selectedOpportunityCategory }, prefetched)
       .then((data) => {
         if (cancelled) return;
         setRolePage(data);
@@ -2129,13 +2129,16 @@ export default function OpenRolesPage({ enabled = true }) {
   }, []);
 
   const categoryTabs = [{ id: 'ALL', label: 'All Roles', count: rolePage.filtered_total }, ...rolePage.categories];
-  const ROLES_PER_PAGE = 8;
+  const ROLES_PER_PAGE = 7;
   const totalPages = rolePage.total_pages;
   const activePage = currentPage;
   const paginatedJobs = useMemo(() => {
-    const items = requisitions || [];
-    return items.slice(0, 8);
-  }, [requisitions]);
+    let items = requisitions || [];
+    if (selectedExperience && selectedExperience !== 'ALL') {
+      items = items.filter((j) => matchesExperience(j, selectedExperience));
+    }
+    return items.slice(0, 7);
+  }, [requisitions, selectedExperience]);
   const pageStart = Math.max(1, Math.min(activePage - 2, totalPages - 4));
   const visiblePages = Array.from({ length: Math.min(5, totalPages) }, (_, index) => pageStart + index);
 
@@ -3083,11 +3086,11 @@ export default function OpenRolesPage({ enabled = true }) {
               </div>
             ) : (
               <div className="flex-1 flex flex-col justify-between rounded-2xl sm:rounded-3xl bg-[#0B0D12] border border-white/[0.08] p-3 sm:px-5 sm:py-3 shadow-xl will-change-transform min-h-0">
-{/* TOP OF ROLES TAB: Compact Search & Filter Console Linked Directly to Table */}
-                <div className="pb-2.5 mb-2.5 border-b border-white/[0.06] flex flex-wrap items-center gap-2 max-w-3xl">
-                  {/* Compact Keyword Search Input */}
-                  <div className="relative flex-1 min-w-[160px] sm:min-w-[190px] sm:max-w-xs">
-                    <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" />
+{/* TOP OF ROLES TAB: Search & Filter Console Linked Directly to Table */}
+                <div className="pb-3 mb-3 border-b border-white/[0.06] flex flex-wrap items-center gap-2 sm:gap-2.5 w-full">
+                  {/* Keyword Search Input */}
+                  <div className="relative flex-1 min-w-[200px] sm:min-w-[240px] max-w-sm">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" />
                     <input
                       type="text"
                       value={searchQuery}
@@ -3096,7 +3099,7 @@ export default function OpenRolesPage({ enabled = true }) {
                         setCurrentPage(1);
                       }}
                       placeholder="Search roles, skills, company..."
-                      className="w-full bg-white/[0.03] hover:bg-white/[0.05] border border-white/10 rounded-lg pl-7 pr-6 py-1 text-[11px] text-white placeholder-white/40 focus:outline-none focus:border-white/30 transition shadow-inner"
+                      className="w-full bg-white/[0.03] hover:bg-white/[0.05] border border-white/10 rounded-xl pl-9 pr-7 py-1.5 text-xs text-white placeholder-white/40 focus:outline-none focus:border-white/30 transition shadow-inner"
                     />
                     {searchQuery && (
                       <button
@@ -3105,9 +3108,9 @@ export default function OpenRolesPage({ enabled = true }) {
                           setSearchQuery('');
                           setCurrentPage(1);
                         }}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 hover:text-white cursor-pointer"
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/40 hover:text-white cursor-pointer"
                       >
-                        <X size={11} />
+                        <X size={13} />
                       </button>
                     )}
                   </div>
