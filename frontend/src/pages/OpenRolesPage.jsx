@@ -1988,7 +1988,7 @@ export default function OpenRolesPage({ enabled = true }) {
       window.__PREFETCHED_REQUISITIONS__ = null;
     }
     const prefetched = rolesPrefetch.current;
-    loadOpenRolesPage(request, { page: currentPage, pageSize: 7, q: debouncedSearch, workMode: selectedWorkMode, family: selectedFamily, location: selectedLocation, category: selectedOpportunityCategory }, prefetched)
+    loadOpenRolesPage(request, { page: currentPage, pageSize: 8, q: debouncedSearch, workMode: selectedWorkMode, family: selectedFamily, location: selectedLocation, category: selectedOpportunityCategory }, prefetched)
       .then((data) => {
         if (cancelled) return;
         setRolePage(data);
@@ -2126,12 +2126,12 @@ export default function OpenRolesPage({ enabled = true }) {
   }, []);
 
   const categoryTabs = [{ id: 'ALL', label: 'All Roles', count: rolePage.filtered_total }, ...rolePage.categories];
-  const ROLES_PER_PAGE = 7;
+  const ROLES_PER_PAGE = 8;
   const totalPages = rolePage.total_pages;
   const activePage = currentPage;
   const paginatedJobs = useMemo(() => {
     const items = requisitions || [];
-    return items.slice(0, 7);
+    return items.slice(0, 8);
   }, [requisitions]);
   const pageStart = Math.max(1, Math.min(activePage - 2, totalPages - 4));
   const visiblePages = Array.from({ length: Math.min(5, totalPages) }, (_, index) => pageStart + index);
@@ -3285,7 +3285,7 @@ export default function OpenRolesPage({ enabled = true }) {
                 <div className="hidden sm:block overflow-x-auto scrollbar-thin">
                   <div className="min-w-[760px]">
                     {/* Table Header Row */}
-                    <div className="grid grid-cols-[minmax(230px,2fr)_100px_110px_140px_170px_140px] items-center px-4 py-2 text-[10px] font-semibold text-neutral-400 uppercase tracking-wider border-b border-white/[0.06]">
+                    <div className={`grid grid-cols-[minmax(230px,2fr)_100px_110px_140px_170px_140px] items-center px-4 ${paginatedJobs.length <= 7 ? 'py-2.5' : 'py-2'} text-[10px] font-semibold text-neutral-400 uppercase tracking-wider border-b border-white/[0.06]`}>
                       <div className="flex items-center gap-1.5">
                         <ArrowLeft size={10} className="text-neutral-500" />
                         <span>ROLE &amp; COMPANY</span>
@@ -3324,7 +3324,7 @@ export default function OpenRolesPage({ enabled = true }) {
                           <div
                             key={job.id || job._id}
                             onClick={() => handleOpenJob(job)}
-                            className="grid grid-cols-[minmax(230px,2fr)_100px_110px_140px_170px_140px] items-center px-4 py-2 hover:bg-white/[0.04] transition-colors duration-100 ease-out rounded-xl group cursor-pointer"
+                            className={`grid grid-cols-[minmax(230px,2fr)_100px_110px_140px_170px_140px] items-center px-4 ${paginatedJobs.length <= 7 ? 'py-2.5' : 'py-2'} hover:bg-white/[0.04] transition-colors duration-100 ease-out rounded-xl group cursor-pointer`}
                           >
                             {/* 1. Role & Company */}
                             <div className="flex items-center gap-3 min-w-0 pr-3">
