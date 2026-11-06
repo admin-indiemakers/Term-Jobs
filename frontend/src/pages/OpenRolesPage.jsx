@@ -345,7 +345,7 @@ function FilterDropdown({
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
-        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition cursor-pointer select-none border ${
+        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition cursor-pointer select-none border ${
           isFiltered
             ? 'bg-white/10 border-white/30 text-white shadow-sm'
             : isOpen
@@ -3019,7 +3019,7 @@ export default function OpenRolesPage({ enabled = true }) {
           </header>
 
           {/* Section Title Header */}
-          <div className="mb-2 sm:mb-2.5 pt-0 shrink-0">
+          <div className="mb-1.5 sm:mb-2 pt-0 shrink-0">
             <h2 className="font-display text-xl sm:text-2xl font-bold tracking-tight text-white">
               Latest Opportunities
             </h2>
@@ -3085,12 +3085,12 @@ export default function OpenRolesPage({ enabled = true }) {
                 </div>
               </div>
             ) : (
-              <div className="flex-1 flex flex-col justify-between rounded-2xl sm:rounded-3xl bg-[#0B0D12] border border-white/[0.08] p-3 sm:px-5 sm:py-3 shadow-xl will-change-transform min-h-0">
+              <div className="flex-1 flex flex-col justify-between rounded-2xl sm:rounded-3xl bg-[#0B0D12] border border-white/[0.08] p-2.5 sm:px-5 sm:pt-2 sm:pb-2.5 shadow-xl will-change-transform min-h-0">
 {/* TOP OF ROLES TAB: Search & Filter Console Linked Directly to Table */}
-                <div className="pb-3 mb-3 border-b border-white/[0.06] flex flex-wrap items-center gap-2 sm:gap-2.5 w-full">
+                <div className="pb-2 mb-2 border-b border-white/[0.06] flex flex-wrap items-center gap-2 sm:gap-2.5 w-full">
                   {/* Keyword Search Input */}
                   <div className="relative flex-1 min-w-[200px] sm:min-w-[240px] max-w-sm">
-                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" />
+                    <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" />
                     <input
                       type="text"
                       value={searchQuery}
@@ -3099,7 +3099,7 @@ export default function OpenRolesPage({ enabled = true }) {
                         setCurrentPage(1);
                       }}
                       placeholder="Search roles, skills, company..."
-                      className="w-full bg-white/[0.03] hover:bg-white/[0.05] border border-white/10 rounded-xl pl-9 pr-7 py-1.5 text-xs text-white placeholder-white/40 focus:outline-none focus:border-white/30 transition shadow-inner"
+                      className="w-full bg-white/[0.03] hover:bg-white/[0.05] border border-white/10 rounded-xl pl-8.5 pr-7 py-1 text-xs text-white placeholder-white/40 focus:outline-none focus:border-white/30 transition shadow-inner"
                     />
                     {searchQuery && (
                       <button
@@ -3110,7 +3110,7 @@ export default function OpenRolesPage({ enabled = true }) {
                         }}
                         className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/40 hover:text-white cursor-pointer"
                       >
-                        <X size={13} />
+                        <X size={12} />
                       </button>
                     )}
                   </div>
@@ -3286,7 +3286,7 @@ export default function OpenRolesPage({ enabled = true }) {
                 <div className="hidden sm:block overflow-x-auto scrollbar-thin">
                   <div className="min-w-[760px]">
                     {/* Table Header Row */}
-                    <div className={`grid grid-cols-[minmax(230px,2fr)_100px_110px_140px_170px_140px] items-center px-4 ${paginatedJobs.length <= 7 ? 'py-2.5' : 'py-2'} text-[10px] font-semibold text-neutral-400 uppercase tracking-wider border-b border-white/[0.06]`}>
+                    <div className="grid grid-cols-[minmax(230px,2fr)_100px_110px_140px_170px_140px] items-center px-4 py-2 text-[10px] font-semibold text-neutral-400 uppercase tracking-wider border-b border-white/[0.06]">
                       <div className="flex items-center gap-1.5">
                         <ArrowLeft size={10} className="text-neutral-500" />
                         <span>ROLE &amp; COMPANY</span>
