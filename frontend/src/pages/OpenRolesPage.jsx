@@ -2620,7 +2620,7 @@ export default function OpenRolesPage({ enabled = true }) {
             </p>
 
             {/* Pure Transparent Glass Platform Metrics */}
-            <div className="mt-4 sm:mt-5 grid grid-cols-3 gap-2 relative z-10 max-w-sm">
+            <div className="mt-4 sm:mt-5 grid grid-cols-2 gap-2 relative z-10 max-w-sm">
               {/* Card 1: Open Roles */}
               <div className="flex flex-col items-center justify-center p-2 sm:p-2.5 rounded-xl bg-black/[0.02] hover:bg-black/[0.04] border border-neutral-900/15 hover:border-neutral-900/30 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.7)] transition-all group cursor-default">
                 <Briefcase size={13} className="text-neutral-500 group-hover:text-neutral-900 transition-colors shrink-0" />
@@ -2632,18 +2632,7 @@ export default function OpenRolesPage({ enabled = true }) {
                 </div>
               </div>
 
-              {/* Card 2: Enterprise Partners */}
-              <div className="flex flex-col items-center justify-center p-2 sm:p-2.5 rounded-xl bg-black/[0.02] hover:bg-black/[0.04] border border-neutral-900/15 hover:border-neutral-900/30 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.7)] transition-all group cursor-default">
-                <Building2 size={13} className="text-neutral-500 group-hover:text-neutral-900 transition-colors shrink-0" />
-                <div className="text-sm sm:text-base font-extrabold text-neutral-900 tracking-tight leading-none my-1">
-                  {rolePage.stats.companies}
-                </div>
-                <div className="text-[8.5px] sm:text-[9.5px] font-bold text-neutral-500 uppercase tracking-wider leading-tight text-center">
-                  Partners
-                </div>
-              </div>
-
-              {/* Card 3: Avg Review Time */}
+              {/* Card 2: Avg Review Time */}
               <div className="flex flex-col items-center justify-center p-2 sm:p-2.5 rounded-xl bg-black/[0.02] hover:bg-black/[0.04] border border-neutral-900/15 hover:border-neutral-900/30 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.7)] transition-all group cursor-default">
                 <Zap size={13} className="text-neutral-500 group-hover:text-neutral-900 transition-colors shrink-0" />
                 <div className="text-sm sm:text-base font-extrabold text-neutral-900 tracking-tight leading-none my-1">
