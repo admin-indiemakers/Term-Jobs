@@ -1,10 +1,11 @@
 import AdminPageHeader from '../components/admin/AdminPageHeader';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Building2, Plus, Users, FileText, X, RefreshCw, ExternalLink, Pencil } from 'lucide-react';
+import { Building2, Plus, Users, Eye, FileText, X, RefreshCw, ExternalLink, Pencil } from 'lucide-react';
 import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import ResumePreviewModal from '../components/ResumePreviewModal';
+import RequisitionDashboard from '../components/admin/RequisitionDashboard';
 
 const emptyForm = () => ({ client_request_id: crypto.randomUUID(), company_name: '', title: '', department: '', location: '', work_mode: '', experience: '', duration: '', headcount: 1, start_date: '', submission_deadline: '', skills: '', job_description: '', internal_link: '' });
 const fields = [
@@ -20,6 +21,7 @@ export default function SuperAdminRequisitions() {
   const { token } = useAuth();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [showForm, setShowForm] = useState(false);
@@ -32,12 +34,38 @@ export default function SuperAdminRequisitions() {
   const [applicantError, setApplicantError] = useState('');
   const [preview, setPreview] = useState(null);
   const [closing, setClosing] = useState(false);
+  const [reviewTab, setReviewTab] = useState('applicants');
+  const [viewerPage, setViewerPage] = useState(1);
+  const [viewerData, setViewerData] = useState(null);
+  const [loadingViewers, setLoadingViewers] = useState(false);
+  const [viewerError, setViewerError] = useState('');
+  const reviewRef = useRef(null);
+  const selectedRoleId = selected?.id;
+  const openReview = (row, tab = 'applicants') => {
+    setSelected({ ...row });
+    setReviewTab(tab);
+    setViewerPage(1);
+  };
+  useEffect(() => {
+    if (selectedRoleId) reviewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [selectedRoleId]);
+  useEffect(() => {
+    if (!selected || reviewTab !== 'viewers') return;
+    let cancelled = false;
+    setLoadingViewers(true); setViewerData(null); setViewerError('');
+    request(`/api/superadmin/requisitions/${selected.id}/viewers?page=${viewerPage}`, { token, noCache: true })
+      .then(data => { if (!cancelled) setViewerData(data); })
+      .catch(err => { if (!cancelled) setViewerError(err.message || 'Could not load viewers.'); })
+      .finally(() => { if (!cancelled) setLoadingViewers(false); });
+    return () => { cancelled = true; };
+  }, [selected, reviewTab, viewerPage, token]);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const nextRows = await request('/api/superadmin/requisitions', { token, noCache: true });
       setRows(nextRows);
+      setHasLoaded(true);
       setSelected(previous => previous ? nextRows.find(row => row.id === previous.id) || null : null);
     }
     catch (err) { setError(err.message || 'Could not load requisitions.'); }
@@ -52,7 +80,7 @@ export default function SuperAdminRequisitions() {
     return () => { window.clearInterval(timer); window.removeEventListener('focus', refresh); };
   }, [token, load]);
   useEffect(() => {
-    if (!selected) return;
+    if (!selected || reviewTab !== 'applicants') return;
     let cancelled = false;
     setLoadingApplicants(true);
     setApplicants([]);
@@ -62,7 +90,7 @@ export default function SuperAdminRequisitions() {
       .catch(err => { if (!cancelled) setApplicantError(err.message || 'Could not load applicants.'); })
       .finally(() => { if (!cancelled) setLoadingApplicants(false); });
     return () => { cancelled = true; };
-  }, [selected, token]);
+  }, [selected, reviewTab, token]);
 
   const update = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
   const editPosting = (row) => {
@@ -109,6 +137,7 @@ export default function SuperAdminRequisitions() {
         </AdminPageHeader>
         {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
         {success && <div role="status" className="rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-800">{success}</div>}
+        <RequisitionDashboard rows={rows} ready={hasLoaded} loading={loading} onReview={openReview} />
         {showForm && (
           <form onSubmit={publish} className="rounded-2xl border bg-white p-5 sm:p-7 space-y-5">
             <div className="flex justify-between items-center"><h2 className="text-lg font-bold">{editingId ? 'Edit company requisition' : 'Post a company requisition'}</h2><button type="button" aria-label="Close posting form" disabled={saving} onClick={() => setShowForm(false)}><X size={20} /></button></div>
@@ -131,15 +160,34 @@ export default function SuperAdminRequisitions() {
         <section key={sectionName} className="rounded-2xl border bg-white overflow-hidden" aria-label={`${sectionName} requisitions`}>
           <div className="border-b px-5 py-4 font-semibold">{sectionName} requisitions ({sectionRows.length})</div>
           {loading ? <p className="p-8 text-gray-500">Loading requisitions…</p> : !sectionRows.length ? <div className="p-10 text-center text-gray-500"><Building2 className="mx-auto mb-3" /><p>No {sectionName.toLowerCase()} requisitions.</p><p className="text-sm mt-1">{sectionName === 'Closed' ? 'Expired and manually closed postings appear here. Applicants remain available.' : 'Use Post Requisition to publish a role.'}</p></div> :
-            <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-gray-50 text-gray-500"><tr>{['Role / company', 'Work mode / location', 'Due date', 'Status', 'Applicants', 'Actions'].map(label => <th key={label} className="px-5 py-3 font-medium">{label}</th>)}</tr></thead><tbody className="divide-y">{sectionRows.map(row => <tr key={row.id} className={selected?.id === row.id ? 'bg-gray-50' : ''}><td className="px-5 py-4"><p className="mb-1.5 font-mono text-xs font-semibold text-gray-500" title={row.id}>{requisitionRef(row.id)}</p><button type="button" onClick={() => setSelected({ ...row })} className="text-left font-semibold hover:underline">{row.title}</button><p className="mt-1 text-gray-500">{row.company_name}</p></td><td className="px-5 py-4">{row.structured_role.work_mode}<p className="text-gray-500">{row.structured_role.location}</p></td><td className="px-5 py-4">{row.structured_role.submission_deadline}</td><td className="px-5 py-4">{row.status}</td><td className="px-5 py-4"><button onClick={() => setSelected({ ...row })} className="flex items-center gap-2 rounded-lg border px-3 py-2 hover:bg-gray-100"><Users size={16} /> {row.applicants_count} · View</button></td><td className="px-5 py-4"><button type="button" disabled={saving} onClick={() => editPosting(row)} className="flex items-center gap-2 rounded-lg border px-3 py-2 hover:bg-gray-100"><Pencil size={16} /> Edit</button></td></tr>)}</tbody></table></div>}
+            <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-gray-50 text-gray-500"><tr>{['Role / company', 'Work mode / location', 'Due date', 'Status', 'Viewers', 'Applicants', 'Actions'].map(label => <th key={label} className="px-5 py-3 font-medium">{label}</th>)}</tr></thead><tbody className="divide-y">{sectionRows.map(row => <tr key={row.id} className={selected?.id === row.id ? 'bg-gray-50' : ''}><td className="px-5 py-4"><p className="mb-1.5 font-mono text-xs font-semibold text-gray-500" title={row.id}>{requisitionRef(row.id)}</p><button type="button" onClick={() => openReview(row)} className="text-left font-semibold hover:underline">{row.title}</button><p className="mt-1 text-gray-500">{row.company_name}</p></td><td className="px-5 py-4">{row.structured_role.work_mode}<p className="text-gray-500">{row.structured_role.location}</p></td><td className="px-5 py-4">{row.structured_role.submission_deadline}</td><td className="px-5 py-4">{row.status}</td><td className="px-5 py-4"><button type="button" onClick={() => openReview(row, 'viewers')} aria-label={`View viewers for ${row.title}`} className="flex items-center gap-2 whitespace-nowrap rounded-lg border px-3 py-2 hover:bg-gray-100"><Eye size={16} /> {row.viewers_count ?? 0} · View viewers</button></td><td className="px-5 py-4"><button type="button" onClick={() => openReview(row)} aria-label={`View applicants for ${row.title}`} className="flex items-center gap-2 whitespace-nowrap rounded-lg border px-3 py-2 hover:bg-gray-100"><Users size={16} /> {row.applicants_count} · View applicants</button></td><td className="px-5 py-4"><button type="button" disabled={saving} onClick={() => editPosting(row)} className="flex items-center gap-2 rounded-lg border px-3 py-2 hover:bg-gray-100"><Pencil size={16} /> Edit</button></td></tr>)}</tbody></table></div>}
         </section>
           );
         })}
-        {selected && <section className="rounded-2xl border bg-white p-5 sm:p-7 space-y-4">
-          <header className="flex flex-wrap justify-between gap-3"><div><p className="mb-1.5 font-mono text-xs font-semibold text-gray-500" title={selected.id}>{requisitionRef(selected.id)}</p><h2 className="font-bold text-lg">Applicants · {selected.title}</h2><p className="text-sm text-gray-500 mt-1">{selected.company_name} · All applicants are automatically included in Candidate Pool.</p></div><div className="flex items-center gap-3"><Link to="/dashboard/superadmin/candidates" className="text-sm font-semibold underline underline-offset-4">Candidate Pool</Link>{selected.status === 'Published' && <><a target="_blank" rel="noreferrer" href="/open-roles" className="text-sm inline-flex gap-1 items-center">Open Roles <ExternalLink size={14} /></a><button type="button" disabled={closing} onClick={closePosting} className="border rounded-lg px-3 py-2 text-sm">{closing ? 'Closing…' : 'Close posting'}</button></>}</div></header>
+        {selected && <section ref={reviewRef} aria-label="Role activity" className="scroll-mt-6 rounded-2xl border bg-white p-5 sm:p-7 space-y-4">
+          <header className="flex flex-wrap justify-between gap-3"><div><p className="mb-1.5 font-mono text-xs font-semibold text-gray-500" title={selected.id}>{requisitionRef(selected.id)}</p><h2 className="font-bold text-lg">Role activity · {selected.title}</h2><p className="text-sm text-gray-500 mt-1">{selected.company_name}</p></div><div className="flex items-center gap-3"><Link to="/dashboard/superadmin/candidates" className="text-sm font-semibold underline underline-offset-4">Candidate Pool</Link>{selected.status === 'Published' && <><a target="_blank" rel="noreferrer" href="/open-roles" className="text-sm inline-flex gap-1 items-center">Open Roles <ExternalLink size={14} /></a><button type="button" disabled={closing} onClick={closePosting} className="border rounded-lg px-3 py-2 text-sm">{closing ? 'Closing…' : 'Close posting'}</button></>}<button type="button" aria-label="Close role activity" onClick={() => setSelected(null)} className="rounded-lg border p-2"><X size={18} /></button></div></header>
           {selected.internal_link && <div className="rounded-xl border border-gray-200 bg-gray-50 p-4"><p className="mb-1 text-xs font-semibold text-gray-500">Internal reference · Admin only</p><a href={selected.internal_link} target="_blank" rel="noopener noreferrer" className="inline-flex max-w-full items-center gap-2 text-sm font-medium underline underline-offset-4"><span className="break-all">{selected.internal_link}</span><ExternalLink size={14} className="shrink-0" /></a></div>}
+          <div role="group" aria-label="Activity view" className="flex flex-wrap gap-2 border-b pb-4">
+            <button type="button" aria-pressed={reviewTab === 'applicants'} onClick={() => setReviewTab('applicants')} className={`inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-semibold ${reviewTab === 'applicants' ? 'bg-gray-900 text-white' : 'bg-white text-gray-700'}`}><Users size={16} /> Applicants ({selected.applicants_count ?? 0})</button>
+            <button type="button" aria-pressed={reviewTab === 'viewers'} onClick={() => setReviewTab('viewers')} className={`inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-semibold ${reviewTab === 'viewers' ? 'bg-gray-900 text-white' : 'bg-white text-gray-700'}`}><Eye size={16} /> Viewers ({selected.viewers_count ?? 0})</button>
+          </div>
+          {reviewTab === 'applicants' ? <>
+            <p className="text-sm text-gray-500">All applicants are automatically included in Candidate Pool.</p>
           {applicantError && <p role="alert" className="text-red-700 text-sm">{applicantError}</p>}
           {loadingApplicants ? <p className="text-sm text-gray-500 py-4">Loading applicants…</p> : !applicantError && !applicants.length ? <p className="text-sm text-gray-500 py-6">No applications yet. Applicants will appear here after submitting through Open Roles.</p> : <div className="divide-y">{applicants.map(person => <article key={person.id} className="flex flex-wrap items-center justify-between gap-4 py-4"><div><h3 className="font-semibold">{person.candidate_name}</h3><p className="text-sm text-gray-500">{person.candidate_email}{person.candidate_phone ? ` · ${person.candidate_phone}` : ''}</p><p className="text-xs text-gray-500 mt-1">{person.status} · Applied {person.applied_at ? new Date(person.applied_at).toLocaleDateString() : '—'}</p></div><button disabled={!person.has_resume} onClick={() => setPreview(person)} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold disabled:opacity-40"><FileText size={16} /> {person.has_resume ? 'View resume' : 'No resume uploaded'}</button></article>)}</div>}
+          </> : <>
+            <p className="text-sm text-gray-500">Signed-in candidates are identified. Other visits appear as anonymous browser sessions. Repeat opens count once per candidate or session. View tracking starts with this update.</p>
+            {viewerError && <p role="alert" className="text-sm text-red-700">{viewerError}</p>}
+            {loadingViewers ? <p role="status" className="py-4 text-sm text-gray-500">Loading viewers…</p> : viewerData && <>
+              <p className="text-sm font-medium text-gray-700">{viewerData.identified_count} identified · {viewerData.anonymous_count} anonymous</p>
+              {!viewerData.viewers.length ? <p className="py-6 text-sm text-gray-500">No recorded views yet. Viewers appear after opening this role’s details on Open Roles.</p> : <div className="divide-y">{viewerData.viewers.map(person => <article key={person.id} className="flex flex-wrap items-center justify-between gap-4 py-4">
+                <div className="min-w-0"><h3 className="font-semibold">{person.candidate_name}</h3>{person.candidate_email && <p className="break-all text-sm text-gray-500">{person.candidate_email}</p>}<p className="mt-1 text-xs text-gray-500">First viewed {person.first_viewed_at ? new Date(person.first_viewed_at).toLocaleString() : '—'}<br />Last viewed {person.last_viewed_at ? new Date(person.last_viewed_at).toLocaleString() : '—'}</p></div>
+                <span className={`rounded-full px-3 py-1 text-xs font-semibold ${person.has_applied ? 'bg-green-50 text-green-800' : 'bg-gray-100 text-gray-600'}`}>{person.has_applied ? 'Applied' : person.candidate_email ? 'Viewed · no application' : 'Anonymous'}</span>
+              </article>)}</div>}
+              {(viewerPage > 1 || viewerData.has_more) && <div className="flex items-center justify-between gap-3 pt-3 text-sm"><button type="button" disabled={viewerPage === 1} onClick={() => setViewerPage(page => page - 1)} className="rounded-lg border px-3 py-2 disabled:opacity-40">Previous</button><span>Page {viewerPage}</span><button type="button" disabled={!viewerData.has_more} onClick={() => setViewerPage(page => page + 1)} className="rounded-lg border px-3 py-2 disabled:opacity-40">Next</button></div>}
+            </>}
+          </>}
+
         </section>}
       </div>
       {preview && <ResumePreviewModal token={token} candidateId={preview.id} filename={preview.filename} onClose={() => setPreview(null)} />}

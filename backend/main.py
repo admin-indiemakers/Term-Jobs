@@ -186,6 +186,9 @@ async def vercel_routing_middleware(request: Request, call_next):
     # Deployment branch is authoritative; client headers cannot select production.
     from modules.shared.config import current_cluster_var, is_dev_qa_environment
     target_cluster = "dev_qa" if is_dev_qa_environment() else "main"
+    from modules.shared.database_access import rejects_environment_request
+    if request.method != 'OPTIONS' and rejects_environment_request(request.headers, target_cluster):
+        return JSONResponse(status_code=403, content={'detail': 'This frontend cannot access this database environment. Use the matching QA/dev backend.'}, headers=_get_cors_headers(request))
     token = current_cluster_var.set(target_cluster)
 
     try:
@@ -273,6 +276,13 @@ async def http_exception_handler(request: Request, exc: HTTPException):
         headers=_get_cors_headers(request),
     )
 
+@app.get('/api/environment')
+def api_environment():
+    """Allow proxies to verify isolation without accessing a database or credentials."""
+    from modules.shared.config import get_active_cluster
+    return JSONResponse({'active_cluster': get_active_cluster()}, headers={'Cache-Control': 'no-store'})
+
+
 @app.get("/health")
 @app.get("/api/health")
 def health_check():
@@ -322,8 +332,11 @@ app.include_router(workforce_router, prefix="/api", tags=["Workforce"])
 app.include_router(workforce_router, tags=["Workforce"])
 app.include_router(workorder_router)
 app.include_router(superadmin_agent_router)
-from modules.requisition.superadmin_router import router as superadmin_requisitions_router
+from modules.superadmin_agent.overview import router as superadmin_overview_router
+app.include_router(superadmin_overview_router)
+from modules.requisition.superadmin_router import router as superadmin_requisitions_router, public_views_router
 app.include_router(superadmin_requisitions_router)
+app.include_router(public_views_router)
 app.include_router(company_admin_agent_router)
 app.include_router(hiring_manager_agent_router)
 app.include_router(aura_agent_router, prefix="/api/v2/hm-agent", tags=["Aura AI Assistant"])
@@ -3543,6 +3556,26 @@ def candidate_outreach_respond(request: Request, token: str, action: str = "inte
 </body>
 </html>"""
     )
+
+
+@app.get('/api/superadmin/outreach/email-preview')
+def preview_superadmin_outreach_email(requisition_id: str | None = None, current_user: User = Depends(get_current_user)) -> dict:
+    """Render the actual outgoing template with inert sample credentials; never send mail."""
+    if current_user.role != 'Super Admin':
+        raise HTTPException(403, 'Super Admin authorization required.')
+    from modules.shared.db import db
+    from modules.candidate.outreach_service import build_interactive_outreach_html
+    requisition = db.requisitions.find_one({'id': requisition_id}) if requisition_id else {}
+    if requisition_id and not requisition:
+        raise HTTPException(404, 'Requisition not found.')
+    skills = requisition.get('skills') or []
+    if isinstance(skills, str):
+        skills = [item.strip() for item in skills.split(',') if item.strip()]
+    return {'html': build_interactive_outreach_html(
+        candidate_name='Candidate Name', requisition_title=requisition.get('title') or 'Fullstack Developer',
+        company_name=requisition.get('company_name') or requisition.get('client_name') or 'Enterprise Partner',
+        match_score=80, matched_skills=skills, token='email-design-preview',
+    )}
 
 
 @app.get("/api/superadmin/outreach/stats")

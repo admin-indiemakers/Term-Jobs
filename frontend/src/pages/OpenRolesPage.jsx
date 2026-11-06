@@ -1,3 +1,5 @@
+import { loadOpenRolesPage } from '../utils/loadOpenRoles';
+import { trackRoleView } from '../utils/trackRoleView';
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
@@ -504,20 +506,9 @@ export default function OpenRolesPage({ enabled = true }) {
     }
   }, [refreshProfile]);
 
-  // Job search & filters - hydrate instantly from session cache if available (0ms render)
-  const [requisitions, setRequisitions] = useState(() => {
-    try {
-      const cached = sessionStorage.getItem('tj_cached_requisitions');
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed?.data) && parsed.data.length > 0) {
-          return parsed.data;
-        }
-      }
-    } catch (e) {}
-    return [];
-  });
-  const [loading, setLoading] = useState(() => requisitions.length === 0);
+  // Jobs must come from the current backend, never an unverified legacy cache.
+  const [requisitions, setRequisitions] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedWorkMode, setSelectedWorkMode] = useState('ALL');
@@ -526,6 +517,14 @@ export default function OpenRolesPage({ enabled = true }) {
   const [selectedExperience, setSelectedExperience] = useState('ALL');
   const [selectedOpportunityCategory, setSelectedOpportunityCategory] = useState('ALL');
   const [currentPage, setCurrentPage] = useState(1);
+  const [rolePage, setRolePage] = useState({ total: 0, total_pages: 1, filtered_total: 0, categories: [], filters: { families: [], locations: [] }, stats: { roles: 0, companies: 0 } });
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const rolesPrefetch = useRef(undefined);
+  useEffect(() => {
+    if (searchQuery.trim() === debouncedSearch) return;
+    const timer = setTimeout(() => { setDebouncedSearch(searchQuery.trim()); setCurrentPage(1); }, 250);
+    return () => clearTimeout(timer);
+  }, [searchQuery, debouncedSearch]);
   const [savedJobIds, setSavedJobIds] = useState(() => {
     try {
       const saved = localStorage.getItem('tj_saved_jobs');
@@ -554,6 +553,13 @@ export default function OpenRolesPage({ enabled = true }) {
 
   // Modal states
   const [selectedJob, setSelectedJob] = useState(null);
+  const viewedJobId = selectedJob?.id;
+  const viewerToken = candidateAuth?.candidateToken;
+  useEffect(() => {
+    if (!viewedJobId) return;
+    // Analytics failure must not prevent reading or applying to a role.
+    trackRoleView(API_BASE_URL, viewedJobId, viewerToken).catch(() => {});
+  }, [viewedJobId, viewerToken]);
   const [modalActiveTab, setModalActiveTab] = useState('job_details');
   const [expandedSections, setExpandedSections] = useState({
     company: false,
@@ -1970,126 +1976,44 @@ export default function OpenRolesPage({ enabled = true }) {
     }
   }, [candidateUser, selectedJob]);
 
-  // Fetch published requisitions only when Open Roles is active/enabled
+  // Fetch current-environment roles and show failures instead of stale rows.
   useEffect(() => {
     if (!enabled) return;
-
     let cancelled = false;
-    if (requisitions.length === 0) {
-      setLoading(true);
-    }
+    setLoading(true);
     setError(null);
-
-    const onDataLoaded = (data) => {
-      if (cancelled) return;
-      if (Array.isArray(data)) {
-        setRequisitions(data);
-        setLoading(false);
-        try {
-          sessionStorage.setItem('tj_cached_requisitions', JSON.stringify({ t: Date.now(), data }));
-        } catch (e) {}
-      }
-    };
-
-    // 1. Consume early speculatively prefetched request from <head> if present
-    if (typeof window !== 'undefined' && window.__PREFETCHED_REQUISITIONS__) {
-      const earlyPromise = window.__PREFETCHED_REQUISITIONS__;
-      window.__PREFETCHED_REQUISITIONS__ = null; // consume once
-      earlyPromise
-        .then((data) => {
-          if (data && Array.isArray(data) && data.length > 0) {
-            onDataLoaded(data);
-          } else {
-            // fallback to client request
-            return request('/api/public/requisitions').then(onDataLoaded);
-          }
-        })
-        .catch(() => {
-          request('/api/public/requisitions').then(onDataLoaded).catch((err) => {
-            if (!cancelled) {
-              if (requisitions.length === 0) setError(err.message || 'Could not load open roles.');
-              setLoading(false);
-            }
-          });
-        });
-      return () => {
-        cancelled = true;
-      };
+    try { sessionStorage.removeItem('tj_cached_requisitions'); } catch {}
+    if (rolesPrefetch.current === undefined) {
+      rolesPrefetch.current = window.__PREFETCHED_REQUISITIONS__ || null;
+      window.__PREFETCHED_REQUISITIONS__ = null;
     }
-
-    // 2. Standard request with fresh data fetch
-    request('/api/public/requisitions', { forceRefresh: true, noCache: true })
-      .then(onDataLoaded)
-      .catch((err) => {
-        console.error('Error fetching public requisitions:', err);
-        if (!cancelled) {
-          if (requisitions.length === 0) {
-            setError(err.message || 'Could not load open roles.');
-          }
-          setLoading(false);
+    const prefetched = rolesPrefetch.current;
+    loadOpenRolesPage(request, { page: currentPage, q: debouncedSearch, workMode: selectedWorkMode, family: selectedFamily, location: selectedLocation, category: selectedOpportunityCategory }, prefetched)
+      .then((data) => {
+        if (cancelled) return;
+        setRolePage(data);
+        setRequisitions(data.items);
+        if (selectedOpportunityCategory !== 'ALL' && !data.categories.some(item => item.id === selectedOpportunityCategory)) {
+          setSelectedOpportunityCategory('ALL');
+          setCurrentPage(1);
+          return;
         }
-      });
+        if (currentPage > data.total_pages) setCurrentPage(data.total_pages);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setRequisitions([]);
+          setError(err.message || 'Could not load open roles.');
+        }
+      })
+      .finally(() => { rolesPrefetch.current = null; if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [enabled, currentPage, debouncedSearch, selectedWorkMode, selectedFamily, selectedLocation, selectedOpportunityCategory]);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [enabled]);
+  // Options and counts describe the full result set, not just the current page.
+  const availableFamilies = rolePage.filters.families;
+  const availableLocations = rolePage.filters.locations;
 
-  // Filtered job list
-  const filteredJobs = useMemo(() => {
-    return requisitions.filter((job) => {
-      // 1. Exclude closed roles (only Published roles are displayed)
-      const status = (job.status || '').toLowerCase();
-      if (status && status !== 'published') return false;
-
-      // 2. Exclude expired roles whose application due date has passed
-      const dueDateVal = job.due_date || job.submission_deadline || job.application_due_date || job.structured_role?.submission_deadline;
-      const dueInfo = formatDueDate(dueDateVal);
-      if (dueInfo && dueInfo.isExpired) return false;
-
-      const role = job.structured_role || {};
-      const title = (job.title || '').toLowerCase();
-      const comp = (job.company_name || '').toLowerCase();
-      const desc = (job.generated_jd_markdown || '').toLowerCase();
-      const skills = (role.must_have_skills || []).concat(role.nice_to_have_skills || []).map((s) => s.toLowerCase());
-
-      const query = searchQuery.trim().toLowerCase();
-      const matchesSearch =
-        !query ||
-        title.includes(query) ||
-        comp.includes(query) ||
-        desc.includes(query) ||
-        skills.some((s) => s.includes(query));
-
-      const rawMode = (role.work_mode || job.work_mode || 'Onsite').toLowerCase();
-      const matchesWorkMode =
-        selectedWorkMode === 'ALL' ||
-        (selectedWorkMode === 'Remote' && rawMode.includes('remote')) ||
-        (selectedWorkMode === 'Hybrid' && rawMode.includes('hybrid')) ||
-        (selectedWorkMode === 'Onsite' && (
-          rawMode.includes('onsite') ||
-          rawMode.includes('on-site') ||
-          rawMode.includes('in-office') ||
-          (!rawMode.includes('remote') && !rawMode.includes('hybrid'))
-        ));
-
-      const jobDept = getJobDepartment(job);
-      const matchesFamily =
-        selectedFamily === 'ALL' || jobDept.toLowerCase() === selectedFamily.toLowerCase();
-
-      const locVal = Array.isArray(role.location)
-        ? role.location.join(' ')
-        : (role.location || job.location || job.company_location || '');
-      const matchesLocation =
-        selectedLocation === 'ALL' || locVal.toLowerCase().includes(selectedLocation.toLowerCase());
-
-      const matchesExp = matchesExperience(job, selectedExperience);
-
-      return matchesSearch && matchesWorkMode && matchesFamily && matchesLocation && matchesExp;
-    });
-  }, [requisitions, searchQuery, selectedWorkMode, selectedFamily, selectedLocation, selectedExperience]);
-
-  // Options for filter dropdowns:
   const workModeCounts = useMemo(() => {
     const counts = { Remote: 0, Hybrid: 0, Onsite: 0 };
     requisitions.forEach((j) => {
@@ -2109,66 +2033,19 @@ export default function OpenRolesPage({ enabled = true }) {
     { value: 'Onsite', label: 'Onsite', count: workModeCounts.Onsite },
   ], [workModeCounts]);
 
-  const departmentCounts = useMemo(() => {
-    const counts = {};
-    requisitions.forEach((j) => {
-      const dept = getJobDepartment(j);
-      if (dept && dept !== 'General') {
-        counts[dept] = (counts[dept] || 0) + 1;
-      }
-    });
-    return counts;
-  }, [requisitions]);
-
   const departmentOptions = useMemo(() => {
     const opts = [{ value: 'ALL', label: 'All Depts' }];
-    const depts = Object.keys(departmentCounts).sort((a, b) => a.localeCompare(b));
-    depts.forEach((d) => {
-      opts.push({
-        value: d,
-        label: d,
-        count: departmentCounts[d],
-      });
-    });
-    return opts;
-  }, [departmentCounts]);
-
-  // Locations for filter dropdown - strictly geographic locations (Work modes like Remote/Hybrid/Onsite are handled by All Modes)
-  const availableLocations = useMemo(() => {
-    const WORK_MODES = new Set([
-      'remote',
-      'hybrid',
-      'onsite',
-      'on-site',
-      'in-office',
-      'wfh',
-      'remote / hybrid',
-      'hybrid / remote',
-      'work from home',
-    ]);
-    const set = new Set();
-    requisitions.forEach((j) => {
-      const loc = j.structured_role?.location || j.location || j.company_location;
-      const addGeoLocation = (val) => {
-        if (!val || typeof val !== 'string') return;
-        const trimmed = val.trim();
-        if (!trimmed) return;
-        if (!WORK_MODES.has(trimmed.toLowerCase())) {
-          const normalized = trimmed.length > 2 && trimmed === trimmed.toUpperCase()
-            ? trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase()
-            : trimmed;
-          set.add(normalized);
-        }
-      };
-
-      if (Array.isArray(loc)) {
-        loc.forEach((l) => addGeoLocation(l));
-      } else if (loc && typeof loc === 'string') {
-        addGeoLocation(loc);
+    const allFamilies = (availableFamilies && availableFamilies.length > 0)
+      ? availableFamilies
+      : Array.from(new Set(requisitions.map((j) => getJobDepartment(j)).filter(Boolean)));
+    allFamilies.forEach((d) => {
+      if (d && d !== 'General') {
+        const count = requisitions.filter((j) => getJobDepartment(j).toLowerCase() === d.toLowerCase()).length;
+        opts.push({ value: d, label: d, count });
       }
     });
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [requisitions]);
+    return opts;
+  }, [availableFamilies, requisitions]);
 
   const locationOptions = useMemo(() => {
     const opts = [{ value: 'ALL', label: 'All Locations' }];
@@ -2230,55 +2107,6 @@ export default function OpenRolesPage({ enabled = true }) {
     return mode.toLowerCase() === 'remote' ? 'Remote' : mode;
   };
 
-  const getJobCategory = useCallback((job) => {
-    const role = job.structured_role || {};
-    // 1. Prefer real stored family from database
-    const rawFamily = (role.job_family || job.job_family || '').trim();
-    if (rawFamily && rawFamily.toLowerCase() !== 'general' && rawFamily.toLowerCase() !== 'other') {
-      return rawFamily;
-    }
-    const rawCategory = (job.category || '').trim();
-    if (rawCategory && rawCategory.toLowerCase() !== 'general') {
-      return rawCategory;
-    }
-
-    // 2. Classify strictly by real role title
-    const title = (job.title || '').toLowerCase();
-    if (title.includes('qa') || title.includes('test') || title.includes('quality')) {
-      return 'QA & Testing';
-    }
-    if (
-      title.includes('developer') ||
-      title.includes('engineer') ||
-      title.includes('programmer') ||
-      title.includes('frontend') ||
-      title.includes('backend') ||
-      title.includes('full stack') ||
-      title.includes('web') ||
-      title.includes('mobile') ||
-      title.includes('software')
-    ) {
-      return 'Development';
-    }
-    if (title.includes('devops') || title.includes('cloud') || title.includes('infrastructure') || title.includes('sre')) {
-      return 'DevOps';
-    }
-    if (title.includes('design') || title.includes('ui') || title.includes('ux')) {
-      return 'Design';
-    }
-    if (title.includes('human resource') || title.includes('hr ') || title.startsWith('hr') || title.includes('recruiter') || title.includes('talent')) {
-      return 'HR';
-    }
-    if (title.includes('sales') || title.includes('business dev') || title.includes('marketing')) {
-      return 'Sales';
-    }
-    if (title.includes('service') || title.includes('operation') || title.includes('ops') || title.includes('field service') || title.includes('logistics')) {
-      return 'Operations';
-    }
-
-    return 'Other';
-  }, []);
-
   const getExperienceDisplay = useCallback((job) => {
     const role = job.structured_role || {};
     if (role.experience && typeof role.experience === 'string' && role.experience.trim()) {
@@ -2297,101 +2125,13 @@ export default function OpenRolesPage({ enabled = true }) {
     return '';
   }, []);
 
-  // Category tabs dynamically derived ONLY from real data with count > 0
-  const categoryTabs = useMemo(() => {
-    const countMap = new Map();
-
-    filteredJobs.forEach((job) => {
-      const cat = getJobCategory(job);
-      if (cat) {
-        countMap.set(cat, (countMap.get(cat) || 0) + 1);
-      }
-    });
-
-    const tabs = [{ id: 'ALL', label: 'All Roles', count: filteredJobs.length }];
-
-    Array.from(countMap.entries())
-      .filter(([_, count]) => count > 0)
-      .sort((a, b) => b[1] - a[1])
-      .forEach(([id, count]) => {
-        tabs.push({ id, label: id, count });
-      });
-
-    return tabs;
-  }, [filteredJobs, getJobCategory]);
-
-  // Keep selected category valid if search or filters narrow down the list
-  useEffect(() => {
-    if (selectedOpportunityCategory !== 'ALL') {
-      const exists = categoryTabs.some((t) => t.id === selectedOpportunityCategory);
-      if (!exists) {
-        setSelectedOpportunityCategory('ALL');
-        setCurrentPage(1);
-      }
-    }
-  }, [categoryTabs, selectedOpportunityCategory]);
-
-  const categoryFilteredJobs = useMemo(() => {
-    if (selectedOpportunityCategory === 'ALL') {
-      return filteredJobs;
-    }
-    return filteredJobs.filter((job) => getJobCategory(job) === selectedOpportunityCategory);
-  }, [filteredJobs, selectedOpportunityCategory, getJobCategory]);
-
-  // Dynamic height-aware pagination:
-  // Each page holds up to 7 roles, but when roles have wrapped multiline skills,
-  // we dynamically reduce the roles on that page by 1 or 2 and move them to the next page,
-  // keeping the overall tab height consistent with Page 1 without compressing role rows.
-  const paginatedPages = useMemo(() => {
-    if (!categoryFilteredJobs || categoryFilteredJobs.length === 0) return [[]];
-
-    const getEstimatedRowHeight = (job) => {
-      const role = job.structured_role || {};
-      const rawSkills = (role.must_have_skills || []).concat(role.nice_to_have_skills || []);
-      const skills = rawSkills.filter((s) => s && typeof s === 'string' && s.trim());
-      const top2 = skills.slice(0, 2);
-      const totalSkillChars = top2.reduce((acc, s) => acc + s.length, 0);
-
-      // In a 170px wide skills column:
-      // ~68px: long multiline wrap (e.g. >= 36 chars or very long skill title)
-      // ~60px: 2-line wrapped skills
-      // ~48px: single-line compact skills
-      if (totalSkillChars >= 36 || top2.some((s) => s.length >= 22)) return 68;
-      if (totalSkillChars > 16 || top2.some((s) => s.length > 11)) return 60;
-      return 48;
-    };
-
-    const pages = [];
-    let currentPageJobs = [];
-    let accumulatedHeight = 0;
-    const MAX_PAGE_HEIGHT = 410; // Calibrated to Page 1's height with 7 compact roles
-    const MAX_ROLES_PER_PAGE = 7; // Never exceed 7 roles per page
-
-    for (const job of categoryFilteredJobs) {
-      const rowHeight = getEstimatedRowHeight(job);
-      const wouldOverflowHeight = currentPageJobs.length >= 5 && accumulatedHeight + rowHeight > MAX_PAGE_HEIGHT;
-      const wouldExceedMaxRoles = currentPageJobs.length >= MAX_ROLES_PER_PAGE;
-
-      if (wouldExceedMaxRoles || wouldOverflowHeight) {
-        pages.push(currentPageJobs);
-        currentPageJobs = [job];
-        accumulatedHeight = rowHeight;
-      } else {
-        currentPageJobs.push(job);
-        accumulatedHeight += rowHeight;
-      }
-    }
-
-    if (currentPageJobs.length > 0) {
-      pages.push(currentPageJobs);
-    }
-
-    return pages;
-  }, [categoryFilteredJobs]);
-
-  const totalPages = Math.max(1, paginatedPages.length);
-  const activePage = Math.min(currentPage, totalPages);
-  const paginatedJobs = paginatedPages[activePage - 1] || [];
+  const categoryTabs = [{ id: 'ALL', label: 'All Roles', count: rolePage.filtered_total }, ...rolePage.categories];
+  const ROLES_PER_PAGE = 8;
+  const totalPages = rolePage.total_pages;
+  const activePage = currentPage;
+  const paginatedJobs = requisitions;
+  const pageStart = Math.max(1, Math.min(activePage - 2, totalPages - 4));
+  const visiblePages = Array.from({ length: Math.min(5, totalPages) }, (_, index) => pageStart + index);
 
   const handleOpenJob = (job) => {
     setSelectedJob(job);
@@ -2882,7 +2622,7 @@ export default function OpenRolesPage({ enabled = true }) {
               <div className="flex flex-col items-center justify-center p-2 sm:p-2.5 rounded-xl bg-black/[0.02] hover:bg-black/[0.04] border border-neutral-900/15 hover:border-neutral-900/30 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.7)] transition-all group cursor-default">
                 <Briefcase size={13} className="text-neutral-500 group-hover:text-neutral-900 transition-colors shrink-0" />
                 <div className="text-sm sm:text-base font-extrabold text-neutral-900 tracking-tight leading-none my-1">
-                  {requisitions.length}
+                  {rolePage.stats.roles}
                 </div>
                 <div className="text-[8.5px] sm:text-[9.5px] font-bold text-neutral-500 uppercase tracking-wider leading-tight text-center">
                   Open Roles
@@ -2893,7 +2633,7 @@ export default function OpenRolesPage({ enabled = true }) {
               <div className="flex flex-col items-center justify-center p-2 sm:p-2.5 rounded-xl bg-black/[0.02] hover:bg-black/[0.04] border border-neutral-900/15 hover:border-neutral-900/30 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.7)] transition-all group cursor-default">
                 <Building2 size={13} className="text-neutral-500 group-hover:text-neutral-900 transition-colors shrink-0" />
                 <div className="text-sm sm:text-base font-extrabold text-neutral-900 tracking-tight leading-none my-1">
-                  {new Set(requisitions.map((r) => r.company_name).filter(Boolean)).size}
+                  {rolePage.stats.companies}
                 </div>
                 <div className="text-[8.5px] sm:text-[9.5px] font-bold text-neutral-500 uppercase tracking-wider leading-tight text-center">
                   Partners
@@ -3274,14 +3014,15 @@ export default function OpenRolesPage({ enabled = true }) {
             </div>
           </header>
 
-{/* Section Title Header */}
+          {/* Section Title Header */}
           <div className="mb-3.5 pt-1">
             <h2 className="font-display text-xl sm:text-2xl font-bold tracking-tight text-white">
               Latest Opportunities
             </h2>
             <p className="text-xs text-neutral-400 mt-0.5 font-medium">
-              {categoryFilteredJobs.length} active roles available
+              {rolePage?.filtered_total || requisitions.length} active roles available
             </p>
+          </div>
           </div>
 
                     {/* Opportunities List / Table Section */}
@@ -3306,7 +3047,7 @@ export default function OpenRolesPage({ enabled = true }) {
                   Retry
                 </button>
               </div>
-            ) : categoryFilteredJobs.length === 0 ? (
+            ) : rolePage.total === 0 ? (
               <div className="py-16 px-6 rounded-3xl bg-[#0B0D12] border border-white/[0.08] text-center max-w-xl mx-auto my-8 backdrop-blur-md">
                 <div className="w-12 h-12 rounded-2xl bg-white/[0.05] border border-white/10 flex items-center justify-center text-neutral-400 mx-auto mb-3">
                   <Search size={22} />
@@ -3675,7 +3416,7 @@ export default function OpenRolesPage({ enabled = true }) {
                 {/* Table Footer: Count & Pagination */}
                 <div className="mt-auto pt-2.5 border-t border-white/[0.06] flex items-center justify-between px-2 text-xs">
                   <div className="text-neutral-400 font-medium text-[11.5px]">
-                    Showing {paginatedJobs.length} of {categoryFilteredJobs.length} roles
+                    Showing {(activePage - 1) * ROLES_PER_PAGE + 1}–{(activePage - 1) * ROLES_PER_PAGE + paginatedJobs.length} of {rolePage.total} roles
                   </div>
                   <div className="flex items-center gap-1.5">
                     <button
@@ -3687,11 +3428,13 @@ export default function OpenRolesPage({ enabled = true }) {
                     >
                       <ChevronLeft size={13} />
                     </button>
-                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                    {visiblePages.map((page) => (
                       <button
                         key={page}
                         type="button"
                         onClick={() => setCurrentPage(page)}
+                        aria-label={`Page ${page}`}
+                        aria-current={activePage === page ? 'page' : undefined}
                         className={`w-7 h-7 rounded-full text-xs font-semibold flex items-center justify-center transition cursor-pointer ${
                           activePage === page
                             ? 'bg-white text-black font-bold shadow-sm'
@@ -3868,7 +3611,6 @@ export default function OpenRolesPage({ enabled = true }) {
           </main>
         </div>
       </div>
-    </div>
 
     {/* ============================================================ */}
     {/* VIEW 2: CANDIDATE INTERVIEWS (HORIZONTAL SLIDE PAGE UI)      */}

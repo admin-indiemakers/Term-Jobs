@@ -57,8 +57,25 @@ export default function SuperAdminOutreachControl() {
   const [triggeringOutreach, setTriggeringOutreach] = useState(false);
   const [testingTelegram, setTestingTelegram] = useState(false);
   const [alertingCandidateId, setAlertingCandidateId] = useState(null);
-  const [activeTab, setActiveTab] = useState('candidates'); // 'candidates' | 'activity' | 'message_preview'
+  const [activeTab, setActiveTab] = useState('candidates'); // 'candidates' | 'activity' | 'email_preview'
   const [previewChannel, setPreviewChannel] = useState('telegram'); // 'telegram' | 'email'
+  const [emailPreview, setEmailPreview] = useState('');
+  const [emailPreviewError, setEmailPreviewError] = useState('');
+  const [loadingEmailPreview, setLoadingEmailPreview] = useState(false);
+
+  useEffect(() => {
+    if (activeTab !== 'email_preview' || previewChannel !== 'email') return;
+    let cancelled = false;
+    setEmailPreview('');
+    setEmailPreviewError('');
+    setLoadingEmailPreview(true);
+    const query = selectedReqId ? `?requisition_id=${encodeURIComponent(selectedReqId)}` : '';
+    request(`/api/superadmin/outreach/email-preview${query}`, { token, noCache: true })
+      .then(result => { if (!cancelled) setEmailPreview(result.html); })
+      .catch(error => { if (!cancelled) setEmailPreviewError(error.message || 'Unable to load email preview.'); })
+      .finally(() => { if (!cancelled) setLoadingEmailPreview(false); });
+    return () => { cancelled = true; };
+  }, [activeTab, previewChannel, selectedReqId, token]);
   const [filterRsvp, setFilterRsvp] = useState('all'); // 'all' | 'interested' | 'unavailable' | 'pending'
   const [searchCandidate, setSearchCandidate] = useState('');
   const [notification, setNotification] = useState({ type: '', message: '' });
@@ -1008,73 +1025,19 @@ export default function SuperAdminOutreachControl() {
 
             {/* View 2: HTML Email Design */}
             {previewChannel === 'email' && (
-              <div className="max-w-2xl mx-auto bg-white/70 backdrop-blur-2xl rounded-3xl border border-white/90 shadow-[0_16px_40px_rgba(0,0,0,0.04)] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-                {/* Fake Email Client Chrome */}
-                <div className="bg-white/50 border-b border-black/[0.04] px-5 py-3 flex items-center justify-between text-xs text-gray-500">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-rose-400 inline-block" />
-                    <span className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block" />
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block" />
-                    <span className="font-bold text-gray-700 ml-2">Inbox Preview (Interactive Email)</span>
-                  </div>
-                  <span className="font-mono text-[11px] text-gray-400">from: TermJobs Talent Team &lt;talent@termjobs.com&gt;</span>
+              <div className="mx-auto w-full max-w-[632px] overflow-hidden rounded-xl border border-[#E5E7EB]" style={{ backgroundColor: '#F4F6F8', color: '#171717', colorScheme: 'only light' }}>
+                <div className="border-b border-[#E5E7EB] px-5 py-4" style={{ backgroundColor: '#FFFFFF', color: '#525252' }}>
+                  <p className="text-xs font-semibold" style={{ color: '#171717' }}>Email preview</p>
+                  <p className="mt-1 text-[11px]" style={{ color: '#525252' }}>Actual outgoing template · Preview only</p>
                 </div>
-
-                {/* Email Content Body */}
-                <div className="p-6 sm:p-8 space-y-6">
-                  {/* Header */}
-                  <div className="border-b border-black/[0.04] pb-5">
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="w-7 h-7 rounded-lg bg-slate-950 text-white font-black flex items-center justify-center text-xs shadow-2xs">
-                        TJ
-                      </div>
-                      <span className="font-black text-sm text-gray-950 tracking-tight">TermJobs Executive Staffing</span>
-                    </div>
-                    <h2 className="text-xl font-black text-gray-950">
-                      Exclusive Opportunity: {selectedReq?.title || 'Senior Software Engineer'} at {selectedReq?.company_name || 'Enterprise Partner'}
-                    </h2>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Matching your candidate talent profile on the TermJobs network.
-                    </p>
-                  </div>
-
-                  {/* Body Message */}
-                  <div className="text-xs text-gray-700 leading-relaxed space-y-3">
-                    <p>Hi <strong>[Candidate Name]</strong>,</p>
-                    <p>
-                      Our AI talent matching engine identified your background as a <strong>Top 20 fit</strong> for an active requisition with <strong>{selectedReq?.company_name || 'our enterprise client'}</strong>.
-                    </p>
-                    <div className="p-4 bg-white/60 backdrop-blur-md rounded-2xl border border-white/80 space-y-1.5 text-xs shadow-3xs">
-                      <div><strong>Position:</strong> {selectedReq?.title || 'Open Role'}</div>
-                      <div><strong>Organization:</strong> {selectedReq?.company_name || 'Client Company'}</div>
-                      <div><strong>Key Skills:</strong> {(selectedReq?.skills || ['Cloud Architecture', 'Python', 'React']).join(', ')}</div>
-                      <div><strong>Status:</strong> Immediate Hiring Priority</div>
-                    </div>
-                    <p>
-                      Because candidate availability changes over time, please click one of the buttons below so our hiring managers know your current status:
-                    </p>
-                  </div>
-
-                  {/* THE TWO BIG INTERACTIVE BUTTONS */}
-                  <div className="p-5 bg-white/60 backdrop-blur-md rounded-2xl border border-white/80 space-y-3 text-center shadow-3xs">
-                    <div className="text-[11px] font-black text-gray-500 uppercase tracking-wider">
-                      Interactive 1-Click RSVP
-                    </div>
-                    <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-                      <div className="w-full sm:w-auto px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs shadow-sm flex items-center justify-center gap-2 cursor-pointer transition active:scale-95">
-                        <Check size={16} />
-                        <span>✓ Yes, I am Available & Interested</span>
-                      </div>
-                      <div className="w-full sm:w-auto px-6 py-3 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-700 hover:to-pink-700 text-white font-bold text-xs shadow-sm flex items-center justify-center gap-2 cursor-pointer transition active:scale-95">
-                        <X size={16} />
-                        <span>✕ No Longer Available / Placed Elsewhere</span>
-                      </div>
-                    </div>
-                    <p className="text-[10px] text-gray-400 mt-2">
-                      No password or login required. Clicking instantly updates your profile and notifies the recruiting team.
-                    </p>
-                  </div>
-                </div>
+                {loadingEmailPreview ? <p role="status" className="p-6 text-sm" style={{ color: '#525252' }}>Loading email preview…</p>
+                  : emailPreviewError ? <p role="alert" className="p-6 text-sm" style={{ color: '#171717' }}>{emailPreviewError}</p>
+                  : emailPreview && <iframe title="TermJobs light-theme email preview" srcDoc={emailPreview} sandbox="allow-same-origin"
+                    className="block w-full border-0" style={{ height: 1120, backgroundColor: '#F4F6F8', colorScheme: 'only light' }}
+                    onLoad={event => {
+                      const document = event.currentTarget.contentDocument;
+                      if (document) event.currentTarget.style.height = `${document.documentElement.scrollHeight}px`;
+                    }} />}
               </div>
             )}
           </div>

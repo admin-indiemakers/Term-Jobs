@@ -17,6 +17,7 @@ def setup(monkeypatch):
     monkeypatch.setattr(posting, 'db', database)
     app = FastAPI()
     app.include_router(posting.router)
+    app.include_router(posting.public_views_router)
     user = User(id='admin', tenant_id='platform', role='Super Admin', name='Admin')
     app.dependency_overrides[get_current_user] = lambda: user
     return database, app, TestClient(app), user
@@ -71,7 +72,7 @@ def test_invalid_posting_cannot_publish(setup, field, value):
 def test_only_superadmin_can_manage_postings(setup, role):
     database, app, client, _ = setup
     app.dependency_overrides[get_current_user] = lambda: User(id='other', tenant_id='other', role=role)
-    for method, path, kwargs in [('get', '', {}), ('post', '', {'json': payload()}), ('get', '/req/applicants', {}), ('post', '/req/close', {})]:
+    for method, path, kwargs in [('get', '', {}), ('post', '', {'json': payload()}), ('get', '/req/applicants', {}), ('get', '/req/viewers', {}), ('post', '/req/close', {})]:
         assert getattr(client, method)('/api/superadmin/requisitions' + path, **kwargs).status_code == 403
     assert database.requisitions.count_documents({}) == 0
 
@@ -278,3 +279,81 @@ def test_public_expiry_runs_before_cached_listing(setup, monkeypatch):
         main.get_public_requisition(req_id)
     assert error.value.status_code == 404
     main._cache.clear()
+
+
+def test_views_deduplicate_sessions_and_verified_candidates_and_match_applications(setup, monkeypatch):
+    from modules.candidate_profile import router as candidate_auth
+    from modules.identity.services.auth_service import create_access_token
+    database, _, client, _ = setup
+    monkeypatch.setattr(candidate_auth, 'db', database)
+    req = client.post('/api/superadmin/requisitions', json=payload()).json()['id']
+    path = f'/api/public/requisitions/{req}/views'
+    for _ in range(2):
+        assert client.post(path, json={'visitor_id': 'browser-one'}).status_code == 204
+    database.candidates.insert_one({'id': 'candidate-one', 'candidate_name': 'Arjun', 'candidate_email': 'arjun@example.test', 'password_hash': 'private'})
+    token = create_access_token({'sub': 'arjun@example.test', 'role': 'CandidateProfile'})
+    headers = {'Authorization': f'Bearer {token}'}
+    for browser in ['first-device', 'second-device']:
+        assert client.post(path, headers=headers, json={'visitor_id': browser}).status_code == 204
+    original = database.requisition_views.find_one({'candidate_email': 'arjun@example.test'})
+    assert original['candidate_id'] == 'candidate-one'
+    database.candidate_submissions.insert_many([
+        {'id': 'app', 'requisition_id': req, 'candidate_email': 'ARJUN@example.test'},
+        {'id': 'elsewhere', 'requisition_id': 'other', 'candidate_email': 'other@example.test'},
+    ])
+    data = client.get(f'/api/superadmin/requisitions/{req}/viewers').json()
+    assert (data['total'], data['identified_count'], data['anonymous_count']) == (2, 1, 1)
+    identified = next(row for row in data['viewers'] if row['candidate_email'])
+    assert identified['candidate_name'] == 'Arjun'
+    assert identified['has_applied'] is True
+    assert identified['last_viewed_at'].endswith('+00:00')
+    assert not any('password' in str(row) or 'visitor_id' in row for row in data['viewers'])
+    anonymous = next(row for row in data['viewers'] if not row['candidate_email'])
+    assert anonymous['candidate_name'] == 'Anonymous visitor'
+    assert anonymous['has_applied'] is False
+    listed = client.get('/api/superadmin/requisitions').json()[0]
+    assert listed['viewers_count'] == 2
+    assert listed['applicants_count'] == 1
+    client.post(f'/api/superadmin/requisitions/{req}/close')
+    assert client.get(f'/api/superadmin/requisitions/{req}/viewers').json()['total'] == 2
+    assert client.post(path, json={'visitor_id': 'new-session'}).status_code == 404
+
+
+def test_views_reject_forged_identity_and_unpublished_roles(setup, monkeypatch):
+    from modules.candidate_profile import router as candidate_auth
+    from modules.identity.services.auth_service import create_access_token
+    database, _, client, _ = setup
+    monkeypatch.setattr(candidate_auth, 'db', database)
+    req = client.post('/api/superadmin/requisitions', json=payload()).json()['id']
+    path = f'/api/public/requisitions/{req}/views'
+    assert client.post(path, json={'visitor_id': 'session', 'candidate_email': 'forged@example.test'}).status_code == 422
+    assert client.post(path, json={'visitor_id': '<script>'}).status_code == 422
+    assert client.post(path, json={'visitor_id': 'session'}, headers={'Authorization': 'Bearer invalid'}).status_code == 401
+    staff_token = create_access_token({'sub': 'admin', 'role': 'Super Admin'})
+    assert client.post(path, json={'visitor_id': 'session'}, headers={'Authorization': f'Bearer {staff_token}'}).status_code == 403
+    database.requisitions.insert_one({'id': 'draft', 'status': 'Draft'})
+    database.requisitions.insert_one({'id': 'expired', 'status': 'Published', 'structured_role': {'submission_deadline': '2000-01-01'}})
+    for missing in ['draft', 'expired', 'missing']:
+        assert client.post(f'/api/public/requisitions/{missing}/views', json={'visitor_id': 'session'}).status_code == 404
+    assert database.requisition_views.count_documents({}) == 0
+    assert client.get('/api/superadmin/requisitions/missing/viewers').status_code == 404
+
+
+def test_viewers_pagination_is_scoped_to_requested_role(setup):
+    from datetime import datetime, timezone
+    database, _, client, _ = setup
+    req = client.post('/api/superadmin/requisitions', json=payload()).json()['id']
+    now = datetime.now(timezone.utc)
+    database.requisition_views.insert_many([
+        {'_id': str(index), 'requisition_id': req, 'candidate_email': '', 'first_viewed_at': now, 'last_viewed_at': now}
+        for index in range(51)
+    ] + [{'_id': 'private-other', 'requisition_id': 'other', 'candidate_email': 'other@example.test'}])
+    path = f'/api/superadmin/requisitions/{req}/viewers'
+    first = client.get(path).json()
+    second = client.get(path + '?page=2').json()
+    assert first['total'] == 51 and first['has_more'] is True
+    assert len(first['viewers']) == 50
+    assert len(second['viewers']) == 1 and second['has_more'] is False
+    assert set(row['id'] for row in first['viewers']).isdisjoint(row['id'] for row in second['viewers'])
+    assert 'private-other' not in str(first) + str(second)
+    assert client.get(path + '?page=0').status_code == 422

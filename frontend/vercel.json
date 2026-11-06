@@ -7,7 +7,7 @@
     },
     {
       "src": "/api/(.*)",
-      "dest": "https://term-jobs-j8ja-seven.vercel.app/api/$1"
+      "dest": "/api/proxy?__path=$1"
     },
     { "handle": "filesystem" },
     {

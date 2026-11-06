@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
@@ -8,15 +10,20 @@ import { createServer } from 'vite';
 import react from '@vitejs/plugin-react';
 import { superAdminNavigation, isSuperAdminNavActive } from '../src/utils/superAdminNavigation.js';
 
-let server, Header, Metric, Actions;
+let server, testCache, Header, Metric, Actions;
 before(async () => {
-  server = await createServer({ configFile: false, plugins: [react()], optimizeDeps: { noDiscovery: true }, server: { middlewareMode: true, hmr: false, ws: false }, appType: 'custom' });
+  // Never let the test optimizer replace dependencies used by a running dev server.
+  testCache = await mkdtemp(path.join(tmpdir(), 'termjobs-ui-vite-'));
+  server = await createServer({ configFile: false, cacheDir: testCache, plugins: [react()], optimizeDeps: { noDiscovery: true }, server: { middlewareMode: true, hmr: false, ws: false }, appType: 'custom' });
   const header = await server.ssrLoadModule('/src/components/admin/AdminPageHeader.jsx');
   Header = header.default;
   Metric = header.AdminMetric;
   Actions = (await server.ssrLoadModule('/src/components/admin/CandidateApplicationActions.jsx')).default;
 });
-after(async () => { await server?.close(); });
+after(async () => {
+  try { await server?.close(); }
+  finally { if (testCache) await rm(testCache, { recursive: true, force: true }); }
+});
 
 const navigation = () => superAdminNavigation({ icons: {}, selectedCount: 3, candidateCount: 12, onboardCompany() {}, onboardVendor() {} });
 const render = element => renderToStaticMarkup(React.createElement(MemoryRouter, null, element));

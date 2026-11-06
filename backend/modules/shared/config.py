@@ -15,7 +15,8 @@ else:
     load_dotenv(override=not bool(os.getenv("VERCEL")))
 
 DEV_QA_MONGODB_URL = "mongodb+srv://worksarjunm_db_user:CwGHqtAh7UY6YB3H@cluster0.9v3d7xx.mongodb.net/?appName=TERMJOB_DEV_QA"
-MAIN_MONGODB_URL = "mongodb+srv://worksarjunm_db_user:Y3fv1MhYgoa94NXT@termjob.bnwy4et.mongodb.net/?appName=TERMJOB"
+# Production credentials must exist only in the main deployment's environment.
+PRODUCTION_MONGODB_HOSTS = {'termjob.bnwy4et.mongodb.net'}
 
 
 def detect_branch_name() -> str:
@@ -39,24 +40,35 @@ def detect_branch_name() -> str:
 
 def is_dev_qa_environment() -> bool:
     """Only an explicitly identified main branch may use production."""
+    if os.getenv('VERCEL') and os.getenv('VERCEL_ENV') != 'production':
+        return True
     return detect_branch_name() != "main"
 
 
 def get_mongodb_url_for_cluster(cluster: str) -> str:
     """Return MongoDB connection string for specific cluster ('dev_qa' or 'main')."""
     if cluster == "dev_qa" or is_dev_qa_environment():
-        return (
+        testing_url = (
             os.getenv("MONGODB_URL_DEV_QA")
             or os.getenv("MONGODB_URL_DEV")
             or os.getenv("MONGODB_URL_QA")
             or DEV_QA_MONGODB_URL
         )
-    return (
+        from urllib.parse import urlsplit
+        # Preview's generic URL may itself be a testing URL, not a production URL.
+        production_urls = [os.getenv(key) for key in ('MONGODB_URL_MAIN', 'MONGODB_URL_PROD')]
+        testing_host = urlsplit(testing_url).hostname
+        if testing_host and (testing_host in PRODUCTION_MONGODB_HOSTS or any(urlsplit(url).hostname == testing_host for url in production_urls if url)):
+            raise RuntimeError('QA/dev database configuration points to a production database host. Connection refused.')
+        return testing_url
+    production_url = (
         os.getenv("MONGODB_URL_MAIN")
         or os.getenv("MONGODB_URL_PROD")
         or os.getenv("MONGODB_URL")
-        or MAIN_MONGODB_URL
     )
+    if not production_url:
+        raise RuntimeError('Production database URL is not configured.')
+    return production_url
 
 
 def get_active_cluster() -> str:

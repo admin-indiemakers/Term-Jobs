@@ -18,7 +18,9 @@ const getApiBaseUrl = () => {
     }
 
     // 3. If explicit backend URL is provided via environment variables, use it
-    const envUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL;
+    // Deployed apps use the server-side proxy, which verifies database isolation.
+    // Build-time VITE_API_URL values must not bypass that check in QA previews.
+    const envUrl = import.meta.env.DEV && (import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL);
     if (envUrl && typeof envUrl === 'string' && envUrl.trim()) {
       const trimmed = envUrl.trim().replace(/\/+$/, '');
       if (!trimmed.includes('localhost') && !trimmed.includes('127.0.0.1')) {
@@ -165,6 +167,7 @@ export async function request(path, {
         headers,
         body: payloadBody !== undefined ? (isFormData || typeof payloadBody === 'string' ? payloadBody : JSON.stringify(payloadBody)) : undefined,
         signal: controller.signal,
+        cache: forceRefresh || noCache ? 'no-store' : 'default',
       });
     } catch (err) {
       // Network / CORS errors are always logged (no credentials in these logs)

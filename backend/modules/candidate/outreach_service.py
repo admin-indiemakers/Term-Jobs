@@ -61,119 +61,28 @@ def build_interactive_outreach_html(
     unavailable_url = f"{base_url}/api/public/outreach/{token}/respond?action=unavailable"
     decline_url = f"{base_url}/api/public/outreach/{token}/respond?action=declined"
 
-    skills_badge_html = "".join([
-        f'<span style="background-color: #f1f5f9; color: #0f172a; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; margin-right: 6px; display: inline-block; margin-bottom: 6px; border: 1px solid #e2e8f0;">{sk}</span>'
-        for sk in matched_skills[:5]
-    ]) if matched_skills else '<span style="color: #64748b; font-size: 12px;">Profile & Experience Match</span>'
+    from html import escape
+    from modules.shared.email_layout import light_email, email_paragraph, email_details, email_note, email_button, email_link
 
-    return f"""<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Opportunity Matching Your Profile: {requisition_title}</title>
-</head>
-<body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b;">
-  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #f8fafc; padding: 32px 16px;">
-    <tr>
-      <td align="center">
-        <table width="100%" max-width="600" border="0" cellspacing="0" cellpadding="0" style="max-width: 600px; background-color: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.04);">
-          <!-- Header Brand Bar -->
-          <tr>
-            <td style="padding: 24px 32px; background-color: #0a0a0a; color: #ffffff;">
-              <table width="100%" border="0" cellspacing="0" cellpadding="0">
-                <tr>
-                  <td>
-                    <span style="font-size: 18px; font-weight: 800; letter-spacing: -0.5px; color: #ffffff;">TERM JOBS</span>
-                    <span style="font-size: 11px; background-color: #27272a; color: #a1a1aa; padding: 3px 8px; border-radius: 4px; margin-left: 8px; font-weight: bold; text-transform: uppercase;">Talent Match</span>
-                  </td>
-                  <td align="right">
-                    <span style="font-size: 12px; font-weight: bold; color: #10b981; background-color: rgba(16, 185, 129, 0.12); padding: 4px 10px; border-radius: 9999px;">
-                      {match_score}% Profile Fit
-                    </span>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-
-          <!-- Body Content -->
-          <tr>
-            <td style="padding: 32px;">
-              <h1 style="margin: 0 0 16px 0; font-size: 20px; font-weight: 800; color: #0f172a; line-height: 1.3;">
-                New Opportunity: {requisition_title}
-              </h1>
-              
-              <p style="margin: 0 0 16px 0; font-size: 14px; line-height: 1.6; color: #334155;">
-                Dear <strong>{candidate_name}</strong>,
-              </p>
-              
-              <p style="margin: 0 0 20px 0; font-size: 14px; line-height: 1.6; color: #334155;">
-                You previously registered your profile or submitted your resume on the <strong>TermJobs</strong> platform. A new position matching your background and technical skill set has just opened:
-              </p>
-
-              <!-- Role Card -->
-              <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
-                <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px; margin-bottom: 6px;">
-                  Hiring Organization: {company_name}
-                </div>
-                <div style="font-size: 17px; font-weight: 800; color: #0f172a; margin-bottom: 12px;">
-                  {requisition_title}
-                </div>
-                
-                <div style="margin-bottom: 6px; font-size: 12px; font-weight: 700; color: #475569;">
-                  Matched Competencies:
-                </div>
-                <div>
-                  {skills_badge_html}
-                </div>
-              </div>
-
-              <!-- Question Section -->
-              <div style="margin-bottom: 24px; padding: 16px 20px; background-color: #eff6ff; border-left: 4px solid #3b82f6; border-radius: 6px;">
-                <p style="margin: 0; font-size: 13.5px; font-weight: 600; color: #1e3a8a; line-height: 1.5;">
-                  We understand your career status and availability may have evolved since you last connected with us. Are you currently available and interested in exploring this role?
-                </p>
-              </div>
-
-              <!-- Interactive Buttons -->
-              <div style="text-align: center; margin-bottom: 28px;">
-                <table width="100%" border="0" cellspacing="0" cellpadding="0">
-                  <tr>
-                    <td align="center" style="padding-bottom: 12px;">
-                      <a href="{interested_url}" target="_blank" style="background-color: #059669; color: #ffffff; font-size: 14px; font-weight: 800; text-decoration: none; padding: 14px 28px; border-radius: 10px; display: inline-block; min-width: 220px; box-shadow: 0 2px 6px rgba(5,150,105,0.25);">
-                        ✓ Yes, I am Available & Interested
-                      </a>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td align="center">
-                      <a href="{unavailable_url}" target="_blank" style="background-color: #ffffff; color: #475569; font-size: 13px; font-weight: 700; text-decoration: none; padding: 11px 22px; border-radius: 10px; display: inline-block; border: 1px solid #cbd5e1; min-width: 220px;">
-                        ✕ No Longer Available / Placed Elsewhere
-                      </a>
-                    </td>
-                  </tr>
-                </table>
-              </div>
-
-              <div style="border-top: 1px solid #e2e8f0; padding-top: 16px; font-size: 12px; color: #94a3b8; text-align: center;">
-                Available in general but want to pass on this specific role? <a href="{decline_url}" style="color: #64748b; text-decoration: underline;">Click here to pass</a>.
-              </div>
-            </td>
-          </tr>
-
-          <!-- Footer -->
-          <tr>
-            <td style="padding: 20px 32px; background-color: #f8fafc; border-top: 1px solid #e2e8f0; text-align: center; font-size: 11px; color: #94a3b8;">
-              TermJobs AI Talent Matching &copy; {datetime.now().year}. This message was sent because you registered on the TermJobs network.
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>"""
+    content = email_paragraph(f"Hi {escape(candidate_name or 'Candidate')},")
+    content += email_paragraph(
+        f"A new <strong>{escape(requisition_title)}</strong> opportunity at "
+        f"<strong>{escape(company_name)}</strong> matches your profile on TermJobs."
+    )
+    content += email_details([
+        ('Position', requisition_title), ('Company', company_name),
+        ('Profile fit', f'{match_score}%'),
+        ('Matched skills', ', '.join(str(skill) for skill in matched_skills[:5]) if matched_skills else 'Profile and experience match'),
+    ])
+    content += email_note('Are you open to this opportunity?', 'Let the hiring team know whether you are available and interested. Your response helps us recommend relevant opportunities.')
+    content += email_button('Yes, I’m available & interested', interested_url)
+    content += email_button('I’m no longer available', unavailable_url, primary=False)
+    content += email_paragraph('Available, but this role isn’t right for you? ' + email_link('Pass on this opportunity', decline_url), secondary=True)
+    return light_email(
+        title='An opportunity for you', category='Talent matching', content=content,
+        preheader=f'{requisition_title} at {company_name} matches your profile.',
+        footer='You received this email because you registered your profile or submitted a resume on the TermJobs network.',
+    )
 
 
 def dispatch_outreach_to_top_candidates(

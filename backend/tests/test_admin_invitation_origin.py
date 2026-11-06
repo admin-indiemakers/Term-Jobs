@@ -1,4 +1,5 @@
 import importlib
+from html import unescape
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit
 from unittest.mock import Mock
@@ -90,7 +91,7 @@ def test_real_email_link_loads_room_anonymously_in_the_owning_environment(enviro
     from modules.interview.domain.links import candidate_interview_link
     link = candidate_interview_link(saved, frontend)
     html = sender.call_args.args[2]
-    assert link in html
+    assert link in unescape(html)
     assert 'https://termjobs.in/interview/' not in html
     parsed = urlsplit(link)
     token = parse_qs(parsed.query)['token'][0]
@@ -113,7 +114,7 @@ def test_local_email_template_preserves_the_explicit_environment(environment, mo
         company_name='Company', round_name='AI Interview', scheduled_date='2026-11-05', scheduled_time='On demand',
         duration_minutes=45, meeting_link=link, candidate_portal_link=link, passcode='pass', public_origin='http://localhost:5173',
     )
-    assert link in sender.call_args.args[2]
+    assert link in unescape(sender.call_args.args[2])
 
 
 def test_unconfigured_environment_does_not_create_an_unusable_attempt(environment, monkeypatch):

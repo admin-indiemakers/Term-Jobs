@@ -29,3 +29,21 @@ test('concurrent refresh and uncached GETs share requests, with token isolation'
     clearApiCache();
   }
 });
+
+test('forced and uncached API reads bypass the browser HTTP cache', async () => {
+  const originalFetch = globalThis.fetch;
+  const cacheModes = [];
+  globalThis.fetch = async (url, options) => {
+    cacheModes.push(options.cache);
+    return { ok: true, status: 200, json: async () => [] };
+  };
+  try {
+    clearApiCache();
+    await request('/api/public/requisitions', { forceRefresh: true });
+    await request('/api/public/requisitions', { noCache: true });
+    assert.deepEqual(cacheModes, ['no-store', 'no-store']);
+  } finally {
+    globalThis.fetch = originalFetch;
+    clearApiCache();
+  }
+});

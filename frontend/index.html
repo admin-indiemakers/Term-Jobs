@@ -57,18 +57,9 @@
           if (!isPublicJobPage || hasSession) return;
           var isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
           var base = isLocal ? 'http://' + location.hostname + ':8000' : '';
-          var url = base + '/api/public/requisitions';
-          window.__PREFETCHED_REQUISITIONS__ = fetch(url, { headers: { 'Accept': 'application/json' } })
+          var url = base + '/api/public/requisitions/page?page=1&page_size=8';
+          window.__PREFETCHED_REQUISITIONS__ = fetch(url, { cache: 'no-store', headers: { 'Accept': 'application/json' } })
             .then(function(r) { return r.ok ? r.json() : null; })
-            .then(function(data) {
-              if (data && Array.isArray(data)) {
-                try {
-                  sessionStorage.setItem('tj_cache:anon:' + url, JSON.stringify({ timestamp: Date.now(), data: data }));
-                  sessionStorage.setItem('tj_cached_requisitions', JSON.stringify({ t: Date.now(), data: data }));
-                } catch(e) {}
-              }
-              return data;
-            })
             .catch(function() { return null; });
 
         } catch(e) {}
