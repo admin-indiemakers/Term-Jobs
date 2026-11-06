@@ -1988,7 +1988,7 @@ export default function OpenRolesPage({ enabled = true }) {
       window.__PREFETCHED_REQUISITIONS__ = null;
     }
     const prefetched = rolesPrefetch.current;
-    loadOpenRolesPage(request, { page: currentPage, q: debouncedSearch, workMode: selectedWorkMode, family: selectedFamily, location: selectedLocation, category: selectedOpportunityCategory }, prefetched)
+    loadOpenRolesPage(request, { page: currentPage, pageSize: 7, q: debouncedSearch, workMode: selectedWorkMode, family: selectedFamily, location: selectedLocation, category: selectedOpportunityCategory }, prefetched)
       .then((data) => {
         if (cancelled) return;
         setRolePage(data);
@@ -2126,10 +2126,29 @@ export default function OpenRolesPage({ enabled = true }) {
   }, []);
 
   const categoryTabs = [{ id: 'ALL', label: 'All Roles', count: rolePage.filtered_total }, ...rolePage.categories];
-  const ROLES_PER_PAGE = 8;
+  const ROLES_PER_PAGE = 7;
   const totalPages = rolePage.total_pages;
   const activePage = currentPage;
-  const paginatedJobs = requisitions;
+  const paginatedJobs = useMemo(() => {
+    const items = requisitions || [];
+    if (items.length <= 6) return items;
+    // Dynamic height check: if multi-line skill tags expand row height, cap at 6 to guarantee zero overflow
+    let multilineCount = 0;
+    for (const job of items) {
+      const role = job.structured_role || {};
+      const rawSkills = (role.must_have_skills || []).concat(role.nice_to_have_skills || []);
+      const skills = rawSkills.filter((s) => s && typeof s === 'string' && s.trim());
+      const top2 = skills.slice(0, 2);
+      const totalSkillChars = top2.reduce((acc, s) => acc + s.length, 0);
+      if (totalSkillChars >= 24 || top2.some((s) => s.length >= 14)) {
+        multilineCount++;
+      }
+    }
+    if (multilineCount >= 2 && items.length > 6) {
+      return items.slice(0, 6);
+    }
+    return items.slice(0, 7);
+  }, [requisitions]);
   const pageStart = Math.max(1, Math.min(activePage - 2, totalPages - 4));
   const visiblePages = Array.from({ length: Math.min(5, totalPages) }, (_, index) => pageStart + index);
 
@@ -3416,7 +3435,7 @@ export default function OpenRolesPage({ enabled = true }) {
                 {/* Table Footer: Count & Pagination */}
                 <div className="mt-auto pt-2.5 border-t border-white/[0.06] flex items-center justify-between px-2 text-xs">
                   <div className="text-neutral-400 font-medium text-[11.5px]">
-                    Showing {(activePage - 1) * ROLES_PER_PAGE + 1}–{(activePage - 1) * ROLES_PER_PAGE + paginatedJobs.length} of {rolePage.total} roles
+                    Showing {paginatedJobs.length === 0 ? 0 : `${(activePage - 1) * ROLES_PER_PAGE + 1}–${(activePage - 1) * ROLES_PER_PAGE + paginatedJobs.length}`} of {rolePage.filtered_total ?? rolePage.total ?? requisitions.length} roles
                   </div>
                   <div className="flex items-center gap-1.5">
                     <button
