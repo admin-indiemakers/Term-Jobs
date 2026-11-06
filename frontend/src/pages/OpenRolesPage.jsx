@@ -51,11 +51,13 @@ import {
 } from 'lucide-react';
 import { API_BASE_URL, request } from '../api/client';
 import { marked } from 'marked';
+import { useAuth } from '../context/AuthContext';
 import { useCandidateAuth } from '../context/CandidateAuthContext';
 import SEOHead from '../components/SEOHead';
 import ResumePreviewModal from '../components/ResumePreviewModal';
 import ResumeUploadField from '../components/ResumeUploadField';
 import CandidateEmailEditor from '../components/CandidateEmailEditor';
+import CandidateOnboardingModal from '../components/CandidateOnboardingModal';
 import { Backdrop } from '../components/landing/Backdrop';
 import logo from '../assets/termjobs-logo.png';
 import { formatDueDate } from '../utils/dateUtils';
@@ -76,6 +78,340 @@ function GoogleIcon({ className = "w-4 h-4" }) {
   );
 }
 
+const COMPANY_LOGOS = {
+  'aethanalytica': 'https://aethanalytica.com/images/aeth_analytica.svg',
+  'zensbee': 'https://www.google.com/s2/favicons?domain=zensbee.com&sz=128',
+  'hivenesthq': 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 92"><path d="M69.54,39.28 L50.00,50.56 L30.46,39.28 L30.46,16.72 L50.00,5.44 L69.54,16.72Z" fill="%23ff6106"/><path d="M48.75,75.28 L29.22,86.56 L9.68,75.28 L9.68,52.72 L29.22,41.44 L48.75,52.72Z" fill="%23ffffff"/><path d="M90.32,75.28 L70.78,86.56 L51.25,75.28 L51.25,52.72 L70.78,41.44 L90.32,52.72Z" fill="%23ff6106"/></svg>',
+  'hivenest': 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 92"><path d="M69.54,39.28 L50.00,50.56 L30.46,39.28 L30.46,16.72 L50.00,5.44 L69.54,16.72Z" fill="%23ff6106"/><path d="M48.75,75.28 L29.22,86.56 L9.68,75.28 L9.68,52.72 L29.22,41.44 L48.75,52.72Z" fill="%23ffffff"/><path d="M90.32,75.28 L70.78,86.56 L51.25,75.28 L51.25,52.72 L70.78,41.44 L90.32,52.72Z" fill="%23ff6106"/></svg>',
+  'easy entrance': 'https://www.google.com/s2/favicons?domain=eepinnovations.com&sz=128',
+  'nifama': 'https://nifama.com/wp-content/uploads/2025/05/nifama-circle.webp',
+  'smart moves': 'https://smartmoves.co.in/wp-content/uploads/2026/03/smlogosm.png',
+  'element 8': 'https://api.element8.ae/wp-content/uploads/2024/02/e8-logo-white.svg',
+  'element8': 'https://api.element8.ae/wp-content/uploads/2024/02/e8-logo-white.svg',
+  'acura': 'https://acurasolution.com/assets/frontend/img/acura/acura-logo.png',
+  'kone': 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 198"><path fill="%231450F5" d="M0 0h37.4v80.2L91.4 0H138l-65 92.9 69.2 105.1h-47l-46.8-74.4-10 14.7v59.7H0V0zm168.3 0h37.4v198h-37.4V0zm74.7 0h37.4v198h-37.4V0zm115.8 0c41.3 0 71.6 30.3 71.6 74.3v49.4c0 44-30.3 74.3-71.6 74.3h-53.1V0h53.1zm-15.7 34.2v129.6h15.7c22.3 0 34.2-15.1 34.2-64.8s-11.9-64.8-34.2-64.8h-15.7z"/></svg>',
+  'skybook': 'https://cdn-ildbpmf.nitrocdn.com/lCVcGRMJHpdBAcriZZeZQDmoipVlbUzC/assets/images/optimized/rev-5664630/skybookglobal.com/wp-content/uploads/2025/01/skybook-global-logo.png',
+  'techbrein': 'https://www.google.com/s2/favicons?domain=techbrein.com&sz=128',
+  'zoobie': 'https://www.google.com/s2/favicons?domain=zoobies.com&sz=128',
+  'heylearn': 'https://heylearnacademy.com/wp-content/uploads/2026/07/hey-learn-logo.png',
+  'axel': 'https://axeltechnologies.com/assets/axel-logo-hero-nobg-Diakrs67.png',
+  'mailercloud': 'https://www.mailercloud.com/img/brand/mailercloud-logo.svg',
+  '4dots': 'https://www.google.com/s2/favicons?domain=4dots.in&sz=128',
+  'asimovx': 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTEyIiBoZWlnaHQ9IjUxMiIgdmlld0JveD0iMCAwIDEwMCAxMDAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CiAgPGRlZnM+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9ImxvZ29HcmFkaWVudCIgeDE9IjAlIiB5MT0iMCUiIHgyPSIxMDAlIiB5Mj0iMTAwJSI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCUiIHN0eWxlPSJzdG9wLWNvbG9yOiM5MDMzRkY7c3RvcC1vcGFjaXR5OjEiIC8+CiAgICAgIDxzdG9wIG9mZnNldD0iMTAwJSIgc3R5bGU9InN0b3AtY29sb3I6I0Q5NDZFRjtzdG9wLW9wYWNpdHk6MSIgLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxnIHN0cm9rZT0idXJsKCNsb2dvR3JhZGllbnQpIiBzdHJva2Utd2lkdGg9IjQiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIgZmlsbD0ibm9uZSI+CiAgICAKICAgIDwhLS0gUGVyaW1ldGVyIENoZXZyb25zIC0tPgogICAgPHBhdGggZD0iTTUwLDEwIEw4NC42NCwzMCIgLz4gPCEtLSBUb3AgdG8gVG9wUmlnaHQgLS0+CiAgICA8cGF0aCBkPSJNNTAsMTAgTDE1LjM2LDMwIiAvPiA8IS0tIFRvcCB0byBUb3BMZWZ0IC0tPgogICAgPHBhdGggZD0iTTUwLDkwIEw4NC42NCw3MCIgLz4gPCEtLSBCb3QgdG8gQm90UmlnaHQgLS0+CiAgICA8cGF0aCBkPSJNNTAsOTAgTDE1LjM2LDcwIiAvPiA8IS0tIEJvdCB0byBCb3RMZWZ0IC0tPgoKICAgIDwhLS0gVmVydGljYWwgQ2VudGVyIEF4aXMgLS0+CiAgICA8cGF0aCBkPSJNNTAsMTAgTDUwLDkwIiAvPgoKICAgIDwhLS0gQ2VudGVyIFggU3Bva2VzIChDb25uZWN0aW5nIENlbnRlciB0byBDb3JuZXJzKSAtLT4KICAgIDxwYXRoIGQ9Ik01MCw1MCBMODQuNjQsMzAiIC8+IDwhLS0gQ2VudGVyIHRvIFRvcFJpZ2h0IC0tPgogICAgPHBhdGggZD0iTTUwLDUwIEwxNS4zNiwzMCIgLz4gPCEtLSBDZW50ZXIgdG8gVG9wTGVmdCAtLT4KICAgIDxwYXRoIGQ9Ik01MCw1MCBMODQuNjQsNzAiIC8+IDwhLS0gQ2VudGVyIHRvIEJvdFJpZ2h0IC0tPgogICAgPHBhdGggZD0iTTUwLDUwIEwxNS4zNiw3MCIgLz4gPCEtLSBDZW50ZXIgdG8gQm90TGVmdCAtLT4KICAgIAogICAgPCEtLSBMb25nIERpYWdvbmFscyAoUmVxdWVzdGVkIEFkZGl0aW9ucykgLS0+CiAgICA8cGF0aCBkPSJNNTAsMTAgTDE1LjM2LDcwIiAvPiA8IS0tIFRvcCB0byBCb3RMZWZ0IC0tPgogICAgPHBhdGggZD0iTTUwLDEwIEw4NC42NCw3MCIgLz4gPCEtLSBUb3AgdG8gQm90UmlnaHQgLS0+CiAgICA8cGF0aCBkPSJNNTAsOTAgTDE1LjM2LDMwIiAvPiA8IS0tIEJvdCB0byBCb3RMZWZ0IC0tPgogICAgPHBhdGggZD0iTTUwLDkwIEw4NC42NCwzMCIgLz4gPCEtLSBCb3QgdG8gQm90UmlnaHQgLS0+CgogICAgPCEtLSBOb2RlcyB3aXRoIGhvbGVzIChmaWxsZWQgYmxhY2spIC0tPgogICAgPGcgZmlsbD0iIzAwMDAwMCIgc3Ryb2tlPSJ1cmwoI2xvZ29HcmFkaWVudCIgc3Ryb2tlLXdpZHRoPSI0Ij4KICAgICAgPGNpcmNsZSBjeD0iNTAiIGN5PSIxMCIgcj0iNSIgLz4KICAgICAgPGNpcmNsZSBjeD0iODQuNjQiIGN5PSIzMCIgcj0iNSIgLz4KICAgICAgPGNpcmNsZSBjeD0iODQuNjQiIGN5PSI3MCIgcj0iNSIgLz4KICAgICAgPGNpcmNsZSBjeD0iNTAiIGN5PSI5MCIgcj0iNSIgLz4KICAgICAgPGNpcmNsZSBjeD0iMTUuMzYiIGN5PSI3MCIgcj0iNSIgLz4KICAgICAgPGNpcmNsZSBjeD0iMTUuMzYiIGN5PSIzMCIgcj0iNSIgLz4KICAgICAgPGNpcmNsZSBjeD0iNTAiIGN5PSI1MCIgcj0iNSIgLz4KICAgIDwvZz4KICA8L2c+Cjwvc3ZnPg=='
+};
+
+function getCompanyLogoUrl(job) {
+  if (!job) return null;
+  if (job.company_logo || job.logo || job.company_logo_url) {
+    return job.company_logo || job.logo || job.company_logo_url;
+  }
+  const name = (job.company_name || job.company || '').toLowerCase().trim();
+  for (const [key, url] of Object.entries(COMPANY_LOGOS)) {
+    if (name.includes(key)) return url;
+  }
+  return null;
+}
+
+function CompanyAvatar({ job, size = 'w-8 h-8', className = '', inModal = false }) {
+  const compName = (job?.company_name || job?.company || '').trim();
+  const companyInitial = (compName || job?.title || 'R').slice(0, 1).toUpperCase();
+  const logoUrl = getCompanyLogoUrl(job);
+
+  return (
+    <div
+      className={`${size} flex items-center justify-center shrink-0 overflow-hidden ${
+        inModal
+          ? 'bg-neutral-100 rounded-lg p-1 border border-neutral-200'
+          : 'bg-transparent p-0.5'
+      } ${className}`}
+    >
+      {logoUrl ? (
+        <img
+          src={logoUrl}
+          alt={compName}
+          className="w-full h-full object-contain filter drop-shadow-sm"
+          onError={(e) => {
+            e.currentTarget.style.display = 'none';
+            if (e.currentTarget.nextElementSibling) {
+              e.currentTarget.nextElementSibling.style.display = 'flex';
+            }
+          }}
+        />
+      ) : null}
+      <span
+        style={{ display: logoUrl ? 'none' : 'flex' }}
+        className={`w-full h-full items-center justify-center font-extrabold text-xs select-none rounded-lg ${
+          inModal ? 'text-neutral-900 bg-neutral-200' : 'text-white bg-white/10'
+        }`}
+      >
+        {companyInitial}
+      </span>
+    </div>
+  );
+}
+
+export function getJobDepartment(job) {
+  if (!job) return 'General';
+  const explicit = (job.department || job.structured_role?.department || job.dept || '').trim();
+  if (explicit && explicit.toLowerCase() !== 'general' && explicit.toLowerCase() !== 'other') {
+    return explicit;
+  }
+
+  const fam = (job.job_family || job.structured_role?.job_family || '').trim();
+  if (fam && fam.toLowerCase() !== 'general' && fam.toLowerCase() !== 'other') {
+    return fam;
+  }
+
+  const title = (job.title || '').toLowerCase();
+
+  if (
+    title.includes('designer') ||
+    title.includes('ui/ux') ||
+    title.includes('ui / ux') ||
+    title.includes('ux designer') ||
+    title.includes('product design')
+  ) {
+    return 'Design & UI/UX';
+  }
+  if (
+    title.includes('qa') ||
+    title.includes('test') ||
+    title.includes('tester') ||
+    title.includes('quality assurance')
+  ) {
+    return 'Quality Assurance';
+  }
+  if (
+    title.includes('devops') ||
+    title.includes('sre') ||
+    title.includes('cloud') ||
+    title.includes('infrastructure')
+  ) {
+    return 'DevOps & Cloud';
+  }
+  if (
+    title.includes('sales') ||
+    title.includes('business development') ||
+    title.includes('business dev') ||
+    title.includes('bdm') ||
+    title.includes('bde') ||
+    title.includes('consultant')
+  ) {
+    return 'Sales & BD';
+  }
+  if (
+    title.includes('marketing') ||
+    title.includes('growth') ||
+    title.includes('seo') ||
+    title.includes('content')
+  ) {
+    return 'Marketing';
+  }
+  if (
+    title.includes('human resource') ||
+    title.includes('hr ') ||
+    title.startsWith('hr') ||
+    title.includes('recruiter') ||
+    title.includes('talent')
+  ) {
+    return 'Human Resources';
+  }
+  if (
+    title.includes('service') ||
+    title.includes('operations') ||
+    title.includes('maintenance') ||
+    title.includes('field engineer')
+  ) {
+    return 'Operations & Service';
+  }
+  if (
+    title.includes('developer') ||
+    title.includes('engineer') ||
+    title.includes('software') ||
+    title.includes('frontend') ||
+    title.includes('front end') ||
+    title.includes('backend') ||
+    title.includes('full stack') ||
+    title.includes('fullstack') ||
+    title.includes('web') ||
+    title.includes('mobile') ||
+    title.includes('flutter')
+  ) {
+    return 'Engineering';
+  }
+  return 'General';
+}
+
+export function matchesExperience(job, selectedExp) {
+  if (!selectedExp || selectedExp === 'ALL') return true;
+  const role = job?.structured_role || {};
+  const expStr = (role.experience || job?.experience_level || job?.experience || '').toLowerCase();
+  const minExp = job?.min_experience;
+  const maxExp = job?.max_experience;
+
+  if (selectedExp === 'ENTRY') {
+    if (minExp !== undefined && minExp <= 1) return true;
+    return (
+      expStr.includes('fresher') ||
+      expStr.includes('0–1') ||
+      expStr.includes('0-1') ||
+      expStr.includes('0–2') ||
+      expStr.includes('0-2') ||
+      expStr.includes('entry') ||
+      expStr.includes('junior')
+    );
+  }
+  if (selectedExp === 'JUNIOR') {
+    if (minExp !== undefined && minExp <= 3 && (maxExp === undefined || maxExp >= 1)) return true;
+    return (
+      expStr.includes('1+') ||
+      expStr.includes('1-') ||
+      expStr.includes('1–') ||
+      expStr.includes('2–') ||
+      expStr.includes('2-') ||
+      expStr.includes('2+') ||
+      expStr.includes('0–2') ||
+      expStr.includes('0-2') ||
+      expStr.includes('junior') ||
+      expStr.includes('entry')
+    );
+  }
+  if (selectedExp === 'MID') {
+    if (minExp !== undefined && minExp >= 2 && minExp <= 5) return true;
+    return (
+      expStr.includes('mid') ||
+      expStr.includes('2–4') ||
+      expStr.includes('2-4') ||
+      expStr.includes('3–5') ||
+      expStr.includes('3-5') ||
+      expStr.includes('3 – 6') ||
+      expStr.includes('3-6') ||
+      expStr.includes('3+') ||
+      expStr.includes('2.5')
+    );
+  }
+  if (selectedExp === 'SENIOR') {
+    if (minExp !== undefined && minExp >= 5) return true;
+    return (
+      expStr.includes('senior') ||
+      expStr.includes('5+') ||
+      expStr.includes('5–') ||
+      expStr.includes('5-') ||
+      expStr.includes('6')
+    );
+  }
+  return true;
+}
+
+function FilterDropdown({
+  icon: Icon,
+  label,
+  value,
+  options,
+  onChange,
+  className = '',
+  menuWidth = 'w-52',
+  align = 'left',
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setIsOpen(false);
+      }
+    };
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') setIsOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen]);
+
+  const selectedOption = options.find((o) => o.value === value);
+  const displayLabel = selectedOption ? selectedOption.label : label;
+  const isFiltered = value !== 'ALL';
+
+  return (
+    <div ref={dropdownRef} className={`relative inline-block ${className}`}>
+      <button
+        type="button"
+        onClick={() => setIsOpen((prev) => !prev)}
+        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10.5px] font-medium transition cursor-pointer select-none border ${
+          isFiltered
+            ? 'bg-white/10 border-white/30 text-white shadow-sm'
+            : isOpen
+            ? 'bg-white/[0.08] border-white/25 text-white'
+            : 'bg-white/[0.03] hover:bg-white/[0.06] border-white/10 text-white/90'
+        }`}
+      >
+        {Icon && (
+          <Icon
+            size={11}
+            className={`shrink-0 ${isFiltered ? 'text-white' : 'text-neutral-400'}`}
+          />
+        )}
+        <span className="truncate max-w-[120px]">{displayLabel}</span>
+        <ChevronDown
+          size={10}
+          className={`shrink-0 text-neutral-400 transition-transform duration-200 ${
+            isOpen ? 'rotate-180 text-white' : ''
+          }`}
+        />
+      </button>
+
+      {isOpen && (
+        <div
+          className={`absolute top-full mt-1.5 ${
+            align === 'right' ? 'right-0' : 'left-0'
+          } z-50 ${menuWidth} py-1.5 rounded-xl bg-[#0f1117]/95 backdrop-blur-xl border border-white/15 shadow-[0_12px_40px_rgba(0,0,0,0.7)] animate-in fade-in zoom-in-95 duration-100 max-h-64 overflow-y-auto scrollbar-thin`}
+        >
+          {options.map((opt) => {
+            const isSelected = value === opt.value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => {
+                  onChange(opt.value);
+                  setIsOpen(false);
+                }}
+                className={`w-full flex items-center justify-between px-3 py-1.5 text-[11px] text-left transition-colors cursor-pointer ${
+                  isSelected
+                    ? 'bg-white/15 text-white font-semibold'
+                    : 'text-neutral-300 hover:text-white hover:bg-white/[0.06]'
+                }`}
+              >
+                <div className="flex items-center gap-2 truncate pr-2">
+                  <span className="truncate">{opt.label}</span>
+                  {typeof opt.count === 'number' && (
+                    <span
+                      className={`text-[9.5px] px-1.5 py-0.2 rounded-md font-mono ${
+                        isSelected
+                          ? 'bg-white/20 text-white'
+                          : 'bg-white/[0.06] text-neutral-400'
+                      }`}
+                    >
+                      {opt.count}
+                    </span>
+                  )}
+                </div>
+                {isSelected && <Check size={11} className="text-white shrink-0 ml-1.5" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function OpenRolesPage({ enabled = true }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -89,10 +425,38 @@ export default function OpenRolesPage({ enabled = true }) {
   const loginWithGoogle = candidateAuth?.loginWithGoogle;
   const login = candidateAuth?.login;
   const register = candidateAuth?.register;
+  const completeOnboarding = candidateAuth?.completeOnboarding;
 
   const isCandidateAuthenticated = Boolean(candidateAuth?.candidateToken && candidateUser);
   const candidateEmail = (candidateUser?.candidate_email || candidateUser?.email || '').trim().toLowerCase();
   const appliedStorageKey = candidateEmail ? `tj_applied_jobs_${candidateEmail}` : null;
+
+  // Recruiter / Admin / Staff exclusion check: never show candidate onboarding to recruiters or admins
+  let internalUser = null;
+  try {
+    const authCtx = useAuth();
+    internalUser = authCtx?.user;
+  } catch {}
+  if (!internalUser) {
+    try {
+      const saved = localStorage.getItem('auth_user');
+      if (saved) internalUser = JSON.parse(saved);
+    } catch {}
+  }
+  const isStaffOrAdmin = Boolean(
+    internalUser && (
+      internalUser.role === 'Admin' ||
+      internalUser.role === 'Super Admin' ||
+      internalUser.role === 'Hiring Manager' ||
+      internalUser.role === 'Recruiter' ||
+      internalUser.role === 'HR'
+    )
+  );
+
+  // Candidate Onboarding State
+  const [showOnboardingModal, setShowOnboardingModal] = useState(false);
+  const [pendingAutoApplyJob, setPendingAutoApplyJob] = useState(null);
+  const [dismissedSessionOnboarding, setDismissedSessionOnboarding] = useState(false);
 
   // Candidate in-app outreach & interview notifications
   const [showNotificationDrawer, setShowNotificationDrawer] = useState(false);
@@ -140,16 +504,6 @@ export default function OpenRolesPage({ enabled = true }) {
     }
   }, [refreshProfile]);
 
-  const unreadNotificationCount = useMemo(() => {
-    const pendingOutreach = (outreachHistory || []).filter((o) => {
-      const token = o.token || o._id;
-      const localAct = outreachActionStatus[token];
-      if (localAct) return false;
-      return o.status === 'pending' || o.status === 'sent';
-    });
-    return pendingOutreach.length;
-  }, [outreachHistory, outreachActionStatus]);
-
   // Job search & filters - hydrate instantly from session cache if available (0ms render)
   const [requisitions, setRequisitions] = useState(() => {
     try {
@@ -169,6 +523,7 @@ export default function OpenRolesPage({ enabled = true }) {
   const [selectedWorkMode, setSelectedWorkMode] = useState('ALL');
   const [selectedFamily, setSelectedFamily] = useState('ALL');
   const [selectedLocation, setSelectedLocation] = useState('ALL');
+  const [selectedExperience, setSelectedExperience] = useState('ALL');
   const [selectedOpportunityCategory, setSelectedOpportunityCategory] = useState('ALL');
   const [currentPage, setCurrentPage] = useState(1);
   const [savedJobIds, setSavedJobIds] = useState(() => {
@@ -337,30 +692,18 @@ export default function OpenRolesPage({ enabled = true }) {
 
   const loadCandidateInterviews = useCallback(async (customEmail = null) => {
     try {
-      let email = (
+      if (!candidateUser && !customEmail) {
+        setCandidateInterviews([]);
+        return;
+      }
+      const email = (
         customEmail ||
-        agreementLookupEmail ||
         candidateUser?.candidate_email ||
         candidateUser?.email ||
         candidateUser?.details?.candidate_email ||
         ''
-      ).trim();
-      if (!email) {
-        try {
-          const storedUser = JSON.parse(localStorage.getItem('candidate_profile_user') || '{}');
-          email = (storedUser?.candidate_email || storedUser?.email || storedUser?.details?.candidate_email || localStorage.getItem('candidate_email') || '').trim();
-          if (!email && (storedUser?.candidate_name?.toLowerCase().includes('hashil') || storedUser?.name?.toLowerCase().includes('hashil'))) {
-            email = 'mohammedhashil2018@gmail.com';
-          }
-        } catch (_) {}
-      }
-      if (!email) {
-        const urlParams = new URLSearchParams(window.location.search);
-        email = (urlParams.get('email') || '').trim();
-      }
-      if (!email && (candidateUser?.candidate_name?.toLowerCase().includes('hashil') || candidateUser?.name?.toLowerCase().includes('hashil') || !candidateUser)) {
-        email = 'mohammedhashil2018@gmail.com';
-      }
+      ).trim().toLowerCase();
+
       if (!email) {
         setCandidateInterviews([]);
         return;
@@ -372,7 +715,16 @@ export default function OpenRolesPage({ enabled = true }) {
       if (res.ok) {
         const data = await res.json();
         const rounds = Array.isArray(data.rounds) ? data.rounds : [];
-        setCandidateInterviews(rounds);
+        const candId = (candidateUser?.id || candidateUser?.candidate_id || '').toLowerCase();
+        // Strictly isolate interviews to this candidate's account only
+        const userRounds = rounds.filter((r) => {
+          const rEmail = (r.candidate_email || r.email || '').trim().toLowerCase();
+          const rCandId = (r.candidate_id || '').trim().toLowerCase();
+          if (rEmail && rEmail === email) return true;
+          if (candId && rCandId && rCandId === candId) return true;
+          return !rEmail && !rCandId;
+        });
+        setCandidateInterviews(userRounds);
       } else {
         setCandidateInterviews([]);
       }
@@ -382,10 +734,14 @@ export default function OpenRolesPage({ enabled = true }) {
     } finally {
       setLoadingInterviews(false);
     }
-  }, [candidateUser, candidateAuth, agreementLookupEmail]);
+  }, [candidateUser, candidateAuth]);
 
   useEffect(() => {
-    loadCandidateInterviews();
+    if (candidateUser) {
+      loadCandidateInterviews();
+    } else {
+      setCandidateInterviews([]);
+    }
   }, [candidateUser, loadCandidateInterviews]);
 
   const [isInterviewViewOpen, setIsInterviewViewOpen] = useState(false);
@@ -1089,8 +1445,7 @@ export default function OpenRolesPage({ enabled = true }) {
               setAuthError(null);
               setAuthSuccessMsg('Signed in with Google successfully!');
               setTimeout(() => {
-                setShowAuthModal(false);
-                setAuthSuccessMsg('');
+                handleCandidateAuthSuccess(data?.candidate || userInfo);
               }, 600);
 
               if (onSuccess && typeof onSuccess === 'function') {
@@ -1161,8 +1516,7 @@ export default function OpenRolesPage({ enabled = true }) {
       setAuthError(null);
       setAuthSuccessMsg('Profile created! Signed in successfully.');
       setTimeout(() => {
-        setShowAuthModal(false);
-        setAuthSuccessMsg('');
+        handleCandidateAuthSuccess(data?.candidate);
       }, 600);
     } catch (err) {
       setAuthError(err.message || 'Could not complete profile registration.');
@@ -1181,11 +1535,10 @@ export default function OpenRolesPage({ enabled = true }) {
     setAuthError(null);
     setAuthLoading(true);
     try {
-      await login(authEmail.trim(), authPassword);
+      const data = await login(authEmail.trim(), authPassword);
       setAuthSuccessMsg('Welcome back! Loading candidate profile...');
       setTimeout(() => {
-        setShowAuthModal(false);
-        setAuthSuccessMsg('');
+        handleCandidateAuthSuccess(data?.candidate);
       }, 600);
     } catch (err) {
       setAuthError(err.message || 'Login failed. Please check your credentials.');
@@ -1234,11 +1587,10 @@ export default function OpenRolesPage({ enabled = true }) {
       if (regResume) {
         formData.append('resume', regResume);
       }
-      await register(formData);
+      const data = await register(formData);
       setAuthSuccessMsg('Candidate Profile created successfully!');
       setTimeout(() => {
-        setShowAuthModal(false);
-        setAuthSuccessMsg('');
+        handleCandidateAuthSuccess(data?.candidate);
       }, 600);
     } catch (err) {
       setAuthError(err.message || 'Registration failed. Please check your details.');
@@ -1264,10 +1616,24 @@ export default function OpenRolesPage({ enabled = true }) {
 
   // Persistent tracking of jobs applied by the CURRENT authenticated candidate
   const [justAppliedJobIds, setJustAppliedJobIds] = useState(() => {
-    if (!isCandidateAuthenticated || !appliedStorageKey) return new Set();
     try {
-      const saved = localStorage.getItem(appliedStorageKey);
-      return new Set(saved ? JSON.parse(saved) : []);
+      const set = new Set();
+      if (appliedStorageKey) {
+        const saved = localStorage.getItem(appliedStorageKey);
+        if (saved) JSON.parse(saved).forEach((id) => set.add(String(id)));
+      }
+      Object.keys(localStorage).forEach((k) => {
+        if (k.startsWith('tj_applied_jobs')) {
+          const val = localStorage.getItem(k);
+          if (val) {
+            try {
+              const parsed = JSON.parse(val);
+              if (Array.isArray(parsed)) parsed.forEach((id) => set.add(String(id)));
+            } catch (_) {}
+          }
+        }
+      });
+      return set;
     } catch {
       return new Set();
     }
@@ -1275,13 +1641,24 @@ export default function OpenRolesPage({ enabled = true }) {
 
   // Keep justAppliedJobIds strictly synchronized with authentication state
   useEffect(() => {
-    if (!isCandidateAuthenticated || !appliedStorageKey) {
-      setJustAppliedJobIds(new Set());
-      return;
-    }
     try {
-      const saved = localStorage.getItem(appliedStorageKey);
-      setJustAppliedJobIds(new Set(saved ? JSON.parse(saved) : []));
+      const set = new Set();
+      if (appliedStorageKey) {
+        const saved = localStorage.getItem(appliedStorageKey);
+        if (saved) JSON.parse(saved).forEach((id) => set.add(String(id)));
+      }
+      Object.keys(localStorage).forEach((k) => {
+        if (k.startsWith('tj_applied_jobs')) {
+          const val = localStorage.getItem(k);
+          if (val) {
+            try {
+              const parsed = JSON.parse(val);
+              if (Array.isArray(parsed)) parsed.forEach((id) => set.add(String(id)));
+            } catch (_) {}
+          }
+        }
+      });
+      setJustAppliedJobIds(set);
     } catch {
       setJustAppliedJobIds(new Set());
     }
@@ -1327,11 +1704,72 @@ export default function OpenRolesPage({ enabled = true }) {
     }
   }, [applications, isCandidateAuthenticated, appliedStorageKey]);
 
+  // Consolidated list of applications: merges server-fetched applications with locally-confirmed applied jobs
+  const displayedApplications = useMemo(() => {
+    const list = Array.isArray(applications) ? applications.map((a) => ({ ...a })) : [];
+    const knownReqIds = new Set(
+      list.map((a) => String(a.requisition_id || a.id || a.submission_id || ''))
+    );
+
+    // Also check all candidate submissions/applications from candidateUser if present
+    if (Array.isArray(candidateUser?.applications)) {
+      candidateUser.applications.forEach((ca) => {
+        const idKey = String(ca.requisition_id || ca.id || ca.submission_id || '');
+        if (idKey && !knownReqIds.has(idKey)) {
+          list.push({ ...ca });
+          knownReqIds.add(idKey);
+        }
+      });
+    }
+
+    // Ensure any job applied in this session or stored in localStorage appears in Applications
+    if (justAppliedJobIds && justAppliedJobIds.size > 0) {
+      justAppliedJobIds.forEach((jid) => {
+        if (!knownReqIds.has(String(jid))) {
+          const matchingJob = requisitions.find(
+            (r) => String(r.id) === String(jid) || String(r._id) === String(jid)
+          );
+          if (matchingJob) {
+            list.push({
+              submission_id: `APP-${jid}`,
+              requisition_id: matchingJob.id || jid,
+              requisition_title: matchingJob.title || 'Role Application',
+              company_name: matchingJob.company_name || matchingJob.company || 'Enterprise Partner',
+              status: 'Submitted',
+              match_score: 88,
+              recommendation: 'Strong Match',
+              created_at: 'Applied recently',
+              interview_status: null,
+            });
+            knownReqIds.add(String(jid));
+          }
+        }
+      });
+    }
+
+    // Enrich missing or generic titles & company names from active requisitions
+    list.forEach((app) => {
+      const matched = requisitions.find(
+        (r) => String(r.id) === String(app.requisition_id) || String(r._id) === String(app.requisition_id)
+      );
+      if (matched) {
+        if (!app.requisition_title || app.requisition_title === 'Open Requisition' || app.requisition_title === 'Contract Position') {
+          app.requisition_title = matched.title || app.requisition_title;
+        }
+        if (!app.company_name || app.company_name === 'Enterprise Partner' || app.company_name === 'Enterprise Client') {
+          app.company_name = matched.company_name || matched.company || app.company_name;
+        }
+      }
+    });
+
+    return list;
+  }, [applications, candidateUser?.applications, justAppliedJobIds, requisitions]);
+
   // Map of candidate's submitted applications for O(1) matching - strictly for authenticated candidate
   const appliedMap = useMemo(() => {
     const map = new Map();
-    if (!isCandidateAuthenticated || !Array.isArray(applications)) return map;
-    applications.forEach((app) => {
+    if (!isCandidateAuthenticated || !Array.isArray(displayedApplications)) return map;
+    displayedApplications.forEach((app) => {
       if (app.requisition_id) {
         map.set(String(app.requisition_id), app);
       }
@@ -1343,7 +1781,7 @@ export default function OpenRolesPage({ enabled = true }) {
       }
     });
     return map;
-  }, [applications, isCandidateAuthenticated]);
+  }, [displayedApplications, isCandidateAuthenticated]);
 
   const getJobApplication = useCallback((job) => {
     if (!job || !isCandidateAuthenticated) return null;
@@ -1354,6 +1792,151 @@ export default function OpenRolesPage({ enabled = true }) {
       null
     );
   }, [appliedMap, isCandidateAuthenticated]);
+
+  // Filtered outreach & interview items for notification drawer:
+  // Exclude redundant outreach questions ("Are you interested?") for positions the candidate has ALREADY applied for.
+  const activeNotificationItems = useMemo(() => {
+    if (!Array.isArray(outreachHistory)) return [];
+    return outreachHistory.filter((item) => {
+      const token = item.token || item._id;
+      const actionState = outreachActionStatus[token];
+      const isInterested = (actionState && actionState.action === 'interested') || item.status === 'interested';
+      const reqId = String(item.requisition_id || '');
+      const reqTitleLower = (item.requisition_title || '').trim().toLowerCase();
+
+      // Check if candidate already applied for this requisition
+      const isApplied = Boolean(
+        (reqId && justAppliedJobIds.has(reqId)) ||
+        (displayedApplications || []).some(
+          (app) => (reqId && String(app.requisition_id) === reqId) ||
+                   (reqTitleLower && app.requisition_title && app.requisition_title.trim().toLowerCase() === reqTitleLower)
+        )
+      );
+
+      // If already applied and not yet confirmed as interested / completed, hide the redundant outreach question
+      if (isApplied && !isInterested && item.status !== 'completed' && item.interview_status !== 'Completed') {
+        return false;
+      }
+
+      return true;
+    });
+  }, [outreachHistory, outreachActionStatus, justAppliedJobIds, displayedApplications]);
+
+  const unreadNotificationCount = useMemo(() => {
+    return activeNotificationItems.filter((o) => {
+      const token = o.token || o._id;
+      const localAct = outreachActionStatus[token];
+      if (localAct) return false;
+      return o.status === 'pending' || o.status === 'sent';
+    }).length;
+  }, [activeNotificationItems, outreachActionStatus]);
+
+  // Auto-submit application helper for unauthenticated candidates who apply and then sign in
+  const autoSubmitApplication = async (jobToApply, candidateDoc) => {
+    if (!jobToApply || !candidateDoc) return;
+    setSubmitting(true);
+    try {
+      const applicantName = (candidateDoc?.candidate_name || applyForm.name || candidateDoc?.name || '').trim();
+      const applicantEmail = (candidateDoc?.candidate_email || applyForm.email || candidateDoc?.email || '').trim();
+      const applicantPhone = (candidateDoc?.candidate_phone || applyForm.phone || candidateDoc?.details?.candidate_phone || '').trim();
+
+      const formData = new FormData();
+      formData.append('name', applicantName);
+      formData.append('email', applicantEmail);
+      formData.append('phone', applicantPhone);
+      formData.append('linkedin_url', (applyForm.linkedin_url || candidateDoc?.details?.linkedin_url || '').trim());
+      formData.append('github_url', (applyForm.github_url || candidateDoc?.details?.github_url || '').trim());
+      formData.append('cover_note', applyForm.cover_note ? applyForm.cover_note.trim() : '');
+      if (resumeFile) {
+        formData.append('resume', resumeFile);
+      }
+
+      const res = await fetch(`${API_BASE_URL}/api/public/requisitions/${jobToApply.id}/apply`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (res.ok) {
+        const jid = String(jobToApply.id);
+        setJustAppliedJobIds((prev) => {
+          const next = new Set(prev);
+          next.add(jid);
+          if (jobToApply._id) next.add(String(jobToApply._id));
+          if (appliedStorageKey) {
+            try {
+              localStorage.setItem(appliedStorageKey, JSON.stringify(Array.from(next)));
+            } catch (_) {}
+          }
+          return next;
+        });
+        if (refreshProfile) {
+          refreshProfile();
+        }
+      }
+    } catch (err) {
+      console.warn('[AutoApply] Failed to submit application:', err);
+    } finally {
+      setSubmitting(false);
+      // Immediately open candidate onboarding modal
+      if (!isStaffOrAdmin) {
+        setShowOnboardingModal(true);
+      }
+    }
+  };
+
+  const handleCandidateAuthSuccess = async (candidateDoc) => {
+    setShowAuthModal(false);
+    setAuthSuccessMsg('');
+    if (pendingAutoApplyJob) {
+      const job = pendingAutoApplyJob;
+      setPendingAutoApplyJob(null);
+      await autoSubmitApplication(job, candidateDoc);
+    } else if (!candidateDoc?.onboarding_completed && !isStaffOrAdmin) {
+      const localKey = `tj_onboarding_done_${candidateDoc?.id || candidateDoc?.candidate_email}`;
+      if (!localStorage.getItem(localKey)) {
+        setShowOnboardingModal(true);
+      }
+    }
+  };
+
+  // Automatically trigger onboarding modal on first sign-in if not completed yet and not staff
+  useEffect(() => {
+    if (
+      isCandidateAuthenticated &&
+      candidateUser &&
+      !isStaffOrAdmin &&
+      !candidateUser.onboarding_completed &&
+      !dismissedSessionOnboarding &&
+      !pendingAutoApplyJob &&
+      !showAuthModal
+    ) {
+      const localKey = `tj_onboarding_done_${candidateUser.id || candidateUser.candidate_email}`;
+      if (!localStorage.getItem(localKey)) {
+        setShowOnboardingModal(true);
+      }
+    }
+  }, [
+    isCandidateAuthenticated,
+    candidateUser,
+    isStaffOrAdmin,
+    dismissedSessionOnboarding,
+    pendingAutoApplyJob,
+    showAuthModal,
+  ]);
+
+  const handleOnboardingComplete = async () => {
+    setShowOnboardingModal(false);
+    setDismissedSessionOnboarding(true);
+    if (candidateUser) {
+      const localKey = `tj_onboarding_done_${candidateUser.id || candidateUser.candidate_email}`;
+      try {
+        localStorage.setItem(localKey, 'true');
+      } catch {}
+    }
+    if (completeOnboarding) {
+      await completeOnboarding();
+    }
+  };
 
   // Auto-populate candidate details
   useEffect(() => {
@@ -1478,10 +2061,21 @@ export default function OpenRolesPage({ enabled = true }) {
         desc.includes(query) ||
         skills.some((s) => s.includes(query));
 
+      const rawMode = (role.work_mode || job.work_mode || 'Onsite').toLowerCase();
       const matchesWorkMode =
-        selectedWorkMode === 'ALL' || (role.work_mode || '').toLowerCase() === selectedWorkMode.toLowerCase();
+        selectedWorkMode === 'ALL' ||
+        (selectedWorkMode === 'Remote' && rawMode.includes('remote')) ||
+        (selectedWorkMode === 'Hybrid' && rawMode.includes('hybrid')) ||
+        (selectedWorkMode === 'Onsite' && (
+          rawMode.includes('onsite') ||
+          rawMode.includes('on-site') ||
+          rawMode.includes('in-office') ||
+          (!rawMode.includes('remote') && !rawMode.includes('hybrid'))
+        ));
+
+      const jobDept = getJobDepartment(job);
       const matchesFamily =
-        selectedFamily === 'ALL' || role.job_family === selectedFamily;
+        selectedFamily === 'ALL' || jobDept.toLowerCase() === selectedFamily.toLowerCase();
 
       const locVal = Array.isArray(role.location)
         ? role.location.join(' ')
@@ -1489,18 +2083,55 @@ export default function OpenRolesPage({ enabled = true }) {
       const matchesLocation =
         selectedLocation === 'ALL' || locVal.toLowerCase().includes(selectedLocation.toLowerCase());
 
-      return matchesSearch && matchesWorkMode && matchesFamily && matchesLocation;
-    });
-  }, [requisitions, searchQuery, selectedWorkMode, selectedFamily, selectedLocation]);
+      const matchesExp = matchesExperience(job, selectedExperience);
 
-  // Job families for filter pills
-  const availableFamilies = useMemo(() => {
-    const set = new Set();
-    requisitions.forEach((j) => {
-      if (j.structured_role?.job_family) set.add(j.structured_role.job_family);
+      return matchesSearch && matchesWorkMode && matchesFamily && matchesLocation && matchesExp;
     });
-    return Array.from(set);
+  }, [requisitions, searchQuery, selectedWorkMode, selectedFamily, selectedLocation, selectedExperience]);
+
+  // Options for filter dropdowns:
+  const workModeCounts = useMemo(() => {
+    const counts = { Remote: 0, Hybrid: 0, Onsite: 0 };
+    requisitions.forEach((j) => {
+      const role = j.structured_role || {};
+      const rawMode = (role.work_mode || j.work_mode || '').toLowerCase();
+      if (rawMode.includes('remote')) counts.Remote++;
+      else if (rawMode.includes('hybrid')) counts.Hybrid++;
+      else counts.Onsite++;
+    });
+    return counts;
   }, [requisitions]);
+
+  const workModeOptions = useMemo(() => [
+    { value: 'ALL', label: 'All Modes' },
+    { value: 'Remote', label: 'Remote', count: workModeCounts.Remote },
+    { value: 'Hybrid', label: 'Hybrid', count: workModeCounts.Hybrid },
+    { value: 'Onsite', label: 'Onsite', count: workModeCounts.Onsite },
+  ], [workModeCounts]);
+
+  const departmentCounts = useMemo(() => {
+    const counts = {};
+    requisitions.forEach((j) => {
+      const dept = getJobDepartment(j);
+      if (dept && dept !== 'General') {
+        counts[dept] = (counts[dept] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [requisitions]);
+
+  const departmentOptions = useMemo(() => {
+    const opts = [{ value: 'ALL', label: 'All Depts' }];
+    const depts = Object.keys(departmentCounts).sort((a, b) => a.localeCompare(b));
+    depts.forEach((d) => {
+      opts.push({
+        value: d,
+        label: d,
+        count: departmentCounts[d],
+      });
+    });
+    return opts;
+  }, [departmentCounts]);
 
   // Locations for filter dropdown - strictly geographic locations (Work modes like Remote/Hybrid/Onsite are handled by All Modes)
   const availableLocations = useMemo(() => {
@@ -1523,7 +2154,10 @@ export default function OpenRolesPage({ enabled = true }) {
         const trimmed = val.trim();
         if (!trimmed) return;
         if (!WORK_MODES.has(trimmed.toLowerCase())) {
-          set.add(trimmed);
+          const normalized = trimmed.length > 2 && trimmed === trimmed.toUpperCase()
+            ? trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase()
+            : trimmed;
+          set.add(normalized);
         }
       };
 
@@ -1534,6 +2168,36 @@ export default function OpenRolesPage({ enabled = true }) {
       }
     });
     return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [requisitions]);
+
+  const locationOptions = useMemo(() => {
+    const opts = [{ value: 'ALL', label: 'All Locations' }];
+    availableLocations.forEach((loc) => {
+      const count = requisitions.filter((j) => {
+        const role = j.structured_role || {};
+        const locVal = Array.isArray(role.location)
+          ? role.location.join(' ')
+          : (role.location || j.location || j.company_location || '');
+        return locVal.toLowerCase().includes(loc.toLowerCase());
+      }).length;
+      opts.push({ value: loc, label: loc, count });
+    });
+    return opts;
+  }, [availableLocations, requisitions]);
+
+  const experienceOptions = useMemo(() => {
+    const entryCount = requisitions.filter((j) => matchesExperience(j, 'ENTRY')).length;
+    const juniorCount = requisitions.filter((j) => matchesExperience(j, 'JUNIOR')).length;
+    const midCount = requisitions.filter((j) => matchesExperience(j, 'MID')).length;
+    const seniorCount = requisitions.filter((j) => matchesExperience(j, 'SENIOR')).length;
+
+    return [
+      { value: 'ALL', label: 'All Experience' },
+      { value: 'ENTRY', label: 'Fresher / Entry (0–1 yr)', count: entryCount },
+      { value: 'JUNIOR', label: 'Junior (1–3 yrs)', count: juniorCount },
+      { value: 'MID', label: 'Mid-Level (3–5 yrs)', count: midCount },
+      { value: 'SENIOR', label: 'Senior (5+ yrs)', count: seniorCount },
+    ];
   }, [requisitions]);
 
   // Guard: if selectedLocation ever holds a work mode, reset it to 'ALL'
@@ -1674,14 +2338,60 @@ export default function OpenRolesPage({ enabled = true }) {
     return filteredJobs.filter((job) => getJobCategory(job) === selectedOpportunityCategory);
   }, [filteredJobs, selectedOpportunityCategory, getJobCategory]);
 
-  const ROLES_PER_PAGE = 8;
-  const totalPages = Math.max(1, Math.ceil(categoryFilteredJobs.length / ROLES_PER_PAGE));
-  const activePage = Math.min(currentPage, totalPages);
+  // Dynamic height-aware pagination:
+  // Each page holds up to 7 roles, but when roles have wrapped multiline skills,
+  // we dynamically reduce the roles on that page by 1 or 2 and move them to the next page,
+  // keeping the overall tab height consistent with Page 1 without compressing role rows.
+  const paginatedPages = useMemo(() => {
+    if (!categoryFilteredJobs || categoryFilteredJobs.length === 0) return [[]];
 
-  const paginatedJobs = useMemo(() => {
-    const startIdx = (activePage - 1) * ROLES_PER_PAGE;
-    return categoryFilteredJobs.slice(startIdx, startIdx + ROLES_PER_PAGE);
-  }, [categoryFilteredJobs, activePage]);
+    const getEstimatedRowHeight = (job) => {
+      const role = job.structured_role || {};
+      const rawSkills = (role.must_have_skills || []).concat(role.nice_to_have_skills || []);
+      const skills = rawSkills.filter((s) => s && typeof s === 'string' && s.trim());
+      const top2 = skills.slice(0, 2);
+      const totalSkillChars = top2.reduce((acc, s) => acc + s.length, 0);
+
+      // In a 170px wide skills column:
+      // ~68px: long multiline wrap (e.g. >= 36 chars or very long skill title)
+      // ~60px: 2-line wrapped skills
+      // ~48px: single-line compact skills
+      if (totalSkillChars >= 36 || top2.some((s) => s.length >= 22)) return 68;
+      if (totalSkillChars > 16 || top2.some((s) => s.length > 11)) return 60;
+      return 48;
+    };
+
+    const pages = [];
+    let currentPageJobs = [];
+    let accumulatedHeight = 0;
+    const MAX_PAGE_HEIGHT = 410; // Calibrated to Page 1's height with 7 compact roles
+    const MAX_ROLES_PER_PAGE = 7; // Never exceed 7 roles per page
+
+    for (const job of categoryFilteredJobs) {
+      const rowHeight = getEstimatedRowHeight(job);
+      const wouldOverflowHeight = currentPageJobs.length >= 5 && accumulatedHeight + rowHeight > MAX_PAGE_HEIGHT;
+      const wouldExceedMaxRoles = currentPageJobs.length >= MAX_ROLES_PER_PAGE;
+
+      if (wouldExceedMaxRoles || wouldOverflowHeight) {
+        pages.push(currentPageJobs);
+        currentPageJobs = [job];
+        accumulatedHeight = rowHeight;
+      } else {
+        currentPageJobs.push(job);
+        accumulatedHeight += rowHeight;
+      }
+    }
+
+    if (currentPageJobs.length > 0) {
+      pages.push(currentPageJobs);
+    }
+
+    return pages;
+  }, [categoryFilteredJobs]);
+
+  const totalPages = Math.max(1, paginatedPages.length);
+  const activePage = Math.min(currentPage, totalPages);
+  const paginatedJobs = paginatedPages[activePage - 1] || [];
 
   const handleOpenJob = (job) => {
     setSelectedJob(job);
@@ -1705,6 +2415,7 @@ export default function OpenRolesPage({ enabled = true }) {
     if (!selectedJob) return;
 
     if (!candidateUser) {
+      setPendingAutoApplyJob(selectedJob);
       setSubmitError('Candidate sign-in or registration is mandatory to submit an application. Please sign in or create your profile.');
       setShowAuthModal(true);
       return;
@@ -1791,6 +2502,9 @@ export default function OpenRolesPage({ enabled = true }) {
       }
       if (refreshProfile) {
         refreshProfile();
+      }
+      if (!candidateUser?.onboarding_completed && !isStaffOrAdmin) {
+        setShowOnboardingModal(true);
       }
     } catch (err) {
       console.error('Error applying to requisition:', err);
@@ -1950,6 +2664,9 @@ export default function OpenRolesPage({ enabled = true }) {
       if (refreshProfile) {
         refreshProfile();
       }
+      if (!candidateUser?.onboarding_completed && !isStaffOrAdmin) {
+        setShowOnboardingModal(true);
+      }
     } catch (err) {
       const displayMsg = formatApiErrorMessage(err?.message || err, 'Failed to submit profile. Please ensure all required fields are filled out.');
       setPoolError(displayMsg);
@@ -1976,6 +2693,28 @@ export default function OpenRolesPage({ enabled = true }) {
     const role = selectedJob.structured_role || {};
     const markdown = selectedJob.generated_jd_markdown || '';
 
+    // Helper to sanitize "About the Role" text so it never contains Responsibilities,
+    // Requirements, Skills, Salary, Employment Type, etc. (which have their own dedicated sections).
+    const cleanAboutRole = (text) => {
+      if (!text) return '';
+      const stopPatterns = [
+        /(?:\r?\n|^)\s*(?:#{1,6}\s*)?(?:\*\*)?\s*(?:key\s+|core\s+)?responsibilit(?:ies|y)[:\s*]*/i,
+        /(?:\r?\n|^)\s*(?:#{1,6}\s*)?(?:\*\*)?\s*(?:required\s+)?(?:requirements?|qualifications?)[:\s*]*/i,
+        /(?:\r?\n|^)\s*(?:#{1,6}\s*)?(?:\*\*)?\s*(?:preferred\s+|nice\s+to\s+have\s+)?skills?[:\s*]*/i,
+        /(?:\r?\n|^)\s*(?:#{1,6}\s*)?(?:\*\*)?\s*(?:salary|compensation|stipend)[:\s*]*/i,
+        /(?:\r?\n|^)\s*(?:#{1,6}\s*)?(?:\*\*)?\s*(?:employment\s+type|work\s+mode|duration|location)[:\s*]*/i,
+      ];
+
+      let cleanest = text;
+      for (const pat of stopPatterns) {
+        const match = cleanest.search(pat);
+        if (match !== -1) {
+          cleanest = cleanest.slice(0, match).trim();
+        }
+      }
+      return cleanest.trim();
+    };
+
     const sections = {
       overview: '',
       company: '',
@@ -1988,50 +2727,58 @@ export default function OpenRolesPage({ enabled = true }) {
 
     if (markdown) {
       const parts = markdown.split(/\*\*([^*]+)\*\*/);
+      // parts[0] is the introductory overview preceding the first bold heading
+      if (parts[0] && parts[0].trim()) {
+        sections.role = cleanAboutRole(parts[0].trim());
+      }
+
       let currentKey = 'overview';
 
       for (let i = 1; i < parts.length; i += 2) {
         const header = parts[i].trim();
+        const cleanHeader = header.replace(/:+$/, '').trim();
         const content = (parts[i + 1] || '').trim();
-        const hLower = header.toLowerCase();
+        const hLower = cleanHeader.toLowerCase();
 
-        if (hLower.includes('about') && !hLower.includes('role')) {
+        if (hLower.includes('about the company') || (hLower.includes('about') && !hLower.includes('role'))) {
           currentKey = 'company';
           sections.company = content;
-        } else if (hLower.includes('about the role') || hLower === 'the role' || hLower.includes('role overview')) {
+        } else if (hLower.includes('about the role') || hLower === 'the role' || hLower.includes('role overview') || hLower.includes('job summary')) {
           currentKey = 'role';
-          sections.role = content;
-          if (!sections.overview) {
-            sections.overview = content.split('\n\n')[0] || content;
-          }
+          sections.role = cleanAboutRole(content);
         } else if (hLower.includes('responsibilit') || /^\d+\.\s+/.test(header)) {
           currentKey = 'responsibilities';
-          sections.responsibilities += (sections.responsibilities ? '\n\n' : '') + `**${header}**\n` + content;
+          sections.responsibilities += (sections.responsibilities ? '\n\n' : '') + content;
         } else if (hLower.includes('qualification') || hLower.includes('requirement')) {
           currentKey = 'qualifications';
-          sections.qualifications += (sections.qualifications ? '\n\n' : '') + `**${header}**\n` + content;
+          sections.qualifications += (sections.qualifications ? '\n\n' : '') + content;
         } else if (hLower.includes('preferred skill') || hLower === 'skills') {
           currentKey = 'skills';
-          sections.skills += (sections.skills ? '\n\n' : '') + `**${header}**\n` + content;
-        } else if (hLower.includes('employment')) {
+          sections.skills += (sections.skills ? '\n\n' : '') + content;
+        } else if (hLower.includes('salary') || hLower.includes('employment') || hLower.includes('work mode') || hLower.includes('location')) {
           currentKey = 'employment';
-          sections.employment += (sections.employment ? '\n\n' : '') + content;
+          sections.employment += (sections.employment ? '\n- ' : '- ') + `**${cleanHeader}:** ` + content;
         } else {
-          if (currentKey && sections[currentKey] !== undefined) {
-            sections[currentKey] += (sections[currentKey] ? '\n\n' : '') + `**${header}**\n` + content;
+          if (currentKey && sections[currentKey] !== undefined && currentKey !== 'role') {
+            sections[currentKey] += (sections[currentKey] ? '\n\n' : '') + `**${cleanHeader}**\n` + content;
           }
         }
       }
     }
 
+    if (!sections.role) {
+      sections.role = cleanAboutRole(role.job_description || role.role_summary || role.summary || '');
+    }
+    if (!sections.role) {
+      sections.role = 'We are seeking passionate talent to join our team.';
+    }
+    sections.role = cleanAboutRole(sections.role);
+
     if (!sections.overview) {
-      sections.overview = sections.role || role.job_description || role.role_summary || role.summary || '';
+      sections.overview = sections.role;
     }
     if (!sections.company) {
       sections.company = selectedJob.company_description || `${selectedJob.company_name || 'Hiring partner'} is actively recruiting for this position.`;
-    }
-    if (!sections.role) {
-      sections.role = role.job_description || role.role_summary || role.summary || 'We are seeking passionate talent to join our team.';
     }
     if (!sections.responsibilities) {
       sections.responsibilities = Array.isArray(role.responsibilities)
@@ -2222,6 +2969,22 @@ export default function OpenRolesPage({ enabled = true }) {
             <div className="flex items-center gap-1.5 sm:gap-2.5 ml-auto shrink-0">
               {candidateUser ? (
                 <div className="flex items-center gap-1.5 sm:gap-2">
+                  {/* Interview Quick Access Trigger (Appears ONLY after candidate signin) */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsInterviewViewOpen(true);
+                      setActiveNavTab('interview');
+                    }}
+                    className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full border border-white/15 bg-white/[0.04] hover:bg-white/[0.08] hover:border-white/30 text-white/90 hover:text-white text-[10px] sm:text-[11px] font-medium transition backdrop-blur-md active:scale-95 cursor-pointer"
+                    title="Open My Interviews"
+                  >
+                    <span>Interview</span>
+                    {allCandidateInterviewRounds.filter((r) => r.status === 'Upcoming').length > 0 && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse ml-0.5" />
+                    )}
+                  </button>
+
                   {/* Modern Monochrome Notification Bell */}
                   <div className="relative">
                     <button
@@ -2247,10 +3010,12 @@ export default function OpenRolesPage({ enabled = true }) {
                       <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 max-h-[82vh] overflow-y-auto rounded-2xl bg-[#090a0e]/95 border border-white/15 backdrop-blur-2xl shadow-[0_24px_60px_rgba(0,0,0,0.85),inset_0_1px_1px_rgba(255,255,255,0.12)] p-4 z-50 text-white">
                         <div className="flex items-center justify-between pb-3 mb-3 border-b border-white/10">
                           <div className="flex items-center gap-2">
-                            <Bell size={13} className="text-white" />
-                            <span className="text-[11px] font-extrabold text-white tracking-widest uppercase">Notifications & Alerts</span>
+                            <div className="w-5 h-5 rounded-md bg-white/10 flex items-center justify-center text-white">
+                              <Bell size={12} />
+                            </div>
+                            <span className="text-[11px] font-black text-white tracking-widest uppercase">Notifications & Alerts</span>
                             {unreadNotificationCount > 0 && (
-                              <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-white text-black">
+                              <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-white text-black shadow-sm">
                                 {unreadNotificationCount} New
                               </span>
                             )}
@@ -2259,23 +3024,26 @@ export default function OpenRolesPage({ enabled = true }) {
                             type="button"
                             onClick={() => setShowNotificationDrawer(false)}
                             className="p-1 rounded-md text-white/40 hover:text-white hover:bg-white/10 transition cursor-pointer"
+                            title="Close"
                           >
                             <X size={12} />
                           </button>
                         </div>
 
                         {/* List of Outreach Notifications & Match Alerts */}
-                        {outreachHistory.length === 0 && (allCandidateInterviewRounds || []).length === 0 ? (
-                          <div className="py-7 text-center">
-                            <Sparkles size={20} className="text-white/20 mx-auto mb-2" />
-                            <p className="text-xs font-semibold text-white/70">No notifications yet</p>
-                            <p className="text-[10.5px] text-white/40 mt-1 max-w-[240px] mx-auto">
-                              When you apply for a job or get fast-tracked, interactive Telegram & interview alerts will appear here.
+                        {activeNotificationItems.length === 0 ? (
+                          <div className="py-8 text-center px-4">
+                            <div className="w-10 h-10 rounded-full bg-white/[0.04] border border-white/10 flex items-center justify-center mx-auto mb-2.5 text-white/40">
+                              <Bell size={16} />
+                            </div>
+                            <p className="text-xs font-semibold text-white/80">No new notifications</p>
+                            <p className="text-[11px] text-white/40 mt-1 max-w-[240px] mx-auto leading-relaxed">
+                              When you receive interview invitations or fast-track updates, they will appear here.
                             </p>
                           </div>
                         ) : (
                           <div className="space-y-3">
-                            {outreachHistory.map((item, idx) => {
+                            {activeNotificationItems.map((item, idx) => {
                               const token = item.token || item._id;
                               const actionState = outreachActionStatus[token];
 
@@ -2285,7 +3053,7 @@ export default function OpenRolesPage({ enabled = true }) {
                                        (item.requisition_id && String(r.requisition_id) === String(item.requisition_id)) ||
                                        (item.requisition_title && r.requisition_title && item.requisition_title.toLowerCase() === r.requisition_title.toLowerCase())
                               );
-                              const matchingApp = (applications || []).find(
+                              const matchingApp = (displayedApplications || []).find(
                                 (app) => (item.requisition_id && String(app.requisition_id) === String(item.requisition_id)) ||
                                          (item.requisition_title && app.requisition_title && item.requisition_title.toLowerCase() === app.requisition_title.toLowerCase())
                               );
@@ -2305,7 +3073,6 @@ export default function OpenRolesPage({ enabled = true }) {
                               const isInterested = (actionState && actionState.action === 'interested') || item.status === 'interested';
                               const isUnavailable = (actionState && actionState.action === 'unavailable') || item.status === 'unavailable';
                               const meetingLink = actionState?.meeting_link || item.meeting_link;
-                              const passcode = actionState?.passcode || item.candidate_passcode || 'TJ-FAST-TRACK';
 
                               return (
                                 <div
@@ -2317,7 +3084,7 @@ export default function OpenRolesPage({ enabled = true }) {
                                       <div className="text-xs font-bold text-white leading-tight">
                                         {item.requisition_title || 'Position Match Alert'}
                                       </div>
-                                      <div className="text-[10.5px] text-white/50 mt-0.5">
+                                      <div className="text-[10.5px] text-white/50 mt-0.5 font-medium">
                                         {item.company_name || 'Enterprise Partner'}
                                       </div>
                                     </div>
@@ -2334,7 +3101,7 @@ export default function OpenRolesPage({ enabled = true }) {
                                     <div className="p-3 rounded-xl bg-white/[0.04] border border-white/15 flex flex-col gap-2">
                                       <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-1.5 text-xs font-bold text-white">
-                                          <CheckCircle2 size={13} className="text-white" />
+                                          <CheckCircle2 size={13} className="text-emerald-400" />
                                           <span>AI Interview Completed</span>
                                         </div>
                                         <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-white text-black tracking-wide uppercase">
@@ -2361,20 +3128,20 @@ export default function OpenRolesPage({ enabled = true }) {
                                       </div>
                                     </div>
                                   ) : isInterested ? (
-                                    <div className="p-3 rounded-xl bg-white/[0.04] border border-white/15 flex flex-col gap-2">
+                                    <div className="p-3.5 rounded-xl bg-white/[0.04] border border-white/15 flex flex-col gap-2.5">
                                       <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-1.5 text-xs font-bold text-white">
-                                          <CheckCircle2 size={12} className="text-white" />
+                                          <CheckCircle2 size={13} className="text-emerald-400" />
                                           <span>Status Confirmed: Available & Interested</span>
                                         </div>
-                                        <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-white/10 text-white border border-white/15">
+                                        <span className="px-2.5 py-0.5 rounded-full text-[9px] font-bold bg-white/10 text-emerald-400 border border-emerald-500/20">
                                           Ready
                                         </span>
                                       </div>
                                       <p className="text-[11px] text-white/60 leading-relaxed">
                                         Your AI Interview is ready. You can attend immediately with your camera & mic.
                                       </p>
-                                      <div className="flex items-center gap-2 pt-1">
+                                      <div className="pt-0.5">
                                         <button
                                           type="button"
                                           onClick={() => {
@@ -2388,14 +3155,11 @@ export default function OpenRolesPage({ enabled = true }) {
                                               setActiveNavTab('interview');
                                             }
                                           }}
-                                          className="px-3 py-1.5 rounded-xl bg-white hover:bg-neutral-200 text-black font-extrabold text-[11px] flex items-center gap-1.5 shadow transition active:scale-95 cursor-pointer"
+                                          className="w-full sm:w-auto px-4 py-2 rounded-xl bg-white hover:bg-neutral-200 text-black font-extrabold text-[11px] flex items-center justify-center gap-2 shadow-sm transition active:scale-95 cursor-pointer"
                                         >
-                                          <Sparkles size={11} className="text-black" />
+                                          <Sparkles size={12} className="text-black" />
                                           <span>Start AI Interview</span>
                                         </button>
-                                        <span className="text-[10px] text-white/70 font-mono bg-white/[0.06] px-2.5 py-1 rounded-xl border border-white/15">
-                                          Passcode: {passcode}
-                                        </span>
                                       </div>
                                     </div>
                                   ) : isUnavailable ? (
@@ -2444,45 +3208,53 @@ export default function OpenRolesPage({ enabled = true }) {
                   </div>
 
                   {/* Candidate Pill */}
-                  <div className="flex items-center gap-1.5 sm:gap-2 p-0.5 pl-2 pr-1.5 rounded-full bg-paper/[0.06] border border-paper/15 backdrop-blur-md">
-                    <div className="w-5.5 h-5.5 rounded-full bg-white/10 text-white font-bold text-[9.5px] flex items-center justify-center border border-white/20">
-                      {(candidateUser.candidate_name || 'C').slice(0, 1).toUpperCase()}
-                    </div>
-                    <span className="text-[11px] sm:text-xs font-semibold text-white max-w-[90px] sm:max-w-[120px] truncate">
-                      {candidateUser.candidate_name || candidateUser.candidate_email}
-                    </span>
-                    <div className="h-3 w-px bg-paper/20 mx-0.5" />
+                  <div className="flex items-center gap-1.5 sm:gap-2 p-0.5 pl-1.5 pr-1.5 rounded-full bg-paper/[0.06] border border-paper/15 backdrop-blur-md">
                     <button
                       type="button"
                       onClick={() => setShowSetupModal(true)}
-                      className="hidden sm:inline-block px-2 py-0.5 text-[10.5px] font-medium text-paper/80 hover:text-white transition rounded-lg hover:bg-paper/10 cursor-pointer"
+                      className="flex items-center gap-1.5 cursor-pointer hover:opacity-90 transition p-0.5 rounded-full"
+                      title="Profile Settings"
                     >
-                      Edit Profile
+                      <div className="w-5.5 h-5.5 rounded-full bg-white/10 text-white font-bold text-[9.5px] flex items-center justify-center border border-white/20 shrink-0">
+                        {(candidateUser.candidate_name || 'C').slice(0, 1).toUpperCase()}
+                      </div>
+                      <span className="text-[11px] sm:text-xs font-semibold text-white max-w-[85px] sm:max-w-[120px] truncate hidden sm:inline">
+                        {candidateUser.candidate_name || candidateUser.candidate_email}
+                      </span>
                     </button>
+
+                    <div className="h-3 w-px bg-paper/20 mx-0.5" />
+
+                    {/* Candidate Onboarding Tour Preview Icon */}
                     <button
                       type="button"
-                      onClick={() => setShowMyAppsModal(true)}
-                      className="px-2 py-0.5 text-[10px] sm:text-[10.5px] font-medium text-paper/80 hover:text-white transition rounded-lg hover:bg-paper/10 cursor-pointer"
+                      onClick={() => setShowOnboardingModal(true)}
+                      className="p-1 sm:p-1.5 text-paper/70 hover:text-white transition rounded-lg hover:bg-paper/10 cursor-pointer flex items-center justify-center"
+                      title="Onboarding Tour Preview"
                     >
-                      Apps ({applications.length})
+                      <Sparkles size={13} className="text-white/80 hover:text-white" />
                     </button>
+
                     <a
                       href={`https://t.me/${TELEGRAM_BOT_USERNAME}?start=${candidateUser.id || candidateUser.candidate_email || ''}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="hidden sm:inline-flex px-2 py-0.5 text-[10.5px] font-medium text-paper/80 hover:text-white transition rounded-lg hover:bg-paper/10 cursor-pointer items-center gap-1.5 text-decoration-none"
+                      className="hidden lg:inline-flex p-1 sm:p-1.5 text-paper/70 hover:text-white transition rounded-lg hover:bg-paper/10 cursor-pointer items-center justify-center text-decoration-none"
                       title="Connect Telegram for instant interview alerts & notifications"
                     >
-                      <Send size={11} />
-                      <span>Bot</span>
+                      <Send size={12} />
                     </a>
+
+                    <div className="h-3 w-px bg-paper/20 mx-0.5" />
+
+                    {/* Sign Out Icon */}
                     <button
                       type="button"
                       onClick={handleCandidateLogout}
-                      className="p-1 text-paper/50 hover:text-white transition cursor-pointer"
+                      className="p-1 sm:p-1.5 text-paper/60 hover:text-rose-400 hover:bg-rose-500/10 transition rounded-lg cursor-pointer flex items-center justify-center"
                       title="Sign out"
                     >
-                      <LogOut size={12} />
+                      <LogOut size={13} />
                     </button>
                   </div>
                 </div>
@@ -2492,164 +3264,28 @@ export default function OpenRolesPage({ enabled = true }) {
                   <button
                     type="button"
                     onClick={() => { setAuthModalTab('login'); setShowAuthModal(true); }}
-                    className="inline-flex items-center gap-1 px-2.5 sm:px-3 py-1 rounded-full border border-white/15 bg-white/[0.04] hover:bg-white/[0.08] hover:border-white/30 text-white/90 hover:text-white text-[10px] sm:text-[11px] font-medium transition backdrop-blur-md active:scale-95 cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-white/15 bg-white/[0.04] hover:bg-white/[0.08] hover:border-white/30 text-white/90 hover:text-white text-[11px] sm:text-xs font-medium transition backdrop-blur-md active:scale-95 cursor-pointer"
                   >
                     <User size={11} className="text-white/70" />
                     <span>Sign In</span>
                   </button>
-
-                  {/* Staff Portal Link */}
-                  <Link
-                    to="/login"
-                    className="inline-flex items-center gap-1 px-2.5 sm:px-3 py-1 rounded-full border border-white/15 bg-white/[0.04] hover:bg-white/[0.08] hover:border-white/30 text-white/90 hover:text-white text-[10px] sm:text-[11px] font-medium transition backdrop-blur-md active:scale-95"
-                  >
-                    <Users size={11} className="text-white/70" />
-                    <span>Staff</span>
-                    <ArrowRight size={10} className="text-white/60" />
-                  </Link>
                 </div>
               )}
             </div>
           </header>
 
-          {/* Glass Search & Filter Control Console — Optimized for Mobile */}
-          <div className="mt-1 mb-3.5 sm:mb-5 flex flex-col sm:flex-row items-center justify-between gap-2.5 sm:gap-3">
-            <div className="w-[90%] sm:w-full max-w-lg sm:max-w-4xl mx-auto sm:mx-0 p-2 sm:p-1.5 rounded-2xl bg-white/[0.04] hover:bg-white/[0.06] border border-white/[0.12] focus-within:border-white/35 backdrop-blur-2xl shadow-[0_8px_32px_0_rgba(0,0,0,0.37),inset_0_1px_1px_0_rgba(255,255,255,0.14)] flex flex-col sm:flex-row items-center gap-2 transition-all">
-              {/* Keyword Search Input */}
-              <div className="relative flex-1 w-full min-w-[150px]">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search roles, skills, company..."
-                  className="w-full bg-transparent pl-8 pr-6 py-1.5 text-xs text-white placeholder-white/40 focus:outline-none font-sans"
-                />
-                {searchQuery && (
-                  <button
-                    type="button"
-                    onClick={() => setSearchQuery('')}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 hover:text-white cursor-pointer"
-                  >
-                    <X size={12} />
-                  </button>
-                )}
-              </div>
-
-              {/* Filter Dropdowns & Glass Action Button */}
-              <div className="flex items-center gap-1.5 w-full sm:w-auto shrink-0 justify-between sm:justify-start">
-                {/* Work Mode Filter */}
-                <div className="relative flex-1 sm:flex-initial">
-                  <select
-                    value={selectedWorkMode}
-                    onChange={(e) => setSelectedWorkMode(e.target.value)}
-                    className="w-full sm:w-auto appearance-none bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.1] rounded-xl pl-6 pr-5 py-1.5 text-[11px] text-white/90 font-medium cursor-pointer focus:outline-none focus:border-white/30 transition shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]"
-                  >
-                    <option value="ALL" className="bg-zinc-950 text-white">All Modes</option>
-                    <option value="Remote" className="bg-zinc-950 text-white">Remote</option>
-                    <option value="Hybrid" className="bg-zinc-950 text-white">Hybrid</option>
-                    <option value="Onsite" className="bg-zinc-950 text-white">Onsite</option>
-                  </select>
-                  <Briefcase size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-white/50 pointer-events-none" />
-                  <ChevronDown size={10} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-white/50 pointer-events-none" />
-                </div>
-
-                {/* Department Filter */}
-                <div className="relative flex-1 sm:flex-initial">
-                  <select
-                    value={selectedFamily}
-                    onChange={(e) => setSelectedFamily(e.target.value)}
-                    className="w-full sm:w-auto appearance-none bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.1] rounded-xl pl-6 pr-5 py-1.5 text-[11px] text-white/90 font-medium cursor-pointer focus:outline-none focus:border-white/30 transition max-w-[130px] truncate shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]"
-                  >
-                    <option value="ALL" className="bg-zinc-950 text-white">All Depts</option>
-                    {availableFamilies.map((fam) => (
-                      <option key={fam} value={fam} className="bg-zinc-950 text-white">
-                        {fam}
-                      </option>
-                    ))}
-                  </select>
-                  <Building2 size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-white/50 pointer-events-none" />
-                  <ChevronDown size={10} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-white/50 pointer-events-none" />
-                </div>
-
-                {/* Location Filter (Tablet / Desktop) */}
-                <div className="relative flex-1 sm:flex-initial hidden md:block">
-                  <select
-                    value={selectedLocation}
-                    onChange={(e) => setSelectedLocation(e.target.value)}
-                    className="w-full sm:w-auto appearance-none bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.1] rounded-xl pl-6 pr-5 py-1.5 text-[11px] text-white/90 font-medium cursor-pointer focus:outline-none focus:border-white/30 transition max-w-[115px] truncate shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]"
-                  >
-                    <option value="ALL" className="bg-zinc-950 text-white">All Locations</option>
-                    {availableLocations.map((loc) => (
-                      <option key={loc} value={loc} className="bg-zinc-950 text-white">
-                        {loc}
-                      </option>
-                    ))}
-                  </select>
-                  <MapPin size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-white/50 pointer-events-none" />
-                  <ChevronDown size={10} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-white/50 pointer-events-none" />
-                </div>
-
-                {/* Glass Search Action Button */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    document.getElementById('roles-grid-section')?.scrollIntoView({ behavior: 'smooth' });
-                  }}
-                  className="w-8 h-8 rounded-xl bg-white/[0.08] hover:bg-white/[0.16] border border-white/15 text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 cursor-pointer shrink-0 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.2)]"
-                  title="Search Roles"
-                >
-                  <ArrowRight size={13} />
-                </button>
-              </div>
-            </div>
+{/* Section Title Header */}
+          <div className="mb-3.5 pt-1">
+            <h2 className="font-display text-xl sm:text-2xl font-bold tracking-tight text-white">
+              Latest Opportunities
+            </h2>
+            <p className="text-xs text-neutral-400 mt-0.5 font-medium">
+              {categoryFilteredJobs.length} active roles available
+            </p>
           </div>
 
-          {/* Section Title Header & Category Pills */}
-          <div className="mb-3 pt-0.5">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="font-display text-xl sm:text-2xl font-bold tracking-tight text-white">
-                Latest Opportunities
-              </h2>
-              <div className="flex items-center gap-2.5 sm:gap-3">
-                <button
-                  type="button"
-                  onClick={() => setShowGeneralPoolModal(true)}
-                  className="lg:hidden text-[10.5px] font-semibold text-white/80 hover:text-white transition inline-flex items-center gap-1 cursor-pointer bg-white/10 px-2.5 py-1 rounded-full border border-white/15"
-                >
-                  <Sparkles size={11} className="text-white" />
-                  <span>Join Talent Pool</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Category Filter Pills */}
-            <div className="flex items-center gap-2 sm:gap-2.5 overflow-x-auto pb-2 scrollbar-none select-none">
-              {categoryTabs.map((tab) => {
-                const isActive = selectedOpportunityCategory === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedOpportunityCategory(tab.id);
-                      setCurrentPage(1);
-                    }}
-                    className={`px-3.5 py-1.5 rounded-full text-xs transition-all cursor-pointer whitespace-nowrap shrink-0 ${
-                      isActive
-                        ? 'bg-white text-black font-bold shadow-md'
-                        : 'bg-[#12141A] hover:bg-[#1A1D24] text-neutral-300 hover:text-white border border-white/10 font-medium'
-                    }`}
-                  >
-                    {tab.label} ({tab.count})
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Opportunities List / Table Section */}
-          <main id="roles-grid-section" className="flex-1 w-full flex flex-col pb-20 sm:pb-24">
+                    {/* Opportunities List / Table Section */}
+          <main id="roles-grid-section" className="flex-1 w-full flex flex-col pb-3 sm:pb-4">
             {loading ? (
               <div className="py-24 text-center space-y-3">
                 <div className="w-10 h-10 rounded-full border-2 border-white/80 border-t-transparent animate-spin mx-auto" />
@@ -2688,6 +3324,7 @@ export default function OpenRolesPage({ enabled = true }) {
                       setSelectedWorkMode('ALL');
                       setSelectedFamily('ALL');
                       setSelectedLocation('ALL');
+                      setSelectedExperience('ALL');
                       setCurrentPage(1);
                     }}
                     className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-bold transition cursor-pointer"
@@ -2704,9 +3341,205 @@ export default function OpenRolesPage({ enabled = true }) {
                 </div>
               </div>
             ) : (
-              <div className="rounded-2xl sm:rounded-3xl bg-[#0B0D12] border border-white/[0.08] p-3 sm:p-5 shadow-xl will-change-transform">
-                {/* Scrollable table container */}
-                <div className="overflow-x-auto scrollbar-thin">
+              <div className="flex-1 flex flex-col justify-between rounded-2xl sm:rounded-3xl bg-[#0B0D12] border border-white/[0.08] p-3 sm:px-5 sm:py-3.5 shadow-xl will-change-transform min-h-[480px] lg:min-h-[500px]">
+{/* TOP OF ROLES TAB: Compact Search & Filter Console Linked Directly to Table */}
+                <div className="pb-2.5 mb-2.5 border-b border-white/[0.06] flex flex-wrap items-center gap-2 max-w-3xl">
+                  {/* Compact Keyword Search Input */}
+                  <div className="relative flex-1 min-w-[160px] sm:min-w-[190px] sm:max-w-xs">
+                    <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value);
+                        setCurrentPage(1);
+                      }}
+                      placeholder="Search roles, skills, company..."
+                      className="w-full bg-white/[0.03] hover:bg-white/[0.05] border border-white/10 rounded-lg pl-7 pr-6 py-1 text-[11px] text-white placeholder-white/40 focus:outline-none focus:border-white/30 transition shadow-inner"
+                    />
+                    {searchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSearchQuery('');
+                          setCurrentPage(1);
+                        }}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 hover:text-white cursor-pointer"
+                      >
+                        <X size={11} />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Compact Work Mode */}
+                  <FilterDropdown
+                    icon={Briefcase}
+                    label="All Modes"
+                    value={selectedWorkMode}
+                    options={workModeOptions}
+                    onChange={(val) => {
+                      setSelectedWorkMode(val);
+                      setCurrentPage(1);
+                    }}
+                    menuWidth="w-44"
+                  />
+
+                  {/* Compact Department */}
+                  <FilterDropdown
+                    icon={Building2}
+                    label="All Depts"
+                    value={selectedFamily}
+                    options={departmentOptions}
+                    onChange={(val) => {
+                      setSelectedFamily(val);
+                      setCurrentPage(1);
+                    }}
+                    menuWidth="w-56"
+                  />
+
+                  {/* Compact Location */}
+                  <FilterDropdown
+                    icon={MapPin}
+                    label="All Locations"
+                    value={selectedLocation}
+                    options={locationOptions}
+                    onChange={(val) => {
+                      setSelectedLocation(val);
+                      setCurrentPage(1);
+                    }}
+                    className="hidden sm:inline-block"
+                    menuWidth="w-60"
+                  />
+
+                  {/* Compact Experience */}
+                  <FilterDropdown
+                    icon={GraduationCap}
+                    label="All Experience"
+                    value={selectedExperience}
+                    options={experienceOptions}
+                    onChange={(val) => {
+                      setSelectedExperience(val);
+                      setCurrentPage(1);
+                    }}
+                    className="hidden sm:inline-block"
+                    menuWidth="w-56"
+                    align="right"
+                  />
+                </div>
+
+                                {/* Mobile View: Touch-Friendly Requisition Cards (< 640px) */}
+                <div className="sm:hidden divide-y divide-white/[0.06]">
+                  {paginatedJobs.map((job) => {
+                    const role = job.structured_role || {};
+                    const rawSkills = (role.must_have_skills || []).concat(role.nice_to_have_skills || []);
+                    const skills = rawSkills.filter((s) => s && typeof s === 'string' && s.trim());
+                    const workMode = (role.work_mode || job.work_mode || 'Onsite').trim();
+                    const isRemote = workMode.toLowerCase().includes('remote');
+                    const isHybrid = workMode.toLowerCase().includes('hybrid');
+                    const compName = (job.company_name || job.company || '').trim();
+                    const companyInitial = (compName || job.title || 'R').slice(0, 1).toUpperCase();
+                    const locDisplay = getLocationDisplay(job);
+                    const expDisplay = getExperienceDisplay(job);
+                    const existingApp = getJobApplication(job);
+                    const isApplied = Boolean(
+                      isCandidateAuthenticated && (
+                        existingApp ||
+                        justAppliedJobIds.has(String(job.id)) ||
+                        (job._id && justAppliedJobIds.has(String(job._id)))
+                      )
+                    );
+                    const isSaved = savedJobIds.has(String(job.id)) || (job._id && savedJobIds.has(String(job._id)));
+
+                    return (
+                      <div
+                        key={job.id || job._id}
+                        onClick={() => handleOpenJob(job)}
+                        className="py-2.5 px-1 hover:bg-white/[0.03] active:bg-white/[0.06] transition-colors rounded-xl cursor-pointer space-y-2"
+                      >
+                        {/* 1. Header: Initial + Title + Company */}
+                        <div className="flex items-start justify-between gap-2.5">
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                            <CompanyAvatar job={job} size="w-8 h-8" />
+                            <div className="min-w-0 flex-1">
+                              <h3 className="text-[13px] font-bold text-white tracking-tight leading-snug truncate">
+                                {job.title}
+                              </h3>
+                              <p className="text-[11px] text-neutral-400 truncate mt-0.5 font-medium">
+                                {compName || locDisplay || 'Direct Requisition'}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* 2. Badges: Work Mode, Experience, Location */}
+                        <div className="flex flex-wrap items-center gap-1.5 text-[10.5px]">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-[#16181F] border border-white/[0.08] text-neutral-200">
+                            <span>{isRemote ? 'Remote' : isHybrid ? 'Hybrid' : workMode}</span>
+                          </span>
+                          {expDisplay && (
+                            <span className="px-2.5 py-0.5 rounded-full bg-[#16181F] border border-white/[0.08] text-neutral-300">
+                              {expDisplay}
+                            </span>
+                          )}
+                          {locDisplay && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#16181F] border border-white/[0.08] text-neutral-300 truncate max-w-[140px]">
+                              <MapPin size={10} className="text-neutral-400 shrink-0" />
+                              <span className="truncate">{locDisplay}</span>
+                            </span>
+                          )}
+                        </div>
+
+                        {/* 3. Skills + Apply Button */}
+                        <div className="flex items-center justify-between gap-2 pt-0.5">
+                          <div className="flex items-center gap-1 overflow-hidden min-w-0">
+                            {skills.slice(0, 2).map((skill) => (
+                              <span
+                                key={skill}
+                                className="px-2 py-0.5 rounded-md bg-[#16181F] border border-white/[0.08] text-[10px] font-medium text-neutral-300 truncate max-w-[85px]"
+                              >
+                                {skill}
+                              </span>
+                            ))}
+                            {skills.length > 2 && (
+                              <span className="px-1.5 py-0.5 rounded-md bg-[#16181F] border border-white/[0.08] text-[10px] font-medium text-neutral-400 shrink-0">
+                                +{skills.length - 2}
+                              </span>
+                            )}
+                          </div>
+
+                          {isApplied ? (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenJob(job);
+                              }}
+                              className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-semibold text-[10.5px] transition shadow-sm cursor-pointer shrink-0"
+                            >
+                              <Check size={11} className="text-emerald-400" />
+                              <span>Applied</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenJob(job);
+                              }}
+                              className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-white hover:bg-neutral-200 text-black font-semibold text-[10.5px] transition shadow-sm cursor-pointer shrink-0 active:scale-95"
+                            >
+                              <span>Apply Now</span>
+                              <ArrowRight size={10} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Tablet and Desktop: Full Table (>= 640px) */}
+                <div className="hidden sm:block overflow-x-auto scrollbar-thin">
                   <div className="min-w-[760px]">
                     {/* Table Header Row */}
                     <div className="grid grid-cols-[minmax(230px,2fr)_100px_110px_140px_170px_140px] items-center px-4 py-2.5 text-[10px] font-semibold text-neutral-400 uppercase tracking-wider border-b border-white/[0.06]">
@@ -2748,13 +3581,11 @@ export default function OpenRolesPage({ enabled = true }) {
                           <div
                             key={job.id || job._id}
                             onClick={() => handleOpenJob(job)}
-                            className="grid grid-cols-[minmax(230px,2fr)_100px_110px_140px_170px_140px] items-center px-4 py-3 hover:bg-white/[0.04] transition-colors duration-100 ease-out rounded-xl group cursor-pointer"
+                            className="grid grid-cols-[minmax(230px,2fr)_100px_110px_140px_170px_140px] items-center px-4 py-2.5 hover:bg-white/[0.04] transition-colors duration-100 ease-out rounded-xl group cursor-pointer"
                           >
                             {/* 1. Role & Company */}
                             <div className="flex items-center gap-3 min-w-0 pr-3">
-                              <div className="w-8 h-8 rounded-lg bg-white text-black font-extrabold text-xs flex items-center justify-center shrink-0 shadow-sm">
-                                {companyInitial}
-                              </div>
+                              <CompanyAvatar job={job} size="w-8 h-8" />
                               <div className="min-w-0 flex-1">
                                 <h3 className="text-[13px] font-bold text-white tracking-tight truncate group-hover:text-white transition-colors">
                                   {job.title}
@@ -2767,16 +3598,7 @@ export default function OpenRolesPage({ enabled = true }) {
 
                             {/* 2. Type */}
                             <div>
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10.5px] font-medium bg-[#16181F] border border-white/[0.08] text-neutral-200">
-                                <span
-                                  className={`w-1.5 h-1.5 rounded-full ${
-                                    isRemote
-                                      ? 'bg-emerald-400'
-                                      : isHybrid
-                                      ? 'bg-sky-400'
-                                      : 'bg-amber-400'
-                                  }`}
-                                />
+                              <span className="inline-flex items-center -ml-2 px-2.5 py-0.5 rounded-full text-[10.5px] font-medium bg-[#16181F] border border-white/[0.08] text-neutral-200">
                                 <span>{isRemote ? 'Remote' : isHybrid ? 'Hybrid' : workMode}</span>
                               </span>
                             </div>
@@ -2815,20 +3637,8 @@ export default function OpenRolesPage({ enabled = true }) {
                               )}
                             </div>
 
-                            {/* 6. Bookmark & Apply */}
-                            <div className="flex items-center justify-end gap-2 pr-1">
-                              <button
-                                type="button"
-                                onClick={(e) => toggleSaveJob(job.id || job._id, e)}
-                                className={`w-7 h-7 rounded-lg flex items-center justify-center transition cursor-pointer ${
-                                  isSaved
-                                    ? 'text-white bg-white/15'
-                                    : 'text-neutral-400 hover:text-white hover:bg-white/10'
-                                }`}
-                                title={isSaved ? 'Saved' : 'Save opportunity'}
-                              >
-                                <Bookmark size={14} className={isSaved ? 'fill-white' : ''} />
-                              </button>
+                            {/* 6. Apply */}
+                            <div className="flex items-center justify-end pr-1">
                               {isApplied ? (
                                 <button
                                   type="button"
@@ -2863,7 +3673,7 @@ export default function OpenRolesPage({ enabled = true }) {
                 </div>
 
                 {/* Table Footer: Count & Pagination */}
-                <div className="mt-4 pt-3 border-t border-white/[0.06] flex items-center justify-between px-2 text-xs">
+                <div className="mt-auto pt-2.5 border-t border-white/[0.06] flex items-center justify-between px-2 text-xs">
                   <div className="text-neutral-400 font-medium text-[11.5px]">
                     Showing {paginatedJobs.length} of {categoryFilteredJobs.length} roles
                   </div>
@@ -2913,7 +3723,7 @@ export default function OpenRolesPage({ enabled = true }) {
                 <div className="md:hidden fixed bottom-4 inset-x-0 z-40 flex justify-center pointer-events-none px-3.5 pb-[env(safe-area-inset-bottom,0px)]">
                   <nav
                     aria-label="Mobile Candidate Navigation"
-                    className="pointer-events-auto flex items-center gap-1 p-1 rounded-full bg-[#0a0b10]/85 hover:bg-[#0a0b10]/95 backdrop-blur-2xl border border-white/20 shadow-[0_12px_40px_rgba(0,0,0,0.65),inset_0_1px_1px_rgba(255,255,255,0.22)] select-none"
+                    className="pointer-events-auto flex items-center gap-1 p-1 rounded-full bg-[#0a0b10]/90 hover:bg-[#0a0b10]/95 backdrop-blur-2xl border border-white/20 shadow-[0_12px_40px_rgba(0,0,0,0.65),inset_0_1px_1px_rgba(255,255,255,0.22)] select-none"
                   >
                     {[
                       {
@@ -2931,23 +3741,40 @@ export default function OpenRolesPage({ enabled = true }) {
                           document.getElementById('roles-grid-section')?.scrollIntoView({ behavior: 'smooth' });
                         },
                       },
-                      ...(hasInterviewAccess
-                        ? [
-                            {
-                              id: 'interview',
-                              label: 'INTERVIEW',
-                              icon: Video,
-                              onClick: () => {
-                                setActiveNavTab('interview');
-                                setIsInterviewViewOpen(true);
-                                setShowAgreementModal(false);
-                                setShowSetupModal(false);
-                                setShowMyAppsModal(false);
-                                setShowAuthModal(false);
-                              },
-                            },
-                          ]
-                        : []),
+                      {
+                        id: 'applications',
+                        label: 'APPS',
+                        icon: Briefcase,
+                        badge: displayedApplications?.length > 0 ? displayedApplications.length : null,
+                        onClick: () => {
+                          setActiveNavTab('applications');
+                          setIsInterviewViewOpen(false);
+                          setShowInterviewModal(false);
+                          setShowAgreementModal(false);
+                          setShowSetupModal(false);
+                          setShowAuthModal(false);
+                          setShowMyAppsModal(true);
+                        },
+                      },
+                      {
+                        id: 'interview',
+                        label: 'INTERVIEW',
+                        icon: Video,
+                        badge: candidateUser ? (allCandidateInterviewRounds.filter((r) => r.status === 'Upcoming').length || null) : null,
+                        onClick: () => {
+                          if (!candidateUser) {
+                            setAuthModalTab('login');
+                            setShowAuthModal(true);
+                            return;
+                          }
+                          setActiveNavTab('interview');
+                          setIsInterviewViewOpen(true);
+                          setShowAgreementModal(false);
+                          setShowSetupModal(false);
+                          setShowMyAppsModal(false);
+                          setShowAuthModal(false);
+                        },
+                      },
                       {
                         id: 'agreement',
                         label: 'AGREEMENT',
@@ -2964,7 +3791,7 @@ export default function OpenRolesPage({ enabled = true }) {
                       },
                       {
                         id: 'profile',
-                        label: 'PROFILE',
+                        label: '',
                         icon: User,
                         hasUser: Boolean(candidateUser),
                         onClick: () => {
@@ -2981,7 +3808,15 @@ export default function OpenRolesPage({ enabled = true }) {
                         },
                       },
                     ].map((item, idx) => {
-                      const isActive = activeNavTab === item.id;
+                      const isActive = isInterviewViewOpen
+                        ? item.id === 'interview'
+                        : showMyAppsModal
+                        ? item.id === 'applications'
+                        : showAgreementModal
+                        ? item.id === 'agreement'
+                        : showSetupModal
+                        ? item.id === 'profile'
+                        : activeNavTab === item.id;
                       const IconComponent = item.icon;
                       return (
                         <div key={item.id} className="flex items-center">
@@ -2990,7 +3825,11 @@ export default function OpenRolesPage({ enabled = true }) {
                             type="button"
                             onClick={item.onClick}
                             aria-current={isActive ? 'true' : undefined}
-                            className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all duration-200 cursor-pointer active:scale-95 ${
+                            title={item.label || (item.id === 'profile' ? 'Profile' : item.id)}
+                            aria-label={item.label || item.id}
+                            className={`relative flex items-center justify-center gap-1 sm:gap-1.5 ${
+                              item.label ? 'px-2 sm:px-3' : 'px-2 sm:px-2.5'
+                            } py-1.5 rounded-full transition-all duration-200 cursor-pointer active:scale-95 ${
                               isActive
                                 ? 'bg-neutral-800 text-neutral-100 border border-neutral-700 shadow-sm'
                                 : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/[0.06] border border-transparent'
@@ -3010,9 +3849,11 @@ export default function OpenRolesPage({ enabled = true }) {
                                 <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-emerald-400 ring-1 ring-black" />
                               )}
                             </span>
-                            <span className="text-[0.58rem] font-medium tracking-[0.16em] uppercase">
-                              {item.label}
-                            </span>
+                            {item.label ? (
+                              <span className="text-[0.56rem] sm:text-[0.58rem] font-medium tracking-[0.12em] sm:tracking-[0.16em] uppercase">
+                                {item.label}
+                              </span>
+                            ) : null}
                           </button>
                         </div>
                       );
@@ -3020,94 +3861,7 @@ export default function OpenRolesPage({ enabled = true }) {
                   </nav>
                 </div>
 
-                {/* Desktop View: Preserved Exact Minimal Vertical List */}
-                {Boolean(candidateUser || hasInterviewAccess) && (
-                  <nav
-                    aria-label="Candidate Navigation"
-                    className="hidden md:block fixed right-10 bottom-8 z-40 pointer-events-auto"
-                  >
-                    <ul className="flex flex-col items-end gap-2.5">
-                      {[
-                        {
-                          id: 'home',
-                          label: 'HOME',
-                          onClick: () => {
-                            setActiveNavTab('home');
-                            setIsInterviewViewOpen(false);
-                            setShowInterviewModal(false);
-                            setShowAgreementModal(false);
-                            setShowSetupModal(false);
-                            setShowMyAppsModal(false);
-                            document.getElementById('roles-grid-section')?.scrollIntoView({ behavior: 'smooth' });
-                          },
-                        },
-                        ...(hasInterviewAccess
-                          ? [
-                              {
-                                id: 'interview',
-                                label: 'INTERVIEW',
-                                isLive: allCandidateInterviewRounds.some((r) => r.status === 'Upcoming' && r.is_ready),
-                                onClick: () => {
-                                  setActiveNavTab('interview');
-                                  setIsInterviewViewOpen(true);
-                                  setShowAgreementModal(false);
-                                  setShowSetupModal(false);
-                                  setShowMyAppsModal(false);
-                                },
-                              },
-                            ]
-                          : []),
-                        {
-                          id: 'agreement',
-                          label: 'AGREEMENT',
-                          onClick: () => {
-                            setActiveNavTab('agreement');
-                            setShowInterviewModal(false);
-                            setShowAgreementModal(true);
-                          },
-                        },
-                        {
-                          id: 'profile',
-                          label: 'PROFILE',
-                          onClick: () => {
-                            setActiveNavTab('profile');
-                            setShowInterviewModal(false);
-                            if (candidateUser) {
-                              setShowSetupModal(true);
-                            } else {
-                              setShowAuthModal(true);
-                            }
-                          },
-                        },
-                      ].map((item) => {
-                        const isActive = activeNavTab === item.id;
-                        return (
-                          <li key={item.id}>
-                            <button
-                              type="button"
-                              onClick={item.onClick}
-                              aria-current={isActive ? 'true' : undefined}
-                              className={`text-[0.62rem] font-semibold tracking-[0.2em] uppercase transition-all duration-300 focus-visible:ring-1 focus-visible:ring-current focus-visible:outline-none cursor-pointer flex items-center gap-1.5 ${
-                                isInterviewViewOpen
-                                  ? isActive
-                                    ? 'text-neutral-800 font-bold'
-                                    : 'text-neutral-400 hover:text-neutral-700'
-                                  : isActive
-                                    ? 'text-neutral-200 font-bold'
-                                    : 'text-neutral-400 hover:text-neutral-200'
-                              }`}
-                            >
-                              {item.id === 'interview' && (
-                                <span className={`w-1.5 h-1.5 rounded-full ${isInterviewViewOpen ? 'bg-emerald-600' : 'bg-emerald-400'} animate-pulse`} />
-                              )}
-                              <span>{item.label}</span>
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </nav>
-                )}
+
               </>,
               document.body
             )}
@@ -3121,7 +3875,7 @@ export default function OpenRolesPage({ enabled = true }) {
     {/* ============================================================ */}
     <div className="w-[100vw] min-w-[100vw] min-h-screen shrink-0 flex flex-col lg:flex-row bg-[#08090b] relative overflow-x-hidden">
       {/* Main Left Section: Dark Canvas (~75% on Desktop) */}
-      <main className="flex-1 min-w-0 bg-[#08090b] text-white p-4 sm:p-6 lg:p-8 xl:p-10 flex flex-col relative h-screen max-h-screen overflow-hidden">
+      <main className="flex-1 min-w-0 bg-[#08090b] text-white p-3.5 sm:p-6 lg:p-8 xl:p-10 flex flex-col relative h-screen max-h-screen overflow-hidden">
         <Backdrop tone="dark" />
 
         <div className="relative z-10 flex flex-col flex-1 min-h-0 h-full">
@@ -3142,29 +3896,36 @@ export default function OpenRolesPage({ enabled = true }) {
                 <span className="font-medium tracking-wide">Platform Overview</span>
               </button>
 
-              {/* Candidate Profile Pill (Exact Match to Screenshot) */}
+              {/* Candidate Profile Pill / Sign In */}
               <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setShowCandidateMenu(!showCandidateMenu)}
-                  className="flex items-center gap-2 sm:gap-2.5 px-3 py-1.5 rounded-full bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 transition cursor-pointer"
-                >
-                  <div className="w-6 h-6 rounded-full bg-neutral-900 border border-white/20 text-white font-bold text-[10px] flex items-center justify-center">
-                    {candidateUser?.candidate_name
-                      ? candidateUser.candidate_name
-                          .split(' ')
-                          .map((n) => n[0])
-                          .slice(0, 2)
-                          .join('')
-                          .toUpperCase()
-                      : 'MH'}
-                  </div>
-                  <span className="text-xs font-semibold text-white max-w-[120px] truncate">
-                    {candidateUser?.candidate_name || 'Mohammed Hashil'}
-                  </span>
-                  <span className="text-xs text-neutral-400 font-medium hidden sm:inline">Candidate</span>
-                  <ChevronDown size={14} className="text-neutral-400" />
-                </button>
+                {candidateUser ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowCandidateMenu(!showCandidateMenu)}
+                    className="flex items-center gap-2 sm:gap-2.5 px-3 py-1.5 rounded-full bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 transition cursor-pointer"
+                  >
+                    <div className="w-6 h-6 rounded-full bg-neutral-900 border border-white/20 text-white font-bold text-[10px] flex items-center justify-center">
+                      {(candidateUser.candidate_name || candidateUser.candidate_email || 'C').slice(0, 1).toUpperCase()}
+                    </div>
+                    <span className="text-xs font-semibold text-white max-w-[120px] truncate">
+                      {candidateUser.candidate_name || candidateUser.candidate_email}
+                    </span>
+                    <span className="text-xs text-neutral-400 font-medium hidden sm:inline">Candidate</span>
+                    <ChevronDown size={14} className="text-neutral-400" />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthModalTab('login');
+                      setShowAuthModal(true);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-white/15 bg-white/[0.06] hover:bg-white/[0.12] text-white text-xs font-semibold transition active:scale-95 cursor-pointer shadow-sm"
+                  >
+                    <User size={12} className="text-white/70" />
+                    <span>Sign In</span>
+                  </button>
+                )}
 
                 {/* Candidate Dropdown Menu */}
                 {showCandidateMenu && (
@@ -3190,6 +3951,17 @@ export default function OpenRolesPage({ enabled = true }) {
                     >
                       <FileText size={13} />
                       <span>My Applications</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowCandidateMenu(false);
+                        setShowOnboardingModal(true);
+                      }}
+                      className="w-full text-left px-4 py-2 text-xs font-medium text-neutral-300 hover:text-white hover:bg-white/[0.06] flex items-center gap-2 cursor-pointer"
+                    >
+                      <Sparkles size={13} className="text-white/80" />
+                      <span>Onboarding Tour</span>
                     </button>
                     <div className="h-px bg-white/10 my-1" />
                     <button
@@ -3223,7 +3995,7 @@ export default function OpenRolesPage({ enabled = true }) {
                 {/* Filter Tabs, Search & Sort Controls */}
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4 mb-4">
                   {/* Filter Tabs */}
-                  <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-2 overflow-x-auto scrollbar-none flex-nowrap pb-1">
                     {[
                       { id: 'all', label: `All (${allCount})` },
                       { id: 'upcoming', label: `Upcoming (${upcomingCount})` },
@@ -3287,31 +4059,75 @@ export default function OpenRolesPage({ enabled = true }) {
                 Loading your scheduled interviews...
               </div>
             </div>
+          ) : !candidateUser ? (
+            /* Not Signed In State */
+            <div className="flex-1 min-h-0 flex flex-col items-center justify-center p-6 sm:p-8 text-center max-w-md mx-auto my-auto">
+              <div className="w-16 h-16 rounded-2xl bg-white/[0.04] border border-white/10 flex items-center justify-center mb-5 text-neutral-400">
+                <User size={28} />
+              </div>
+              <h2 className="text-xl font-bold text-white tracking-tight">Sign In Required</h2>
+              <p className="mt-2 text-xs text-neutral-400 leading-relaxed">
+                Your interviews and AI evaluations are tied to your verified candidate account. Please sign in to view your scheduled rounds.
+              </p>
+              <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthModalTab('login');
+                    setShowAuthModal(true);
+                  }}
+                  className="px-5 py-2.5 rounded-xl bg-white text-neutral-950 font-bold text-xs hover:bg-neutral-200 transition cursor-pointer flex items-center gap-2 shadow"
+                >
+                  <User size={14} />
+                  <span>Sign In</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsInterviewViewOpen(false);
+                    setActiveNavTab('home');
+                  }}
+                  className="px-5 py-2.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/15 text-white font-bold text-xs transition cursor-pointer flex items-center gap-2"
+                >
+                  <ArrowLeft size={14} />
+                  <span>Browse Open Roles</span>
+                </button>
+              </div>
+            </div>
           ) : !hasInterviewAccess ? (
             /* Access Restricted State */
-            <div className="flex-1 min-h-0 flex flex-col items-center justify-center p-8 text-center max-w-md mx-auto my-auto">
+            <div className="flex-1 min-h-0 flex flex-col items-center justify-center p-6 sm:p-8 text-center max-w-md mx-auto my-auto">
               <div className="w-16 h-16 rounded-2xl bg-white/[0.04] border border-white/10 flex items-center justify-center mb-5 text-neutral-400">
-                <Lock size={28} />
+                <Video size={28} />
               </div>
-              <h2 className="text-xl font-bold text-white tracking-tight">No Interview History</h2>
+              <h2 className="text-xl font-bold text-white tracking-tight">No Active Interviews</h2>
               <p className="mt-2 text-xs text-neutral-400 leading-relaxed">
-                This portal is exclusively accessible to candidates with active or past interview schedules. When an enterprise schedules an interview with you, it will appear here automatically.
+                When enterprise hiring partners schedule an interview or AI evaluation with you, your invitations and live meeting links will appear here automatically.
               </p>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsInterviewViewOpen(false);
-                  setActiveNavTab('home');
-                }}
-                className="mt-6 px-6 py-2.5 rounded-xl bg-white text-neutral-950 font-bold text-xs hover:bg-neutral-200 transition cursor-pointer flex items-center gap-2"
-              >
-                <ArrowLeft size={14} />
-                <span>Back to Open Roles</span>
-              </button>
+              <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsInterviewViewOpen(false);
+                    setActiveNavTab('home');
+                  }}
+                  className="px-5 py-2.5 rounded-xl bg-white text-neutral-950 font-bold text-xs hover:bg-neutral-200 transition cursor-pointer flex items-center gap-2 shadow"
+                >
+                  <ArrowLeft size={14} />
+                  <span>Browse Open Roles</span>
+                </button>
+                <Link
+                  to="/interview/login"
+                  className="px-5 py-2.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/15 text-white font-bold text-xs transition cursor-pointer flex items-center gap-2"
+                >
+                  <Video size={14} className="text-emerald-400" />
+                  <span>Passcode Login</span>
+                </Link>
+              </div>
             </div>
           ) : (
             /* Interview Cards List (The Marked Portion - ONLY this section scrolls, scrollbar hidden) */
-            <div className="flex-1 min-h-0 overflow-y-auto space-y-4 pb-16 pt-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+            <div className="flex-1 min-h-0 overflow-y-auto space-y-4 pb-32 sm:pb-24 pt-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                 {filteredInterviews.length === 0 ? (
                   <div className="py-16 text-center rounded-2xl bg-white/[0.02] border border-white/5">
                     <Calendar size={32} className="mx-auto text-neutral-600 mb-3" />
@@ -3618,8 +4434,8 @@ export default function OpenRolesPage({ enabled = true }) {
             (() => {
               const isDetailCompleted = selectedDetailRound.status === 'Completed' || selectedDetailRound.status === 'Evaluated';
               const isDetailCancelled = selectedDetailRound.status === 'Cancelled' || selectedDetailRound.status === 'Rejected';
-              const candidateDisplayName = candidateUser?.candidate_name || selectedDetailRound.candidate_name || 'Mohammed Hashil';
-              const candidateDisplayEmail = candidateUser?.candidate_email || selectedDetailRound.candidate_email || 'mohammedhashil2018@gmail.com';
+              const candidateDisplayName = candidateUser?.candidate_name || candidateUser?.name || selectedDetailRound.candidate_name || 'Candidate';
+              const candidateDisplayEmail = candidateUser?.candidate_email || candidateUser?.email || selectedDetailRound.candidate_email || '';
 
               return (
                 <div
@@ -3936,9 +4752,7 @@ export default function OpenRolesPage({ enabled = true }) {
             {/* Header: Company & Action Icons */}
             <div className="p-5 pb-3 sm:px-6 sm:pt-5 sm:pb-3 border-b border-neutral-200/80 flex items-center justify-between gap-3 bg-neutral-50/80">
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-7 h-7 rounded-lg bg-neutral-950 text-white font-extrabold flex items-center justify-center text-xs shadow-sm shrink-0">
-                  {(selectedJob.company_name || selectedJob.title || 'E').slice(0, 1).toUpperCase()}
-                </div>
+                <CompanyAvatar job={selectedJob} size="w-7 h-7" inModal={true} />
                 <span className="text-xs sm:text-sm font-bold text-neutral-900 tracking-tight flex items-center gap-1.5 truncate">
                   <span className="truncate">{selectedJob.company_name || 'Hiring Partner'}</span>
                   <CheckCircle2 size={13} className="text-sky-600 fill-sky-100 shrink-0" />
@@ -4068,17 +4882,10 @@ export default function OpenRolesPage({ enabled = true }) {
                 <>
                   {/* Two Columns Grid */}
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6 items-start">
-                    {/* Left Column: Job Overview & Accordions (7 cols) */}
+                    {/* Left Column: Job Details Accordions (7 cols) */}
                     <div className="lg:col-span-7 space-y-4">
-                      <div>
-                        <h3 className="text-sm sm:text-base font-bold text-neutral-950 mb-2">Job Overview</h3>
-                        <p className="text-xs text-neutral-600 leading-relaxed">
-                          {parsedJobSections.overview}
-                        </p>
-                      </div>
-
                       {/* Accordion Cards */}
-                      <div className="space-y-2 pt-1">
+                      <div className="space-y-2">
                         {/* 1. About the Company */}
                         <div className="rounded-xl bg-neutral-50 border border-neutral-200 overflow-hidden shadow-sm">
                           <button
@@ -4349,7 +5156,21 @@ export default function OpenRolesPage({ enabled = true }) {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xl animate-in fade-in duration-200">
           <div className="bg-white border border-neutral-200 rounded-3xl max-w-lg w-full p-6 shadow-2xl text-neutral-900">
             <div className="flex items-center justify-between pb-4 border-b border-neutral-100">
-              <h3 className="text-base font-bold text-neutral-900">Your Submitted Applications</h3>
+              <div className="flex items-center gap-2.5">
+                <h3 className="text-base font-bold text-neutral-900">Your Submitted Applications</h3>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowMyAppsModal(false);
+                    setShowOnboardingModal(true);
+                  }}
+                  className="px-2 py-0.5 rounded-full bg-neutral-100 text-neutral-900 hover:bg-neutral-200 border border-neutral-300 text-[10.5px] font-bold transition flex items-center gap-1 cursor-pointer"
+                  title="View Candidate Onboarding Tour"
+                >
+                  <Sparkles size={11} className="text-neutral-700" />
+                  <span>Tour</span>
+                </button>
+              </div>
               <button
                 type="button"
                 onClick={() => setShowMyAppsModal(false)}
@@ -4360,12 +5181,12 @@ export default function OpenRolesPage({ enabled = true }) {
             </div>
 
             <div className="mt-4 space-y-3 max-h-80 overflow-y-auto">
-              {applications.length === 0 ? (
+              {displayedApplications.length === 0 ? (
                 <div className="py-8 text-center text-xs text-neutral-500">
                   You haven't submitted any applications yet.
                 </div>
               ) : (
-                applications.map((app, i) => {
+                displayedApplications.map((app, i) => {
                   const matchingRound = (allCandidateInterviewRounds || []).find(
                     (r) => r.requisition_id === app.requisition_id || (r.requisition_title && app.requisition_title && r.requisition_title.toLowerCase() === app.requisition_title.toLowerCase())
                   );
@@ -4378,11 +5199,21 @@ export default function OpenRolesPage({ enabled = true }) {
                   const aiMeetingLink = matchingRound?.meeting_link || matchingOutreach?.meeting_link;
                   const isAi = matchingRound ? (matchingRound.round_type === 'AI' || (matchingRound.round_name && matchingRound.round_name.toLowerCase().includes('ai'))) : true;
 
+                  const matchedReq = requisitions.find(
+                    (r) => String(r.id) === String(app.requisition_id) || String(r._id) === String(app.requisition_id)
+                  );
+                  const roleTitle = (app.requisition_title && app.requisition_title !== 'Open Requisition' && app.requisition_title !== 'Contract Position')
+                    ? app.requisition_title
+                    : (matchedReq?.title || app.requisition_title || 'Role Application');
+                  const compName = (app.company_name && app.company_name !== 'Enterprise Partner' && app.company_name !== 'Enterprise Client')
+                    ? app.company_name
+                    : (matchedReq?.company_name || matchedReq?.company || app.company_name || 'Enterprise Client');
+
                   return (
                     <div key={i} className="p-3.5 rounded-2xl bg-neutral-50 border border-neutral-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                       <div>
-                        <div className="text-xs font-bold text-neutral-900">{app.requisition_title || 'Contract Position'}</div>
-                        <div className="text-[11px] text-neutral-500">{app.company_name || 'Enterprise Client'}</div>
+                        <div className="text-xs font-bold text-neutral-900">{roleTitle}</div>
+                        <div className="text-[11px] text-neutral-500">{compName}</div>
                         {matchingRound?.candidate_passcode && (
                           <div className="text-[10px] text-neutral-500 font-mono mt-0.5">
                             Passcode: {matchingRound.candidate_passcode}
@@ -4941,9 +5772,11 @@ export default function OpenRolesPage({ enabled = true }) {
                 <span className="text-xs text-white/70 truncate">
                   Candidate:{' '}
                   <strong className="text-white">
-                    {candidateUser?.candidate_name || candidateUser?.name || 'Mohammed Hashil'}
+                    {candidateUser?.candidate_name || candidateUser?.name || 'Candidate'}
                   </strong>{' '}
-                  ({candidateUser?.candidate_email || candidateUser?.email || 'mohammedhashil2018@gmail.com'})
+                  {candidateUser?.candidate_email || candidateUser?.email ? (
+                    <span>({candidateUser.candidate_email || candidateUser.email})</span>
+                  ) : null}
                 </span>
               </div>
               <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1 shrink-0">
@@ -5913,6 +6746,18 @@ export default function OpenRolesPage({ enabled = true }) {
         </div>,
         document.body
       )}
+
+      {/* Candidate Onboarding Carousel Modal */}
+      <CandidateOnboardingModal
+        isOpen={showOnboardingModal && !isStaffOrAdmin}
+        onClose={() => {
+          setShowOnboardingModal(false);
+          setDismissedSessionOnboarding(true);
+        }}
+        candidateUser={candidateUser}
+        onComplete={handleOnboardingComplete}
+        openProfileSetup={() => setShowSetupModal(true)}
+      />
 
     </div>
   );

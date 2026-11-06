@@ -117,6 +117,15 @@ class MockLLM:
         if o.get("notes"):
             notes.append(str(o["notes"]))
 
+        work_mode = o.get("work_mode")
+        if not work_mode:
+            if "remote" in answers_section or "remote" in text:
+                work_mode = "Remote"
+            elif any(w in answers_section or w in text for w in ("on-site", "onsite", "on site")):
+                work_mode = "On-site"
+            else:
+                work_mode = "Hybrid"
+
         return StructuredRole(
             title=title,
             must_have_skills=skills,
@@ -127,4 +136,5 @@ class MockLLM:
             contract_duration=contract_duration,
             confidence=float(o.get("confidence", 0.95)),
             notes="; ".join(notes),
+            work_mode=work_mode,
         ).model_dump()

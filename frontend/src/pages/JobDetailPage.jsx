@@ -24,8 +24,21 @@ export default function JobDetailPage() {
   // Extract stable ID if format is [slug]-[id] or pure [id]
   const jobId = slugOrId ? slugOrId.split('-').pop() : '';
 
-  const [job, setJob] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [job, setJob] = useState(() => {
+    try {
+      const cached = sessionStorage.getItem('tj_cached_requisitions');
+      if (cached && (jobId || slugOrId)) {
+        const parsed = JSON.parse(cached);
+        const data = parsed.data || parsed;
+        if (Array.isArray(data)) {
+          const matched = data.find((r) => String(r.id) === String(jobId) || String(r._id) === String(jobId) || r.slug === slugOrId);
+          if (matched) return matched;
+        }
+      }
+    } catch (_) {}
+    return null;
+  });
+  const [loading, setLoading] = useState(() => !job);
   const [error, setError] = useState(null);
   const [copied, setCopied] = useState(false);
 
@@ -46,29 +59,29 @@ export default function JobDetailPage() {
       return;
     }
 
-    setLoading(true);
+    let cancelled = false;
+    if (!job) setLoading(true);
     setError(null);
 
-    fetch(`${API_BASE_URL}/api/public/requisitions/${jobId}`, {
-      headers: { Accept: 'application/json' }
-    })
-      .then(async (res) => {
-        if (!res.ok) {
-          if (res.status === 404) {
-            throw new Error('This role is closed, expired, or does not exist.');
-          }
-          throw new Error('Unable to load job details at this time.');
-        }
-        return res.json();
-      })
+    request(`/api/public/requisitions/${jobId}`)
       .then((data) => {
-        setJob(data);
-        setLoading(false);
+        if (!cancelled && data) {
+          setJob(data);
+          setLoading(false);
+        }
       })
       .catch((err) => {
-        setError(err.message || 'Job requisition not found');
-        setLoading(false);
+        if (!cancelled) {
+          if (!job) {
+            setError(err.message || 'Job requisition not found');
+          }
+          setLoading(false);
+        }
       });
+
+    return () => {
+      cancelled = true;
+    };
   }, [jobId]);
 
   const handleShare = () => {

@@ -257,7 +257,30 @@ export function CandidateAuthProvider({ children }) {
     return data;
   };
 
-  // 6. Logout
+  // 6. Complete Onboarding
+  const completeOnboarding = async () => {
+    if (!candidateToken) return null;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/candidate-profile/onboarding/complete`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${candidateToken}`,
+        },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.candidate) {
+        setCandidateUser(data.candidate);
+        localStorage.setItem(CANDIDATE_USER_KEY, JSON.stringify(data.candidate));
+      }
+      return data;
+    } catch (err) {
+      console.warn('[CandidateAuth] completeOnboarding error:', err);
+      return null;
+    }
+  };
+
+  // 7. Logout
   const logout = () => {
     try {
       localStorage.removeItem(CANDIDATE_TOKEN_KEY);
@@ -301,6 +324,7 @@ export function CandidateAuthProvider({ children }) {
     confirmEmailChange,
     setupProfile,
     refreshProfile,
+    completeOnboarding,
     logout,
   };
 

@@ -834,7 +834,7 @@ def get_candidate_attendance(
     from zoneinfo import ZoneInfo
     now = datetime.now(ZoneInfo("Asia/Kolkata"))
     current_month_str = now.strftime("%Y-%m")
-    target_month = month or current_month_str
+    target_month = month if isinstance(month, str) and month else current_month_str
     try:
         if not re.fullmatch(r"\d{4}-\d{2}", target_month):
             raise ValueError
