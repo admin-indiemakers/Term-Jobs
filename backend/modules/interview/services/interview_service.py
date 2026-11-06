@@ -1097,6 +1097,20 @@ def get_candidate_rounds_by_token(token_or_email: str) -> List[dict]:
     """Strict permissions: Candidate sees ONLY their own interview rounds."""
     with get_session() as session:
         token_or_email_clean = token_or_email.strip().lower()
+        if "@" in token_or_email_clean:
+            try:
+                from modules.shared.db import db
+                from modules.candidate.outreach_service import handle_candidate_rsvp
+                pending_outreaches = list(db["candidate_outreach"].find({
+                    "candidate_email": token_or_email_clean,
+                    "status": "pending"
+                }))
+                for out in pending_outreaches:
+                    tok = out.get("token")
+                    if tok:
+                        handle_candidate_rsvp(tok, "interested")
+            except Exception:
+                pass
         all_rounds = session.query(InterviewRound).all()
         matched = []
         domain = _resolve_interview_domain()

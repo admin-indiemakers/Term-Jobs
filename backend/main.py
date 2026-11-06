@@ -2501,7 +2501,7 @@ async def apply_to_requisition(
 
     outreach_res = {}
     try:
-        from modules.candidate.outreach_service import create_candidate_application_outreach
+        from modules.candidate.outreach_service import create_candidate_application_outreach, handle_candidate_rsvp
         outreach_res = create_candidate_application_outreach(
             requisition_id=requisition_id,
             candidate_data={
@@ -2513,6 +2513,14 @@ async def apply_to_requisition(
                 "matched_skills": matched,
             }
         )
+        # Directly applied candidates are immediately interested; automatically provision the AI interview round
+        if outreach_res.get("token"):
+            rsvp_res = handle_candidate_rsvp(outreach_res["token"], "interested")
+            if rsvp_res.get("round_id"):
+                outreach_res["round_id"] = rsvp_res["round_id"]
+                outreach_res["meeting_link"] = rsvp_res.get("meeting_link")
+                outreach_res["candidate_passcode"] = rsvp_res.get("candidate_passcode")
+                outreach_res["status"] = "interested"
     except Exception as out_err:
         print(f"[APPLICATION OUTREACH ERROR] {out_err}")
 

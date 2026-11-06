@@ -759,8 +759,11 @@ export default function OpenRolesPage({ enabled = true }) {
   useEffect(() => {
     if (isInterviewViewOpen) {
       window.scrollTo({ top: 0, behavior: 'smooth' });
+      if (candidateUser && typeof loadCandidateInterviews === 'function') {
+        loadCandidateInterviews();
+      }
     }
-  }, [isInterviewViewOpen]);
+  }, [isInterviewViewOpen, candidateUser, loadCandidateInterviews]);
 
   // Parse date helper for cards badge (e.g. OCT 16 THU)
   const parseInterviewDateBadge = (dateStr) => {
@@ -2246,6 +2249,9 @@ export default function OpenRolesPage({ enabled = true }) {
       if (refreshProfile) {
         refreshProfile();
       }
+      if (typeof loadCandidateInterviews === 'function') {
+        loadCandidateInterviews(applicantEmail);
+      }
       if (!candidateUser?.onboarding_completed && !isStaffOrAdmin) {
         setShowOnboardingModal(true);
       }
@@ -2406,6 +2412,9 @@ export default function OpenRolesPage({ enabled = true }) {
       setPoolSuccess(result);
       if (refreshProfile) {
         refreshProfile();
+      }
+      if (typeof loadCandidateInterviews === 'function') {
+        loadCandidateInterviews(applicantEmail);
       }
       if (!candidateUser?.onboarding_completed && !isStaffOrAdmin) {
         setShowOnboardingModal(true);
