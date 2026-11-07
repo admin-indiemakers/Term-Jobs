@@ -21,8 +21,9 @@ export default function JobDetailPage() {
   const { slugOrId } = useParams();
   const navigate = useNavigate();
 
-  // Extract stable ID if format is [slug]-[id] or pure [id]
-  const jobId = slugOrId ? slugOrId.split('-').pop() : '';
+  // Public share links use the requisition ID directly. Decode it because IDs
+  // may contain characters that are escaped in the URL.
+  const jobId = slugOrId ? decodeURIComponent(slugOrId) : '';
 
   const [job, setJob] = useState(() => {
     try {
@@ -343,7 +344,9 @@ export default function JobDetailPage() {
                 </div>
                 <div>
                   <span className="block text-neutral-500 text-[10px] uppercase font-mono tracking-wider">Deadline</span>
-                  <span className="font-semibold text-amber-400 mt-0.5 block">{formatDueDate(job.due_date) || 'Open'}</span>
+                  <span className="font-semibold text-amber-400 mt-0.5 block">
+                    {formatDueDate(job.due_date)?.text || 'Open'}
+                  </span>
                 </div>
               </div>
             </div>
