@@ -82,6 +82,12 @@ function GoogleIcon({ className = "w-4 h-4" }) {
 }
 
 const COMPANY_LOGOS = {
+  'little known planet': 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="lkpPlanet" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="%2334D399"/><stop offset="50%" stop-color="%23059669"/><stop offset="100%" stop-color="%23064E3B"/></linearGradient><linearGradient id="lkpRing" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="%2367E8F9" stop-opacity="0.9"/><stop offset="50%" stop-color="%2306B6D4" stop-opacity="0.6"/><stop offset="100%" stop-color="%230891B2" stop-opacity="0.2"/></linearGradient></defs><rect width="100" height="100" rx="22" fill="%23061A14"/><ellipse cx="50" cy="52" rx="38" ry="14" fill="none" stroke="url(%23lkpRing)" stroke-width="3.5" transform="rotate(-25 50 52)"/><circle cx="50" cy="52" r="23" fill="url(%23lkpPlanet)"/><path d="M 50 29 A 23 23 0 0 1 73 52 A 23 15 0 0 1 50 67 A 23 23 0 0 1 50 29 Z" fill="%23047857" opacity="0.4"/><path d="M 16 63 A 38 14 0 0 0 78 34" fill="none" stroke="url(%23lkpRing)" stroke-width="3.5" transform="rotate(-25 50 52)"/><path d="M74 22 L76 26 L80 28 L76 30 L74 34 L72 30 L68 28 L72 26 Z" fill="%23A7F3D0"/><circle cx="28" cy="32" r="1.5" fill="%236EE7B7" opacity="0.8"/></svg>',
+  'little known': 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="lkpPlanet" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="%2334D399"/><stop offset="50%" stop-color="%23059669"/><stop offset="100%" stop-color="%23064E3B"/></linearGradient><linearGradient id="lkpRing" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="%2367E8F9" stop-opacity="0.9"/><stop offset="50%" stop-color="%2306B6D4" stop-opacity="0.6"/><stop offset="100%" stop-color="%230891B2" stop-opacity="0.2"/></linearGradient></defs><rect width="100" height="100" rx="22" fill="%23061A14"/><ellipse cx="50" cy="52" rx="38" ry="14" fill="none" stroke="url(%23lkpRing)" stroke-width="3.5" transform="rotate(-25 50 52)"/><circle cx="50" cy="52" r="23" fill="url(%23lkpPlanet)"/><path d="M 50 29 A 23 23 0 0 1 73 52 A 23 15 0 0 1 50 67 A 23 23 0 0 1 50 29 Z" fill="%23047857" opacity="0.4"/><path d="M 16 63 A 38 14 0 0 0 78 34" fill="none" stroke="url(%23lkpRing)" stroke-width="3.5" transform="rotate(-25 50 52)"/><path d="M74 22 L76 26 L80 28 L76 30 L74 34 L72 30 L68 28 L72 26 Z" fill="%23A7F3D0"/><circle cx="28" cy="32" r="1.5" fill="%236EE7B7" opacity="0.8"/></svg>',
+  'lkp': 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="lkpPlanet" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="%2334D399"/><stop offset="50%" stop-color="%23059669"/><stop offset="100%" stop-color="%23064E3B"/></linearGradient><linearGradient id="lkpRing" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="%2367E8F9" stop-opacity="0.9"/><stop offset="50%" stop-color="%2306B6D4" stop-opacity="0.6"/><stop offset="100%" stop-color="%230891B2" stop-opacity="0.2"/></linearGradient></defs><rect width="100" height="100" rx="22" fill="%23061A14"/><ellipse cx="50" cy="52" rx="38" ry="14" fill="none" stroke="url(%23lkpRing)" stroke-width="3.5" transform="rotate(-25 50 52)"/><circle cx="50" cy="52" r="23" fill="url(%23lkpPlanet)"/><path d="M 50 29 A 23 23 0 0 1 73 52 A 23 15 0 0 1 50 67 A 23 23 0 0 1 50 29 Z" fill="%23047857" opacity="0.4"/><path d="M 16 63 A 38 14 0 0 0 78 34" fill="none" stroke="url(%23lkpRing)" stroke-width="3.5" transform="rotate(-25 50 52)"/><path d="M74 22 L76 26 L80 28 L76 30 L74 34 L72 30 L68 28 L72 26 Z" fill="%23A7F3D0"/><circle cx="28" cy="32" r="1.5" fill="%236EE7B7" opacity="0.8"/></svg>',
+  'sign mart': 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="smGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="%23FF3B30"/><stop offset="50%" stop-color="%23FF9500"/><stop offset="100%" stop-color="%23FFCC00"/></linearGradient><linearGradient id="smDark" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="%231F1F24"/><stop offset="100%" stop-color="%230E0E11"/></linearGradient></defs><rect width="100" height="100" rx="22" fill="url(%23smDark)"/><rect x="8" y="8" width="84" height="84" rx="16" fill="none" stroke="%23FF5E3A" stroke-width="1.5" opacity="0.25"/><path d="M68 26 H40 C32 26 26 32 26 40 C26 48 32 52 42 54 L58 57 C68 59 74 64 74 72 C74 80 68 86 58 86 H30" fill="none" stroke="url(%23smGrad)" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="68" cy="26" r="3.5" fill="%23FFF"/><circle cx="30" cy="86" r="3.5" fill="%23FFF"/></svg>',
+  'signmart': 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="smGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="%23FF3B30"/><stop offset="50%" stop-color="%23FF9500"/><stop offset="100%" stop-color="%23FFCC00"/></linearGradient><linearGradient id="smDark" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="%231F1F24"/><stop offset="100%" stop-color="%230E0E11"/></linearGradient></defs><rect width="100" height="100" rx="22" fill="url(%23smDark)"/><rect x="8" y="8" width="84" height="84" rx="16" fill="none" stroke="%23FF5E3A" stroke-width="1.5" opacity="0.25"/><path d="M68 26 H40 C32 26 26 32 26 40 C26 48 32 52 42 54 L58 57 C68 59 74 64 74 72 C74 80 68 86 58 86 H30" fill="none" stroke="url(%23smGrad)" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="68" cy="26" r="3.5" fill="%23FFF"/><circle cx="30" cy="86" r="3.5" fill="%23FFF"/></svg>',
+  'dignmart': 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="smGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="%23FF3B30"/><stop offset="50%" stop-color="%23FF9500"/><stop offset="100%" stop-color="%23FFCC00"/></linearGradient><linearGradient id="smDark" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="%231F1F24"/><stop offset="100%" stop-color="%230E0E11"/></linearGradient></defs><rect width="100" height="100" rx="22" fill="url(%23smDark)"/><rect x="8" y="8" width="84" height="84" rx="16" fill="none" stroke="%23FF5E3A" stroke-width="1.5" opacity="0.25"/><path d="M68 26 H40 C32 26 26 32 26 40 C26 48 32 52 42 54 L58 57 C68 59 74 64 74 72 C74 80 68 86 58 86 H30" fill="none" stroke="url(%23smGrad)" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="68" cy="26" r="3.5" fill="%23FFF"/><circle cx="30" cy="86" r="3.5" fill="%23FFF"/></svg>',
   'aethanalytica': 'https://aethanalytica.com/images/aeth_analytica.svg',
   'zensbee': 'https://www.google.com/s2/favicons?domain=zensbee.com&sz=128',
   'hivenesthq': 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 92"><path d="M69.54,39.28 L50.00,50.56 L30.46,39.28 L30.46,16.72 L50.00,5.44 L69.54,16.72Z" fill="%23ff6106"/><path d="M48.75,75.28 L29.22,86.56 L9.68,75.28 L9.68,52.72 L29.22,41.44 L48.75,52.72Z" fill="%23ffffff"/><path d="M90.32,75.28 L70.78,86.56 L51.25,75.28 L51.25,52.72 L70.78,41.44 L90.32,52.72Z" fill="%23ff6106"/></svg>',
@@ -167,6 +173,13 @@ export function getJobDepartment(job) {
 
   const title = (job.title || '').toLowerCase();
 
+  if (
+    title.includes('research') ||
+    title.includes('travel') ||
+    title.includes('content discovery')
+  ) {
+    return 'Research & Content';
+  }
   if (
     title.includes('designer') ||
     title.includes('ui/ux') ||
@@ -1985,7 +1998,10 @@ export default function OpenRolesPage({ enabled = true }) {
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
-    setLoading(true);
+    // Only trigger full loading spinner on initial load when requisitions are empty
+    if (requisitions.length === 0) {
+      setLoading(true);
+    }
     setError(null);
     try { sessionStorage.removeItem('tj_cached_requisitions'); } catch {}
     if (rolesPrefetch.current === undefined) {
@@ -2040,17 +2056,67 @@ export default function OpenRolesPage({ enabled = true }) {
 
   const departmentOptions = useMemo(() => {
     const opts = [{ value: 'ALL', label: 'All Depts' }];
-    const allFamilies = (availableFamilies && availableFamilies.length > 0)
-      ? availableFamilies
-      : Array.from(new Set(requisitions.map((j) => getJobDepartment(j)).filter(Boolean)));
-    allFamilies.forEach((d) => {
-      if (d && d !== 'General') {
-        const count = requisitions.filter((j) => getJobDepartment(j).toLowerCase() === d.toLowerCase()).length;
-        opts.push({ value: d, label: d, count });
+    const deptMap = new Map();
+
+    // 1. Families from backend filters
+    if (Array.isArray(availableFamilies)) {
+      availableFamilies.forEach((d) => {
+        if (d && d !== 'General' && d !== 'ALL' && d !== 'Other') {
+          deptMap.set(d.toLowerCase(), d);
+        }
+      });
+    }
+
+    // 2. Categories from rolePage
+    if (Array.isArray(rolePage?.categories)) {
+      rolePage.categories.forEach((c) => {
+        const id = c.id || c.label;
+        if (id && id !== 'General' && id !== 'ALL' && id !== 'Other') {
+          if (!deptMap.has(id.toLowerCase())) {
+            deptMap.set(id.toLowerCase(), id);
+          }
+        }
+      });
+    }
+
+    // 3. Derived from loaded requisitions
+    if (Array.isArray(requisitions)) {
+      requisitions.forEach((j) => {
+        const d = getJobDepartment(j);
+        if (d && d !== 'General' && d !== 'ALL' && d !== 'Other') {
+          if (!deptMap.has(d.toLowerCase())) {
+            deptMap.set(d.toLowerCase(), d);
+          }
+        }
+      });
+    }
+
+    // 4. Standard known departments
+    const STANDARD_DEPTS = [
+      'Engineering',
+      'Sales & BD',
+      'Marketing',
+      'Design & UI/UX',
+      'Quality Assurance',
+      'DevOps & Cloud',
+      'Human Resources',
+      'Research & Content',
+      'Operations & Service',
+    ];
+    STANDARD_DEPTS.forEach((d) => {
+      if (!deptMap.has(d.toLowerCase())) {
+        deptMap.set(d.toLowerCase(), d);
       }
     });
+
+    deptMap.forEach((label, valKey) => {
+      const catMatch = rolePage?.categories?.find((c) => (c.id || c.label || '').toLowerCase() === valKey);
+      const count = catMatch ? catMatch.count : requisitions.filter((j) => getJobDepartment(j).toLowerCase() === valKey).length;
+      opts.push({ value: label, label, count: count > 0 ? count : undefined });
+    });
+
     return opts;
-  }, [availableFamilies, requisitions]);
+  }, [availableFamilies, rolePage, requisitions]);
 
   const locationOptions = useMemo(() => {
     const opts = [{ value: 'ALL', label: 'All Locations' }];
@@ -2136,11 +2202,23 @@ export default function OpenRolesPage({ enabled = true }) {
   const activePage = currentPage;
   const paginatedJobs = useMemo(() => {
     let items = requisitions || [];
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
+      items = items.filter((j) => {
+        const title = (j.title || j.structured_role?.title || '').toLowerCase();
+        const comp = (j.company_name || j.company || '').toLowerCase();
+        const role = j.structured_role || {};
+        const skills = (role.must_have_skills || []).concat(role.nice_to_have_skills || []).map((s) => String(s).toLowerCase());
+        const desc = (j.generated_jd_markdown || role.job_description || role.role_summary || '').toLowerCase();
+        const loc = (typeof role.location === 'string' ? role.location : Array.isArray(role.location) ? role.location.join(' ') : '').toLowerCase();
+        return title.includes(q) || comp.includes(q) || skills.some((s) => s.includes(q)) || desc.includes(q) || loc.includes(q);
+      });
+    }
     if (selectedExperience && selectedExperience !== 'ALL') {
       items = items.filter((j) => matchesExperience(j, selectedExperience));
     }
     return items.slice(0, 7);
-  }, [requisitions, selectedExperience]);
+  }, [requisitions, searchQuery, selectedExperience]);
   const pageStart = Math.max(1, Math.min(activePage - 2, totalPages - 4));
   const visiblePages = Array.from({ length: Math.min(5, totalPages) }, (_, index) => pageStart + index);
 
@@ -3044,62 +3122,7 @@ export default function OpenRolesPage({ enabled = true }) {
 
           {/* Opportunities List / Table Section */}
           <main id="roles-grid-section" className="flex-1 w-full flex flex-col min-h-0">
-            {loading ? (
-              <div className="py-24 text-center space-y-3">
-                <div className="w-10 h-10 rounded-full border-2 border-white/80 border-t-transparent animate-spin mx-auto" />
-                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-paper/60">
-                  Loading published requisitions...
-                </div>
-              </div>
-            ) : error ? (
-              <div className="p-8 rounded-3xl bg-rose-500/10 border border-rose-500/20 text-center max-w-md mx-auto my-12 backdrop-blur-md">
-                <AlertCircle size={28} className="text-rose-400 mx-auto mb-2" />
-                <h3 className="text-sm font-bold text-white">Unable to fetch open roles</h3>
-                <p className="text-xs text-zinc-400 mt-1 mb-4">{error}</p>
-                <button
-                  type="button"
-                  onClick={() => window.location.reload()}
-                  className="px-4 py-2 rounded-xl bg-rose-500 text-white font-bold text-xs hover:bg-rose-600 transition cursor-pointer"
-                >
-                  Retry
-                </button>
-              </div>
-            ) : rolePage.total === 0 ? (
-              <div className="py-16 px-6 rounded-3xl bg-[#0B0D12] border border-white/[0.08] text-center max-w-xl mx-auto my-8 backdrop-blur-md">
-                <div className="w-12 h-12 rounded-2xl bg-white/[0.05] border border-white/10 flex items-center justify-center text-neutral-400 mx-auto mb-3">
-                  <Search size={22} />
-                </div>
-                <h3 className="text-base font-bold text-white">No roles matching this category</h3>
-                <p className="text-xs text-neutral-400 mt-1 max-w-sm mx-auto">
-                  Try selecting &quot;All Roles&quot; or resetting your search filters to explore other open opportunities.
-                </p>
-                <div className="mt-6 flex items-center justify-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedOpportunityCategory('ALL');
-                      setSearchQuery('');
-                      setSelectedWorkMode('ALL');
-                      setSelectedFamily('ALL');
-                      setSelectedLocation('ALL');
-                      setSelectedExperience('ALL');
-                      setCurrentPage(1);
-                    }}
-                    className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-bold transition cursor-pointer"
-                  >
-                    Reset All Filters
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowGeneralPoolModal(true)}
-                    className="px-4 py-2 rounded-xl bg-white hover:bg-neutral-200 text-black text-xs font-bold transition cursor-pointer shadow-md"
-                  >
-                    Join General Talent Pool
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="flex-1 flex flex-col justify-between rounded-2xl sm:rounded-3xl bg-[#0B0D12] border border-white/[0.08] p-3 sm:px-5 sm:pt-2 sm:pb-3 shadow-xl will-change-transform min-h-0">
+            <div className="flex-1 flex flex-col justify-between rounded-2xl sm:rounded-3xl bg-[#0B0D12] border border-white/[0.08] p-3 sm:px-5 sm:pt-2 sm:pb-3 shadow-xl will-change-transform min-h-0">
 {/* TOP OF ROLES TAB: Search & Filter Console Linked Directly to Table */}
                 <div className="pb-2 mb-2 border-b border-white/[0.06] flex flex-wrap items-center gap-2 sm:gap-2.5 w-full">
                   {/* Keyword Search Input */}
@@ -3185,6 +3208,64 @@ export default function OpenRolesPage({ enabled = true }) {
                   />
                 </div>
 
+              {error && requisitions.length === 0 ? (
+                <div className="p-8 rounded-3xl bg-rose-500/10 border border-rose-500/20 text-center max-w-md mx-auto my-12 backdrop-blur-md">
+                  <AlertCircle size={28} className="text-rose-400 mx-auto mb-2" />
+                  <h3 className="text-sm font-bold text-white">Unable to fetch open roles</h3>
+                  <p className="text-xs text-zinc-400 mt-1 mb-4">{error}</p>
+                  <button
+                    type="button"
+                    onClick={() => window.location.reload()}
+                    className="px-4 py-2 rounded-xl bg-rose-500 text-white font-bold text-xs hover:bg-rose-600 transition cursor-pointer"
+                  >
+                    Retry
+                  </button>
+                </div>
+              ) : loading && requisitions.length === 0 ? (
+                <div className="py-24 text-center space-y-3">
+                  <div className="w-10 h-10 rounded-full border-2 border-white/80 border-t-transparent animate-spin mx-auto" />
+                  <div className="text-xs font-semibold uppercase tracking-[0.16em] text-paper/60">
+                    Loading published requisitions...
+                  </div>
+                </div>
+              ) : paginatedJobs.length === 0 ? (
+                <div className="py-14 px-6 text-center max-w-md mx-auto my-auto">
+                  <div className="w-11 h-11 rounded-2xl bg-white/[0.05] border border-white/10 flex items-center justify-center text-neutral-400 mx-auto mb-3">
+                    <Search size={20} />
+                  </div>
+                  <h3 className="text-sm font-bold text-white">No roles matching this search</h3>
+                  <p className="text-xs text-neutral-400 mt-1 max-w-xs mx-auto">
+                    {searchQuery.trim()
+                      ? `No opportunities match "${searchQuery}". Try different keywords or reset your filters.`
+                      : 'No opportunities match the selected filters.'}
+                  </p>
+                  <div className="mt-4 flex items-center justify-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedOpportunityCategory('ALL');
+                        setSearchQuery('');
+                        setSelectedWorkMode('ALL');
+                        setSelectedFamily('ALL');
+                        setSelectedLocation('ALL');
+                        setSelectedExperience('ALL');
+                        setCurrentPage(1);
+                      }}
+                      className="px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-semibold transition cursor-pointer"
+                    >
+                      Reset All Filters
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowGeneralPoolModal(true)}
+                      className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-neutral-200 text-black text-xs font-bold transition cursor-pointer shadow-md"
+                    >
+                      Join Talent Pool
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
                                 {/* Mobile View: Touch-Friendly Requisition Cards (< 640px) */}
                 <div className="sm:hidden divide-y divide-white/[0.06]">
                   {paginatedJobs.map((job) => {
@@ -3472,10 +3553,9 @@ export default function OpenRolesPage({ enabled = true }) {
                     </button>
                   </div>
                 </div>
-              </div>
-            )}
-
-
+                </>
+              )}
+            </div>
             {/* Candidate Navigation (Mobile: Glassmorphic Floating Capsule Dock | Desktop: Minimal Vertical List) */}
             {enabled && typeof document !== 'undefined' && createPortal(
               <>
