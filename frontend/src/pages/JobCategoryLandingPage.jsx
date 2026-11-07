@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { API_BASE_URL } from '../api/client';
 import SEOHead from '../components/SEOHead';
+import { publicJobPath } from '../utils/jobLinks';
 import { formatDueDate } from '../utils/dateUtils';
 import { TermJobsLoader } from '../components/TermJobsLoader';
 
@@ -242,7 +243,7 @@ export default function JobCategoryLandingPage({ forcedCategory }) {
               const workMode = role.work_mode || 'Remote';
               const duration = role.duration || '6 Months';
               const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-              const jobDetailUrl = `/jobs/${slug}-${job.id}`;
+              const jobDetailUrl = publicJobPath(job);
 
               return (
                 <article

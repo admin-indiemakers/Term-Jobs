@@ -63,6 +63,7 @@ import logo from '../assets/termjobs-logo.png';
 import { formatDueDate } from '../utils/dateUtils';
 import { validatePhone } from '../utils/phoneValidation';
 import { validateCandidateEmail } from '../utils/candidateEmailValidation';
+import { publicJobUrl } from '../utils/jobLinks';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '215468136876-3e4icbpr6blejlb9vibvecr6ck2tfm5g.apps.googleusercontent.com';
 const TELEGRAM_BOT_USERNAME = import.meta.env.VITE_TELEGRAM_BOT_USERNAME || 'Termjobs_alertbot';
@@ -198,6 +199,7 @@ export default function OpenRolesPage({ enabled = true }) {
 
   // Modal states
   const [selectedJob, setSelectedJob] = useState(null);
+  const sharedRoleOpened = useRef(false);
   const viewedJobId = selectedJob?.id;
   const viewerToken = candidateAuth?.candidateToken;
   useEffect(() => {
@@ -1503,6 +1505,18 @@ export default function OpenRolesPage({ enabled = true }) {
       employment: false,
     });
   };
+
+  useEffect(() => {
+    if (sharedRoleOpened.current || !requisitions.length) return;
+    const requisitionId = new URLSearchParams(location.search).get('requisition');
+    if (!requisitionId) return;
+
+    const sharedJob = requisitions.find((job) => String(job.id || job._id) === requisitionId);
+    if (!sharedJob) return;
+
+    sharedRoleOpened.current = true;
+    handleOpenJob(sharedJob);
+  }, [location.search, requisitions]);
 
   const handleApplySubmit = async (e) => {
     e.preventDefault();
@@ -3757,9 +3771,12 @@ export default function OpenRolesPage({ enabled = true }) {
                   type="button"
                   onClick={() => {
                     if (navigator.clipboard) {
-                      navigator.clipboard.writeText(window.location.href);
-                      setCopiedLink(true);
-                      setTimeout(() => setCopiedLink(false), 2000);
+                      navigator.clipboard.writeText(publicJobUrl(selectedJob))
+                        .then(() => {
+                          setCopiedLink(true);
+                          setTimeout(() => setCopiedLink(false), 2000);
+                        })
+                        .catch(() => setCopiedLink(false));
                     }
                   }}
                   className="p-2 rounded-full bg-white hover:bg-neutral-100 text-neutral-600 hover:text-neutral-900 border border-neutral-200 transition cursor-pointer relative"
