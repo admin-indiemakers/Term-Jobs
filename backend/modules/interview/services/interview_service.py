@@ -15,7 +15,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from modules.shared.db import get_session, db
-from modules.interview.domain.models import InterviewSchedule, InterviewStatus, InterviewRound, InterviewChatMessage
+from modules.interview.domain.models import InterviewSchedule, InterviewStatus, InterviewRound, InterviewChatMessage, InterviewFocusEvent
 from modules.calendar.domain.models import CalendarConfig
 from modules.candidate.domain.models import CandidateSubmission
 
@@ -1597,6 +1597,9 @@ def get_round_communication_analysis(round_id: str) -> Optional[dict]:
             "recording_url": r.recording_url,
             "recording_metadata": r.recording_metadata or {},
             "status": r.status,
+            "focus_monitoring_summary": r.focus_monitoring_summary or {},
+            "focus_monitoring_events": r.focus_monitoring_events or [],
+            "focus_monitoring_consent": r.focus_monitoring_consent or {},
         }
 
 
@@ -2362,3 +2365,200 @@ def process_candidate_hiring_decision(
                 "submission_status": "Rejected",
                 "message": f"Candidate {candidate_name} has been marked as Rejected. Admin notified.",
             }
+
+
+def record_focus_monitoring_consent(
+    round_id: str,
+    consent: bool = True,
+    timestamp: Optional[str] = None,
+    candidate_token: Optional[str] = None,
+    ip_address: Optional[str] = None,
+) -> Optional[dict]:
+    """Records explicit candidate pre-interview consent for browser focus monitoring."""
+    with get_session() as session:
+        r = session.query(InterviewRound).filter(InterviewRound.id == round_id).first()
+        if not r:
+            return None
+        if candidate_token and r.candidate_token and candidate_token != r.candidate_token:
+            raise PermissionError("Invalid candidate invitation token")
+
+        consent_payload = {
+            "consent_given": bool(consent),
+            "timestamp": timestamp or datetime.now(timezone.utc).isoformat(),
+            "candidate_name": r.candidate_name,
+            "ip": ip_address or "",
+        }
+        r.focus_monitoring_consent = consent_payload
+        summary = r.focus_monitoring_summary or {}
+        summary["consent_given"] = bool(consent)
+        summary["consent_timestamp"] = consent_payload["timestamp"]
+        r.focus_monitoring_summary = summary
+        r.updated_at = datetime.now(timezone.utc)
+        session._track(r)
+        session.commit()
+        return consent_payload
+
+
+def record_focus_monitoring_event(
+    round_id: str,
+    event_data: dict,
+    candidate_token: Optional[str] = None,
+) -> Optional[dict]:
+    """
+    Persists an auditable focus-monitoring incident:
+    - Stores event in `interview_focus_events` collection with tenant, application, candidate metadata.
+    - Appends event to `round.focus_monitoring_events` and updates progressive summary.
+    - Prevents duplicates based on client_event_id or incident sequence within this round.
+    """
+    with get_session() as session:
+        r = session.query(InterviewRound).filter(InterviewRound.id == round_id).first()
+        if not r:
+            return None
+        if candidate_token and r.candidate_token and candidate_token != r.candidate_token:
+            raise PermissionError("Invalid candidate invitation token")
+
+        client_event_id = event_data.get("client_event_id") or ""
+        existing_events = list(r.focus_monitoring_events or [])
+
+        # Deduplication check
+        if client_event_id and any(e.get("client_event_id") == client_event_id for e in existing_events):
+            logger.info(f"[Focus Monitoring] Deduplicated event {client_event_id} for round {round_id}")
+            return {
+                "status": "deduplicated",
+                "client_event_id": client_event_id,
+                "total_incidents": len(existing_events),
+                "summary": r.focus_monitoring_summary or {},
+            }
+
+        seq = int(event_data.get("incident_sequence") or (len(existing_events) + 1))
+        start_time = event_data.get("start_time") or datetime.now(timezone.utc).isoformat()
+        if any(e.get("incident_sequence") == seq and e.get("start_time") == start_time for e in existing_events):
+            return {
+                "status": "deduplicated",
+                "incident_sequence": seq,
+                "total_incidents": len(existing_events),
+                "summary": r.focus_monitoring_summary or {},
+            }
+
+        event_id = client_event_id or f"fevt_{uuid.uuid4().hex[:12]}"
+        event_type = event_data.get("event_type") or "tab_hidden"
+        duration_sec = float(event_data.get("duration_seconds") or 0.0)
+        q_num = int(event_data.get("question_number") or 1)
+        end_time = event_data.get("end_time") or datetime.now(timezone.utc).isoformat()
+
+        if seq == 1:
+            violation_level = "warning"
+        elif seq == 2:
+            violation_level = "strong_warning"
+        else:
+            violation_level = "critical_warning"
+
+        stored_event = {
+            "id": event_id,
+            "client_event_id": client_event_id,
+            "round_id": r.id,
+            "tenant_id": r.tenant_id,
+            "requisition_id": r.requisition_id,
+            "candidate_submission_id": r.candidate_submission_id,
+            "candidate_name": r.candidate_name,
+            "candidate_email": r.candidate_email,
+            "event_type": event_type,
+            "incident_sequence": seq,
+            "question_number": q_num,
+            "start_time": start_time,
+            "end_time": end_time,
+            "duration_seconds": round(duration_sec, 2),
+            "violation_level": violation_level,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+        # 1. Insert into dedicated audit collection
+        try:
+            focus_event_model = InterviewFocusEvent(
+                id=event_id,
+                round_id=r.id,
+                tenant_id=r.tenant_id,
+                requisition_id=r.requisition_id,
+                candidate_submission_id=r.candidate_submission_id,
+                candidate_name=r.candidate_name,
+                candidate_email=r.candidate_email,
+                event_type=event_type,
+                incident_sequence=seq,
+                question_number=q_num,
+                start_time=start_time,
+                end_time=end_time,
+                duration_seconds=round(duration_sec, 2),
+                violation_level=violation_level,
+                client_event_id=client_event_id,
+                metadata=event_data.get("metadata") or {},
+            )
+            session.add(focus_event_model)
+        except Exception as exc:
+            logger.warning(f"[Focus Monitoring] Could not save separate event model: {exc}")
+
+        # 2. Append to round document
+        existing_events.append(stored_event)
+        r.focus_monitoring_events = existing_events
+
+        # 3. Update summary
+        total_lost_duration = sum(e.get("duration_seconds", 0.0) for e in existing_events)
+        flagged = len(existing_events) >= 2
+        warning_history = [
+            {
+                "incident_sequence": e.get("incident_sequence"),
+                "violation_level": e.get("violation_level"),
+                "question_number": e.get("question_number"),
+                "timestamp": e.get("start_time"),
+                "duration_seconds": e.get("duration_seconds"),
+            }
+            for e in existing_events
+        ]
+
+        summary = {
+            "total_incidents": len(existing_events),
+            "total_lost_duration_seconds": round(total_lost_duration, 2),
+            "flagged_for_review": flagged,
+            "last_incident_at": end_time,
+            "warning_history": warning_history,
+            "consent_given": bool((r.focus_monitoring_consent or {}).get("consent_given", True)),
+        }
+        r.focus_monitoring_summary = summary
+
+        # 4. If evaluation exists, add to evaluation report
+        if isinstance(r.evaluation, dict):
+            r.evaluation = {
+                **r.evaluation,
+                "focus_monitoring_summary": summary,
+            }
+
+        r.updated_at = datetime.now(timezone.utc)
+        session._track(r)
+        session.commit()
+
+        return {
+            "status": "recorded",
+            "incident": stored_event,
+            "summary": summary,
+        }
+
+
+def get_focus_monitoring_events(round_id: str) -> Optional[dict]:
+    """Retrieves all focus monitoring events and summary for an interview round."""
+    with get_session() as session:
+        r = session.query(InterviewRound).filter(InterviewRound.id == round_id).first()
+        if not r:
+            return None
+        return {
+            "round_id": r.id,
+            "candidate_name": r.candidate_name,
+            "requisition_title": r.requisition_title,
+            "consent": r.focus_monitoring_consent or {},
+            "summary": r.focus_monitoring_summary or {
+                "total_incidents": 0,
+                "total_lost_duration_seconds": 0.0,
+                "flagged_for_review": False,
+                "warning_history": [],
+            },
+            "events": r.focus_monitoring_events or [],
+        }
+

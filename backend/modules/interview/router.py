@@ -32,6 +32,8 @@ from modules.interview.domain.models import (
     SendChatMessageRequest,
     AnalyzeCommunicationRequest,
     SaveTranscriptRequest,
+    FocusConsentRequest,
+    RecordFocusEventRequest,
 )
 from modules.interview.services.interview_service import (
     create_interview_proposal,
@@ -58,6 +60,9 @@ from modules.interview.services.interview_service import (
     save_round_recording,
     get_round_recording,
     process_candidate_hiring_decision,
+    record_focus_monitoring_consent,
+    record_focus_monitoring_event,
+    get_focus_monitoring_events,
 )
 
 async def authorize_interview_request(connection: HTTPConnection):
@@ -878,6 +883,25 @@ def azure_ai_complete_endpoint(round_id: str):
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+@router.post("/rounds/{round_id}/transcribe-audio")
+async def transcribe_audio_endpoint(round_id: str, file: UploadFile = File(...)):
+    """
+    Transcribes spoken candidate audio chunk using Groq Whisper AI.
+    Works seamlessly across all browsers (Brave, Chrome, Firefox, Safari)
+    bypassing client-side privacy or Google speech API blocks.
+    """
+    from modules.interview.services.azure_ai_interview import transcribe_candidate_audio
+    try:
+        audio_bytes = await file.read()
+        filename = file.filename or "candidate_speech.webm"
+        transcript = transcribe_candidate_audio(audio_bytes, filename=filename)
+        return {"status": "success", "round_id": round_id, "transcript": transcript}
+    except Exception as exc:
+        logger.error(f"[Audio Transcription Endpoint Error] {exc}")
+        return {"status": "error", "round_id": round_id, "transcript": "", "detail": str(exc)}
+
+
+
 @router.get("/rounds/{round_id}/communication-analysis")
 def get_communication_analysis_endpoint(round_id: str):
     """Retrieve communication metrics, analysis results, and transcript for an interview round."""
@@ -885,6 +909,55 @@ def get_communication_analysis_endpoint(round_id: str):
     if not report:
         raise HTTPException(status_code=404, detail="Interview round not found")
     return report
+
+
+@router.post("/rounds/{round_id}/focus-consent")
+async def record_focus_consent_endpoint(round_id: str, body: FocusConsentRequest, request: Request):
+    """Candidate pre-interview consent for browser focus monitoring."""
+    token = body.candidate_token or request.query_params.get("token") or request.query_params.get("candidate_token")
+    client_ip = request.client.host if request.client else ""
+    try:
+        res = record_focus_monitoring_consent(
+            round_id=round_id,
+            consent=body.consent,
+            timestamp=body.timestamp,
+            candidate_token=token,
+            ip_address=client_ip,
+        )
+        if not res:
+            raise HTTPException(status_code=404, detail="Interview round not found")
+        return {"status": "success", "consent": res}
+    except PermissionError as pe:
+        raise HTTPException(status_code=403, detail=str(pe))
+
+
+@router.post("/rounds/{round_id}/focus-event")
+async def record_focus_event_endpoint(round_id: str, body: RecordFocusEventRequest, request: Request):
+    """
+    Records a focus monitoring event (tab switch, window blur, fullscreen exit)
+    with duration, question number, and incident sequence. Deduplicates safely.
+    """
+    token = body.candidate_token or request.query_params.get("token") or request.query_params.get("candidate_token")
+    try:
+        res = record_focus_monitoring_event(
+            round_id=round_id,
+            event_data=body.model_dump(),
+            candidate_token=token,
+        )
+        if not res:
+            raise HTTPException(status_code=404, detail="Interview round not found")
+        return res
+    except PermissionError as pe:
+        raise HTTPException(status_code=403, detail=str(pe))
+
+
+@router.get("/rounds/{round_id}/focus-events")
+def get_focus_events_endpoint(round_id: str):
+    """Retrieves all focus monitoring events, summary, and warning history for recruiter review."""
+    events_data = get_focus_monitoring_events(round_id)
+    if not events_data:
+        raise HTTPException(status_code=404, detail="Interview round not found")
+    return events_data
 
 
 @router.post('/rounds/{round_id}/recording/chunks/{upload_id}/parts/{chunk_index}')

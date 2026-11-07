@@ -4608,21 +4608,55 @@ export default function OpenRolesPage({ enabled = true }) {
             {/* Scrollable Body: 2 Columns */}
             <div className="p-5 sm:p-6 overflow-y-auto space-y-6 flex-1 text-xs sm:text-sm text-neutral-800 leading-relaxed font-sans scrollbar-thin bg-white">
               {submitSuccess ? (
-                <div className="py-10 text-center space-y-3">
+                <div className="py-10 text-center space-y-4">
                   <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto border border-emerald-200">
                     <CheckCircle2 size={32} />
                   </div>
                   <h3 className="text-lg font-bold text-neutral-900">Application Submitted Successfully!</h3>
-                  <p className="text-xs text-neutral-600 max-w-md mx-auto">
-                    Your candidate profile has been sent directly to {selectedJob.company_name || 'the hiring partner'}. You will receive interview updates via email and Telegram.
+                  <p className="text-xs text-neutral-600 max-w-md mx-auto leading-relaxed">
+                    {submitSuccess.round_id
+                      ? 'Your profile has been verified and your AI Interview is ready right now! You can start immediately below or access it anytime from the Interviews tab.'
+                      : `Your candidate profile has been sent directly to ${selectedJob?.company_name || 'the hiring partner'}. You will receive interview updates via email and Telegram.`}
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedJob(null)}
-                    className="mt-4 px-6 py-2 rounded-full bg-neutral-900 text-white font-bold text-xs hover:bg-black transition cursor-pointer shadow-sm"
-                  >
-                    Done
-                  </button>
+                  <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+                    {submitSuccess.round_id ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const roundId = submitSuccess.round_id;
+                          const candName = submitSuccess.candidate_name || candidateUser?.candidate_name || 'Candidate';
+                          const candToken = submitSuccess.candidate_token || submitSuccess.outreach_token || '';
+                          setSelectedJob(null);
+                          navigate(`/interview/ai/${roundId}?role=candidate&name=${encodeURIComponent(candName)}&token=${encodeURIComponent(candToken)}`);
+                        }}
+                        className="w-full sm:w-auto px-6 py-2.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md transition cursor-pointer"
+                      >
+                        <Sparkles size={15} />
+                        <span>Start AI Interview Now</span>
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedJob(null);
+                        setIsInterviewViewOpen(true);
+                        setActiveNavTab('interview');
+                        if (typeof loadCandidateInterviews === 'function') {
+                          loadCandidateInterviews(applicantEmail);
+                        }
+                      }}
+                      className="w-full sm:w-auto px-5 py-2.5 rounded-full bg-neutral-100 hover:bg-neutral-200 text-neutral-800 font-bold text-xs transition cursor-pointer flex items-center justify-center gap-2"
+                    >
+                      <span>View in My Interviews</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedJob(null)}
+                      className="w-full sm:w-auto px-5 py-2.5 rounded-full border border-neutral-300 hover:bg-neutral-50 text-neutral-700 font-medium text-xs transition cursor-pointer"
+                    >
+                      Done
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <>
