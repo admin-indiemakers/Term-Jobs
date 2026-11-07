@@ -24,14 +24,26 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (id.includes('node_modules')) {
-            if (id.includes('onnxruntime-web') || id.includes('livekit') || id.includes('@ricky0123/vad-react')) {
-              return 'vendor-interview'
+            if (
+              id.includes('/react/') || 
+              id.includes('\\react\\') || 
+              id.includes('/react-dom/') || 
+              id.includes('\\react-dom\\') || 
+              id.includes('/react-router') || 
+              id.includes('\\react-router') ||
+              id.includes('/scheduler/') ||
+              id.includes('\\scheduler\\')
+            ) {
+              return 'vendor-react'
             }
             if (id.includes('framer-motion') || id.includes('motion')) {
               return 'vendor-motion'
             }
             if (id.includes('lucide-react')) {
               return 'vendor-lucide'
+            }
+            if (id.includes('marked')) {
+              return 'vendor-marked'
             }
           }
         },

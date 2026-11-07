@@ -76,6 +76,7 @@ def setup_test_data():
             "cand3": cand3,
         }
 
+@pytest.mark.groq
 @pytest.mark.anyio
 async def test_screening_cache_full_flow(setup_test_data):
     data = setup_test_data

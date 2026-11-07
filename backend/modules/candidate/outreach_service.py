@@ -431,7 +431,11 @@ def handle_candidate_rsvp(token: str, action: str, origin: Optional[str] = None)
                     InterviewRound.requisition_id == req_id,
                     InterviewRound.status != "Cancelled"
                 ).all()
-                existing_round = next((row for row in candidate_rounds if is_ai_round(row.to_doc())), None)
+                # Prioritize active, non-completed rounds so re-applications get a fresh round
+                existing_round = next((
+                    row for row in candidate_rounds 
+                    if is_ai_round(row.to_doc()) and str(row.status).lower() not in ("completed", "evaluated", "cancelled", "rejected")
+                ), None)
 
                 if existing_round:
                     round_doc = existing_round.to_doc()
@@ -455,7 +459,7 @@ def handle_candidate_rsvp(token: str, action: str, origin: Optional[str] = None)
                         candidate_name=cand_name,
                         candidate_email=cand_email.lower(),
                         round_number=1,
-                        round_name="AI Interview",
+                        round_name="AI Fast-Track Technical Interview",
                         round_type="AI",
                         scheduled_date=now_utc.strftime("%Y-%m-%d"),
                         scheduled_time="Immediate / On-Demand",
@@ -602,6 +606,7 @@ def handle_candidate_rsvp(token: str, action: str, origin: Optional[str] = None)
         "requisition_title": req_title,
         "company_name": comp_name,
         "round_id": round_id,
+        "candidate_token": candidate_token,
         "meeting_link": meeting_link,
         "candidate_portal_link": candidate_portal_link,
         "candidate_passcode": candidate_passcode,
@@ -713,7 +718,15 @@ def create_candidate_application_outreach(
         "candidate_email": cand_email
     })
     if existing and not force_resend:
-        return clean_bson(existing)
+        # Check if the linked round was already completed; if so, allow fresh outreach and new round
+        existing_round_id = existing.get("round_id")
+        should_reuse = True
+        if existing_round_id:
+            round_doc = db["interview_rounds"].find_one({"id": existing_round_id})
+            if round_doc and str(round_doc.get("status", "")).lower() in ("completed", "evaluated"):
+                should_reuse = False
+        if should_reuse:
+            return clean_bson(existing)
 
     # Fetch requisition title & company
     req_data = None

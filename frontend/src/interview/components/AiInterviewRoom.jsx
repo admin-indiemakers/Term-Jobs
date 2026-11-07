@@ -15,6 +15,10 @@ import {
   Clock,
   Captions,
   ShieldCheck,
+  User,
+  LogOut,
+  Eye,
+  AlertTriangle,
 } from 'lucide-react';
 import termjobsLogo from '../../assets/termjobs-logo.png';
 import { useInterviewMedia } from '../hooks/useInterviewMedia';
@@ -41,6 +45,40 @@ export function AiInterviewRoom({
   const [showCaptions, setShowCaptions] = useState(true);
   const aiInterviewMode = true;
   const [isAiSpeakingInRoom, setIsAiSpeakingInRoom] = useState(false);
+  const [focusViolationCount, setFocusViolationCount] = useState(() => {
+    if (typeof window === 'undefined' || !round?.id) return 0;
+    try {
+      const raw = sessionStorage.getItem(`tj_focus_incidents_${round.id}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (typeof parsed?.incidentCount === 'number') return parsed.incidentCount;
+        if (Array.isArray(parsed?.incidents)) return parsed.incidents.length;
+      }
+    } catch (_) {}
+    if (Array.isArray(round?.focus_monitoring_events)) {
+      return round.focus_monitoring_events.length;
+    }
+    return 0;
+  });
+
+  // Sync focus violation count on round update / refresh
+  useEffect(() => {
+    if (!round?.id) return;
+    try {
+      const raw = sessionStorage.getItem(`tj_focus_incidents_${round.id}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const storedCount = parsed?.incidentCount ?? (Array.isArray(parsed?.incidents) ? parsed.incidents.length : 0);
+        if (storedCount > 0) {
+          setFocusViolationCount((prev) => Math.max(prev, storedCount));
+          return;
+        }
+      }
+    } catch (_) {}
+    if (Array.isArray(round?.focus_monitoring_events) && round.focus_monitoring_events.length > 0) {
+      setFocusViolationCount((prev) => Math.max(prev, round.focus_monitoring_events.length));
+    }
+  }, [round?.id, round?.focus_monitoring_events]);
 
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
@@ -117,7 +155,7 @@ export function AiInterviewRoom({
     isAiInterview: aiInterviewMode,
   });
 
-  // Zero-cost Browser Speech Transcription hook for communication analysis
+  // Zero-cost Browser Speech Transcription hook (used in human-to-human interview rooms; in AI mode, AiInterviewStage manages speech recognition exclusively to prevent engine collisions)
   const {
     isSupported: isSpeechSupported,
     isListening: isSpeechListening,
@@ -130,17 +168,17 @@ export function AiInterviewRoom({
   } = useSpeechTranscription({
     speakerRole: currentUserRole,
     speakerName: currentUserName,
-    enabled: true,
+    enabled: !aiInterviewMode,
     isMicMuted: !isMicOn,
     isAiSpeaking: isAiSpeakingInRoom,
   });
 
-  // Auto-start speech recognition when microphone is active
+  // Auto-start speech recognition in human meeting mode when microphone is active
   useEffect(() => {
-    if (isSpeechSupported && isMicOn) {
+    if (!aiInterviewMode && isSpeechSupported && isMicOn) {
       startSpeechRecognition();
     }
-  }, [isSpeechSupported, isMicOn, startSpeechRecognition]);
+  }, [aiInterviewMode, isSpeechSupported, isMicOn, startSpeechRecognition]);
 
   const hasActiveScreenShare = isScreenSharing || isRemoteScreenSharing;
   const remoteParticipantName =
@@ -191,7 +229,11 @@ export function AiInterviewRoom({
     setChatInput('');
   };
 
+  const isNavigatingAwayRef = useRef(false);
+  const [isStageCompleted, setIsStageCompleted] = useState(false);
+
   const handleEndCall = async () => {
+    isNavigatingAwayRef.current = true;
     setShowExitConfirm(false);
     stopSpeechRecognition();
     disconnect();
@@ -199,41 +241,99 @@ export function AiInterviewRoom({
     onLeave?.();
   };
 
+  // Option 2: Native Browser Guard against accidental reload or close
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (isNavigatingAwayRef.current || round?.status === 'Completed' || isStageCompleted) return;
+      e.preventDefault();
+      e.returnValue = '';
+      return '';
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [round?.status, isStageCompleted]);
+
   return (
-    <div className="relative w-full h-screen bg-[#0A0A0A] text-white flex flex-col select-none overflow-hidden font-sans">
-      {/* Top Studio Control Bar */}
-      <header className="h-16 px-4 sm:px-6 flex items-center justify-between z-20 bg-black/90 backdrop-blur-xl border-b border-white/[0.08] shrink-0">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-zinc-900 border border-white/10 flex items-center justify-center p-1.5 shadow-sm shrink-0">
-            <img src={termjobsLogo} alt="TermJobs" className="w-full h-full object-contain" />
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="font-extrabold text-sm sm:text-base tracking-tight text-white uppercase">
-                AI INTERVIEW
-              </span>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-white text-zinc-950 flex items-center gap-1.5 shadow-sm shrink-0">
-                <span className="w-1.5 h-1.5 rounded-full bg-zinc-950 animate-pulse" />
-                LIVE
-              </span>
-            </div>
-            <div className="text-[11px] sm:text-xs text-zinc-400 truncate max-w-[200px] sm:max-w-md">
-              {round?.requisition_title || 'Position'} · Candidate: <span className="text-zinc-200 font-medium">{round?.candidate_name || currentUserName}</span>
-            </div>
-          </div>
+    <div className={`w-full h-screen p-0 sm:p-3 md:p-4 flex items-center justify-center select-none overflow-hidden font-sans ${
+      aiInterviewMode ? 'bg-[#EBEDF0]' : 'bg-[#0A0A0A]'
+    }`}>
+      {/* Single Large Main Container Card (matching Hiring Manager Portal) */}
+      <div className={`w-full h-full max-w-[1680px] flex flex-col overflow-hidden relative shadow-2xl sm:rounded-[28px] border ${
+        aiInterviewMode ? 'bg-[#F8F9FA] border-slate-200/90 text-slate-900' : 'bg-[#0A0A0A] border-zinc-800 text-white'
+      }`}>
+        {/* Top Header Bar */}
+        <header className={`h-16 px-4 sm:px-6 flex items-center justify-between z-20 shrink-0 ${
+          aiInterviewMode
+            ? 'bg-white border-b border-slate-200/80 text-slate-900'
+            : 'bg-black/90 backdrop-blur-xl border-b border-white/[0.08] text-white'
+        }`}>
+          <div className="flex items-center gap-3 min-w-0">
+            {/* Backgroundless TermJobs Logo */}
+            <img
+              src={termjobsLogo}
+              alt="TermJobs"
+              className={`w-7 h-7 object-contain shrink-0 ${!aiInterviewMode ? 'brightness-0 invert' : ''}`}
+            />
+            <span className="font-extrabold text-sm sm:text-base tracking-tight text-slate-900">
+              TERMJOBS
+            </span>
+          <span className="text-slate-300 font-light text-base hidden xs:inline">|</span>
+          <span className="font-bold text-sm text-slate-900 hidden xs:inline">
+            AI Interview
+          </span>
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-100/80 text-emerald-700 text-xs font-semibold">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            Live
+          </span>
         </div>
 
-        {/* Status & Timers */}
+        {/* Status & Timers & Finish */}
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-          <div className="px-3.5 py-1.5 rounded-xl bg-zinc-900 border border-white/10 text-xs sm:text-sm font-mono font-bold text-white shadow-sm flex items-center gap-2">
-            <Clock size={13} className="text-zinc-400 shrink-0" />
+          <div className={`px-3 py-1 rounded-full border text-xs font-mono font-bold flex items-center gap-1.5 shadow-2xs ${
+            aiInterviewMode ? 'bg-white border-slate-200 text-slate-800' : 'bg-zinc-900 border-white/10 text-white'
+          }`}>
+            <Clock size={13} className={aiInterviewMode ? 'text-slate-500' : 'text-zinc-400'} />
             <span>{formatCallTime(callDuration)}</span>
           </div>
 
-          <div className="hidden sm:flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-zinc-900 border border-white/10 text-xs text-zinc-300 font-medium">
-            <ShieldCheck size={13} className="text-zinc-400 shrink-0" />
+          <div className={`hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-medium shadow-2xs ${
+            aiInterviewMode ? 'bg-white border-slate-200 text-slate-700' : 'bg-zinc-900 border-white/10 text-zinc-300'
+          }`}>
+            <ShieldCheck size={13} className={aiInterviewMode ? 'text-slate-500' : 'text-zinc-400'} />
             <span>Encrypted Room</span>
           </div>
+
+          {aiInterviewMode && (
+            <div className={`hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-semibold shadow-2xs transition-all ${
+              focusViolationCount > 0
+                ? 'bg-amber-50 border-amber-300 text-amber-800 animate-pulse'
+                : 'bg-white border-slate-200 text-slate-700'
+            }`}>
+              {focusViolationCount > 0 ? (
+                <>
+                  <AlertTriangle size={13} className="text-amber-600" />
+                  <span>Focus Alert: {focusViolationCount}</span>
+                </>
+              ) : (
+                <>
+                  <Eye size={13} className="text-slate-600" />
+                  <span>Focus Monitoring Active</span>
+                </>
+              )}
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setShowExitConfirm(true)}
+            className="px-4 py-1.5 rounded-full bg-zinc-950 hover:bg-zinc-800 text-white text-xs font-semibold flex items-center gap-1.5 transition shadow-sm cursor-pointer"
+          >
+            <LogOut size={13} />
+            <span>Finish</span>
+          </button>
         </div>
       </header>
 
@@ -348,46 +448,51 @@ export function AiInterviewRoom({
           /* ============================================================ */
           /* NORMAL 2-PARTICIPANT / AI GRID (Mobile optimized & Desktop)   */
           /* ============================================================ */
-          <div className="w-full h-full max-w-7xl mx-auto flex flex-col md:grid md:grid-cols-2 gap-3 sm:gap-4 overflow-hidden">
-            {/* Local Participant Tile */}
-            <div className="relative rounded-2xl md:rounded-3xl overflow-hidden bg-black border border-white/10 flex items-center justify-center shadow-2xl group shrink-0 h-40 sm:h-48 md:h-full">
-              {isCameraOn ? (
-                <video
-                  ref={localVideoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="w-full h-full object-cover transform scale-x-[-1]"
-                />
-              ) : (
-                <div className="flex flex-col items-center justify-center p-3 sm:p-6 text-center">
-                  <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-2xl bg-zinc-900 border border-white/10 text-white font-black text-lg sm:text-2xl flex items-center justify-center shadow-inner mb-2">
-                    {(currentUserName || 'Me').slice(0, 2).toUpperCase()}
+          aiInterviewMode ? (
+            <div className="w-full h-full max-w-[1680px] mx-auto flex flex-col lg:flex-row gap-3 sm:gap-4 min-h-0 overflow-hidden">
+              {/* Local Participant Portrait Video Tile */}
+              <div className="relative rounded-2xl md:rounded-3xl overflow-hidden bg-black border border-slate-200/80 flex items-center justify-center shadow-xs shrink-0 w-full lg:w-[380px] xl:w-[440px] h-64 sm:h-72 lg:h-full">
+                {isCameraOn ? (
+                  <video
+                    ref={localVideoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="w-full h-full object-cover transform scale-x-[-1]"
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center p-4 sm:p-6 text-center">
+                    <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-zinc-900 border border-white/10 text-white font-black text-xl sm:text-2xl flex items-center justify-center shadow-inner mb-2">
+                      {(currentUserName || 'Me').slice(0, 2).toUpperCase()}
+                    </div>
+                    <div className="font-semibold text-xs sm:text-sm text-zinc-200">{currentUserName} (You)</div>
+                    <div className="text-[10px] sm:text-xs text-zinc-500 capitalize">{currentUserRole}</div>
                   </div>
-                  <div className="font-semibold text-xs sm:text-sm text-zinc-200">{currentUserName} (You)</div>
-                  <div className="text-[10px] sm:text-xs text-zinc-500 capitalize">{currentUserRole}</div>
+                )}
+
+                {/* Top Left: Camera Active */}
+                <div className="absolute top-3.5 left-3.5 px-3 py-1 rounded-full bg-black/60 backdrop-blur-md text-[11px] font-medium text-white flex items-center gap-1.5 shadow-sm">
+                  <span className={`w-1.5 h-1.5 rounded-full ${isCameraOn ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-500'}`} />
+                  <span>{isCameraOn ? 'Camera Active' : 'Camera Off'}</span>
                 </div>
-              )}
 
-              {/* Status Badges Overlay */}
-              <div className="absolute top-3 left-3 px-3 py-1 rounded-full bg-black/70 backdrop-blur-md border border-white/10 text-[10px] sm:text-xs font-medium text-white flex items-center gap-1.5">
-                <span className={`w-1.5 h-1.5 rounded-full ${isCameraOn ? 'bg-white animate-pulse' : 'bg-zinc-600'}`} />
-                <span>{isCameraOn ? 'Camera Active' : 'Camera Off'}</span>
+                {/* Bottom Left: User Name Tag */}
+                <div className="absolute bottom-3.5 left-3.5 px-3.5 py-1.5 rounded-full bg-black/60 backdrop-blur-md text-xs font-medium text-white flex items-center gap-2 shadow-sm">
+                  <User size={13} className="text-zinc-300" />
+                  <span className="truncate max-w-[140px] sm:max-w-[200px]">{currentUserName} (You)</span>
+                </div>
+
+                {/* Bottom Right: Green Equalizer Audio Waves */}
+                <div className="absolute bottom-3.5 right-3.5 flex items-end gap-0.5 h-4 px-2 py-1 rounded-lg bg-black/60 backdrop-blur-md">
+                  <span className="w-1 bg-emerald-400 rounded-full animate-pulse h-3" />
+                  <span className="w-1 bg-emerald-400 rounded-full animate-pulse h-4" />
+                  <span className="w-1 bg-emerald-400 rounded-full animate-pulse h-2.5" />
+                  <span className="w-1 bg-emerald-400 rounded-full animate-pulse h-3.5" />
+                </div>
               </div>
 
-              {/* Local Badge & Mic Status: Solid White Pill with Black Text */}
-              <div className="absolute bottom-3 left-3 px-3.5 py-1.5 rounded-full bg-white text-zinc-950 text-xs font-bold shadow-xl flex items-center gap-2">
-                <span className="truncate max-w-[140px] sm:max-w-[200px]">{currentUserName} (You)</span>
-                <span className="w-1.5 h-1.5 rounded-full bg-zinc-950" />
-                <span className="text-[11px] font-bold">
-                  {isMicOn ? 'Mic Active' : 'Mic Muted'}
-                </span>
-              </div>
-            </div>
-
-            {/* AI Interviewer or Remote Participant Tile */}
-            {aiInterviewMode ? (
-              <div className="relative rounded-2xl md:rounded-3xl overflow-hidden shadow-2xl flex-1 min-h-0 h-full">
+              {/* AI Interview Stage (Right Column) */}
+              <div className="relative flex-1 min-w-0 h-full overflow-hidden">
                 <AiInterviewStage
                   round={round}
                   candidateName={round?.candidate_name || currentUserName}
@@ -395,6 +500,7 @@ export function AiInterviewRoom({
                   companyName={round?.company_name || 'Hiring Partner'}
                   userRole={currentUserRole}
                   isMicOn={isMicOn}
+                  onToggleMicrophone={toggleMicrophone}
                   isCameraOn={isCameraOn}
                   onEnableCamera={enableCamera}
                   cameraError={permissionError}
@@ -412,9 +518,51 @@ export function AiInterviewRoom({
                       onEvaluationComplete(result);
                     }
                   }}
+                  onFocusViolationCountChange={setFocusViolationCount}
+                  onInterviewComplete={() => setIsStageCompleted(true)}
+                  onFinishInterview={onLeave}
                 />
               </div>
-            ) : (
+            </div>
+          ) : (
+            <div className="w-full h-full max-w-7xl mx-auto flex flex-col md:grid md:grid-cols-2 gap-3 sm:gap-4 overflow-hidden">
+              {/* Local Participant Tile */}
+              <div className="relative rounded-2xl md:rounded-3xl overflow-hidden bg-black border border-white/10 flex items-center justify-center shadow-2xl group shrink-0 h-40 sm:h-48 md:h-full">
+                {isCameraOn ? (
+                  <video
+                    ref={localVideoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="w-full h-full object-cover transform scale-x-[-1]"
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center p-3 sm:p-6 text-center">
+                    <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-2xl bg-zinc-900 border border-white/10 text-white font-black text-lg sm:text-2xl flex items-center justify-center shadow-inner mb-2">
+                      {(currentUserName || 'Me').slice(0, 2).toUpperCase()}
+                    </div>
+                    <div className="font-semibold text-xs sm:text-sm text-zinc-200">{currentUserName} (You)</div>
+                    <div className="text-[10px] sm:text-xs text-zinc-500 capitalize">{currentUserRole}</div>
+                  </div>
+                )}
+
+                {/* Status Badges Overlay */}
+                <div className="absolute top-3 left-3 px-3 py-1 rounded-full bg-black/70 backdrop-blur-md border border-white/10 text-[10px] sm:text-xs font-medium text-white flex items-center gap-1.5">
+                  <span className={`w-1.5 h-1.5 rounded-full ${isCameraOn ? 'bg-white animate-pulse' : 'bg-zinc-600'}`} />
+                  <span>{isCameraOn ? 'Camera Active' : 'Camera Off'}</span>
+                </div>
+
+                {/* Local Badge & Mic Status: Solid White Pill with Black Text */}
+                <div className="absolute bottom-3 left-3 px-3.5 py-1.5 rounded-full bg-white text-zinc-950 text-xs font-bold shadow-xl flex items-center gap-2">
+                  <span className="truncate max-w-[140px] sm:max-w-[200px]">{currentUserName} (You)</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-zinc-950" />
+                  <span className="text-[11px] font-bold">
+                    {isMicOn ? 'Mic Active' : 'Mic Muted'}
+                  </span>
+                </div>
+              </div>
+
+              {/* AI Interviewer or Remote Participant Tile */}
               <div className="relative rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-950/80 border border-white/10 flex items-center justify-center shadow-2xl flex-1 min-h-0 h-full">
                 {remoteStream || (participants.length > 0 && participants[0].videoTrack) ? (
                   <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
@@ -443,8 +591,8 @@ export function AiInterviewRoom({
                   </span>
                 </div>
               </div>
-            )}
-          </div>
+            </div>
+          )
         )}
 
         {/* Real-time Subtitles / Spoken Captions Bar */}
@@ -615,143 +763,151 @@ export function AiInterviewRoom({
         )}
       </div>
 
-      {/* Floating Bottom Dock Control Bar */}
-      <footer className="h-20 sm:h-22 px-3 sm:px-4 flex items-center justify-center z-20 pb-3 shrink-0">
-        <div className="px-5 sm:px-6 py-2.5 bg-black/90 backdrop-blur-2xl border border-white/10 rounded-full flex items-center gap-3 sm:gap-5 shadow-2xl">
-          {/* Mic */}
-          <div className="flex flex-col items-center gap-1">
-            <button
-              type="button"
-              onClick={toggleMicrophone}
-              title={isMicOn ? 'Mute Microphone' : 'Unmute Microphone'}
-              aria-label={isMicOn ? 'Mute Microphone' : 'Unmute Microphone'}
-              className={`w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center transition cursor-pointer ${
-                isMicOn
-                  ? 'bg-white text-zinc-950 font-bold shadow-md hover:bg-zinc-200'
-                  : 'bg-zinc-900 border border-white/10 text-zinc-400 hover:text-white'
-              }`}
-            >
-              {isMicOn ? <Mic size={17} /> : <MicOff size={17} />}
-            </button>
-            <span className="text-[10px] text-zinc-400 font-medium hidden xs:inline">Mic</span>
-          </div>
+      {/* Floating Bottom Dock Control Bar (only in human peer meeting mode; in AI interview mode, all controls are directly inside the top bar and stage) */}
+      {!aiInterviewMode && (
+        <footer className="h-20 sm:h-22 px-3 sm:px-4 flex items-center justify-center z-20 pb-3 shrink-0">
+          <div className="px-5 sm:px-6 py-2.5 bg-black/90 backdrop-blur-2xl border border-white/10 rounded-full flex items-center gap-3 sm:gap-5 shadow-2xl">
+            {/* Mic */}
+            <div className="flex flex-col items-center gap-1">
+              <button
+                type="button"
+                onClick={toggleMicrophone}
+                title={isMicOn ? 'Mute Microphone' : 'Unmute Microphone'}
+                aria-label={isMicOn ? 'Mute Microphone' : 'Unmute Microphone'}
+                className={`w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center transition cursor-pointer ${
+                  isMicOn
+                    ? 'bg-white text-zinc-950 font-bold shadow-md hover:bg-zinc-200'
+                    : 'bg-zinc-900 border border-white/10 text-zinc-400 hover:text-white'
+                }`}
+              >
+                {isMicOn ? <Mic size={17} /> : <MicOff size={17} />}
+              </button>
+              <span className="text-[10px] text-zinc-400 font-medium hidden xs:inline">Mic</span>
+            </div>
 
-          {/* Video */}
-          <div className="flex flex-col items-center gap-1">
-            <button
-              type="button"
-              onClick={toggleCamera}
-              title={isCameraOn ? 'Turn Off Camera' : 'Turn On Camera'}
-              aria-label={isCameraOn ? 'Turn Off Camera' : 'Turn On Camera'}
-              className={`w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center transition cursor-pointer ${
-                isCameraOn
-                  ? 'bg-white text-zinc-950 font-bold shadow-md hover:bg-zinc-200'
-                  : 'bg-zinc-900 border border-white/10 text-zinc-400 hover:text-white'
-              }`}
-            >
-              {isCameraOn ? <Video size={17} /> : <VideoOff size={17} />}
-            </button>
-            <span className="text-[10px] text-zinc-400 font-medium hidden xs:inline">Video</span>
-          </div>
+            {/* Video */}
+            <div className="flex flex-col items-center gap-1">
+              <button
+                type="button"
+                onClick={toggleCamera}
+                title={isCameraOn ? 'Turn Off Camera' : 'Turn On Camera'}
+                aria-label={isCameraOn ? 'Turn Off Camera' : 'Turn On Camera'}
+                className={`w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center transition cursor-pointer ${
+                  isCameraOn
+                    ? 'bg-white text-zinc-950 font-bold shadow-md hover:bg-zinc-200'
+                    : 'bg-zinc-900 border border-white/10 text-zinc-400 hover:text-white'
+                }`}
+              >
+                {isCameraOn ? <Video size={17} /> : <VideoOff size={17} />}
+              </button>
+              <span className="text-[10px] text-zinc-400 font-medium hidden xs:inline">Video</span>
+            </div>
 
-          {/* Screen Share */}
-          <div className="flex flex-col items-center gap-1">
-            <button
-              type="button"
-              onClick={toggleScreenShare}
-              title={isScreenSharing ? 'Stop Screen Sharing' : 'Share Screen'}
-              aria-label={isScreenSharing ? 'Stop Screen Sharing' : 'Share Screen'}
-              className={`w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center transition cursor-pointer ${
-                isScreenSharing
-                  ? 'bg-white text-zinc-950'
-                  : 'bg-zinc-900 border border-white/10 text-zinc-300 hover:text-white hover:bg-zinc-800'
-              }`}
-            >
-              <Monitor size={17} />
-            </button>
-            <span className="text-[10px] text-zinc-400 font-medium hidden sm:inline">Screen Share</span>
-          </div>
+            {/* Screen Share */}
+            <div className="flex flex-col items-center gap-1">
+              <button
+                type="button"
+                onClick={toggleScreenShare}
+                title={isScreenSharing ? 'Stop Screen Sharing' : 'Share Screen'}
+                aria-label={isScreenSharing ? 'Stop Screen Sharing' : 'Share Screen'}
+                className={`w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center transition cursor-pointer ${
+                  isScreenSharing
+                    ? 'bg-white text-zinc-950'
+                    : 'bg-zinc-900 border border-white/10 text-zinc-300 hover:text-white hover:bg-zinc-800'
+                }`}
+              >
+                <Monitor size={17} />
+              </button>
+              <span className="text-[10px] text-zinc-400 font-medium hidden sm:inline">Screen Share</span>
+            </div>
 
-          {/* Captions */}
-          <div className="flex flex-col items-center gap-1">
-            <button
-              type="button"
-              onClick={() => setShowCaptions(!showCaptions)}
-              title={showCaptions ? 'Hide Live Captions' : 'Show Live Captions'}
-              aria-label={showCaptions ? 'Hide Live Captions' : 'Show Live Captions'}
-              className={`w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center transition cursor-pointer ${
-                showCaptions
-                  ? 'bg-zinc-800 text-white border border-white/20'
-                  : 'bg-zinc-900 border border-white/10 text-zinc-400 hover:text-white'
-              }`}
-            >
-              <Captions size={17} />
-            </button>
-            <span className="text-[10px] text-zinc-400 font-medium hidden xs:inline">Captions</span>
-          </div>
+            {/* Captions */}
+            <div className="flex flex-col items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setShowCaptions(!showCaptions)}
+                title={showCaptions ? 'Hide Live Captions' : 'Show Live Captions'}
+                aria-label={showCaptions ? 'Hide Live Captions' : 'Show Live Captions'}
+                className={`w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center transition cursor-pointer ${
+                  showCaptions
+                    ? 'bg-zinc-800 text-white border border-white/20'
+                    : 'bg-zinc-900 border border-white/10 text-zinc-400 hover:text-white'
+                }`}
+              >
+                <Captions size={17} />
+              </button>
+              <span className="text-[10px] text-zinc-400 font-medium hidden xs:inline">Captions</span>
+            </div>
 
-          {/* Chat */}
-          <div className="flex flex-col items-center gap-1">
-            <button
-              type="button"
-              onClick={() => setActiveTab(activeTab === 'chat' ? null : 'chat')}
-              title="Meeting Chat"
-              aria-label="Meeting Chat"
-              className={`relative w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center transition cursor-pointer ${
-                activeTab === 'chat'
-                  ? 'bg-white text-zinc-950 font-bold'
-                  : 'bg-zinc-900 border border-white/10 text-zinc-300 hover:text-white hover:bg-zinc-800'
-              }`}
-            >
-              <MessageSquare size={17} />
-              {unreadCount > 0 && activeTab !== 'chat' && (
-                <span className="absolute -top-1 -right-1 px-1.5 py-0.5 rounded-full bg-white text-zinc-950 text-[10px] font-bold shadow-md">
-                  {unreadCount}
-                </span>
-              )}
-            </button>
-            <span className="text-[10px] text-zinc-400 font-medium hidden xs:inline">Chat</span>
-          </div>
+            {/* Chat */}
+            <div className="flex flex-col items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setActiveTab(activeTab === 'chat' ? null : 'chat')}
+                title="Meeting Chat"
+                aria-label="Meeting Chat"
+                className={`relative w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center transition cursor-pointer ${
+                  activeTab === 'chat'
+                    ? 'bg-white text-zinc-950 font-bold'
+                    : 'bg-zinc-900 border border-white/10 text-zinc-300 hover:text-white hover:bg-zinc-800'
+                }`}
+              >
+                <MessageSquare size={17} />
+                {unreadCount > 0 && activeTab !== 'chat' && (
+                  <span className="absolute -top-1 -right-1 px-1.5 py-0.5 rounded-full bg-white text-zinc-950 text-[10px] font-bold shadow-md">
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+              <span className="text-[10px] text-zinc-400 font-medium hidden xs:inline">Chat</span>
+            </div>
 
-          {/* Exit */}
-          <div className="flex flex-col items-center gap-1">
-            <button
-              type="button"
-              onClick={() => setShowExitConfirm(true)}
-              title="Leave Meeting"
-              aria-label="Leave Meeting"
-              className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-rose-500/20 border border-rose-500/30 text-rose-400 hover:bg-rose-600 hover:text-white flex items-center justify-center transition cursor-pointer"
-            >
-              <PhoneOff size={17} />
-            </button>
-            <span className="text-[10px] text-rose-400 font-medium hidden xs:inline">Exit</span>
+            {/* Exit */}
+            <div className="flex flex-col items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setShowExitConfirm(true)}
+                title="Leave Meeting"
+                aria-label="Leave Meeting"
+                className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-rose-500/20 border border-rose-500/30 text-rose-400 hover:bg-rose-600 hover:text-white flex items-center justify-center transition cursor-pointer"
+              >
+                <PhoneOff size={17} />
+              </button>
+              <span className="text-[10px] text-rose-400 font-medium hidden xs:inline">Exit</span>
+            </div>
           </div>
-        </div>
-      </footer>
+        </footer>
+      )}
 
       {/* Exit Confirmation Dialog */}
       {showExitConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 max-w-sm w-full text-center shadow-2xl">
-            <div className="w-12 h-12 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center mx-auto mb-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className={`border rounded-3xl p-6 max-w-sm w-full text-center shadow-2xl ${
+            aiInterviewMode ? 'bg-white border-slate-200 text-slate-900' : 'bg-zinc-900 border-zinc-800 text-white'
+          }`}>
+            <div className="w-12 h-12 rounded-full bg-rose-500/15 text-rose-500 flex items-center justify-center mx-auto mb-3">
               <PhoneOff size={22} />
             </div>
-            <h3 className="text-lg font-bold text-white">Leave Interview Room?</h3>
-            <p className="text-xs text-zinc-400 mt-1 mb-6">
-              Are you sure you want to disconnect? You can rejoin while this round is active.
+            <h3 className={`text-lg font-bold ${aiInterviewMode ? 'text-slate-900' : 'text-white'}`}>
+              Leave Interview Room?
+            </h3>
+            <p className={`text-xs mt-1 mb-6 ${aiInterviewMode ? 'text-slate-500' : 'text-zinc-400'}`}>
+              Are you sure you want to finish or exit? You can return to open roles at any time.
             </p>
             <div className="flex items-center gap-3">
               <button
                 type="button"
                 onClick={() => setShowExitConfirm(false)}
-                className="flex-1 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold transition"
+                className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition cursor-pointer ${
+                  aiInterviewMode ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300'
+                }`}
               >
                 Stay in Call
               </button>
               <button
                 type="button"
                 onClick={handleEndCall}
-                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition"
+                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition cursor-pointer shadow-md"
               >
                 Leave Room
               </button>
@@ -760,6 +916,7 @@ export function AiInterviewRoom({
         </div>
       )}
 
+      </div>
     </div>
   );
 }

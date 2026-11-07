@@ -34,12 +34,28 @@ def public_listing(page=1, page_size=8, q='', work_mode='', family='', location=
     ]}
     filters = []
     if q.strip():
-        term = {'$regex': re.escape(q.strip()), '$options': 'i'}
-        filters.append({'$or': [{key: term} for key in [
-            'title', '_company', 'generated_jd_markdown', 'structured_role.job_description',
-            'structured_role.role_summary', 'structured_role.summary', 'intent.description',
-            'structured_role.must_have_skills', 'structured_role.nice_to_have_skills',
-        ]]})
+        raw_q = q.strip()
+        escaped = re.escape(raw_q)
+        word_start = r'\b' if raw_q[0].isalnum() or raw_q[0] == '_' else r'(^|[^\w])'
+        word_end = r'\b' if raw_q[-1].isalnum() or raw_q[-1] == '_' else r'([^\w]|$)'
+        # Boundary matching prevents substring noise (e.g. searching 'AI' will not match 'email' or 'maintain')
+        if len(raw_q) <= 3:
+            term = {'$regex': rf'{word_start}{escaped}{word_end}', '$options': 'i'}
+            desc_term = term
+        else:
+            term = {'$regex': rf'{word_start}{escaped}', '$options': 'i'}
+            desc_term = {'$regex': rf'{word_start}{escaped}{word_end}', '$options': 'i'} if len(raw_q) <= 5 else term
+        filters.append({'$or': [
+            {'title': term},
+            {'_company': term},
+            {'structured_role.must_have_skills': term},
+            {'structured_role.nice_to_have_skills': term},
+            {'generated_jd_markdown': desc_term},
+            {'structured_role.job_description': desc_term},
+            {'structured_role.role_summary': desc_term},
+            {'structured_role.summary': desc_term},
+            {'intent.description': desc_term},
+        ]})
     if work_mode:
         mode_pattern = r'^(on[- ]?site|in-office)$' if work_mode.lower().replace('-', '').replace(' ', '') == 'onsite' else '^' + re.escape(work_mode) + '$'
         filters.append({'structured_role.work_mode': {'$regex': mode_pattern, '$options': 'i'}})

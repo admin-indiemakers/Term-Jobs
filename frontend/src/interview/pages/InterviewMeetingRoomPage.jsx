@@ -4,6 +4,7 @@ import { Clock, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { interviewApi } from '../services/interviewApi';
 import { InterviewRoom } from '../components/InterviewRoom';
 import { AiInterviewRoom } from '../components/AiInterviewRoom';
+import { AiInterviewOnboarding } from '../components/AiInterviewOnboarding';
 import { InterviewReviewPanel } from '../components/InterviewReviewPanel';
 import { InterviewCompletedCard } from '../components/InterviewCompletedCard';
 import { mergeInterviewResult, isAiInterviewRound } from '../utils/interviewMode';
@@ -19,6 +20,10 @@ export function InterviewMeetingRoomPage() {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
   const [candidateLeft, setCandidateLeft] = useState(false);
+  const [isOnboardingCompleted, setIsOnboardingCompleted] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return sessionStorage.getItem(`tj_onboarding_done_${roundId}`) === 'true';
+  });
   const { token: accountToken, loading: authLoading, user } = useAuth();
   const [joinIdentity, setJoinIdentity] = useState(null);
 
@@ -87,6 +92,9 @@ export function InterviewMeetingRoomPage() {
             setErrorMsg('This interview link has expired. Please request a new interview invitation.');
           }
           setRound(res);
+          if (res?.id && sessionStorage.getItem(`tj_onboarding_done_${res.id}`) === 'true') {
+            setIsOnboardingCompleted(true);
+          }
         } else {
           setErrorMsg('Interview round not found.');
         }
@@ -122,7 +130,13 @@ export function InterviewMeetingRoomPage() {
   const isAlreadyAttended = round?.status === 'Completed' && queryRole === 'candidate';
 
   if (isAlreadyAttended || candidateLeft) {
-    return <InterviewCompletedCard round={round} invitationToken={invitationToken} />;
+    return (
+      <InterviewCompletedCard
+        round={round}
+        invitationToken={invitationToken}
+        candidateName={queryName}
+      />
+    );
   }
 
   if (!errorMsg && round && joinIdentity?.role === 'interviewer' && (round.status === 'Completed' || round.is_expired)) {
@@ -175,6 +189,23 @@ export function InterviewMeetingRoomPage() {
 
   const isAiRoute = window.location.pathname.startsWith('/interview/ai');
   const isPeerRoute = window.location.pathname.startsWith('/interview/room');
+  const isAiRound =
+    isAiRoute ||
+    isAiInterviewRound(round) ||
+    round?.round_type === 'AI' ||
+    /AI/i.test(String(round?.round_name || ''));
+
+  // Pre-interview Onboarding (3 functional steps: Privacy & Consent -> System Check -> Join Interview)
+  if (isAiRound && queryRole === 'candidate' && !isOnboardingCompleted) {
+    return (
+      <AiInterviewOnboarding
+        round={round}
+        candidateName={queryName}
+        onComplete={() => setIsOnboardingCompleted(true)}
+      />
+    );
+  }
+
   const Room = isAiRoute ? AiInterviewRoom : isPeerRoute ? InterviewRoom : (isAiInterviewRound(round) ? AiInterviewRoom : InterviewRoom);
   return (
     <Room

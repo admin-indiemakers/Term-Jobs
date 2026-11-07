@@ -4,7 +4,7 @@ import {
   Briefcase, MapPin, Clock, Building2, Search, Filter, 
   ChevronRight, ArrowRight, CheckCircle2, AlertCircle, Sparkles, HelpCircle 
 } from 'lucide-react';
-import { API_BASE_URL } from '../api/client';
+import { API_BASE_URL, request } from '../api/client';
 import SEOHead from '../components/SEOHead';
 import { formatDueDate } from '../utils/dateUtils';
 import { TermJobsLoader } from '../components/TermJobsLoader';
@@ -45,42 +45,65 @@ export default function JobCategoryLandingPage({ forcedCategory }) {
   const categoryKey = forcedCategory || params.category || 'contract';
   const config = CATEGORY_CONFIG[categoryKey] || CATEGORY_CONFIG.contract;
 
-  const [jobs, setJobs] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const filterByCategory = (data, catKey) => {
+    if (!Array.isArray(data)) return [];
+    return data.filter((job) => {
+      const role = job.structured_role || {};
+      const engType = (role.engagement_type || '').toLowerCase();
+      const workMode = (role.work_mode || '').toLowerCase();
+      const location = Array.isArray(role.location) ? role.location.join(' ').toLowerCase() : (role.location || '').toLowerCase();
+
+      if (catKey === 'remote-contract') {
+        return workMode.includes('remote') || location.includes('remote');
+      }
+      if (catKey === 'temporary') {
+        return engType.includes('temp') || (role.duration && role.duration.toLowerCase().includes('month') && parseInt(role.duration) <= 3);
+      }
+      // Default contract
+      return true;
+    });
+  };
+
+  const [jobs, setJobs] = useState(() => {
+    try {
+      const cached = sessionStorage.getItem('tj_cached_requisitions');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        const data = parsed.data || parsed;
+        if (Array.isArray(data) && data.length > 0) {
+          return filterByCategory(data, categoryKey);
+        }
+      }
+    } catch (_) {}
+    return [];
+  });
+  const [loading, setLoading] = useState(() => jobs.length === 0);
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    setLoading(true);
-    fetch(`${API_BASE_URL}/api/public/requisitions`, {
-      headers: { Accept: 'application/json' },
-    })
-      .then((res) => (res.ok ? res.json() : []))
-      .then((data) => {
-        if (Array.isArray(data)) {
-          // Filter matching the category intent
-          const filtered = data.filter((job) => {
-            const role = job.structured_role || {};
-            const engType = (role.engagement_type || '').toLowerCase();
-            const workMode = (role.work_mode || '').toLowerCase();
-            const location = Array.isArray(role.location) ? role.location.join(' ').toLowerCase() : (role.location || '').toLowerCase();
+    let cancelled = false;
+    if (jobs.length === 0) setLoading(true);
 
-            if (categoryKey === 'remote-contract') {
-              return workMode.includes('remote') || location.includes('remote');
-            }
-            if (categoryKey === 'temporary') {
-              return engType.includes('temp') || (role.duration && role.duration.toLowerCase().includes('month') && parseInt(role.duration) <= 3);
-            }
-            // Default contract
-            return true;
-          });
-          setJobs(filtered);
+    request('/api/public/requisitions')
+      .then((data) => {
+        if (cancelled) return;
+        if (Array.isArray(data)) {
+          setJobs(filterByCategory(data, categoryKey));
+          try {
+            sessionStorage.setItem('tj_cached_requisitions', JSON.stringify({ t: Date.now(), data }));
+          } catch (_) {}
         }
         setLoading(false);
       })
       .catch(() => {
-        setJobs([]);
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       });
+
+    return () => {
+      cancelled = true;
+    };
   }, [categoryKey]);
 
   const visibleJobs = jobs.filter((job) => {

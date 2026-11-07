@@ -46,14 +46,12 @@
     <!-- Fonts Preconnect & Async Non-Blocking Load -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="preconnect" href="http://localhost:8000" />
-    <link rel="dns-prefetch" href="http://localhost:8000" />
 
     <!-- Zero-Latency Speculative Prefetch for Public Requisitions (starts at 0ms in parallel with JS bundles) -->
     <script>
       (function() {
         try {
-          var publicJobRoutes = ['/', '/open-roles', '/openroles', '/jobs', '/careers', '/apply'];
+          var publicJobRoutes = ['/', '/open-roles', '/openroles', '/jobs', '/careers', '/apply', '/find-jobs'];
           var isPublicJobPage = publicJobRoutes.indexOf(location.pathname) !== -1;
           var hasSession = !!localStorage.getItem('token') || !!localStorage.getItem('auth_token') || !!localStorage.getItem('auth_user');
           if (!isPublicJobPage || hasSession) return;
@@ -67,11 +65,10 @@
         } catch(e) {}
       })();
     </script>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&family=Inter:wght@400;500;600;700&display=swap" />
-    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" media="print" onload="this.media='all'" />
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" media="print" onload="this.media='all'" />
     <noscript>
-      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" />
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" />
     </noscript>
 
     <!-- Structured Data: Organization & WebSite Schemas -->

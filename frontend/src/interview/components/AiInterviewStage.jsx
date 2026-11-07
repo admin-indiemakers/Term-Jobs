@@ -1,39 +1,48 @@
-import { finalizeRecording } from '../utils/recording';
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  Sparkles,
+  Bot,
+  User,
+  Clock,
   Mic,
   MicOff,
+  Send,
+  SkipForward,
+  RotateCcw,
+  Pause,
+  Play,
+  LogOut,
   Volume2,
   VolumeX,
-  RotateCcw,
+  Sparkles,
   CheckCircle2,
-  ArrowRight,
-  Clock,
-  Activity,
-  Award,
-  Zap,
-  ChevronRight,
-  Play,
-  Square,
   FileText,
-  Layers,
-  Check,
   AlertCircle,
   ExternalLink,
-  ShieldCheck,
-  Sliders,
-  Home,
+  Briefcase,
+  Flag,
+  Type,
+  AudioLines,
+  ShieldAlert,
+  AlertTriangle,
+  Eye,
 } from 'lucide-react';
+import { useFocusMonitoring } from '../hooks/useFocusMonitoring';
 import { interviewApi } from '../services/interviewApi';
+import { finalizeRecording } from '../utils/recording';
+import { deduplicateOverlap, collapseWordStutters } from '../utils/speechDedup';
+import { InterviewCompletedCard } from './InterviewCompletedCard';
+import { useNavigate } from 'react-router-dom';
+import termjobsLogo from '../../assets/termjobs-logo.png';
 
 /**
- * Modern Interactive AI Interviewer Stage
- * Powered by continuous in-browser Speech-to-Text (STT) and deterministic + LLM Spoken Communication Analysis.
- * Features:
- * - Unbreakable STT without word limits.
- * - Human-like Natural Voice synthesis using asynchronously loaded premium neural voices.
- * - Hardware and Software Acoustic Echo Cancellation (AIC) filter to reject system speaker audio.
+ * Live AI Interview Stage (Azure OpenAI gpt-6-luna)
+ * Displays the conversational live interviewer room in the side panel of TermJobs:
+ * - Session status bar with gpt-6-luna badge, Question counter, 20m timer, Text/Voice toggle, Pause, and Finish.
+ * - STAR pattern detection indicators.
+ * - Interactive dialog transcript stream with AI Interviewer bubble, Read aloud button, Candidate answer bubble, and Follow-Up cards.
+ * - Realistic Human Female Voice synthesis (Microsoft Jenny / Aria / Google US English / Microsoft Zira) with automatic Chrome un-suspend.
+ * - Exclusive, continuous live microphone Speech-to-Text with full toggle control, wave visualizer, and deduplication.
+ * - Recruiter scorecard generation with gpt-6-luna on completion.
  */
 export function AiInterviewStage({
   round,
@@ -42,71 +51,655 @@ export function AiInterviewStage({
   companyName = 'Hiring Partner',
   userRole = 'candidate',
   isMicOn = true,
-  liveTranscript = '',
-  isSpeechListening = false,
-  speechError = '',
-  clearLiveTranscript,
+  onToggleMicrophone,
   isCameraOn = false,
   onEnableCamera,
   cameraError,
-  transcriptTurns = [],
-  startSpeechRecognition,
-  stopSpeechRecognition,
+  localStream = null,
   onAiSpeakingChange,
   onAnalysisReady,
   onSaveProofRecording,
-  localStream = null,
+  onFocusViolationCountChange,
+  onInterviewComplete,
 }) {
-  const [currentStep, setCurrentStep] = useState(0);
-  const [questions, setQuestions] = useState([]);
-  const [questionLoadError, setQuestionLoadError] = useState('');
-  const [cameraReady, setCameraReady] = useState(false);
-  const [submissionError, setSubmissionError] = useState('');
-  const [isAiSpeaking, setIsAiSpeaking] = useState(false);
-  const [ttsEnabled, setTtsEnabled] = useState(true);
-  const [availableVoices, setAvailableVoices] = useState([]);
-  const [selectedVoice, setSelectedVoice] = useState(null);
-  const [showVoiceSettings, setShowVoiceSettings] = useState(false);
+  const navigate = useNavigate();
+  const cacheKey = round?.id ? `tj_interview_cache_${round.id}` : null;
+  const initialCache = useRef((() => {
+    if (!round?.id || typeof window === 'undefined') return null;
+    try {
+      const raw = sessionStorage.getItem(`tj_interview_cache_${round.id}`);
+      return raw ? JSON.parse(raw) : null;
+    } catch (_) {
+      return null;
+    }
+  })()).current;
 
-  // Per-question finalized speech segments
-  const [finalizedSegments, setFinalizedSegments] = useState([]);
-  const [typedAnswer, setTypedAnswer] = useState('');
-  const [showTypedAnswer, setShowTypedAnswer] = useState(false);
-  const [answerError, setAnswerError] = useState('');
-  const [answers, setAnswers] = useState({});
+  const [questions, setQuestions] = useState(() => (Array.isArray(initialCache?.questions) && initialCache.questions.length > 0 ? initialCache.questions : []));
+  const [questionLoadError, setQuestionLoadError] = useState('');
+  const [currentStep, setCurrentStep] = useState(() => (typeof initialCache?.currentStep === 'number' ? initialCache.currentStep : 0));
+  const [inputMode, setInputMode] = useState('voice'); // 'text' | 'voice'
+  const [currentAnswer, setCurrentAnswer] = useState('');
+  const [isListening, setIsListening] = useState(false);
+  const [micVolume, setMicVolume] = useState(0); // 0 - 100 real-time microphone volume
+  const [sttEngine, setSttEngine] = useState('browser'); // 'browser' | 'whisper'
+  const [sttStatus, setSttStatus] = useState('ready'); // 'ready' | 'recording' | 'transcribing'
+  const [micErrorMessage, setMicErrorMessage] = useState('');
+  const [speechConfidence, setSpeechConfidence] = useState(100);
+  const [isAiThinking, setIsAiThinking] = useState(false);
   const [isCompleted, setIsCompleted] = useState(round?.status === 'Completed');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+  const [secondsRemaining, setSecondsRemaining] = useState(() => (typeof initialCache?.secondsRemaining === 'number' ? initialCache.secondsRemaining : 20 * 60));
+
+  // Audio / Voice Synthesis (Realistic Female Voice)
+  const [isSpeakingAi, setIsSpeakingAi] = useState(false);
+  const [activeSpeakingTurnIndex, setActiveSpeakingTurnIndex] = useState(null);
+  const [selectedFemaleVoice, setSelectedFemaleVoice] = useState(null);
+  const selectedVoiceRef = useRef(null);
+
+  // Dialog conversation stream
+  const [turns, setTurns] = useState(() => (Array.isArray(initialCache?.turns) && initialCache.turns.length > 0 ? initialCache.turns : []));
+  const [isQuestionsLoading, setIsQuestionsLoading] = useState(() => {
+    if (Array.isArray(initialCache?.questions) && initialCache.questions.length > 0) return false;
+    if (Array.isArray(initialCache?.turns) && initialCache.turns.length > 0) return false;
+    return true;
+  });
+  const [followUpQuestion, setFollowUpQuestion] = useState(null);
+  const [followUpsCount, setFollowUpsCount] = useState(0);
+  const [lastStar, setLastStar] = useState(null);
+
+  // Recording
   const [isUploadingRecording, setIsUploadingRecording] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(null);
   const [recordingUploaded, setRecordingUploaded] = useState(false);
-  const [analysisResult, setAnalysisResult] = useState(round?.communication_analysis || null);
-  const [metricsResult, setMetricsResult] = useState(round?.communication_metrics || null);
-  const [activeTab, setActiveTab] = useState('scorecard'); // 'scorecard' | 'transcript'
-  const [questionDuration, setQuestionDuration] = useState(0);
 
   const synthRef = useRef(typeof window !== 'undefined' ? window.speechSynthesis : null);
-  const timerRef = useRef(null);
-  const processedTurnIdsRef = useRef(new Set());
+  const turnsEndRef = useRef(null);
+
+  // Dedicated single-engine Speech Recognition references
+  const recognitionRef = useRef(null);
+  const isListeningRef = useRef(false);
+  isListeningRef.current = isListening;
+  const isPausedRef = useRef(false);
+  isPausedRef.current = isPaused;
+  const isCompletedRef = useRef(false);
+  isCompletedRef.current = isCompleted;
+  const isAiSpeakingRef = useRef(false);
+  const aiSpeakingSafetyTimerRef = useRef(null);
+  const isMicOnRef = useRef(isMicOn);
+  isMicOnRef.current = isMicOn;
+  const roundIdRef = useRef(round?.id);
+  roundIdRef.current = round?.id;
+  const currentTurnIdRef = useRef(0);
+
+  // Real-Time Audio Level Analyzer & Whisper MediaRecorder references
+  const audioContextRef = useRef(null);
+  const analyserRef = useRef(null);
+  const animFrameRef = useRef(null);
+  const whisperRecorderRef = useRef(null);
+  const whisperChunksRef = useRef([]);
+  const whisperSliceTimerRef = useRef(null);
+  const activeAudioStreamRef = useRef(null);
+
+  const baseTextRef = useRef('');
+  const currentAnswerRef = useRef('');
+  currentAnswerRef.current = currentAnswer;
+
   const mediaRecorderRef = useRef(null);
   const recordedChunksRef = useRef([]);
   const recordingStartTimeRef = useRef(null);
 
-  // Auto-record candidate video/audio stream using MediaRecorder (if not handled centrally by parent InterviewRoom)
+  // =========================================================================
+  // REALISTIC HUMAN FEMALE VOICE SELECTOR & ENGINE
+  // =========================================================================
+  const loadRealisticFemaleVoice = useCallback(() => {
+    if (typeof window === 'undefined' || !window.speechSynthesis) return;
+    const voices = window.speechSynthesis.getVoices() || [];
+    if (!voices.length) return;
+
+    const enVoices = voices.filter((v) => v.lang && v.lang.toLowerCase().startsWith('en'));
+    const pool = enVoices.length ? enVoices : voices;
+
+    const femalePriority = [
+      'Microsoft Jenny Online (Natural)',
+      'Microsoft Aria Online (Natural)',
+      'Jenny',
+      'Aria',
+      'Google US English', // Chrome's high-quality neural female voice
+      'Google UK English Female',
+      'Samantha (Enhanced)',
+      'Samantha',
+      'Ava (Enhanced)',
+      'Ava',
+      'Microsoft Zira', // Windows built-in female voice
+      'Zira',
+      'Karen (Enhanced)',
+      'Karen',
+      'Victoria',
+      'Female',
+    ];
+
+    let chosenVoice = null;
+    for (const name of femalePriority) {
+      chosenVoice = pool.find((v) => v.name.toLowerCase().includes(name.toLowerCase()));
+      if (chosenVoice) break;
+    }
+
+    if (!chosenVoice) {
+      // Exclude male voice names
+      const maleKeywords = ['david', 'mark', 'george', 'daniel', 'guy', 'male', 'richard'];
+      chosenVoice = pool.find((v) => !maleKeywords.some((m) => v.name.toLowerCase().includes(m))) || pool[0];
+    }
+
+    if (chosenVoice) {
+      setSelectedFemaleVoice(chosenVoice);
+      selectedVoiceRef.current = chosenVoice;
+      console.log('🎤 [Realistic Female Voice Loaded]:', chosenVoice.name);
+    }
+  }, []);
+
   useEffect(() => {
-    if (round?.status === 'Completed' || isCompleted || questions.length !== 4 || questionLoadError) return;
-    if (onSaveProofRecording) return;
+    loadRealisticFemaleVoice();
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.onvoiceschanged = loadRealisticFemaleVoice;
+    }
+    return () => {
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        window.speechSynthesis.onvoiceschanged = null;
+      }
+    };
+  }, [loadRealisticFemaleVoice]);
+
+  // Robust speak function with safety timeout so isAiSpeaking NEVER gets stuck
+  const speakText = useCallback(
+    (text, turnIndex = null) => {
+      if (typeof window === 'undefined' || !window.speechSynthesis || !text) return;
+      const synth = window.speechSynthesis;
+
+      // Automatically pause microphone so AI speaking through speakers is never recorded
+      isAiSpeakingRef.current = true;
+      whisperChunksRef.current = [];
+      setIsListening(false);
+      isListeningRef.current = false;
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.onend = null;
+          recognitionRef.current.onerror = null;
+          recognitionRef.current.stop();
+        } catch (_) {}
+        recognitionRef.current = null;
+      }
+      if (whisperRecorderRef.current && whisperRecorderRef.current.state !== 'inactive') {
+        try { whisperRecorderRef.current.stop(); } catch (_) {}
+      }
+
+      if (aiSpeakingSafetyTimerRef.current) {
+        clearTimeout(aiSpeakingSafetyTimerRef.current);
+        aiSpeakingSafetyTimerRef.current = null;
+      }
+
+      const endSpeaking = () => {
+        if (aiSpeakingSafetyTimerRef.current) {
+          clearTimeout(aiSpeakingSafetyTimerRef.current);
+          aiSpeakingSafetyTimerRef.current = null;
+        }
+        isAiSpeakingRef.current = false;
+        setIsSpeakingAi(false);
+        setActiveSpeakingTurnIndex(null);
+        onAiSpeakingChange?.(false);
+        whisperChunksRef.current = [];
+      };
+
+      try {
+        if (synth.paused) synth.resume();
+        synth.cancel();
+
+        setTimeout(() => {
+          try {
+            if (synth.paused) synth.resume();
+            const utterance = new SpeechSynthesisUtterance(text);
+
+            const voice = selectedVoiceRef.current || selectedFemaleVoice;
+            if (voice) {
+              utterance.voice = voice;
+              utterance.lang = voice.lang || 'en-US';
+            } else {
+              utterance.lang = 'en-US';
+            }
+
+            utterance.rate = 0.96;
+            utterance.pitch = 1.05;
+            utterance.volume = 1.0;
+
+            utterance.onstart = () => {
+              isAiSpeakingRef.current = true;
+              setIsSpeakingAi(true);
+              setActiveSpeakingTurnIndex(turnIndex);
+              onAiSpeakingChange?.(true);
+              whisperChunksRef.current = [];
+
+              // Strict safety timeout: guarantees isAiSpeaking resets even if Chrome drops onend event
+              const estimatedMs = Math.max(3500, text.length * 85 + 2500);
+              aiSpeakingSafetyTimerRef.current = setTimeout(endSpeaking, estimatedMs);
+            };
+
+            utterance.onend = endSpeaking;
+            utterance.onerror = endSpeaking;
+
+            synth.speak(utterance);
+          } catch (innerErr) {
+            console.warn('[TTS inner warning]:', innerErr);
+            endSpeaking();
+          }
+        }, 60);
+      } catch (e) {
+        console.warn('[TTS invocation warning]:', e);
+        endSpeaking();
+      }
+    },
+    [selectedFemaleVoice, onAiSpeakingChange]
+  );
+
+  // Chrome long-speech keep-alive
+  useEffect(() => {
+    if (!isSpeakingAi) return;
+    const timer = setInterval(() => {
+      if (typeof window !== 'undefined' && window.speechSynthesis?.speaking) {
+        window.speechSynthesis.pause();
+        window.speechSynthesis.resume();
+      } else {
+        clearInterval(timer);
+      }
+    }, 8000);
+    return () => clearInterval(timer);
+  }, [isSpeakingAi]);
+
+  // =========================================================================
+  // DUAL-ENGINE SPEECH-TO-TEXT (Browser Speech + High-Speed Groq Whisper AI)
+  // Real-time audio level meter, auto-unmute sync, and zero-drop transcription
+  // =========================================================================
+
+  // Flushes recorded microphone audio chunk to backend Groq Whisper STT
+  const flushAudioChunkToWhisper = useCallback(async () => {
+    // If AI is currently speaking, drop any speaker sound immediately
+    if (isAiSpeakingRef.current) {
+      whisperChunksRef.current = [];
+      return;
+    }
+
+    if (!whisperChunksRef.current.length || !roundIdRef.current) return;
+    const capturedTurnId = currentTurnIdRef.current;
+    const chunks = [...whisperChunksRef.current];
+    whisperChunksRef.current = [];
+    const blob = new Blob(chunks, { type: 'audio/webm' });
+    if (blob.size < 600) return; // Ignore micro clicks
+
+    setSttStatus('transcribing');
+    try {
+      const res = await interviewApi.transcribeAudio(roundIdRef.current, blob, 'candidate_voice.webm');
+      // If candidate transitioned to next question while request was in-flight, discard old transcript!
+      if (capturedTurnId !== currentTurnIdRef.current || isAiSpeakingRef.current) {
+        return;
+      }
+      if (res && res.transcript && res.transcript.trim()) {
+        const newText = res.transcript.trim();
+        setCurrentAnswer((prev) => {
+          if (capturedTurnId !== currentTurnIdRef.current) return '';
+          const current = (prev || '').trim();
+          if (!current) return newText;
+          const merged = deduplicateOverlap(current, newText);
+          const clean = collapseWordStutters(merged).replace(/\s+/g, ' ').trim();
+          currentAnswerRef.current = clean;
+          baseTextRef.current = clean;
+          return clean;
+        });
+      }
+    } catch (err) {
+      console.warn('[Whisper STT transcription warning]:', err);
+    } finally {
+      if (isListeningRef.current) {
+        setSttStatus('recording');
+      } else {
+        setSttStatus('ready');
+      }
+    }
+  }, []);
+
+  const setupAudioMeter = useCallback((stream) => {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx || !stream) return;
+      if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
+        audioContextRef.current = new AudioCtx();
+      }
+      const ctx = audioContextRef.current;
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 64;
+      analyser.smoothingTimeConstant = 0.4;
+      source.connect(analyser);
+      analyserRef.current = analyser;
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      const updateVolume = () => {
+        if (!isListeningRef.current) {
+          setMicVolume(0);
+          return;
+        }
+        analyser.getByteFrequencyData(dataArray);
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          sum += dataArray[i];
+        }
+        const avg = sum / dataArray.length;
+        const normalized = Math.min(100, Math.round((avg / 128) * 100));
+        setMicVolume(normalized);
+        animFrameRef.current = requestAnimationFrame(updateVolume);
+      };
+      animFrameRef.current = requestAnimationFrame(updateVolume);
+    } catch (err) {
+      console.warn('[Audio meter setup warning]:', err);
+    }
+  }, []);
+
+  const startWhisperRecorder = useCallback((stream) => {
+    if (typeof MediaRecorder === 'undefined' || !stream) return;
+    try {
+      if (whisperRecorderRef.current && whisperRecorderRef.current.state !== 'inactive') {
+        try { whisperRecorderRef.current.stop(); } catch (_) {}
+      }
+      whisperChunksRef.current = [];
+
+      let mimeType = 'audio/webm';
+      if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+        mimeType = 'audio/webm;codecs=opus';
+      } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+        mimeType = 'audio/mp4';
+      }
+
+      const recorder = new MediaRecorder(stream, { mimeType });
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          // Do not accumulate chunks if AI is speaking
+          if (!isAiSpeakingRef.current) {
+            whisperChunksRef.current.push(e.data);
+          }
+        }
+      };
+
+      recorder.start(1000);
+      whisperRecorderRef.current = recorder;
+
+      if (whisperSliceTimerRef.current) clearInterval(whisperSliceTimerRef.current);
+      // Auto-flush speech chunks every 4 seconds so spoken words appear naturally
+      whisperSliceTimerRef.current = setInterval(() => {
+        if (isListeningRef.current && !isAiSpeakingRef.current && whisperChunksRef.current.length > 0) {
+          flushAudioChunkToWhisper();
+        }
+      }, 4000);
+    } catch (e) {
+      console.warn('[Whisper Recorder init warning]:', e);
+    }
+  }, [flushAudioChunkToWhisper]);
+
+  const startListening = useCallback(async () => {
+    if (typeof window === 'undefined') return;
+
+    // If AI is currently reading aloud, stop AI speech before candidate speaks
+    if (isAiSpeakingRef.current) {
+      if (synthRef.current) synthRef.current.cancel();
+      isAiSpeakingRef.current = false;
+      setIsSpeakingAi(false);
+      setActiveSpeakingTurnIndex(null);
+      onAiSpeakingChange?.(false);
+    }
+
+    setMicErrorMessage('');
+
+    // 1. Unmute synchronization: if bottom dock muted mic, unmute it immediately
+    if (!isMicOnRef.current && onToggleMicrophone) {
+      try {
+        await onToggleMicrophone();
+      } catch (_) {}
+    }
+
+    // 2. Obtain or verify active microphone stream and enable audio tracks
+    let stream = localStream;
+    let audioTrack = stream?.getAudioTracks()?.find((t) => t.readyState === 'live');
+
+    if (audioTrack) {
+      audioTrack.enabled = true;
+    } else {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true },
+          video: false,
+        });
+        activeAudioStreamRef.current = stream;
+        audioTrack = stream.getAudioTracks()[0];
+      } catch (mediaErr) {
+        console.error('[Microphone hardware access error]:', mediaErr);
+        setMicErrorMessage('Microphone access is blocked. Allow microphone in your browser address bar permissions and retry.');
+        setIsListening(false);
+        return;
+      }
+    }
+
+    setIsListening(true);
+    isListeningRef.current = true;
+    setSttStatus('recording');
+    whisperChunksRef.current = [];
+    baseTextRef.current = currentAnswerRef.current.trim();
+    const capturedTurnId = currentTurnIdRef.current;
+
+    // 3. Start real-time audio volume meter
+    setupAudioMeter(stream);
+
+    // 4. Start Whisper continuous recorder (ultra-reliable backup across all browsers)
+    startWhisperRecorder(stream);
+
+    // 5. Also launch browser SpeechRecognition for immediate live streaming in Chrome/Edge
+    const windowObj = window;
+    const SpeechRecognition = windowObj.SpeechRecognition || windowObj.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      try {
+        if (recognitionRef.current) {
+          try { recognitionRef.current.stop(); } catch (_) {}
+          recognitionRef.current = null;
+        }
+
+        const recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = 'en-US';
+
+        recognition.onstart = () => {
+          setSttEngine('browser');
+        };
+
+        recognition.onresult = (event) => {
+          // If AI is speaking or turn changed, ignore speech from speakers!
+          if (isAiSpeakingRef.current || capturedTurnId !== currentTurnIdRef.current) return;
+
+          let sessionFinal = '';
+          let sessionInterim = '';
+
+          for (let i = 0; i < event.results.length; ++i) {
+            const res = event.results[i];
+            if (!res) continue;
+            const transcript = (res[0]?.transcript || '').trim();
+            if (!transcript) continue;
+
+            if (res.isFinal) {
+              if (res[0]?.confidence) {
+                setSpeechConfidence(Math.round(res[0].confidence * 100));
+              }
+              sessionFinal = deduplicateOverlap(sessionFinal, transcript);
+            } else {
+              sessionInterim = deduplicateOverlap(sessionInterim, transcript);
+            }
+          }
+
+          const cleanFinal = collapseWordStutters(sessionFinal);
+          const cleanInterim = collapseWordStutters(sessionInterim);
+
+          const currentSpoken = cleanInterim
+            ? deduplicateOverlap(cleanFinal, cleanInterim)
+            : cleanFinal;
+
+          const base = baseTextRef.current.trim();
+          const full = base ? deduplicateOverlap(base, currentSpoken) : currentSpoken;
+          const clean = full.replace(/\s+/g, ' ').trim();
+
+          setCurrentAnswer(clean);
+          currentAnswerRef.current = clean;
+        };
+
+        recognition.onerror = (event) => {
+          // If browser shields (Brave) or network block Web Speech, seamlessly route through Whisper AI
+          if (event.error !== 'no-speech') {
+            console.log('Web Speech API status:', event.error, '-> Seamlessly using Whisper AI');
+          }
+          setSttEngine('whisper');
+        };
+
+        recognition.onend = () => {
+          // If user hasn't paused and AI is not speaking, keep browser recognition alive
+          if (isListeningRef.current && sttEngine === 'browser' && !isAiSpeakingRef.current) {
+            try {
+              recognition.start();
+            } catch (_) {}
+          }
+        };
+
+        recognition.start();
+        recognitionRef.current = recognition;
+      } catch (srErr) {
+        console.log('Web Speech unavailable, using Whisper AI:', srErr);
+        setSttEngine('whisper');
+      }
+    } else {
+      setSttEngine('whisper');
+    }
+  }, [localStream, onToggleMicrophone, setupAudioMeter, startWhisperRecorder, sttEngine, onAiSpeakingChange]);
+
+  const stopListening = useCallback(async (flushPending = true) => {
+    isListeningRef.current = false;
+    setIsListening(false);
+    setMicVolume(0);
+
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = null;
+    }
+
+    if (whisperSliceTimerRef.current) {
+      clearInterval(whisperSliceTimerRef.current);
+      whisperSliceTimerRef.current = null;
+    }
+
+    // Stop browser SpeechRecognition safely
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.onend = null;
+        recognitionRef.current.onerror = null;
+        recognitionRef.current.stop();
+      } catch (_) {}
+      recognitionRef.current = null;
+    }
+
+    // Stop Whisper recorder and flush final captured chunk only if requested
+    if (whisperRecorderRef.current && whisperRecorderRef.current.state !== 'inactive') {
+      try {
+        whisperRecorderRef.current.stop();
+      } catch (_) {}
+    }
+
+    if (flushPending && !isAiSpeakingRef.current) {
+      await flushAudioChunkToWhisper();
+    } else {
+      whisperChunksRef.current = [];
+    }
+    setSttStatus('ready');
+    baseTextRef.current = currentAnswerRef.current.trim();
+  }, [flushAudioChunkToWhisper]);
+
+  const toggleListening = useCallback(() => {
+    if (isListening) {
+      stopListening(true);
+    } else {
+      startListening();
+    }
+  }, [isListening, startListening, stopListening]);
+
+  // =========================================================================
+  // AI INTERVIEW FOCUS MONITORING & MALPRACTICE PREVENTION
+  // =========================================================================
+  const pausedByFocusRef = useRef(false);
+
+  const {
+    isFocusLost,
+    incidents: focusIncidents,
+    incidentCount: focusIncidentCount,
+    currentViolation,
+    showReturnToast,
+    dismissViolation,
+  } = useFocusMonitoring({
+    roundId: round?.id,
+    candidateToken: round?.candidate_token || round?.interviewer_token || '',
+    activeQuestionNumber: currentStep + 1,
+    initialFocusEvents: round?.focus_monitoring_events || [],
+    enabled: !isCompleted && !isAnalyzing,
+    onFocusLost: () => {
+      if (isListeningRef.current) {
+        pausedByFocusRef.current = true;
+        stopListening(false);
+      }
+    },
+    onViolation: (_incident, count, level) => {
+      onFocusViolationCountChange?.(count);
+      if (level === 'critical_warning') {
+        setIsPaused(true);
+      }
+    },
+  });
+
+  // Notify parent room of restored or updated focus violation count (survives page refresh)
+  useEffect(() => {
+    if (typeof focusIncidentCount === 'number') {
+      onFocusViolationCountChange?.(focusIncidentCount);
+    }
+  }, [focusIncidentCount, onFocusViolationCountChange]);
+
+  const handleAcknowledgeViolation = () => {
+    const isCritical = currentViolation?.violation_level === 'critical_warning';
+    dismissViolation();
+    if (isCritical) {
+      setIsPaused(false);
+    }
+    if (pausedByFocusRef.current) {
+      pausedByFocusRef.current = false;
+      startListening();
+    }
+  };
+
+  // =========================================================================
+  // CAMERA PROOF RECORDING (MediaRecorder)
+  // =========================================================================
+  useEffect(() => {
+    if (round?.status === 'Completed' || isCompleted || onSaveProofRecording) return;
     if (typeof window === 'undefined' || typeof MediaRecorder === 'undefined') return;
 
     let isCancelled = false;
-
     const initRecording = async () => {
       try {
-        // Record the same camera stream shown in the preview. A second camera
-        // request can end the recorder when the preview stream arrives (Safari).
         const stream = localStream;
-        if (!stream?.getVideoTracks().some(track => track.readyState === 'live') || isCancelled) return;
+        if (!stream?.getVideoTracks().some((track) => track.readyState === 'live') || isCancelled) return;
 
-        // Choose supported mimeType
         const mimeCandidates = [
           'video/webm;codecs=vp9,opus',
           'video/webm;codecs=vp8,opus',
@@ -125,7 +718,11 @@ export function AiInterviewStage({
           return;
         }
 
-        const options = { ...(chosenMime ? { mimeType: chosenMime } : {}), videoBitsPerSecond: 1200000, audioBitsPerSecond: 64000 };
+        const options = {
+          ...(chosenMime ? { mimeType: chosenMime } : {}),
+          videoBitsPerSecond: 1200000,
+          audioBitsPerSecond: 64000,
+        };
         const recorder = new MediaRecorder(stream, options);
         recordedChunksRef.current = [];
         recordingStartTimeRef.current = Date.now();
@@ -136,1144 +733,887 @@ export function AiInterviewStage({
           }
         };
 
-        recorder.start(1000); // 1s slice for smooth buffer
+        recorder.start(1000);
         mediaRecorderRef.current = recorder;
-        console.log('🎥 [RECORDING] Candidate session recording started with:', chosenMime || 'default codec');
       } catch (err) {
-        console.warn('⚠️ [RECORDING] MediaRecorder initialization warning:', err);
+        console.warn('[RECORDING] MediaRecorder initialization warning:', err);
       }
     };
 
     initRecording();
-
     return () => {
       isCancelled = true;
     };
-  }, [localStream, questions, questionLoadError, isCompleted, round?.status, onSaveProofRecording]);
+  }, [localStream, isCompleted, round?.status, onSaveProofRecording]);
 
   useEffect(() => () => {
     const recorder = mediaRecorderRef.current;
     if (recorder && recorder.state !== 'inactive') recorder.stop();
   }, []);
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      stopListening();
+      if (synthRef.current) synthRef.current.cancel();
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+        try { audioContextRef.current.close(); } catch (_) {}
+      }
+      if (activeAudioStreamRef.current) {
+        try {
+          activeAudioStreamRef.current.getTracks().forEach((t) => t.stop());
+        } catch (_) {}
+      }
+    };
+  }, [stopListening]);
 
+  // 20-minute Countdown Timer
+  useEffect(() => {
+    if (isPaused || isCompleted || !questions.length) return;
+    const interval = setInterval(() => {
+      setSecondsRemaining((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          handleFinishInterview();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isPaused, isCompleted, questions.length]);
+
+  const formatTimer = (totalSeconds) => {
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Scroll to bottom of chat transcript when new turns arrive
+  useEffect(() => {
+    turnsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [turns.length, isAiThinking]);
+
+  // Load questions
   const loadQuestions = useCallback(async () => {
+    if (Array.isArray(initialCache?.questions) && initialCache.questions.length > 0) {
+      setQuestions(initialCache.questions);
+      setIsQuestionsLoading(false);
+      return;
+    }
     setQuestionLoadError('');
+    setIsQuestionsLoading(true);
     try {
-      if (Array.isArray(round?.interview_questions) && round.interview_questions.length === 4) {
+      if (Array.isArray(round?.interview_questions) && round.interview_questions.length > 0) {
         setQuestions(round.interview_questions);
+        setIsQuestionsLoading(false);
         return;
       }
       const data = await interviewApi.getAssessmentQuestions(round?.id, round?.candidate_token || round?.interviewer_token);
-      if (Array.isArray(data?.questions) && data.questions.length === 4) {
+      if (Array.isArray(data?.questions) && data.questions.length > 0) {
         setQuestions(data.questions);
+        setIsQuestionsLoading(false);
         return;
       }
       throw new Error('Interview questions format invalid');
     } catch (error) {
-      console.warn('Backend question fetch notice, applying role-aligned competency questions:', error);
+      console.warn('Applying role-aligned questions:', error);
       const fallback = [
         {
           id: 'q1_technical_delivery',
           competency: 'technical_delivery',
           category: 'Technical delivery',
           phase: 'Phase 1 of 4',
-          title: 'Technical delivery',
-          prompt: `Tell me about a key technical project you delivered for ${requisitionTitle}. What did you personally deliver, and what was the outcome?`,
-          hint: 'Use STAR: Situation, Task, Action, Result. Explain your personal contribution and measurable outcome.',
-          durationGuide: '2 - 3 mins',
-          rubric_version: 'star-competencies-v1',
-          question_style_version: 'concise-v2',
+          title: 'Technical Delivery',
+          prompt: `In your role as ${requisitionTitle}, describe a key technical system or application you personally designed, built, and delivered. Walk me through the architecture, your personal contributions, and how you validated the outcome.`,
+          hint: 'Use STAR: Situation, Task, Action, Result. Highlight direct contributions.',
         },
         {
           id: 'q2_problem_solving',
           competency: 'problem_solving',
           category: 'Problem solving',
           phase: 'Phase 2 of 4',
-          title: 'Problem solving',
-          prompt: 'Describe a difficult technical problem or bug you solved. What options did you consider, and why did you choose your solution?',
-          hint: 'Explain the root cause analysis, trade-offs between approaches, and how you verified the fix.',
-          durationGuide: '2 - 3 mins',
-          rubric_version: 'star-competencies-v1',
-          question_style_version: 'concise-v2',
+          title: 'Problem Solving & Debugging',
+          prompt: 'Describe a difficult technical bottleneck, latency issue, or system bug you solved. What diagnostic approaches did you test, and why did you settle on your eventual solution?',
+          hint: 'Detail trade-offs, root cause isolation, and verification metrics.',
         },
         {
           id: 'q3_collaboration',
           competency: 'collaboration',
           category: 'Collaboration',
           phase: 'Phase 3 of 4',
-          title: 'Collaboration',
-          prompt: 'Tell me about a disagreement or conflicting priority with a teammate or stakeholder. How did you handle it, and what changed?',
-          hint: 'Demonstrate active listening, objective reasoning, and constructive conflict resolution.',
-          durationGuide: '2 - 3 mins',
-          rubric_version: 'star-competencies-v1',
-          question_style_version: 'concise-v2',
+          title: 'Stakeholder Collaboration',
+          prompt: 'Tell me about a conflicting technical priority or disagreement you experienced with a team member or product stakeholder. How did you resolve it constructively?',
+          hint: 'Focus on communication, data-driven reasoning, and shared alignment.',
         },
         {
           id: 'q4_ownership',
           competency: 'ownership',
           category: 'Ownership',
           phase: 'Phase 4 of 4',
-          title: 'Ownership',
-          prompt: 'Describe a delivery risk or unexpected obstacle you took ownership of. What actions did you take, and how did you measure the result?',
-          hint: 'Highlight proactive communication, risk mitigation, and taking accountability from start to finish.',
-          durationGuide: '2 - 3 mins',
-          rubric_version: 'star-competencies-v1',
-          question_style_version: 'concise-v2',
+          title: 'Engineering Ownership & Reliability',
+          prompt: 'Describe a production release risk, deadline shift, or unexpected failure you took personal responsibility for. What immediate steps did you execute, and what preventative measures were adopted?',
+          hint: 'Highlight proactive ownership and post-incident improvements.',
         },
       ];
       setQuestions(fallback);
+    } finally {
+      setIsQuestionsLoading(false);
     }
-  }, [round?.id, round?.candidate_token, round?.interviewer_token, round?.interview_questions, requisitionTitle]);
-
-  useEffect(() => { loadQuestions(); }, [loadQuestions]);
-  useEffect(() => {
-    const checkCamera = () => setCameraReady(Boolean(isCameraOn && localStream?.getVideoTracks().some(track => track.enabled && track.readyState === 'live')));
-    checkCamera();
-    const timer = setInterval(checkCamera, 500);
-    return () => clearInterval(timer);
-  }, [localStream, isCameraOn]);
-
-  const activeQuestion = questions[currentStep] || { id: '', prompt: '', phase: '', category: '' };
-
-  // =========================================================================
-  // NATURAL HUMAN VOICE LOADER (Fixes "super ai" robotic voice)
-  // =========================================================================
-  const loadVoices = useCallback(() => {
-    if (!synthRef.current) return;
-    const voices = synthRef.current.getVoices() || [];
-    if (voices.length === 0) return;
-
-    // Filter English voices
-    const enVoices = voices.filter((v) => v.lang.startsWith('en'));
-    setAvailableVoices(enVoices.length > 0 ? enVoices : voices);
-
-    // Prioritize highest quality natural/human voices across macOS, Windows, Chrome & Safari
-    const naturalVoice =
-      enVoices.find((v) => v.name.includes('Google US English')) ||
-      enVoices.find((v) => v.name.includes('Samantha (Enhanced)')) ||
-      enVoices.find((v) => v.name.includes('Samantha')) ||
-      enVoices.find((v) => v.name.includes('Ava (Enhanced)')) ||
-      enVoices.find((v) => v.name.includes('Ava')) ||
-      enVoices.find((v) => v.name.includes('Zoe (Enhanced)')) ||
-      enVoices.find((v) => v.name.includes('Karen (Enhanced)')) ||
-      enVoices.find((v) => v.name.includes('Daniel (Enhanced)')) ||
-      enVoices.find((v) => v.name.includes('Microsoft Jenny') || v.name.includes('Microsoft Aria')) ||
-      enVoices.find((v) => v.name.includes('Natural') || v.name.includes('Enhanced')) ||
-      enVoices.find((v) => v.name.includes('Google')) ||
-      enVoices[0] ||
-      voices[0];
-
-    setSelectedVoice(naturalVoice);
-  }, []);
+  }, [round?.id, round?.candidate_token, round?.interviewer_token, round?.interview_questions, requisitionTitle, initialCache?.questions]);
 
   useEffect(() => {
-    loadVoices();
-    if (synthRef.current) {
-      synthRef.current.onvoiceschanged = loadVoices;
+    loadQuestions();
+  }, [loadQuestions]);
+
+  // Persist live interview state (turns, currentStep, secondsRemaining, questions) to sessionStorage
+  useEffect(() => {
+    if (!cacheKey || isCompleted || !turns || turns.length === 0) return;
+    try {
+      sessionStorage.setItem(
+        cacheKey,
+        JSON.stringify({
+          currentStep,
+          turns,
+          secondsRemaining,
+          questions: questions && questions.length > 0 ? questions : initialCache?.questions || [],
+          savedAt: Date.now(),
+        })
+      );
+    } catch (e) {
+      console.warn('Failed to cache interview state to sessionStorage', e);
     }
-    return () => {
-      if (synthRef.current) {
-        synthRef.current.onvoiceschanged = null;
-      }
-    };
-  }, [loadVoices]);
+  }, [cacheKey, isCompleted, turns, currentStep, secondsRemaining, questions, initialCache?.questions]);
 
-  // Notify parent of AI speaking state for global AIC Gating
-  const updateAiSpeaking = useCallback(
-    (speaking) => {
-      setIsAiSpeaking(speaking);
-      if (onAiSpeakingChange) {
-        onAiSpeakingChange(speaking);
-      }
-    },
-    [onAiSpeakingChange]
-  );
-
-  // Speech synthesis cancellation can omit onend; never leave capture gated forever.
+  // Initialize initial conversation turns once questions are ready
   useEffect(() => {
-    if (!isAiSpeaking) return;
-    const startedAt = Date.now();
-    const timer = setInterval(() => {
-      if (!synthRef.current?.speaking || Date.now() - startedAt > 60000) {
-        synthRef.current?.cancel();
-        updateAiSpeaking(false);
-      }
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [isAiSpeaking, updateAiSpeaking]);
+    if (!questions.length) return;
+    if (turns.length === 0) {
+      const firstQ = questions[0];
+      const firstQText = firstQ.prompt || firstQ.text || `In your role as ${requisitionTitle || 'UI Developer'}, describe a key technical system or application you personally designed, built, and delivered. Walk me through the architecture, your personal contributions, and how you validated the outcome.`;
+      const initialTurns = [
+        {
+          role: 'interviewer',
+          kind: 'question',
+          text: firstQText,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
+        },
+      ];
+      setTurns(initialTurns);
 
-  useEffect(() => {
-    if (isCompleted) return;
-    if (!cameraReady) {
-      synthRef.current?.cancel();
-      updateAiSpeaking(false);
-      stopSpeechRecognition?.();
-    } else if (isMicOn) {
-      startSpeechRecognition?.();
+      // Auto-speak first question in realistic female voice
+      setTimeout(() => {
+        speakText(firstQText, 0);
+      }, 600);
     }
-  }, [cameraReady, isCompleted, isMicOn, updateAiSpeaking, stopSpeechRecognition, startSpeechRecognition]);
+  }, [questions, candidateName, turns.length, speakText]);
 
-  // Per-question elapsed timer
-  useEffect(() => { setQuestionDuration(0); }, [currentStep]);
-  useEffect(() => {
-    if (!cameraReady || !questions.length || isCompleted) return;
-    timerRef.current = setInterval(() => {
-      setQuestionDuration((prev) => prev + 1);
-    }, 1000);
-
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [currentStep, cameraReady, questions.length, isCompleted]);
-
-  const formatSecs = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  const activeQuestion = questions[currentStep] || {
+    id: 'q1',
+    prompt: 'Tell me about a key technical project you delivered.',
+    title: 'Technical Delivery',
   };
 
-  // Speak question using the selected natural voice
-  const speakCurrentQuestion = useCallback(
-    (text) => {
-      if (!synthRef.current || !ttsEnabled) return;
+  // Submit Answer & Trigger Azure OpenAI gpt-6-luna adaptive STAR evaluation
+  const handleSubmitAnswer = async () => {
+    if (!currentAnswer.trim() || isAiThinking) return;
 
-      try {
-        synthRef.current.cancel();
-        const utterance = new SpeechSynthesisUtterance(text);
-        
-        // Natural human cadence tuning: rate 0.93 for warmth and deliberate pacing
-        utterance.rate = 0.93;
-        utterance.pitch = 1.0;
-        utterance.volume = 1.0;
-        utterance.lang = 'en-US';
+    // Invalidate active turn so in-flight Whisper responses cannot spill into next question
+    currentTurnIdRef.current += 1;
 
-        if (selectedVoice) {
-          utterance.voice = selectedVoice;
+    // Hard stop and clear all speech chunks
+    stopListening(false);
+    whisperChunksRef.current = [];
+
+    const answerText = currentAnswer.trim();
+    setCurrentAnswer('');
+    baseTextRef.current = '';
+    currentAnswerRef.current = '';
+
+    const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    // Append candidate turn
+    const updatedTurns = [
+      ...turns,
+      {
+        role: 'candidate',
+        text: answerText,
+        inputMode,
+        timestamp: nowTime,
+      },
+    ];
+    setTurns(updatedTurns);
+    setIsAiThinking(true);
+
+    try {
+      if (round?.id) {
+        const result = await interviewApi.azureAiTurn(round.id, {
+          question: activeQuestion,
+          candidate_answer: answerText,
+          follow_ups_used: followUpsCount,
+          max_follow_ups: 1,
+          previous_turns: updatedTurns.slice(-4).map((t) => ({
+            role: t.role,
+            text: t.text,
+          })),
+        });
+
+        if (result?.star_detected) {
+          setLastStar(result.star_detected);
         }
 
-        utterance.onstart = () => {
-          updateAiSpeaking(true);
-        };
-        utterance.onend = () => {
-          // Delay resuming mic by 400ms to allow room audio reverberation to decay (AIC echo protection)
-          setTimeout(() => {
-            updateAiSpeaking(false);
-            if (startSpeechRecognition && isMicOn) {
-              startSpeechRecognition();
-            }
-          }, 400);
-        };
-        utterance.onerror = () => {
-          updateAiSpeaking(false);
-        };
+        // Clean composer state for the incoming question/follow-up
+        setCurrentAnswer('');
+        baseTextRef.current = '';
+        currentAnswerRef.current = '';
+        whisperChunksRef.current = [];
 
-        synthRef.current.speak(utterance);
-      } catch (err) {
-        console.warn('TTS speech execution notice:', err);
-        updateAiSpeaking(false);
-      }
-    },
-    [ttsEnabled, selectedVoice, isMicOn, startSpeechRecognition, updateAiSpeaking]
-  );
+        const turnTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
 
-  // Speak new question when moving to next step
-  useEffect(() => {
-    if (!isCompleted && ttsEnabled && activeQuestion.prompt && cameraReady) {
-      const timeout = setTimeout(() => {
-        speakCurrentQuestion(activeQuestion.prompt);
-      }, 500);
-      return () => clearTimeout(timeout);
-    }
-    return () => {
-      if (synthRef.current) {
-        synthRef.current.cancel();
-      }
-    };
-  }, [currentStep, isCompleted, ttsEnabled, activeQuestion, cameraReady, speakCurrentQuestion]);
-
-  // =========================================================================
-  // AIC FILTER & TRANSCRIPT ACCUMULATION (No word limit, no echo)
-  // =========================================================================
-  useEffect(() => {
-    if (transcriptTurns.length > 0) {
-      const candidateTurns = transcriptTurns.filter((t) => String(t.speaker || '').toLowerCase() === 'candidate');
-      candidateTurns.forEach((turn) => {
-        const turnKey = turn.id || `${turn.timestamp || ''}:${turn.text || ''}`;
-        if (!turn?.text || processedTurnIdsRef.current.has(turnKey)) return;
-
-        // Check turn against prompt to reject system audio echo
-        const cleanTurn = turn.text.toLowerCase().replace(/[^\w\s]/g, '').trim();
-        const cleanPrompt = activeQuestion.prompt.toLowerCase().replace(/[^\w\s]/g, '').trim();
-
-        // If turn is a direct reflection of the AI question prompt, discard as acoustic feedback
-        if (cleanPrompt === cleanTurn && cleanTurn.split(' ').length >= 8) {
-          processedTurnIdsRef.current.add(turnKey);
+        // Check if Azure OpenAI asks a targeted follow-up question
+        if (result?.next_action === 'follow_up' && result?.follow_up) {
+          const followUpTurn = {
+            role: 'interviewer',
+            kind: 'follow_up',
+            text: result.speech_text || result.follow_up,
+            timestamp: turnTime,
+          };
+          setTurns((prev) => [...prev, followUpTurn]);
+          setFollowUpQuestion(result.follow_up);
+          setFollowUpsCount((prev) => prev + 1);
+          speakText(result.speech_text || result.follow_up, updatedTurns.length);
+          // Mic remains paused while AI speaks; candidate clicks mic when ready to respond
           return;
         }
 
-        // Add to finalized segments
-        processedTurnIdsRef.current.add(turnKey);
-        setFinalizedSegments((prev) => [...prev, turn.text.trim()]);
-      });
-    }
-  }, [transcriptTurns, activeQuestion.prompt]);
+        // If no follow-up needed or max follow-up reached -> advance to next question
+        const nextIndex = currentStep + 1;
+        if (nextIndex >= questions.length) {
+          // Finished all questions!
+          const concludingText = `${result?.acknowledgement || 'Thank you.'} That concludes all the questions for today. Thank you!`;
+          setTurns((prev) => [
+            ...prev,
+            {
+              role: 'interviewer',
+              kind: 'notice',
+              text: concludingText,
+              timestamp: turnTime,
+            },
+          ]);
+          speakText(concludingText, updatedTurns.length);
+          await handleFinishInterview();
+        } else {
+          const nextQ = questions[nextIndex];
+          setCurrentStep(nextIndex);
+          setFollowUpQuestion(null);
+          setFollowUpsCount(0);
 
-  // Real-time displayed answer text combining finalized segments and clean in-flight speech
-  const currentAnswerText = useMemo(() => {
-    const finalized = [...finalizedSegments, typedAnswer].filter(Boolean).join(' ').trim();
-    if (liveTranscript && !isAiSpeaking) {
-      return finalized ? `${finalized} ${liveTranscript.trim()}` : liveTranscript.trim();
-    }
-    return finalized;
-  }, [finalizedSegments, typedAnswer, liveTranscript, isAiSpeaking]);
+          const nextTurnText = `${result?.acknowledgement ? result.acknowledgement + '\n\n' : ''}Next Question: ${nextQ.prompt || nextQ.text}`;
+          setTurns((prev) => [
+            ...prev,
+            {
+              role: 'interviewer',
+              kind: 'question',
+              text: nextTurnText,
+              timestamp: turnTime,
+            },
+          ]);
+          speakText(`${result?.acknowledgement ? result.acknowledgement + ' ' : ''}Next Question: ${nextQ.prompt || nextQ.text}`, updatedTurns.length);
+          // Mic remains paused while AI speaks; candidate clicks mic when ready to respond
+        }
+      }
+    } catch (err) {
+      console.warn('Azure AI Turn exception, applying graceful progression:', err);
+      setCurrentAnswer('');
+      baseTextRef.current = '';
+      currentAnswerRef.current = '';
+      whisperChunksRef.current = [];
 
-  // Real-time metrics heuristics for the candidate's current response
-  const liveMetrics = useMemo(() => {
-    const text = (currentAnswerText || '').trim();
-    if (!text) return { wordCount: 0, wpm: 0, fillerCount: 0 };
-    const words = text.split(/\s+/).filter(Boolean);
-    const wordCount = words.length;
-    const mins = Math.max(questionDuration / 60, 0.1);
-    const wpm = Math.round(wordCount / mins);
-
-    const fillerRegex = /\b(um|uh|like|you know|basically|literally|sort of|actually|i mean)\b/gi;
-    const fillers = (text.match(fillerRegex) || []).length;
-
-    return { wordCount, wpm, fillerCount: fillers };
-  }, [currentAnswerText, questionDuration]);
-
-  const captureWarning = speechError || (!isAiSpeaking && isMicOn && questionDuration >= 20 && !currentAnswerText.trim()
-    ? 'No answer has been detected yet. If you are speaking, check your microphone, retry, or type your answer below.'
-    : '');
-
-  // Submit current answer and move to next question
-  const handleNextQuestion = () => {
-    if (!cameraReady || !questions.length) { setAnswerError('Your camera must be on and questions loaded before continuing.'); return; }
-    if (!currentAnswerText.trim()) {
-      setAnswerError('No answer has been captured. Retry speech recognition or type your answer before continuing.');
-      setShowTypedAnswer(true);
-      return;
-    }
-    setAnswerError('');
-    if (synthRef.current) {
-      synthRef.current.cancel();
-      updateAiSpeaking(false);
-    }
-
-    const savedAnswer = {
-      questionId: activeQuestion.id,
-      questionTitle: activeQuestion.title,
-      questionPrompt: activeQuestion.prompt,
-      answerText: currentAnswerText.trim(),
-      input_mode: typedAnswer.trim() ? 'typed_fallback' : 'speech',
-      wordCount: liveMetrics.wordCount,
-      durationSeconds: questionDuration,
-      recordedAt: new Date().toLocaleTimeString(),
-    };
-
-    setAnswers((prev) => ({
-      ...prev,
-      [currentStep]: savedAnswer,
-    }));
-
-    if (currentStep < questions.length - 1) {
-      setCurrentStep((prev) => prev + 1);
-      setFinalizedSegments([]);
-      setTypedAnswer('');
-      clearLiveTranscript?.();
-    } else {
-      finishAndAnalyzeInterview({
-        ...answers,
-        [currentStep]: savedAnswer,
-      });
+      const turnTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+      const nextIndex = currentStep + 1;
+      if (nextIndex < questions.length) {
+        const nextQ = questions[nextIndex];
+        setCurrentStep(nextIndex);
+        setFollowUpQuestion(null);
+        setFollowUpsCount(0);
+        const fallbackText = `Thank you. Next Question: ${nextQ.prompt || nextQ.text}`;
+        setTurns((prev) => [
+          ...prev,
+          {
+            role: 'interviewer',
+            kind: 'question',
+            text: fallbackText,
+            timestamp: turnTime,
+          },
+        ]);
+        speakText(fallbackText);
+      } else {
+        await handleFinishInterview();
+      }
+    } finally {
+      setIsAiThinking(false);
     }
   };
 
-  // Finalize interview and call 3-Tier Communication Analyzer API + Upload Video Recording
-  const finishAndAnalyzeInterview = async (finalAnswers) => {
-    setSubmissionError('');
-    if (!cameraReady && !recordingUploaded) { setAnswerError('Your camera must be on before submitting.'); return; }
-    setIsCompleted(true);
-    setIsAnalyzing(true);
+  // Skip current question
+  const handleSkipQuestion = () => {
+    currentTurnIdRef.current += 1;
+    stopListening(false);
+    whisperChunksRef.current = [];
+    setCurrentAnswer('');
+    baseTextRef.current = '';
+    currentAnswerRef.current = '';
 
-    if (synthRef.current) {
-      synthRef.current.cancel();
-      updateAiSpeaking(false);
+    const skipTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    setTurns((prev) => [
+      ...prev,
+      {
+        role: 'candidate',
+        kind: 'skip',
+        text: '[Candidate skipped this question]',
+        timestamp: skipTime,
+      },
+    ]);
+
+    const nextIndex = currentStep + 1;
+    if (nextIndex >= questions.length) {
+      handleFinishInterview();
+    } else {
+      const nextQ = questions[nextIndex];
+      setCurrentStep(nextIndex);
+      setFollowUpQuestion(null);
+      setFollowUpsCount(0);
+      const skipPrompt = `Understood, skipping to the next question:\n\n${nextQ.prompt || nextQ.text}`;
+      setTurns((prev) => [
+        ...prev,
+        {
+          role: 'interviewer',
+          kind: 'question',
+          text: skipPrompt,
+          timestamp: skipTime,
+        },
+      ]);
+      speakText(skipPrompt);
     }
+  };
 
-    // 1. Kick off video proof recording save asynchronously in the background
-    setIsUploadingRecording(true);
-    const callSeconds = recordingStartTimeRef.current
-      ? Math.max(1, Math.round((Date.now() - recordingStartTimeRef.current) / 1000))
-      : 30;
+  // Repeat current question
+  const handleRepeatQuestion = () => {
+    const lastInterviewerTurn = [...turns].reverse().find((t) => t.role === 'interviewer');
+    if (lastInterviewerTurn) {
+      speakText(lastInterviewerTurn.text);
+    } else if (activeQuestion.prompt) {
+      speakText(activeQuestion.prompt);
+    }
+  };
 
-    const backgroundUpload = (async () => {
+  // Finalize interview, generate comprehensive scorecard via gpt-6-luna, and upload video proof in the background
+  const handleFinishInterview = async () => {
+    if (isCompleted) return;
+    // 1. Instantly show Interview Completed screen
+    setIsCompleted(true);
+    onInterviewComplete?.();
+    if (cacheKey) {
+      try {
+        sessionStorage.removeItem(cacheKey);
+      } catch (_) {}
+    }
+    stopListening();
+    if (synthRef.current) synthRef.current.cancel();
+
+    // 2. Perform video upload, Azure AI scorecard, and communication analysis silently in background
+    (async () => {
+      const callSeconds = recordingStartTimeRef.current
+        ? Math.max(1, Math.round((Date.now() - recordingStartTimeRef.current) / 1000))
+        : 30;
+
       try {
         if (onSaveProofRecording) {
-          console.log('📹 [PROOF RECORDING] Finalizing session proof via parent room handler...');
-          const saved = recordingUploaded || await onSaveProofRecording(callSeconds, setUploadProgress);
+          const saved = recordingUploaded || (await onSaveProofRecording(callSeconds, setUploadProgress));
           if (saved) setRecordingUploaded(true);
-        } else if (recordingUploaded) {
-          // Scoring retries reuse the already saved recording.
         } else if (mediaRecorderRef.current) {
           const recordedBlob = await finalizeRecording(mediaRecorderRef.current, recordedChunksRef.current);
           if (recordedBlob && round?.id) {
-            await interviewApi.uploadRecording(round.id, recordedBlob, callSeconds, round.candidate_token || round.interviewer_token, setUploadProgress);
-            setRecordingUploaded(true);
-            console.log('✅ [RECORDING] Video successfully uploaded to backend');
-          }
-        } else {
-          const dummyWebm = new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42, 0x86, 0x81, 0x01, 0x42, 0xf7, 0x81, 0x01, 0x42, 0xf2, 0x81, 0x04, 0x42, 0xf3, 0x81, 0x08, 0x42, 0x82, 0x84, 0x77, 0x65, 0x62, 0x6d]);
-          const fallbackBlob = new Blob([dummyWebm], { type: 'video/webm' });
-          if (round?.id) {
-            await interviewApi.uploadRecording(round.id, fallbackBlob, callSeconds, round.candidate_token || round.interviewer_token, setUploadProgress);
+            await interviewApi.uploadRecording(
+              round.id,
+              recordedBlob,
+              callSeconds,
+              round.candidate_token || round.interviewer_token,
+              setUploadProgress
+            );
             setRecordingUploaded(true);
           }
         }
       } catch (recErr) {
-        console.warn('⚠️ [RECORDING] Video recording capture notice:', recErr);
+        console.warn('[RECORDING] Video capture notice:', recErr);
+      } finally {
         try {
-          const dummyWebm = new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42, 0x86, 0x81, 0x01, 0x42, 0xf7, 0x81, 0x01, 0x42, 0xf2, 0x81, 0x04, 0x42, 0xf3, 0x81, 0x08, 0x42, 0x82, 0x84, 0x77, 0x65, 0x62, 0x6d]);
-          const fallbackBlob = new Blob([dummyWebm], { type: 'video/webm' });
-          if (round?.id) {
-            await interviewApi.uploadRecording(round.id, fallbackBlob, callSeconds, round.candidate_token || round.interviewer_token, setUploadProgress);
-            setRecordingUploaded(true);
+          if (localStream) {
+            localStream.getTracks().forEach((track) => track.stop());
           }
         } catch (_) {}
       }
-    })();
 
-    try {
-      await backgroundUpload;
-    } catch (error) {
-      console.warn('Video background upload error non-fatal:', error);
-    }
-    setIsUploadingRecording(false);
-
-    const turnsToSubmit = [];
-    Object.keys(finalAnswers)
-      .sort((a, b) => Number(a) - Number(b))
-      .forEach((idx) => {
-        const item = finalAnswers[idx];
-        turnsToSubmit.push({
-          speaker: 'interviewer',
-          speaker_name: 'Aria (AI Assessor)',
-          text: item.questionPrompt,
-          timestamp: item.recordedAt,
-          duration_seconds: 5,
-        });
-        turnsToSubmit.push({
-          speaker: 'candidate',
-          speaker_name: candidateName,
-          text: item.answerText,
-          question_id: item.questionId,
-          input_mode: item.input_mode,
-          timestamp: item.recordedAt,
-          duration_seconds: item.durationSeconds || 30,
-        });
-      });
-
-    const totalSeconds = Object.values(finalAnswers).reduce(
-      (acc, curr) => acc + (curr.durationSeconds || 30),
-      0
-    );
-
-    try {
-      if (round?.id) {
-        const analysisPromise = interviewApi.analyzeCommunication(round.id, {
-          interview_token: round.candidate_token || round.interviewer_token,
-          transcript_turns: turnsToSubmit,
-          call_duration_seconds: totalSeconds,
-          candidate_name: candidateName,
-          role_title: requisitionTitle,
-        });
-        const res = await analysisPromise;
-
-        if (res) {
-          setAnalysisResult(res.analysis || null);
-          setMetricsResult(res.metrics || null);
-          if (onAnalysisReady) onAnalysisReady(res);
+      // Call Azure AI Complete endpoint for comprehensive recruiter evaluation report & scorecard
+      try {
+        if (round?.id) {
+          const azureRes = await interviewApi.azureAiComplete(round.id);
+          if (azureRes?.scorecard) {
+            onAnalysisReady?.(azureRes.scorecard);
+          }
         }
+      } catch (azErr) {
+        console.warn('[Azure AI Complete notice]', azErr);
       }
-    } catch (err) {
-      setSubmissionError(err.message || 'Assessment could not be submitted. Your answers remain available for retry.');
-      setAnalysisResult(null);
-    } finally {
-      setIsAnalyzing(false);
-    }
+
+      // Submit communication analysis
+      try {
+        if (round?.id) {
+          const turnsToSubmit = turns.map((t) => ({
+            speaker: t.role === 'interviewer' ? 'interviewer' : 'candidate',
+            speaker_name: t.role === 'interviewer' ? 'Aria (AI Assessor)' : candidateName,
+            text: t.text,
+            timestamp: new Date().toLocaleTimeString(),
+            duration_seconds: 30,
+          }));
+          await interviewApi.analyzeCommunication(round.id, {
+            interview_token: round.candidate_token || round.interviewer_token,
+            transcript_turns: turnsToSubmit,
+            call_duration_seconds: 20 * 60 - secondsRemaining,
+            candidate_name: candidateName,
+            role_title: requisitionTitle,
+          });
+        }
+      } catch (commErr) {
+        console.warn('[Communication analysis notice]', commErr);
+      }
+    })();
   };
 
   // =========================================================================
-  // VIEW A: INTERVIEW COMPLETED · CANDIDATE CONFIRMATION OR ADMIN SCORECARD
+  // VIEW: INTERVIEW COMPLETED · CANDIDATE CONFIRMATION CARD
   // =========================================================================
   if (isCompleted) {
-    const isCandidate = userRole === 'candidate' || !['admin', 'interviewer', 'hiring_manager'].includes(userRole);
-
-    // 1. Loading state during transmission & video upload
-    if (isAnalyzing || isUploadingRecording) {
-      return (
-        <div className="w-full h-full rounded-3xl overflow-hidden bg-zinc-950 border border-zinc-800 shadow-2xl flex flex-col items-center justify-center text-center p-8 animate-in fade-in duration-300">
-          <div className="w-16 h-16 rounded-full border-4 border-emerald-500/20 border-t-emerald-400 animate-spin mb-4" />
-          <div className="text-base font-bold text-white tracking-tight">
-            {isUploadingRecording ? (uploadProgress?.phase === 'uploading' ? `Uploading video: ${Math.round(uploadProgress.uploaded / uploadProgress.total * 100)}%` : 'Finalizing saved video…') : 'Submitting Interview Responses...'}
-          </div>
-          <p className="text-xs text-zinc-400 mt-1 max-w-sm">
-            {isUploadingRecording
-              ? 'Uploading your recording. Keep this page open until saving is confirmed.'
-              : 'Saving your answers and preparing the interview assessment…'}
-          </p>
-
-        </div>
-      );
-    }
-
-    if (submissionError) {
-      return <div role="alert" className="h-full rounded-3xl bg-zinc-950 p-6 text-amber-200 flex flex-col justify-center gap-4">
-        <h2 className="text-lg font-bold">Interview submission needs attention</h2>
-        <p>{submissionError}</p>
-        <button type="button" onClick={() => finishAndAnalyzeInterview(answers)} className="rounded-xl bg-emerald-600 p-3 text-white">Retry submission</button>
-      </div>;
-    }
-
-    // 2. Candidate View: Reassuring Confirmation without Scores or Metrics
-    if (isCandidate) {
-      return (
-        <div className="w-full h-full rounded-3xl overflow-hidden bg-zinc-950 border border-zinc-800 shadow-2xl flex flex-col items-center justify-center p-6 sm:p-10 text-center animate-in fade-in zoom-in-95 duration-300">
-          <div className="w-20 h-20 rounded-3xl bg-gradient-to-tr from-emerald-500/20 to-teal-500/20 border-2 border-emerald-500/40 flex items-center justify-center text-emerald-400 mb-5 shadow-xl shadow-emerald-500/10">
-            <CheckCircle2 size={42} className="stroke-[2.5]" />
-          </div>
-
-          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold uppercase tracking-wider mb-3">
-            <Sparkles size={13} />
-            <span>Interview Submitted Successfully</span>
-          </div>
-
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-            Thank You, {candidateName}!
-          </h2>
-
-          <p className="text-zinc-400 text-xs sm:text-sm max-w-lg mt-2 leading-relaxed">
-            Your interview responses for the <strong className="text-zinc-200">{requisitionTitle}</strong> role at{' '}
-            <strong className="text-zinc-200">{companyName}</strong> have been securely recorded and submitted to the hiring team.
-          </p>
-
-          {/* Submission Details Overview */}
-          <div className="w-full max-w-md bg-zinc-900/90 border border-zinc-800/80 rounded-2xl p-5 mt-6 text-left space-y-3 shadow-inner">
-            <div className="flex items-center justify-between text-xs py-1 border-b border-zinc-800">
-              <span className="text-zinc-400 font-medium">Position</span>
-              <span className="font-semibold text-zinc-200">{requisitionTitle}</span>
-            </div>
-            <div className="flex items-center justify-between text-xs py-1 border-b border-zinc-800">
-              <span className="text-zinc-400 font-medium">Interview Status</span>
-              <span className="font-semibold text-emerald-400 flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                Submitted · Under Hiring Review
-              </span>
-            </div>
-            <div className="flex items-center justify-between text-xs py-1 border-b border-zinc-800">
-              <span className="text-zinc-400 font-medium">Session Video</span>
-              <span className="font-semibold text-emerald-400 flex items-center gap-1.5">
-                <CheckCircle2 size={13} />
-                Securely Archived
-              </span>
-            </div>
-            <div className="flex items-center justify-between text-xs py-1 border-b border-zinc-800">
-              <span className="text-zinc-400 font-medium">Questions Completed</span>
-              <span className="font-semibold text-zinc-200">{questions.length} of {questions.length} Answered</span>
-            </div>
-            <div className="flex items-center justify-between text-xs py-1">
-              <span className="text-zinc-400 font-medium">Next Step</span>
-              <span className="font-semibold text-zinc-300">Recruiter will contact you with updates</span>
-            </div>
-          </div>
-
-          <p className="text-[11px] text-zinc-500 mt-6 max-w-md">
-            Our talent acquisition team and interviewers will review your session in the admin portal. You may now close this window or return to the candidate portal.
-          </p>
-
-          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-            <button
-              type="button"
-              onClick={() => {
-                window.location.href = '/';
-              }}
-              className="px-6 py-2.5 rounded-xl bg-white hover:bg-zinc-200 text-zinc-950 font-bold text-xs transition cursor-pointer shadow-lg flex items-center gap-2 active:scale-95"
-            >
-              <Home size={15} />
-              <span>Return to TermJobs Home</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                window.location.href = '/interview/candidate';
-              }}
-              className="px-5 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700 font-semibold text-xs transition cursor-pointer active:scale-95"
-            >
-              Candidate Portal
-            </button>
-          </div>
-        </div>
-      );
-    }
-
-    // 3. Admin / Recruiter / Hiring Manager View: Full Executive Communication Scorecard
-    if (analysisResult?.status !== 'scored') {
-      return <div className="h-full rounded-3xl bg-zinc-950 p-6 text-zinc-200 flex flex-col justify-center gap-3">
-        <h2 className="text-lg font-bold">Assessment pending human review</h2>
-        <p>{analysisResult?.summary || 'No validated STAR and competency assessment is available. No score has been assigned.'}</p>
-      </div>;
-    }
-    const score = analysisResult.overall_score;
-    const scoreColor =
-      score >= 80
-        ? 'text-emerald-400 border-emerald-500/40 bg-emerald-500/10'
-        : score >= 65
-        ? 'text-sky-400 border-sky-500/40 bg-sky-500/10'
-        : 'text-amber-400 border-amber-500/40 bg-amber-500/10';
-
     return (
-      <div className="w-full h-full rounded-3xl overflow-hidden bg-zinc-950 border border-zinc-800 shadow-2xl flex flex-col p-6 animate-in fade-in zoom-in-95 duration-300">
-        {/* Header */}
-        <div className="flex flex-col gap-4 pb-4 border-b border-zinc-800/80 shrink-0 @min-[760px]:flex-row @min-[760px]:items-start @min-[760px]:justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 text-zinc-950 flex items-center justify-center font-black shadow-lg">
-              <Sparkles size={20} />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg font-bold text-white tracking-tight">AI Communication Assessment</h2>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                  ADMIN VIEW
-                </span>
-              </div>
-              <p className="text-xs text-zinc-400">
-                Spoken Linguistic Evaluation · {candidateName} · {requisitionTitle}
-              </p>
-            </div>
-          </div>
-
-          {/* Navigation Tabs */}
-          <div className="flex items-center gap-1.5 p-1 rounded-xl bg-zinc-900 border border-zinc-800 text-xs">
-            <button
-              type="button"
-              onClick={() => setActiveTab('scorecard')}
-              className={`px-3 py-1.5 rounded-lg font-semibold transition cursor-pointer ${
-                activeTab === 'scorecard' ? 'bg-zinc-800 text-white shadow' : 'text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              Scorecard
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('transcript')}
-              className={`px-3 py-1.5 rounded-lg font-semibold transition cursor-pointer ${
-                activeTab === 'transcript' ? 'bg-zinc-800 text-white shadow' : 'text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              Q&A Transcript
-            </button>
-          </div>
-        </div>
-
-        {/* Content Body */}
-        {activeTab === 'scorecard' ? (
-          <div className="flex-1 overflow-y-auto pr-2 py-4 space-y-5">
-            {/* Top Score Banner */}
-            <div className="p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="flex items-center gap-4">
-                <div
-                  className={`w-20 h-20 rounded-2xl border-2 flex flex-col items-center justify-center shrink-0 shadow-xl ${scoreColor}`}
-                >
-                  <span className="text-3xl font-black">{score}</span>
-                  <span className="text-[10px] font-bold tracking-wider uppercase opacity-80">/ 100</span>
-                </div>
-                <div>
-                  <div className="text-sm font-bold text-white">STAR & Competency Assessment</div>
-                  <p className="text-xs text-zinc-400 mt-0.5 line-clamp-2">
-                    {analysisResult?.summary ||
-                      'Review the quoted evidence and competency ratings below.'}
-                  </p>
-                </div>
-              </div>
-              <div className="flex sm:flex-col items-end gap-1.5 shrink-0">
-                <span className="text-[11px] font-semibold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
-                  Ready for Recruiter Review
-                </span>
-              </div>
-            </div>
-
-            {/* Heuristics Grid (Pace, Fillers, Lexicon) */}
-            {metricsResult?.speech_metrics_available ? <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {/* Pace Meter */}
-              <div className="p-4 rounded-2xl bg-zinc-900/60 border border-zinc-800">
-                <div className="flex items-center justify-between text-xs text-zinc-400 mb-1">
-                  <span>Speaking Pace</span>
-                  <Activity size={14} className="text-emerald-400" />
-                </div>
-                <div className="text-2xl font-black text-white">
-                  {metricsResult?.words_per_minute ?? '—'}{' '}
-                  <span className="text-xs font-normal text-zinc-400">WPM</span>
-                </div>
-                <div className="text-[11px] text-emerald-400 mt-1 font-medium">
-                  {metricsResult?.pace_rating || 'Optimal Cadence (130-165)'}
-                </div>
-              </div>
-
-              {/* Fillers Radar */}
-              <div className="p-4 rounded-2xl bg-zinc-900/60 border border-zinc-800">
-                <div className="flex items-center justify-between text-xs text-zinc-400 mb-1">
-                  <span>Filler Words</span>
-                  <Zap size={14} className="text-sky-400" />
-                </div>
-                <div className="text-2xl font-black text-white">
-                  {metricsResult?.filler_percentage !== undefined ? `${metricsResult.filler_percentage}%` : 'Not measured'}
-                  <span className="text-xs font-normal text-zinc-400 ml-1">
-                    ({metricsResult?.filler_count ?? 0} detected)
-                  </span>
-                </div>
-                <div className="text-[11px] text-sky-400 mt-1 font-medium">
-                  {metricsResult?.filler_rating || 'Minimal Fillers (Articulate)'}
-                </div>
-              </div>
-
-              {/* Lexical Diversity */}
-              <div className="p-4 rounded-2xl bg-zinc-900/60 border border-zinc-800">
-                <div className="flex items-center justify-between text-xs text-zinc-400 mb-1">
-                  <span>Lexical Variety</span>
-                  <Award size={14} className="text-purple-400" />
-                </div>
-                <div className="text-2xl font-black text-white">
-                  {metricsResult?.lexical_diversity ?? '—'}{' '}
-                  <span className="text-xs font-normal text-zinc-400">TTR</span>
-                </div>
-                <div className="text-[11px] text-purple-400 mt-1 font-medium">
-                  {metricsResult?.vocabulary_rating || 'Not measured'}
-                </div>
-              </div>
-            </div> : <p className="text-xs text-zinc-400">Speech delivery metrics are unavailable for typed responses. Competency ratings use answer content.</p>}
-
-            {/* 4 Core Dimensions */}
-            <div className="p-4 rounded-2xl bg-zinc-900/60 border border-zinc-800">
-              <h3 className="text-xs font-bold text-zinc-300 uppercase tracking-wider mb-3">
-                Competency Dictionary Ratings (Scale 1 - 5) · {analysisResult.rubric_version}
-              </h3>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {(analysisResult.competencies || []).map(row => ({
-                  label: analysisResult.competency_dictionary?.[row.competency]?.name || row.competency,
-                  val: row.rating, rationale: row.rationale, star: row.star, evidence: row.evidence,
-                  indicators: analysisResult.competency_dictionary?.[row.competency]?.indicators || [],
-                })).map((item, i) => (
-                  <div key={i} className="p-3 rounded-xl bg-zinc-950/70 border border-zinc-800 text-center">
-                    <div className="text-xs text-zinc-400 truncate mb-1">{item.label}</div>
-                    <div className="text-lg font-black text-white">{item.val} / 5</div>
-                    <p className="mt-2 text-xs text-zinc-400">{item.rationale}</p>
-                    <p className="mt-2 text-xs text-zinc-500">Indicators: {item.indicators.join('; ')}</p>
-                    {(item.evidence || []).map((quote, index) => <blockquote key={index} className="mt-2 text-xs text-zinc-300">“{quote}”</blockquote>)}
-                    <dl className="mt-2 text-left text-xs text-zinc-400">{Object.entries(item.star || {}).map(([key, value]) => <div key={key}><dt className="font-semibold capitalize">{key}</dt><dd>{value || 'Not demonstrated'}</dd></div>)}</dl>
-                    <div className="w-full bg-zinc-800 h-1 rounded-full mt-2 overflow-hidden">
-                      <div
-                        className="bg-emerald-400 h-full rounded-full"
-                        style={{ width: `${Math.min(100, item.val * 20)}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Strengths & Growth Areas */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="p-4 rounded-2xl bg-emerald-950/20 border border-emerald-900/40">
-                <div className="flex items-center gap-2 text-xs font-bold text-emerald-400 uppercase tracking-wider mb-2">
-                  <CheckCircle2 size={14} />
-                  <span>Key Strengths</span>
-                </div>
-                <ul className="text-xs text-zinc-300 space-y-1.5 list-disc list-inside">
-                  {(analysisResult?.key_strengths || [
-                    'Structured narrative flow with clear technical takeaways.',
-                    'Comfortable speaking cadence and natural confidence.',
-                  ]).map((s, idx) => (
-                    <li key={idx} className="leading-relaxed">
-                      {s}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div className="p-4 rounded-2xl bg-amber-950/20 border border-amber-900/40">
-                <div className="flex items-center gap-2 text-xs font-bold text-amber-400 uppercase tracking-wider mb-2">
-                  <AlertCircle size={14} />
-                  <span>Areas of Growth</span>
-                </div>
-                <ul className="text-xs text-zinc-300 space-y-1.5 list-disc list-inside">
-                  {(analysisResult?.areas_for_improvement || [
-                    'Incorporate more quantifiable business outcomes in answers.',
-                    'Keep cross-functional summaries slightly more concise.',
-                  ]).map((w, idx) => (
-                    <li key={idx} className="leading-relaxed">
-                      {w}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          </div>
-        ) : (
-          /* Q&A Transcript Tab */
-          <div className="flex-1 overflow-y-auto pr-2 py-4 space-y-4">
-            {questions.map((q, idx) => {
-              const ans = answers[idx];
-              return (
-                <div key={q.id} className="p-4 rounded-2xl bg-zinc-900/70 border border-zinc-800">
-                  <div className="flex items-center justify-between text-xs text-zinc-400 mb-1">
-                    <span className="font-semibold text-emerald-400">Question {idx + 1}: {q.title}</span>
-                    <span>{ans?.durationSeconds ? `${ans.durationSeconds}s` : 'Recorded'}</span>
-                  </div>
-                  <p className="text-xs text-zinc-300 italic mb-3">"{q.prompt}"</p>
-
-                  <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800/80 text-xs text-zinc-200 leading-relaxed font-mono">
-                    <span className="text-zinc-500 font-sans block mb-1">Spoken Answer:</span>
-                    {ans?.answerText || '(No recorded speech)'}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Footer Actions */}
-        <div className="pt-4 border-t border-zinc-800 flex items-center justify-between gap-3">
-          <div className="text-xs text-zinc-500">
-            TermJobs AI Talent Assessor &bull; Communication Record Saved to Pipeline
-          </div>
-          <button
-            type="button"
-            onClick={() => (window.location.href = '/interview/candidate')}
-            className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg transition flex items-center gap-2 cursor-pointer"
-          >
-            <span>Return to Candidate Portal</span>
-            <ArrowRight size={14} />
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // =========================================================================
-  // VIEW B: LIVE INTERVIEW QUESTIONS & CONTINUOUS SPEECH RECOGNITION
-  // =========================================================================
-  if (!questions.length || !cameraReady) {
-    return (
-      <div role="status" className="h-full rounded-2xl sm:rounded-3xl bg-zinc-950/90 border border-white/10 p-6 sm:p-10 text-zinc-200 flex flex-col items-center justify-center text-center gap-4 shadow-2xl backdrop-blur-xl">
-        <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-cyan-500/20 to-emerald-500/20 border border-cyan-500/30 flex items-center justify-center text-cyan-400 mb-1 shadow-lg shadow-cyan-500/10">
-          <Sparkles size={32} />
-        </div>
-        <h2 className="text-xl font-extrabold text-white tracking-tight">Prepare Your AI Interview</h2>
-        <p className="text-xs sm:text-sm text-zinc-400 max-w-md leading-relaxed">
-          Camera and microphone access are required for this session. Your spoken responses will be evaluated autonomously by Aria, TermJobs AI Assessor.
-        </p>
-        {!cameraReady && (
-          <button
-            type="button"
-            onClick={onEnableCamera}
-            className="px-6 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs sm:text-sm transition shadow-lg shadow-emerald-500/20 cursor-pointer"
-          >
-            Enable Camera & Begin
-          </button>
-        )}
-        {cameraError && (
-          <p role="alert" className="text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 px-3 py-2 rounded-lg">
-            {cameraError}
-          </p>
-        )}
-        {!questions.length && (
-          <p className="text-xs text-zinc-400 animate-pulse">
-            {questionLoadError || 'Preparing tailored interview questions from your profile and role…'}
-          </p>
-        )}
-        {questionLoadError && (
-          <button type="button" onClick={loadQuestions} className="text-xs text-cyan-400 underline cursor-pointer">
-            Retry question preparation
-          </button>
-        )}
-      </div>
-    );
-  }
-  return (
-    <div className="@container w-full h-full rounded-2xl sm:rounded-3xl overflow-y-auto overflow-x-hidden bg-zinc-950 border border-white/10 shadow-2xl flex flex-col p-4 sm:p-5 min-h-0 relative">
-      {/* 1. Horizontal Stepper Timeline (1 — 2 — 3 — 4) */}
-      <div className="relative flex items-center justify-between px-3 pt-1 pb-3 shrink-0">
-        <div className="absolute top-1/2 left-6 right-6 h-[2px] -translate-y-1/2 bg-zinc-800 pointer-events-none" />
-        <div
-          className="absolute top-1/2 left-6 h-[2px] -translate-y-1/2 bg-white transition-all duration-300 pointer-events-none"
-          style={{
-            width: `${Math.min(94, (currentStep / Math.max(1, questions.length - 1)) * 92)}%`,
+      <div className="fixed inset-0 z-50 overflow-y-auto bg-[#FAFAFA]">
+        <InterviewCompletedCard
+          round={{
+            ...round,
+            candidate_name: candidateName,
+            requisition_title: requisitionTitle,
+            company_name: companyName,
+          }}
+          invitationToken={round?.candidate_token}
+          candidateName={candidateName}
+          onBack={() => {
+            navigate('/open-roles');
           }}
         />
-        {questions.map((q, idx) => (
-          <div key={q.id} className="relative z-10 flex flex-col items-center">
-            <div
-              className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center font-bold text-xs transition-all duration-300 ${
-                idx === currentStep
-                  ? 'bg-white text-zinc-950 shadow-xl ring-4 ring-white/20 scale-105'
-                  : idx < currentStep
-                  ? 'bg-white text-zinc-950 shadow-md'
-                  : 'bg-zinc-900 border border-zinc-700 text-zinc-500'
+      </div>
+    );
+  }
+
+  // =========================================================================
+  // VIEW: LIVE INTERACTIVE AI INTERVIEW ROOM (Side Panel)
+  // =========================================================================
+  return (
+    <div className="w-full h-full flex flex-col gap-3 min-h-0 overflow-hidden font-sans">
+      {/* 1. Top Role Card */}
+      <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/80 p-4 sm:p-5 shadow-xs shrink-0">
+        {/* Top Row: Position + Candidate + AI Interview badge + Question counter */}
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight truncate">
+                {requisitionTitle || 'UI Developer'}
+              </h2>
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-zinc-100 text-zinc-800 border border-zinc-200">
+                AI Interview
+              </span>
+            </div>
+            <div className="text-xs text-slate-500 font-medium truncate mt-0.5">
+              Candidate: <span className="text-slate-700 font-semibold">{candidateName}</span>
+            </div>
+          </div>
+
+          {/* Question Counter Pill */}
+          <div className="px-3.5 py-1 rounded-full text-xs font-bold text-slate-800 bg-slate-100 border border-slate-200/70 shrink-0">
+            Question {currentStep + 1} of {questions.length || 6}
+          </div>
+        </div>
+      </div>
+
+      {/* Focus Restored Toast */}
+      {showReturnToast && !currentViolation && (
+        <div className="fixed top-5 left-1/2 transform -translate-x-1/2 z-50 bg-zinc-950 text-white px-4 py-2 rounded-2xl shadow-xl flex items-center gap-2 text-xs font-semibold animate-in fade-in slide-in-from-top-4 duration-200 border border-zinc-800">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+          <span>Focus Restored · Return to Question {currentStep + 1}</span>
+        </div>
+      )}
+
+      {/* Progressive Focus Loss Violation Modal */}
+      {currentViolation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${
+                currentViolation.violation_level === 'critical_warning'
+                  ? 'bg-rose-100 text-rose-600'
+                  : currentViolation.violation_level === 'strong_warning'
+                  ? 'bg-amber-100 text-amber-600'
+                  : 'bg-zinc-100 text-zinc-800'
+              }`}>
+                {currentViolation.violation_level === 'critical_warning' ? (
+                  <ShieldAlert className="w-6 h-6 stroke-[2.2]" />
+                ) : (
+                  <AlertTriangle className="w-6 h-6 stroke-[2.2]" />
+                )}
+              </div>
+              <div>
+                <h3 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">
+                  {currentViolation.violation_level === 'critical_warning'
+                    ? 'Interview Paused: Focus Violations'
+                    : currentViolation.violation_level === 'strong_warning'
+                    ? 'Repeated Focus Loss Warning'
+                    : 'Focus Policy Reminder'}
+                </h3>
+                <span className={`inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full ${
+                  currentViolation.violation_level === 'critical_warning'
+                    ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                    : currentViolation.violation_level === 'strong_warning'
+                    ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                    : 'bg-zinc-100 text-zinc-800 border border-zinc-200'
+                }`}>
+                  Incident #{currentViolation.incident_sequence} · {currentViolation.event_type === 'tab_hidden' ? 'Tab Switched' : currentViolation.event_type === 'fullscreen_exit' ? 'Fullscreen Exited' : 'Window Lost Focus'}
+                </span>
+              </div>
+            </div>
+
+            <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-2 text-xs text-slate-700">
+              <p className="leading-relaxed font-normal">
+                {currentViolation.violation_level === 'critical_warning'
+                  ? `Repeated focus loss has been recorded across multiple questions (${focusIncidentCount} incidents total, away for ${currentViolation.duration_seconds}s). The interview session has been paused to protect assessment integrity.`
+                  : currentViolation.violation_level === 'strong_warning'
+                  ? `You left the interview window for ${currentViolation.duration_seconds}s during Question ${currentViolation.question_number}. This incident has been recorded and flagged for recruiter review.`
+                  : `Please return to your interview. Switching tabs or leaving this window is not permitted. Focus loss duration (${currentViolation.duration_seconds}s) has been logged.`}
+              </p>
+              <div className="text-[11px] text-slate-500 pt-1 border-t border-slate-200 flex items-center justify-between">
+                <span>Active Question: {currentViolation.question_number}</span>
+                <span>Away Duration: {currentViolation.duration_seconds}s</span>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-slate-500 italic">
+              Note: Focus changes are reviewed by your recruiter. Accidental brief switches are taken into account alongside your interview recording.
+            </p>
+
+            <button
+              type="button"
+              onClick={handleAcknowledgeViolation}
+              className={`w-full py-3 rounded-xl font-bold text-xs sm:text-sm text-white transition shadow-md cursor-pointer flex items-center justify-center gap-2 ${
+                currentViolation.violation_level === 'critical_warning'
+                  ? 'bg-rose-600 hover:bg-rose-700'
+                  : currentViolation.violation_level === 'strong_warning'
+                  ? 'bg-amber-600 hover:bg-amber-700'
+                  : 'bg-zinc-950 hover:bg-zinc-800'
               }`}
             >
-              {idx < currentStep ? <Check size={14} className="stroke-[3]" /> : idx + 1}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* 2. Aria AI Assessor Info Card & Controls */}
-      <div className="p-3 sm:p-4 rounded-2xl bg-zinc-900/60 border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3 shrink-0">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-zinc-900 border border-white/15 flex items-center justify-center text-white shrink-0 shadow-inner">
-            {/* Audio Wave Visualizer Icon */}
-            <div className="flex items-center gap-0.5 h-4">
-              <span className={`w-0.5 bg-white rounded-full ${isAiSpeaking ? 'h-3.5 animate-pulse' : 'h-2'}`} />
-              <span className={`w-0.5 bg-white rounded-full ${isAiSpeaking ? 'h-4 animate-pulse delay-75' : 'h-3.5'}`} />
-              <span className={`w-0.5 bg-white rounded-full ${isAiSpeaking ? 'h-2 animate-pulse delay-150' : 'h-1.5'}`} />
-              <span className={`w-0.5 bg-white rounded-full ${isAiSpeaking ? 'h-4 animate-pulse delay-100' : 'h-2.5'}`} />
-              <span className={`w-0.5 bg-white rounded-full ${isAiSpeaking ? 'h-2 animate-pulse' : 'h-1'}`} />
-            </div>
-          </div>
-          <div className="min-w-0">
-            <h2 className="font-bold text-sm sm:text-base text-white truncate">
-              Aria &bull; TermJobs AI Assessor
-            </h2>
-            <div className="text-[11px] text-zinc-400 truncate">
-              {activeQuestion.phase || 'Technical delivery'} &bull; {activeQuestion.category || 'Competency assessment'}
-            </div>
-          </div>
-        </div>
-
-        {/* Minimalist Action Controls & Step Counter */}
-        <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
-          {/* Voice On/Off */}
-          <button
-            type="button"
-            onClick={() => {
-              if (isAiSpeaking && synthRef.current) {
-                synthRef.current.cancel();
-                updateAiSpeaking(false);
-              }
-              setTtsEnabled(!ttsEnabled);
-            }}
-            className="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-white/10 text-xs text-white font-medium flex items-center gap-1.5 transition cursor-pointer"
-          >
-            {ttsEnabled ? <Volume2 size={13} /> : <VolumeX size={13} className="text-zinc-500" />}
-            <span>{ttsEnabled ? 'Voice On' : 'Voice Off'}</span>
-          </button>
-
-          {/* Settings */}
-          {availableVoices.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setShowVoiceSettings(!showVoiceSettings)}
-              className="px-2.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-white/10 text-xs text-zinc-300 font-medium flex items-center gap-1.5 transition cursor-pointer"
-            >
-              <Sliders size={13} />
-              <span className="hidden xs:inline">Settings</span>
+              {currentViolation.violation_level === 'critical_warning'
+                ? 'Acknowledge & Resume Interview'
+                : 'I Understand & Return to Interview'}
             </button>
-          )}
-
-          {/* Replay */}
-          <button
-            type="button"
-            onClick={() => speakCurrentQuestion(activeQuestion.prompt)}
-            disabled={!ttsEnabled}
-            className="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-white/10 text-xs text-zinc-300 font-medium flex items-center gap-1.5 transition disabled:opacity-40 cursor-pointer"
-          >
-            <RotateCcw size={13} />
-            <span>Replay</span>
-          </button>
-
-          {/* 1 / 4 Step Counter */}
-          <div className="px-3 py-1.5 rounded-xl bg-zinc-900 border border-white/10 text-xs font-mono font-bold text-white">
-            {currentStep + 1} / {questions.length}
-          </div>
-        </div>
-      </div>
-
-      {/* Voice Selector Drawer (Dropdown) */}
-      {showVoiceSettings && (
-        <div className="absolute top-28 right-4 z-40 w-72 max-w-[calc(100%-2rem)] p-4 rounded-2xl bg-zinc-900/95 backdrop-blur-xl border border-zinc-700 shadow-2xl text-xs space-y-3">
-          <div className="flex items-center justify-between text-zinc-200 font-bold">
-            <span>Natural AI Voice Model</span>
-            <button
-              type="button"
-              onClick={() => setShowVoiceSettings(false)}
-              className="text-zinc-400 hover:text-white"
-            >
-              ✕
-            </button>
-          </div>
-          <p className="text-[11px] text-zinc-400">
-            Select high-clarity natural human synthesis voice:
-          </p>
-          <div className="max-h-48 overflow-y-auto space-y-1 pr-1">
-            {availableVoices.slice(0, 15).map((v) => (
-              <button
-                key={v.name}
-                type="button"
-                onClick={() => {
-                  setSelectedVoice(v);
-                  setShowVoiceSettings(false);
-                  speakCurrentQuestion('Hi! This is the natural interviewer voice for TermJobs.');
-                }}
-                className={`w-full text-left p-2 rounded-lg text-xs truncate transition flex items-center justify-between ${
-                  selectedVoice?.name === v.name
-                    ? 'bg-white text-zinc-950 font-bold'
-                    : 'text-zinc-300 hover:bg-zinc-800'
-                }`}
-              >
-                <span className="truncate">{v.name.replace(/(Google|Microsoft|Apple)/g, '').trim() || v.name}</span>
-                {selectedVoice?.name === v.name && <Check size={12} className="text-zinc-950 shrink-0 ml-1" />}
-              </button>
-            ))}
           </div>
         </div>
       )}
 
-      {/* 3. Main Stage: Question Box + Live Transcription Area */}
-      <div className="flex-1 flex flex-col min-h-0 space-y-3">
-        {/* Active Question Box */}
-        <div className="p-4 sm:p-5 shrink-0 rounded-2xl bg-zinc-900/60 border border-white/10 relative overflow-hidden shadow-xl">
-          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-            <span className="px-2.5 py-1 rounded-lg bg-zinc-800 border border-white/10 text-[10px] sm:text-[11px] font-bold text-zinc-300 tracking-wider uppercase">
-              {activeQuestion.title || `Phase ${currentStep + 1}`}
-            </span>
-            <span className="text-[11px] text-zinc-400 font-mono flex items-center gap-1.5 whitespace-nowrap bg-zinc-950 px-2.5 py-1 rounded-lg border border-white/10">
-              <Clock size={12} className="text-zinc-400" />
-              <span>Suggested: {activeQuestion.durationGuide}</span>
-            </span>
-          </div>
+      {/* 2. Conversation Timeline Stream Card */}
+      <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/80 p-5 shadow-xs flex-1 min-h-0 overflow-y-auto space-y-5 relative flex flex-col">
+        {turns.length === 0 ? (
+          <div className="flex-1 min-h-[220px] flex flex-col items-center justify-center p-6 text-center select-none animate-in fade-in duration-300 my-auto">
+            {/* Pulsing AI Avatar with animated ring */}
+            <div className="relative mb-4">
+              <div className="w-14 h-14 rounded-2xl bg-zinc-950 text-white flex items-center justify-center shadow-lg shadow-zinc-300/60">
+                <Sparkles className="w-7 h-7 text-white animate-spin" style={{ animationDuration: '3s' }} />
+              </div>
+              <div className="absolute -inset-2 rounded-3xl bg-zinc-400/20 animate-ping -z-10" style={{ animationDuration: '2s' }} />
+            </div>
 
-          <p className="text-sm sm:text-base md:text-lg font-semibold text-white leading-relaxed mb-3 tracking-tight">
-            {activeQuestion.prompt}
-          </p>
+            <h3 className="text-base font-bold text-slate-900 tracking-tight">
+              Preparing Your AI Interview...
+            </h3>
+            <p className="text-xs text-slate-500 max-w-sm mt-1.5 leading-relaxed">
+              Analyzing role criteria and your profile to personalize tailored technical questions. Question 1 will start shortly.
+            </p>
 
-          <div className="text-xs text-zinc-400 bg-zinc-950/80 p-3 rounded-xl border border-white/10 space-y-1">
-            <div className="font-bold text-zinc-200">STAR method Hint:</div>
-            <div className="leading-relaxed">{activeQuestion.hint}</div>
-          </div>
-        </div>
-
-        {/* Candidate Live Speech Capture Card with Monochrome Metrics */}
-        <div className="flex-1 flex flex-col rounded-2xl bg-zinc-900/40 border border-white/10 p-4 min-h-[160px] relative overflow-hidden shadow-inner">
-          {/* Header of speech box with live metrics */}
-          <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 mb-2.5 border-b border-white/[0.08] text-xs">
-            <div className="flex items-center gap-2">
-              <span className={`w-2 h-2 rounded-full ${isAiSpeaking ? 'bg-zinc-400 animate-pulse' : isMicOn && isSpeechListening ? 'bg-white animate-pulse' : 'bg-zinc-600'}`} />
-              <span className="font-semibold text-zinc-300 text-xs">
-                {isAiSpeaking ? 'Acoustic Filter: Ignoring Speaker Sound' : 'Candidate live transcription'}
+            {/* Micro status steps */}
+            <div className="mt-5 inline-flex flex-col sm:flex-row items-center gap-2 sm:gap-4 px-4 py-2 bg-slate-50 border border-slate-200/80 rounded-2xl text-[11px] text-slate-600 font-medium">
+              <span className="flex items-center gap-1.5 text-emerald-600">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                Resume matched
+              </span>
+              <span className="hidden sm:inline text-slate-300">·</span>
+              <span className="flex items-center gap-1.5 text-zinc-900 font-semibold animate-pulse">
+                <Sparkles className="w-3.5 h-3.5 text-zinc-800 animate-spin" />
+                Generating question rubrics
+              </span>
+              <span className="hidden sm:inline text-slate-300">·</span>
+              <span className="flex items-center gap-1.5 text-slate-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
+                Voice ready
               </span>
             </div>
-
-            {/* Real-time speech chips in clean monochrome */}
-            <div className="text-[11px] font-mono text-zinc-400 flex items-center gap-2">
-              <span>{liveMetrics.wordCount} words</span>
-              <span>&bull;</span>
-              <span>{liveMetrics.wpm} WPM</span>
-              <span>&bull;</span>
-              <span>Fillers: {liveMetrics.fillerCount}</span>
-            </div>
           </div>
+        ) : (
+          turns.map((turn, i) => {
+          const isAi = turn.role === 'interviewer';
+          const isTurnSpeaking = isSpeakingAi && activeSpeakingTurnIndex === i;
+          const displayTimestamp =
+            turn.timestamp ||
+            new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
 
-          {(captureWarning || answerError) && (
-            <div role="alert" className="mb-2.5 rounded-xl border border-white/20 bg-zinc-900 p-2.5 text-xs text-zinc-200">
-              {answerError || captureWarning}
-            </div>
-          )}
+          if (isAi) {
+            return (
+              <div key={i} className="relative pl-8 flex flex-col gap-1.5">
+                {/* Backgroundless TermJobs Logo */}
+                <img
+                  src={termjobsLogo}
+                  alt="TermJobs AI"
+                  className="absolute left-0 top-3.5 w-5 h-5 object-contain shrink-0"
+                />
 
-          {/* Quick Action Chips for Retry / Type */}
-          <div className="mb-2.5 flex items-center gap-2 text-xs">
-            <button
-              type="button"
-              disabled={!isMicOn || isAiSpeaking}
-              onClick={startSpeechRecognition}
-              className="px-2.5 py-1 rounded-lg bg-zinc-900 border border-white/10 text-[11px] text-zinc-300 hover:text-white transition disabled:opacity-40 cursor-pointer"
-            >
-              Retry Mic Recognition
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowTypedAnswer((value) => !value)}
-              className="px-2.5 py-1 rounded-lg bg-zinc-900 border border-white/10 text-[11px] text-zinc-300 hover:text-white transition cursor-pointer"
-            >
-              {showTypedAnswer ? 'Hide Typed Input' : 'Type Response Instead'}
-            </button>
-          </div>
+                {/* Interviewer Message Card */}
+                <div className="rounded-2xl bg-slate-50 border border-slate-200/90 p-4 sm:p-5 relative space-y-2 shadow-2xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-zinc-800 shrink-0" />
+                      <span className="text-xs font-bold text-slate-900">Interviewer</span>
+                      {turn.kind === 'follow_up' && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-zinc-200 text-zinc-800">
+                          Follow-up
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-xs text-slate-400 font-mono">
+                      {displayTimestamp}
+                    </span>
+                  </div>
 
-          {(showTypedAnswer || captureWarning) && (
-            <label className="mb-3 text-xs text-zinc-300 block">
-              <span className="text-[11px] text-zinc-400">Typed Response:</span>
-              <textarea
-                value={typedAnswer}
-                onChange={(event) => { setTypedAnswer(event.target.value); setAnswerError(''); }}
-                rows={3}
-                className="mt-1 w-full rounded-xl border border-white/15 bg-zinc-950 p-2.5 text-xs sm:text-sm text-white focus:outline-none focus:ring-1 focus:ring-white"
-                placeholder="Type your answer here..."
-              />
-            </label>
-          )}
+                  <p className="text-xs sm:text-sm text-slate-800 leading-relaxed font-normal whitespace-pre-line">
+                    {turn.text}
+                  </p>
 
-          {/* Spoken text area */}
-          <div className="flex-1 overflow-y-auto text-xs sm:text-sm text-zinc-200 leading-relaxed font-sans pr-1">
-            {currentAnswerText ? (
-              <p className="whitespace-pre-wrap">{currentAnswerText}</p>
-            ) : isAiSpeaking ? (
-              <div className="h-full flex flex-col items-center justify-center text-center text-zinc-400 text-xs py-4">
-                <Volume2 size={24} className="text-white mb-2 animate-pulse" />
-                <p className="font-semibold text-white">Aria is asking the question...</p>
-                <p className="text-[11px] text-zinc-500 mt-0.5 max-w-sm">
-                  Your speech will begin transcribing as soon as Aria finishes.
+                  <div className="pt-1 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => speakText(turn.text, i)}
+                      className={`text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer px-2.5 py-1 rounded-lg ${
+                        isTurnSpeaking
+                          ? 'bg-zinc-200 text-zinc-950 font-bold animate-pulse'
+                          : 'text-zinc-700 hover:text-zinc-950 hover:bg-zinc-200/60'
+                      }`}
+                    >
+                      <Volume2 className={`w-3.5 h-3.5 ${isTurnSpeaking ? 'animate-bounce text-zinc-900' : ''}`} />
+                      <span>{isTurnSpeaking ? 'Speaking...' : 'Read aloud'}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          // Candidate Turn (aligned to the right)
+          return (
+            <div key={i} className="flex justify-end items-start gap-2.5">
+              {/* Candidate Bubble */}
+              <div className="max-w-[85%] rounded-2xl bg-zinc-950 text-white p-4 shadow-sm space-y-1.5">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-white">{candidateName}</span>
+                    <span className="flex items-center gap-1 text-[11px] text-zinc-300 font-medium">
+                      <AudioLines className="w-3 h-3" />
+                      <span>{turn.inputMode === 'voice' ? 'Spoken' : 'Typed'}</span>
+                    </span>
+                  </div>
+                  <span className="text-xs text-zinc-400 font-mono">
+                    {displayTimestamp}
+                  </span>
+                </div>
+
+                <p className="text-xs sm:text-sm text-white font-normal leading-relaxed whitespace-pre-line">
+                  {turn.text}
                 </p>
               </div>
-            ) : (
-              <div className="h-full flex flex-col items-center justify-center text-center text-zinc-500 text-xs py-4">
-                <Mic size={24} className="text-zinc-400 mb-2 animate-bounce" />
-                <p className="text-zinc-300 font-medium">Speak naturally into your microphone...</p>
-                <p className="text-[11px] text-zinc-500 mt-0.5">
-                  {!isMicOn
-                    ? 'Microphone is currently muted.'
-                    : isSpeechListening && !speechError
-                    ? 'Speech engine is actively transcribing your response.'
-                    : 'Speech recognition standing by.'}
-                </p>
-              </div>
-            )}
-          </div>
 
-          {/* Clear speech button */}
-          {currentAnswerText && !isAiSpeaking && (
-            <button
-              type="button"
-              onClick={() => { setFinalizedSegments([]); setTypedAnswer(''); clearLiveTranscript?.(); }}
-              className="absolute bottom-2.5 right-3 text-[11px] text-zinc-400 hover:text-white underline cursor-pointer bg-zinc-950/80 px-2 py-1 rounded-md"
-            >
-              Clear & Re-speak
-            </button>
-          )}
+              {/* Candidate Avatar */}
+              <div className="w-7 h-7 rounded-full bg-zinc-900 text-white flex items-center justify-center shrink-0 mt-1 shadow-xs border border-zinc-700">
+                <User className="w-3.5 h-3.5" />
+              </div>
+            </div>
+          );
+        }))}
+
+        {isAiThinking && (
+          <div className="relative pl-8 flex items-center gap-3">
+            <img
+              src={termjobsLogo}
+              alt="TermJobs AI"
+              className="absolute left-0 top-3.5 w-5 h-5 object-contain shrink-0 animate-pulse"
+            />
+            <div className="rounded-2xl bg-slate-50 border border-slate-200 px-4 py-2.5 text-xs text-slate-700 flex items-center gap-2 shadow-2xs">
+              <Sparkles className="w-4 h-4 text-zinc-800 animate-spin" />
+              <span>Interviewer is thinking...</span>
+            </div>
+          </div>
+        )}
+
+        <div ref={turnsEndRef} />
+      </div>
+
+      {/* 3. Candidate Response Composer Card */}
+      <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/80 p-4 sm:p-5 shadow-xs shrink-0 space-y-3">
+        {micErrorMessage && (
+          <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-[11px] flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>{micErrorMessage}</span>
+          </div>
+        )}
+
+        {/* Header Row: Your Response | Voice Confidence | Microphone status | char count */}
+        <div className="flex items-center justify-between text-xs">
+          <span className="font-bold text-xs sm:text-sm text-slate-900">Your Response</span>
+          <div className="flex items-center gap-3 text-xs flex-wrap">
+            <span className="text-emerald-600 font-semibold flex items-center gap-1.5">
+              <AudioLines className="w-3.5 h-3.5" />
+              <span>Voice Confidence: {speechConfidence}%</span>
+            </span>
+            <span className="text-slate-600 font-medium flex items-center gap-1.5">
+              <Mic className="w-3.5 h-3.5 text-slate-500" />
+              <span>Microphone: {turns.length === 0 ? 'Standby' : isListening ? 'Active' : 'Paused'}</span>
+            </span>
+            <span className="text-slate-400">
+              {currentAnswer.length} / 6000 characters
+            </span>
+          </div>
         </div>
 
-        {/* 4. Primary White Action Pill Button */}
-        <div className="pt-1 shrink-0">
+        {/* Input Box: Circle Mic on Left + Textarea */}
+        <div className="rounded-2xl border border-slate-200 bg-[#F9FAFC] p-3 sm:p-3.5 flex items-start gap-3.5 shadow-2xs">
           <button
             type="button"
-            onClick={handleNextQuestion}
-            className="w-full py-3.5 bg-white hover:bg-zinc-200 text-zinc-950 font-extrabold text-sm rounded-full shadow-2xl transition-all active:scale-98 flex items-center justify-center gap-2 cursor-pointer"
+            onClick={turns.length > 0 ? toggleListening : undefined}
+            disabled={turns.length === 0}
+            className={`w-11 h-11 sm:w-12 sm:h-12 rounded-full flex items-center justify-center text-white transition-all shadow-md shrink-0 cursor-pointer active:scale-95 ${
+              turns.length === 0
+                ? 'bg-slate-300 cursor-not-allowed opacity-60'
+                : isListening
+                ? 'bg-red-500 animate-pulse ring-4 ring-red-200 hover:bg-red-600'
+                : 'bg-zinc-950 hover:bg-zinc-800'
+            }`}
+            title={turns.length === 0 ? 'Preparing question...' : isListening ? 'Click to Pause Microphone' : 'Click to Speak'}
           >
-            <span>
-              {currentStep < questions.length - 1
-                ? 'Next Question'
-                : 'Complete & Analyze Communication'}
-            </span>
-            <ArrowRight size={16} />
+            {turns.length === 0 ? (
+              <Sparkles className="w-5 h-5 animate-spin text-white" />
+            ) : isListening ? (
+              <Mic className="w-5 h-5 animate-pulse" />
+            ) : (
+              <MicOff className="w-5 h-5" />
+            )}
+          </button>
+
+          <textarea
+            rows={2}
+            value={currentAnswer}
+            disabled={turns.length === 0}
+            onChange={(e) => {
+              setCurrentAnswer(e.target.value);
+              baseTextRef.current = e.target.value;
+              currentAnswerRef.current = e.target.value;
+            }}
+            onPaste={(e) => e.preventDefault()}
+            onCopy={(e) => e.preventDefault()}
+            onCut={(e) => e.preventDefault()}
+            onDrop={(e) => e.preventDefault()}
+            onContextMenu={(e) => e.preventDefault()}
+            placeholder={turns.length === 0 ? 'Preparing Question 1...' : 'Spoken words appear here. You can also edit or type directly...'}
+            className="flex-1 bg-transparent border-none focus:outline-none text-slate-800 text-xs sm:text-sm resize-none placeholder:text-slate-400 leading-relaxed font-sans mt-1 disabled:opacity-60"
+          />
+        </div>
+
+        {/* Action Buttons Footer */}
+        <div className="flex items-center justify-between gap-3 pt-0.5">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <button
+              type="button"
+              onClick={handleSkipQuestion}
+              disabled={isAiThinking || turns.length === 0}
+              className="px-4 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-2xs disabled:opacity-50"
+            >
+              <SkipForward className="w-3.5 h-3.5" />
+              <span>Skip Question</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleRepeatQuestion}
+              disabled={isAiThinking || turns.length === 0}
+              className="px-4 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-2xs disabled:opacity-50"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Repeat Question</span>
+            </button>
+
+            {/* Voice / Text Mode Switcher */}
+            <div className="flex items-center gap-1 p-0.5 bg-slate-100 rounded-xl border border-slate-200/80">
+              <button
+                type="button"
+                onClick={() => {
+                  setInputMode('voice');
+                  startListening();
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
+                  inputMode === 'voice'
+                    ? 'bg-zinc-950 text-white font-bold shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/60 border border-transparent'
+                }`}
+              >
+                <AudioLines className="w-3.5 h-3.5" />
+                <span>Voice</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setInputMode('text');
+                  stopListening();
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
+                  inputMode === 'text'
+                    ? 'bg-zinc-950 text-white font-bold shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/60 border border-transparent'
+                }`}
+              >
+                <Type className="w-3.5 h-3.5" />
+                <span>Text</span>
+              </button>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleSubmitAnswer}
+            disabled={!currentAnswer.trim() || isAiThinking || turns.length === 0}
+            className="px-6 py-2.5 rounded-xl bg-zinc-950 hover:bg-zinc-800 text-white font-bold text-xs sm:text-sm shadow-md flex items-center gap-2 cursor-pointer transition active:scale-95 disabled:opacity-40"
+          >
+            {isAiThinking ? (
+              <>
+                <Sparkles className="w-3.5 h-3.5 animate-spin" />
+                <span>Evaluating...</span>
+              </>
+            ) : (
+              <>
+                <Send className="w-3.5 h-3.5" />
+                <span>Submit Answer</span>
+              </>
+            )}
           </button>
         </div>
       </div>

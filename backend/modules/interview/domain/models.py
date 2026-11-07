@@ -178,6 +178,9 @@ class InterviewRound(Model):
         "interview_questions": list,
         "recording_url": "",                    # streaming/download URL for interview video recording
         "recording_metadata": dict,             # {size_bytes, duration_seconds, format, uploaded_at}
+        "focus_monitoring_consent": dict,       # {consent_given: bool, timestamp: str, ip: str}
+        "focus_monitoring_events": list,        # list of {id, event_type, start_time, end_time, duration_seconds, question_number, incident_sequence, violation_level, created_at}
+        "focus_monitoring_summary": dict,       # {total_incidents: int, total_lost_duration_seconds: float, flagged_for_review: bool, last_incident_at: str, warning_history: list}
         "expires_at": None,                     # Link expiration timestamp (10 hours from creation)
         "created_by": "",
         "created_at": _utcnow,
@@ -220,6 +223,9 @@ class InterviewRound(Model):
     interview_questions = Column("interview_questions")
     recording_url = Column("recording_url")
     recording_metadata = Column("recording_metadata")
+    focus_monitoring_consent = Column("focus_monitoring_consent")
+    focus_monitoring_events = Column("focus_monitoring_events")
+    focus_monitoring_summary = Column("focus_monitoring_summary")
     expires_at = Column("expires_at")
     created_by = Column("created_by")
     created_at = Column("created_at")
@@ -337,4 +343,66 @@ class CompanyInterviewRequest(BaseModel):
 
 class SaveTranscriptRequest(BaseModel):
     transcript_turns: List[Dict[str, Any]]
+
+
+class InterviewFocusEvent(Model):
+    __tablename__ = "interview_focus_events"
+
+    _fields: ClassVar[dict[str, object]] = {
+        "id": _uuid,
+        "round_id": "",
+        "tenant_id": "",
+        "requisition_id": "",
+        "candidate_submission_id": "",
+        "candidate_name": "",
+        "candidate_email": "",
+        "event_type": "tab_hidden",            # "tab_hidden" | "window_blur" | "fullscreen_exit"
+        "incident_sequence": 1,
+        "question_number": 1,
+        "start_time": "",
+        "end_time": "",
+        "duration_seconds": 0.0,
+        "violation_level": "warning",          # "warning" | "strong_warning" | "critical_warning"
+        "client_event_id": "",
+        "metadata": dict,
+        "created_at": _utcnow,
+    }
+
+    id = Column("id")
+    round_id = Column("round_id")
+    tenant_id = Column("tenant_id")
+    requisition_id = Column("requisition_id")
+    candidate_submission_id = Column("candidate_submission_id")
+    candidate_name = Column("candidate_name")
+    candidate_email = Column("candidate_email")
+    event_type = Column("event_type")
+    incident_sequence = Column("incident_sequence")
+    question_number = Column("question_number")
+    start_time = Column("start_time")
+    end_time = Column("end_time")
+    duration_seconds = Column("duration_seconds")
+    violation_level = Column("violation_level")
+    client_event_id = Column("client_event_id")
+    metadata = Column("metadata")
+    created_at = Column("created_at")
+
+
+class FocusConsentRequest(BaseModel):
+    candidate_token: Optional[str] = None
+    consent: bool = True
+    timestamp: Optional[str] = None
+
+
+class RecordFocusEventRequest(BaseModel):
+    candidate_token: Optional[str] = None
+    event_type: str = "tab_hidden"  # "tab_hidden" | "window_blur" | "fullscreen_exit"
+    incident_sequence: int = 1
+    question_number: int = 1
+    start_time: str
+    end_time: str
+    duration_seconds: float = 0.0
+    violation_level: Optional[str] = "warning"
+    client_event_id: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+
 

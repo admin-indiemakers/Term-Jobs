@@ -9,9 +9,9 @@ const lazy = importer => reactLazy(() => loadRoute(importer));
 import { motion } from 'framer-motion';
 import { useAuth } from './context/AuthContext';
 import { CandidateAuthProvider } from './context/CandidateAuthContext';
-import AuthPage from './pages/AuthPage';
 import LandingPage from './pages/LandingPage';
-import OpenRolesPage from './pages/OpenRolesPage';
+const AuthPage = lazyWithRetry(() => import('./pages/AuthPage'));
+const OpenRolesPage = lazyWithRetry(() => import('./pages/OpenRolesPage'));
 import DashboardLayout from './pages/DashboardLayout';
 import { directorRedirect } from './utils/directorAccess';
 import FieldRequirementIndicators from './components/FieldRequirementIndicators';
@@ -19,6 +19,8 @@ import { TermJobsLoader } from './components/TermJobsLoader';
 import { lazyWithRetry } from './utils/chunkRecovery';
 
 // Lazy-loaded routes with auto-retry and chunk error recovery (prevents chunk load failure after deployments)
+const FindJobsPage = lazyWithRetry(() => import('./pages/FindJobsPage'));
+const ResourcesTrustPage = lazyWithRetry(() => import('./pages/ResourcesTrustPage'));
 const JobDetailPage = lazyWithRetry(() => import('./pages/JobDetailPage'));
 const JobCategoryLandingPage = lazyWithRetry(() => import('./pages/JobCategoryLandingPage'));
 const EmployerLandingPage = lazyWithRetry(() => import('./pages/EmployerLandingPage'));
@@ -232,7 +234,11 @@ function HorizontalTransitionLayout() {
           className="absolute inset-0 w-screen h-dvh overflow-y-auto overflow-x-hidden"
           style={{ left: '-100vw' }}
         >
-          {hasVisitedLogin && <AuthPage />}
+          {hasVisitedLogin && (
+            <Suspense fallback={<FullScreenLoader />}>
+              <AuthPage />
+            </Suspense>
+          )}
         </div>
 
         {/* Center Slot: Landing Page (at 0vw) */}
@@ -249,7 +255,11 @@ function HorizontalTransitionLayout() {
           className="absolute inset-0 w-screen h-dvh overflow-y-auto overflow-x-hidden"
           style={{ left: '100vw' }}
         >
-          {hasVisitedRoles && <OpenRolesPage enabled={isRoles} />}
+          {hasVisitedRoles && (
+            <Suspense fallback={<FullScreenLoader />}>
+              <OpenRolesPage enabled={isRoles} />
+            </Suspense>
+          )}
         </div>
       </motion.div>
     </div>
@@ -269,6 +279,9 @@ export default function App() {
           <Route path="/platform-rules" element={<LegalPage type="rules" />} />
           
           {/* Public SEO & Content Routes */}
+          <Route path="/find-jobs" element={<FindJobsPage />} />
+          <Route path="/resources" element={<ResourcesTrustPage />} />
+          <Route path="/resources-trust" element={<ResourcesTrustPage />} />
           <Route path="/jobs/contract" element={<JobCategoryLandingPage forcedCategory="contract" />} />
           <Route path="/jobs/temporary" element={<JobCategoryLandingPage forcedCategory="temporary" />} />
           <Route path="/jobs/remote-contract" element={<JobCategoryLandingPage forcedCategory="remote-contract" />} />

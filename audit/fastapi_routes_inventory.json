@@ -1,0 +1,831 @@
+[
+  {
+    "path": "/openapi.json",
+    "methods": [
+      "HEAD",
+      "GET"
+    ],
+    "name": "openapi"
+  },
+  {
+    "path": "/docs",
+    "methods": [
+      "HEAD",
+      "GET"
+    ],
+    "name": "swagger_ui_html"
+  },
+  {
+    "path": "/docs/oauth2-redirect",
+    "methods": [
+      "HEAD",
+      "GET"
+    ],
+    "name": "swagger_ui_redirect"
+  },
+  {
+    "path": "/redoc",
+    "methods": [
+      "HEAD",
+      "GET"
+    ],
+    "name": "redoc_html"
+  },
+  {
+    "path": "/api/health",
+    "methods": [
+      "GET"
+    ],
+    "name": "health_check"
+  },
+  {
+    "path": "/health",
+    "methods": [
+      "GET"
+    ],
+    "name": "health_check"
+  },
+  {
+    "path": null,
+    "methods": null,
+    "name": null
+  },
+  {
+    "path": null,
+    "methods": null,
+    "name": null
+  },
+  {
+    "path": null,
+    "methods": null,
+    "name": null
+  },
+  {
+    "path": null,
+    "methods": null,
+    "name": null
+  },
+  {
+    "path": null,
+    "methods": null,
+    "name": null
+  },
+  {
+    "path": null,
+    "methods": null,
+    "name": null
+  },
+  {
+    "path": null,
+    "methods": null,
+    "name": null
+  },
+  {
+    "path": null,
+    "methods": null,
+    "name": null
+  },
+  {
+    "path": null,
+    "methods": null,
+    "name": null
+  },
+  {
+    "path": null,
+    "methods": null,
+    "name": null
+  },
+  {
+    "path": null,
+    "methods": null,
+    "name": null
+  },
+  {
+    "path": null,
+    "methods": null,
+    "name": null
+  },
+  {
+    "path": null,
+    "methods": null,
+    "name": null
+  },
+  {
+    "path": null,
+    "methods": null,
+    "name": null
+  },
+  {
+    "path": null,
+    "methods": null,
+    "name": null
+  },
+  {
+    "path": null,
+    "methods": null,
+    "name": null
+  },
+  {
+    "path": null,
+    "methods": null,
+    "name": null
+  },
+  {
+    "path": null,
+    "methods": null,
+    "name": null
+  },
+  {
+    "path": null,
+    "methods": null,
+    "name": null
+  },
+  {
+    "path": null,
+    "methods": null,
+    "name": null
+  },
+  {
+    "path": null,
+    "methods": null,
+    "name": null
+  },
+  {
+    "path": null,
+    "methods": null,
+    "name": null
+  },
+  {
+    "path": null,
+    "methods": null,
+    "name": null
+  },
+  {
+    "path": null,
+    "methods": null,
+    "name": null
+  },
+  {
+    "path": null,
+    "methods": null,
+    "name": null
+  },
+  {
+    "path": null,
+    "methods": null,
+    "name": null
+  },
+  {
+    "path": null,
+    "methods": null,
+    "name": null
+  },
+  {
+    "path": null,
+    "methods": null,
+    "name": null
+  },
+  {
+    "path": null,
+    "methods": null,
+    "name": null
+  },
+  {
+    "path": null,
+    "methods": null,
+    "name": null
+  },
+  {
+    "path": null,
+    "methods": null,
+    "name": null
+  },
+  {
+    "path": null,
+    "methods": null,
+    "name": null
+  },
+  {
+    "path": "/api/company-profiles",
+    "methods": [
+      "POST"
+    ],
+    "name": "create_company_profile"
+  },
+  {
+    "path": "/company-profiles",
+    "methods": [
+      "POST"
+    ],
+    "name": "create_company_profile"
+  },
+  {
+    "path": "/api/company-profiles",
+    "methods": [
+      "GET"
+    ],
+    "name": "list_company_profiles"
+  },
+  {
+    "path": "/company-profiles",
+    "methods": [
+      "GET"
+    ],
+    "name": "list_company_profiles"
+  },
+  {
+    "path": "/api/settings/candidate-limit",
+    "methods": [
+      "GET"
+    ],
+    "name": "get_candidate_limit"
+  },
+  {
+    "path": "/api/settings/candidate-limit",
+    "methods": [
+      "PUT"
+    ],
+    "name": "set_candidate_limit"
+  },
+  {
+    "path": "/api/templates/form",
+    "methods": [
+      "POST"
+    ],
+    "name": "create_template_from_form"
+  },
+  {
+    "path": "/templates/form",
+    "methods": [
+      "POST"
+    ],
+    "name": "create_template_from_form"
+  },
+  {
+    "path": "/api/templates/create",
+    "methods": [
+      "POST"
+    ],
+    "name": "create_template_from_form"
+  },
+  {
+    "path": "/templates/create",
+    "methods": [
+      "POST"
+    ],
+    "name": "create_template_from_form"
+  },
+  {
+    "path": "/api/templates/seed-presets",
+    "methods": [
+      "POST"
+    ],
+    "name": "seed_role_templates_preset"
+  },
+  {
+    "path": "/templates/seed-presets",
+    "methods": [
+      "POST"
+    ],
+    "name": "seed_role_templates_preset"
+  },
+  {
+    "path": "/api/templates",
+    "methods": [
+      "POST"
+    ],
+    "name": "upload_template"
+  },
+  {
+    "path": "/templates",
+    "methods": [
+      "POST"
+    ],
+    "name": "upload_template"
+  },
+  {
+    "path": "/api/templates",
+    "methods": [
+      "GET"
+    ],
+    "name": "list_templates"
+  },
+  {
+    "path": "/templates",
+    "methods": [
+      "GET"
+    ],
+    "name": "list_templates"
+  },
+  {
+    "path": "/api/templates/{template_id}",
+    "methods": [
+      "DELETE"
+    ],
+    "name": "delete_template"
+  },
+  {
+    "path": "/templates/{template_id}",
+    "methods": [
+      "DELETE"
+    ],
+    "name": "delete_template"
+  },
+  {
+    "path": "/api/requisitions",
+    "methods": [
+      "POST"
+    ],
+    "name": "create_requisition"
+  },
+  {
+    "path": "/requisitions",
+    "methods": [
+      "POST"
+    ],
+    "name": "create_requisition"
+  },
+  {
+    "path": "/api/hiring-manager/counts",
+    "methods": [
+      "GET"
+    ],
+    "name": "hiring_manager_counts"
+  },
+  {
+    "path": "/api/requisitions",
+    "methods": [
+      "GET"
+    ],
+    "name": "list_requisitions"
+  },
+  {
+    "path": "/requisitions",
+    "methods": [
+      "GET"
+    ],
+    "name": "list_requisitions"
+  },
+  {
+    "path": "/api/requisitions/overview-metrics",
+    "methods": [
+      "GET"
+    ],
+    "name": "get_requisitions_overview_metrics"
+  },
+  {
+    "path": "/requisitions/overview-metrics",
+    "methods": [
+      "GET"
+    ],
+    "name": "get_requisitions_overview_metrics"
+  },
+  {
+    "path": "/api/public/requisitions",
+    "methods": [
+      "GET"
+    ],
+    "name": "list_public_requisitions"
+  },
+  {
+    "path": "/api/public/requisitions/{requisition_id}",
+    "methods": [
+      "GET"
+    ],
+    "name": "get_public_requisition"
+  },
+  {
+    "path": "/api/public/requisitions/{requisition_id}/apply",
+    "methods": [
+      "POST"
+    ],
+    "name": "apply_to_requisition"
+  },
+  {
+    "path": "/api/public/talent-pool/join",
+    "methods": [
+      "POST"
+    ],
+    "name": "register_public_candidate"
+  },
+  {
+    "path": "/api/public/candidate/register",
+    "methods": [
+      "POST"
+    ],
+    "name": "register_public_candidate"
+  },
+  {
+    "path": "/api/superadmin/candidate-pool",
+    "methods": [
+      "GET"
+    ],
+    "name": "get_superadmin_candidate_pool"
+  },
+  {
+    "path": "/api/superadmin/candidate-pool",
+    "methods": [
+      "POST"
+    ],
+    "name": "add_superadmin_candidate"
+  },
+  {
+    "path": "/api/superadmin/candidate-pool/{candidate_id}",
+    "methods": [
+      "DELETE"
+    ],
+    "name": "delete_superadmin_candidate"
+  },
+  {
+    "path": "/api/superadmin/candidate-management",
+    "methods": [
+      "GET"
+    ],
+    "name": "get_superadmin_candidate_management"
+  },
+  {
+    "path": "/api/superadmin/candidate-management/simulate-selection",
+    "methods": [
+      "POST"
+    ],
+    "name": "simulate_candidate_selection"
+  },
+  {
+    "path": "/api/superadmin/candidate-management/{selection_id}",
+    "methods": [
+      "DELETE"
+    ],
+    "name": "delete_candidate_selection"
+  },
+  {
+    "path": "/api/public/outreach/{token}/respond",
+    "methods": [
+      "POST"
+    ],
+    "name": "candidate_outreach_respond"
+  },
+  {
+    "path": "/api/public/outreach/{token}/respond",
+    "methods": [
+      "GET"
+    ],
+    "name": "candidate_outreach_respond"
+  },
+  {
+    "path": "/api/superadmin/outreach/stats",
+    "methods": [
+      "GET"
+    ],
+    "name": "get_superadmin_outreach_stats"
+  },
+  {
+    "path": "/api/superadmin/outreach/requisitions",
+    "methods": [
+      "GET"
+    ],
+    "name": "get_superadmin_outreach_requisitions"
+  },
+  {
+    "path": "/api/superadmin/outreach/requisition/{requisition_id}",
+    "methods": [
+      "GET"
+    ],
+    "name": "get_superadmin_requisition_outreach"
+  },
+  {
+    "path": "/api/superadmin/outreach/trigger/{requisition_id}",
+    "methods": [
+      "POST"
+    ],
+    "name": "trigger_superadmin_requisition_outreach"
+  },
+  {
+    "path": "/api/superadmin/outreach/send-test-telegram",
+    "methods": [
+      "POST"
+    ],
+    "name": "send_test_telegram_alert_endpoint"
+  },
+  {
+    "path": "/api/superadmin/outreach/settings",
+    "methods": [
+      "GET"
+    ],
+    "name": "get_superadmin_outreach_settings"
+  },
+  {
+    "path": "/api/superadmin/outreach/settings",
+    "methods": [
+      "POST"
+    ],
+    "name": "update_superadmin_outreach_settings"
+  },
+  {
+    "path": "/api/superadmin/outreach/activity",
+    "methods": [
+      "GET"
+    ],
+    "name": "get_superadmin_outreach_activity"
+  },
+  {
+    "path": "/api/telegram/status",
+    "methods": [
+      "GET"
+    ],
+    "name": "get_telegram_status_endpoint"
+  },
+  {
+    "path": "/api/telegram/webhook",
+    "methods": [
+      "POST"
+    ],
+    "name": "telegram_webhook_endpoint"
+  },
+  {
+    "path": "/api/telegram/send-test",
+    "methods": [
+      "POST"
+    ],
+    "name": "telegram_send_test_endpoint"
+  },
+  {
+    "path": "/api/requisitions/{requisition_id}",
+    "methods": [
+      "GET"
+    ],
+    "name": "get_requisition"
+  },
+  {
+    "path": "/requisitions/{requisition_id}",
+    "methods": [
+      "GET"
+    ],
+    "name": "get_requisition"
+  },
+  {
+    "path": "/requisitions/{requisition_id}/start",
+    "methods": [
+      "POST"
+    ],
+    "name": "start_requisition_flow"
+  },
+  {
+    "path": "/requisitions/{requisition_id}/answer",
+    "methods": [
+      "POST"
+    ],
+    "name": "answer_intake_question"
+  },
+  {
+    "path": "/requisitions/{requisition_id}/refine",
+    "methods": [
+      "POST"
+    ],
+    "name": "refine_requisition_jd"
+  },
+  {
+    "path": "/api/requisitions/{requisition_id}",
+    "methods": [
+      "PATCH"
+    ],
+    "name": "update_requisition_role"
+  },
+  {
+    "path": "/requisitions/{requisition_id}",
+    "methods": [
+      "PATCH"
+    ],
+    "name": "update_requisition_role"
+  },
+  {
+    "path": "/api/requisitions/{requisition_id}/approve",
+    "methods": [
+      "POST"
+    ],
+    "name": "approve_requisition"
+  },
+  {
+    "path": "/requisitions/{requisition_id}/approve",
+    "methods": [
+      "POST"
+    ],
+    "name": "approve_requisition"
+  },
+  {
+    "path": "/api/requisitions/{requisition_id}/director-approve",
+    "methods": [
+      "POST"
+    ],
+    "name": "director_approve_requisition"
+  },
+  {
+    "path": "/requisitions/{requisition_id}/director-approve",
+    "methods": [
+      "POST"
+    ],
+    "name": "director_approve_requisition"
+  },
+  {
+    "path": "/api/requisitions/{requisition_id}/reject",
+    "methods": [
+      "POST"
+    ],
+    "name": "reject_requisition"
+  },
+  {
+    "path": "/requisitions/{requisition_id}/reject",
+    "methods": [
+      "POST"
+    ],
+    "name": "reject_requisition"
+  },
+  {
+    "path": "/api/requisitions/{requisition_id}/submit-for-approval",
+    "methods": [
+      "POST"
+    ],
+    "name": "submit_requisition_for_director_approval_route"
+  },
+  {
+    "path": "/requisitions/{requisition_id}/submit-for-approval",
+    "methods": [
+      "POST"
+    ],
+    "name": "submit_requisition_for_director_approval_route"
+  },
+  {
+    "path": "/api/requisitions/{requisition_id}/publish",
+    "methods": [
+      "POST"
+    ],
+    "name": "publish_requisition"
+  },
+  {
+    "path": "/requisitions/{requisition_id}/publish",
+    "methods": [
+      "POST"
+    ],
+    "name": "publish_requisition"
+  },
+  {
+    "path": "/api/requisitions/{requisition_id}/shortlist/status",
+    "methods": [
+      "GET"
+    ],
+    "name": "get_requisition_shortlist_status_endpoint"
+  },
+  {
+    "path": "/requisitions/{requisition_id}/shortlist/status",
+    "methods": [
+      "GET"
+    ],
+    "name": "get_requisition_shortlist_status_endpoint"
+  },
+  {
+    "path": "/api/requisitions/{requisition_id}/shortlist/send-now",
+    "methods": [
+      "POST"
+    ],
+    "name": "send_requisition_shortlist_now_endpoint"
+  },
+  {
+    "path": "/requisitions/{requisition_id}/shortlist/send-now",
+    "methods": [
+      "POST"
+    ],
+    "name": "send_requisition_shortlist_now_endpoint"
+  },
+  {
+    "path": "/api/requisitions/{requisition_id}/shortlist/generate",
+    "methods": [
+      "POST"
+    ],
+    "name": "generate_requisition_shortlist_endpoint"
+  },
+  {
+    "path": "/requisitions/{requisition_id}/shortlist/generate",
+    "methods": [
+      "POST"
+    ],
+    "name": "generate_requisition_shortlist_endpoint"
+  },
+  {
+    "path": "/candidates/{candidate_id}/offer-letter",
+    "methods": [
+      "GET"
+    ],
+    "name": "get_candidate_offer_letter_endpoint"
+  },
+  {
+    "path": "/api/candidates/{candidate_id}/offer-letter",
+    "methods": [
+      "GET"
+    ],
+    "name": "get_candidate_offer_letter_endpoint"
+  },
+  {
+    "path": "/candidates/{candidate_id}/offer-letter",
+    "methods": [
+      "POST"
+    ],
+    "name": "save_candidate_offer_letter_endpoint"
+  },
+  {
+    "path": "/api/candidates/{candidate_id}/offer-letter",
+    "methods": [
+      "POST"
+    ],
+    "name": "save_candidate_offer_letter_endpoint"
+  },
+  {
+    "path": "/candidates/{candidate_id}/offer-letter/send",
+    "methods": [
+      "POST"
+    ],
+    "name": "send_candidate_offer_letter_endpoint"
+  },
+  {
+    "path": "/api/candidates/{candidate_id}/offer-letter/send",
+    "methods": [
+      "POST"
+    ],
+    "name": "send_candidate_offer_letter_endpoint"
+  },
+  {
+    "path": "/api/requisitions/{requisition_id}/close",
+    "methods": [
+      "POST"
+    ],
+    "name": "close_requisition"
+  },
+  {
+    "path": "/requisitions/{requisition_id}/close",
+    "methods": [
+      "POST"
+    ],
+    "name": "close_requisition"
+  },
+  {
+    "path": "/api/requisitions/{requisition_id}/reset",
+    "methods": [
+      "POST"
+    ],
+    "name": "reset_requisition"
+  },
+  {
+    "path": "/requisitions/{requisition_id}/reset",
+    "methods": [
+      "POST"
+    ],
+    "name": "reset_requisition"
+  },
+  {
+    "path": "/api/requisitions/{requisition_id}",
+    "methods": [
+      "DELETE"
+    ],
+    "name": "delete_requisition"
+  },
+  {
+    "path": "/requisitions/{requisition_id}",
+    "methods": [
+      "DELETE"
+    ],
+    "name": "delete_requisition"
+  },
+  {
+    "path": "/upload/jd-document",
+    "methods": [
+      "POST"
+    ],
+    "name": "upload_jd_document"
+  },
+  {
+    "path": "/",
+    "methods": [
+      "GET"
+    ],
+    "name": "index"
+  },
+  {
+    "path": "/ping",
+    "methods": [
+      "GET"
+    ],
+    "name": "health"
+  },
+  {
+    "path": "/api/ping",
+    "methods": [
+      "GET"
+    ],
+    "name": "health"
+  },
+  {
+    "path": "/api/index.py",
+    "methods": [
+      "GET"
+    ],
+    "name": "health"
+  }
+]

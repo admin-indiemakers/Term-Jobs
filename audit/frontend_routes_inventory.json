@@ -1,0 +1,802 @@
+[
+  {
+    "path": "/candidate-pool/added",
+    "element": null,
+    "raw": "path=\"/candidate-pool/added\" element={<CandidatePoolAdded /"
+  },
+  {
+    "path": "/privacy-policy",
+    "element": null,
+    "raw": "path=\"/privacy-policy\" element={<LegalPage type=\"privacy\" /"
+  },
+  {
+    "path": "/terms-and-conditions",
+    "element": null,
+    "raw": "path=\"/terms-and-conditions\" element={<LegalPage type=\"terms\" /"
+  },
+  {
+    "path": "/platform-rules",
+    "element": null,
+    "raw": "path=\"/platform-rules\" element={<LegalPage type=\"rules\" /"
+  },
+  {
+    "path": "/find-jobs",
+    "element": null,
+    "raw": "path=\"/find-jobs\" element={<FindJobsPage /"
+  },
+  {
+    "path": "/resources",
+    "element": null,
+    "raw": "path=\"/resources\" element={<ResourcesTrustPage /"
+  },
+  {
+    "path": "/resources-trust",
+    "element": null,
+    "raw": "path=\"/resources-trust\" element={<ResourcesTrustPage /"
+  },
+  {
+    "path": "/jobs/contract",
+    "element": null,
+    "raw": "path=\"/jobs/contract\" element={<JobCategoryLandingPage forcedCategory=\"contract\" /"
+  },
+  {
+    "path": "/jobs/temporary",
+    "element": null,
+    "raw": "path=\"/jobs/temporary\" element={<JobCategoryLandingPage forcedCategory=\"temporary\" /"
+  },
+  {
+    "path": "/jobs/remote-contract",
+    "element": null,
+    "raw": "path=\"/jobs/remote-contract\" element={<JobCategoryLandingPage forcedCategory=\"remote-contract\" /"
+  },
+  {
+    "path": "/jobs/:slugOrId",
+    "element": null,
+    "raw": "path=\"/jobs/:slugOrId\" element={<JobDetailPage /"
+  },
+  {
+    "path": "/job/:slugOrId",
+    "element": null,
+    "raw": "path=\"/job/:slugOrId\" element={<JobDetailPage /"
+  },
+  {
+    "path": "/employers",
+    "element": null,
+    "raw": "path=\"/employers\" element={<EmployerLandingPage /"
+  },
+  {
+    "path": "/solutions/contract-staffing",
+    "element": null,
+    "raw": "path=\"/solutions/contract-staffing\" element={<EmployerLandingPage /"
+  },
+  {
+    "path": "/career-guides/temporary-vs-contract-jobs",
+    "element": null,
+    "raw": "path=\"/career-guides/temporary-vs-contract-jobs\" element={<TemporaryVsContractGuidePage /"
+  },
+  {
+    "path": "/join/hiring-manager",
+    "element": null,
+    "raw": "path=\"/join/hiring-manager\" element={<JoinHiringManager /"
+  },
+  {
+    "path": "/invite/hiring-manager",
+    "element": null,
+    "raw": "path=\"/invite/hiring-manager\" element={<JoinHiringManager /"
+  },
+  {
+    "path": "/join/director",
+    "element": null,
+    "raw": "path=\"/join/director\" element={<JoinDirector /"
+  },
+  {
+    "path": "/invite/director",
+    "element": null,
+    "raw": "path=\"/invite/director\" element={<JoinDirector /"
+  },
+  {
+    "path": "/join/procurement",
+    "element": null,
+    "raw": "path=\"/join/procurement\" element={<JoinProcurement /"
+  },
+  {
+    "path": "/invite/procurement",
+    "element": null,
+    "raw": "path=\"/invite/procurement\" element={<JoinProcurement /"
+  },
+  {
+    "path": "/join/finance",
+    "element": null,
+    "raw": "path=\"/join/finance\" element={<JoinFinance /"
+  },
+  {
+    "path": "/invite/finance",
+    "element": null,
+    "raw": "path=\"/invite/finance\" element={<JoinFinance /"
+  },
+  {
+    "path": null,
+    "element": null,
+    "raw": "element={<HorizontalTransitionLayout /"
+  },
+  {
+    "path": "/",
+    "element": "null",
+    "raw": "path=\"/\" element={null} /"
+  },
+  {
+    "path": "/open-roles",
+    "element": "null",
+    "raw": "path=\"/open-roles\" element={null} /"
+  },
+  {
+    "path": "/openroles",
+    "element": "null",
+    "raw": "path=\"/openroles\" element={null} /"
+  },
+  {
+    "path": "/jobs",
+    "element": "null",
+    "raw": "path=\"/jobs\" element={null} /"
+  },
+  {
+    "path": "/careers",
+    "element": "null",
+    "raw": "path=\"/careers\" element={null} /"
+  },
+  {
+    "path": "/apply",
+    "element": "null",
+    "raw": "path=\"/apply\" element={null} /"
+  },
+  {
+    "path": "/candidate/login",
+    "element": "null",
+    "raw": "path=\"/candidate/login\" element={null} /"
+  },
+  {
+    "path": "/candidate-login",
+    "element": "null",
+    "raw": "path=\"/candidate-login\" element={null} /"
+  },
+  {
+    "path": "/candidate/profile-login",
+    "element": "null",
+    "raw": "path=\"/candidate/profile-login\" element={null} /"
+  },
+  {
+    "path": "/login",
+    "element": "null",
+    "raw": "path=\"/login\" element={null} /"
+  },
+  {
+    "path": "/signin",
+    "element": "null",
+    "raw": "path=\"/signin\" element={null} /"
+  },
+  {
+    "path": "/candidate/telegram-login",
+    "element": null,
+    "raw": "path=\"/candidate/telegram-login\" element={<CandidateTelegramLogin /"
+  },
+  {
+    "path": "/hiring-manager/telegram-login",
+    "element": null,
+    "raw": "path=\"/hiring-manager/telegram-login\" element={<HiringManagerTelegramLogin /"
+  },
+  {
+    "path": "/interview/login",
+    "element": null,
+    "raw": "path=\"/interview/login\" element={<CandidateInterviewLogin /"
+  },
+  {
+    "path": "/interview/candidate/login",
+    "element": null,
+    "raw": "path=\"/interview/candidate/login\" element={<CandidateInterviewLogin /"
+  },
+  {
+    "path": "/interview/candidate",
+    "element": null,
+    "raw": "path=\"/interview/candidate\" element={<CandidateInterviewPortal /"
+  },
+  {
+    "path": "/interview/staff",
+    "element": null,
+    "raw": "path=\"/interview/staff\" element={<InterviewerStaffPortal /"
+  },
+  {
+    "path": "/interview/room/:roundId",
+    "element": null,
+    "raw": "path=\"/interview/room/:roundId\" element={<InterviewMeetingRoomPage /"
+  },
+  {
+    "path": "/interview/ai/:roundId",
+    "element": null,
+    "raw": "path=\"/interview/ai/:roundId\" element={<InterviewMeetingRoomPage /"
+  },
+  {
+    "path": "/interview-panel/:candidateId",
+    "element": null,
+    "raw": "path=\"/interview-panel/:candidateId\" element={<RequireAuth"
+  },
+  {
+    "path": "/interview-panel",
+    "element": null,
+    "raw": "path=\"/interview-panel\" element={<RequireAuth"
+  },
+  {
+    "path": "/requisitions/:reqId/candidates/:candidateId/interview",
+    "element": null,
+    "raw": "path=\"/requisitions/:reqId/candidates/:candidateId/interview\" element={<RequireAuth"
+  },
+  {
+    "path": "/admin/login",
+    "element": null,
+    "raw": "path=\"/admin/login\" element={<SuperAdminLogin /"
+  },
+  {
+    "path": "/director/login",
+    "element": null,
+    "raw": "path=\"/director/login\" element={<DirectorLogin /"
+  },
+  {
+    "path": "/",
+    "element": null,
+    "raw": "path=\"/\" element={<LandingPage /"
+  },
+  {
+    "path": "/dashboard",
+    "element": null,
+    "raw": "path=\"/dashboard\"\r\n            element={\r\n              <RequireAuth"
+  },
+  {
+    "path": "(index)",
+    "element": null,
+    "raw": "index element={<DashboardIndex /"
+  },
+  {
+    "path": "interviews",
+    "element": null,
+    "raw": "path=\"interviews\" element={<HiringManagerInterviews /"
+  },
+  {
+    "path": "hiring-manager",
+    "element": null,
+    "raw": "path=\"hiring-manager\" element={<HiringManagerAuraChat /"
+  },
+  {
+    "path": "hiring-manager/legacy",
+    "element": null,
+    "raw": "path=\"hiring-manager/legacy\" element={<HiringManagerDashboard /"
+  },
+  {
+    "path": "hiring-manager/chat",
+    "element": null,
+    "raw": "path=\"hiring-manager/chat\" element={<HiringManagerChat /"
+  },
+  {
+    "path": "requisitions",
+    "element": null,
+    "raw": "path=\"requisitions\" element={<RequisitionRouteGuard"
+  },
+  {
+    "path": "requisitions/published",
+    "element": null,
+    "raw": "path=\"requisitions/published\" element={<RequisitionRouteGuard"
+  },
+  {
+    "path": "requisitions/pending-approval",
+    "element": null,
+    "raw": "path=\"requisitions/pending-approval\" element={<RequisitionRouteGuard"
+  },
+  {
+    "path": "requisitions/pending",
+    "element": null,
+    "raw": "path=\"requisitions/pending\" element={<RequisitionRouteGuard"
+  },
+  {
+    "path": "requisitions/drafted",
+    "element": null,
+    "raw": "path=\"requisitions/drafted\" element={<RequisitionRouteGuard"
+  },
+  {
+    "path": "requisitions/completed",
+    "element": null,
+    "raw": "path=\"requisitions/completed\" element={<RequisitionRouteGuard"
+  },
+  {
+    "path": "requisitions/history",
+    "element": null,
+    "raw": "path=\"requisitions/history\" element={<RequisitionRouteGuard"
+  },
+  {
+    "path": "requisitions/new",
+    "element": null,
+    "raw": "path=\"requisitions/new\" element={<RequisitionRouteGuard"
+  },
+  {
+    "path": "requisitions/:id",
+    "element": null,
+    "raw": "path=\"requisitions/:id\" element={<RequisitionRouteGuard"
+  },
+  {
+    "path": "requisitions/:id/candidates",
+    "element": null,
+    "raw": "path=\"requisitions/:id/candidates\" element={<RequisitionRouteGuard"
+  },
+  {
+    "path": "requisitions/:reqId/candidates/:candidateId",
+    "element": null,
+    "raw": "path=\"requisitions/:reqId/candidates/:candidateId\" element={<RequisitionRouteGuard"
+  },
+  {
+    "path": "candidates/accepted",
+    "element": null,
+    "raw": "path=\"candidates/accepted\" element={<AcceptedCandidates /"
+  },
+  {
+    "path": "candidates/onboarding",
+    "element": null,
+    "raw": "path=\"candidates/onboarding\" element={<OnboardingManagement /"
+  },
+  {
+    "path": "candidates/portal-access",
+    "element": null,
+    "raw": "path=\"candidates/portal-access\" element={<CandidatePortalAccess /"
+  },
+  {
+    "path": "candidates/issues",
+    "element": null,
+    "raw": "path=\"candidates/issues\" element={<ReportedIssues /"
+  },
+  {
+    "path": "candidates",
+    "element": null,
+    "raw": "path=\"candidates\" element={<CandidateRouteDispatcher /"
+  },
+  {
+    "path": "candidatepool",
+    "element": null,
+    "raw": "path=\"candidatepool\" element={<SuperAdminCandidatePool /"
+  },
+  {
+    "path": "candidate-pool",
+    "element": null,
+    "raw": "path=\"candidate-pool\" element={<SuperAdminCandidatePool /"
+  },
+  {
+    "path": "candidatespool",
+    "element": null,
+    "raw": "path=\"candidatespool\" element={<SuperAdminCandidatePool /"
+  },
+  {
+    "path": "candidates-pool",
+    "element": null,
+    "raw": "path=\"candidates-pool\" element={<SuperAdminCandidatePool /"
+  },
+  {
+    "path": "outreach",
+    "element": null,
+    "raw": "path=\"outreach\" element={<SuperAdminOutreachControl /"
+  },
+  {
+    "path": "candidate-outreach",
+    "element": null,
+    "raw": "path=\"candidate-outreach\" element={<SuperAdminOutreachControl /"
+  },
+  {
+    "path": "workforce/team",
+    "element": null,
+    "raw": "path=\"workforce/team\" element={<TeamOverview /"
+  },
+  {
+    "path": "workforce/timesheets",
+    "element": null,
+    "raw": "path=\"workforce/timesheets\" element={<TimesheetApprovals /"
+  },
+  {
+    "path": "workforce/expenses",
+    "element": null,
+    "raw": "path=\"workforce/expenses\" element={<ExpenseApprovals /"
+  },
+  {
+    "path": "workforce/workers",
+    "element": null,
+    "raw": "path=\"workforce/workers\" element={<Workers /"
+  },
+  {
+    "path": "recruiter/workers",
+    "element": null,
+    "raw": "path=\"recruiter/workers\" element={<Workers /"
+  },
+  {
+    "path": "recruiter",
+    "element": null,
+    "raw": "path=\"recruiter\" element={<RecruiterDashboard view=\"dashboard\" /"
+  },
+  {
+    "path": "recruiter/requisitions",
+    "element": null,
+    "raw": "path=\"recruiter/requisitions\" element={<RecruiterDashboard view=\"requisitions\" /"
+  },
+  {
+    "path": "recruiter/candidates",
+    "element": null,
+    "raw": "path=\"recruiter/candidates\" element={<RecruiterDashboard view=\"candidates\" /"
+  },
+  {
+    "path": "recruiter/shortlisted",
+    "element": null,
+    "raw": "path=\"recruiter/shortlisted\" element={<RecruiterDashboard view=\"shortlisted\" /"
+  },
+  {
+    "path": "recruiter/interviews",
+    "element": null,
+    "raw": "path=\"recruiter/interviews\" element={<InterviewRequests /"
+  },
+  {
+    "path": "recruiter/agreements",
+    "element": null,
+    "raw": "path=\"recruiter/agreements\" element={<VendorAgreements /"
+  },
+  {
+    "path": "recruiter/accepted",
+    "element": null,
+    "raw": "path=\"recruiter/accepted\" element={<RecruiterDashboard view=\"accepted\" /"
+  },
+  {
+    "path": "recruiter/portal-access",
+    "element": null,
+    "raw": "path=\"recruiter/portal-access\" element={<RecruiterDashboard view=\"portal-access\" /"
+  },
+  {
+    "path": "recruiter/billing",
+    "element": null,
+    "raw": "path=\"recruiter/billing\" element={<Navigate to=\"/dashboard/superadmin/candidate-management?tab=billing\" replace /"
+  },
+  {
+    "path": "admin",
+    "element": null,
+    "raw": "path=\"admin\" element={<AdminDashboard /"
+  },
+  {
+    "path": "admin/chat",
+    "element": null,
+    "raw": "path=\"admin/chat\" element={<AiChat /"
+  },
+  {
+    "path": "admin/directors",
+    "element": null,
+    "raw": "path=\"admin/directors\" element={<ManageDirectors /"
+  },
+  {
+    "path": "admin/hiring-managers",
+    "element": null,
+    "raw": "path=\"admin/hiring-managers\" element={<ManageHiringManagers /"
+  },
+  {
+    "path": "admin/team",
+    "element": null,
+    "raw": "path=\"admin/team\" element={<AdminTeamMembers /"
+  },
+  {
+    "path": "admin/procurement",
+    "element": null,
+    "raw": "path=\"admin/procurement\" element={<ManageProcurement /"
+  },
+  {
+    "path": "admin/finance",
+    "element": null,
+    "raw": "path=\"admin/finance\" element={<ManageFinance /"
+  },
+  {
+    "path": "admin/profile",
+    "element": null,
+    "raw": "path=\"admin/profile\" element={<CompanyAdminProfile /"
+  },
+  {
+    "path": "admin/partner-vendors",
+    "element": null,
+    "raw": "path=\"admin/partner-vendors\" element={<ManagePartnerVendors /"
+  },
+  {
+    "path": "admin/vendors",
+    "element": null,
+    "raw": "path=\"admin/vendors\" element={<ManagePartnerVendors /"
+  },
+  {
+    "path": "director",
+    "element": null,
+    "raw": "path=\"director\" element={<DirectorDashboard view=\"overview\" /"
+  },
+  {
+    "path": "director/approvals",
+    "element": null,
+    "raw": "path=\"director/approvals\" element={<DirectorDashboard view=\"approvals\" /"
+  },
+  {
+    "path": "director/requisitions",
+    "element": null,
+    "raw": "path=\"director/requisitions\" element={<DirectorDashboard view=\"requisitions\" /"
+  },
+  {
+    "path": "director/requisitions/:id",
+    "element": null,
+    "raw": "path=\"director/requisitions/:id\" element={<DirectorDashboard view=\"requisitions\" /"
+  },
+  {
+    "path": "director/templates",
+    "element": null,
+    "raw": "path=\"director/templates\" element={<DirectorRoleTemplates /"
+  },
+  {
+    "path": "director/role-templates",
+    "element": null,
+    "raw": "path=\"director/role-templates\" element={<DirectorRoleTemplates /"
+  },
+  {
+    "path": "director/work-orders",
+    "element": null,
+    "raw": "path=\"director/work-orders\" element={<DirectorWorkOrders /"
+  },
+  {
+    "path": "director/agreements",
+    "element": null,
+    "raw": "path=\"director/agreements\" element={<DirectorAgreements /"
+  },
+  {
+    "path": "director/finance-approvals",
+    "element": null,
+    "raw": "path=\"director/finance-approvals\" element={<FinanceApprovals /"
+  },
+  {
+    "path": "director/profile",
+    "element": null,
+    "raw": "path=\"director/profile\" element={<UserProfileSettings portalTitle=\"Executive Director Profile\" /"
+  },
+  {
+    "path": "procurement",
+    "element": null,
+    "raw": "path=\"procurement\" element={<ProcurementDashboard /"
+  },
+  {
+    "path": "procurement/finance-approvals",
+    "element": null,
+    "raw": "path=\"procurement/finance-approvals\" element={<FinanceApprovals /"
+  },
+  {
+    "path": "procurement/sow",
+    "element": null,
+    "raw": "path=\"procurement/sow\" element={<ProcurementDashboard /"
+  },
+  {
+    "path": "procurement/profile",
+    "element": null,
+    "raw": "path=\"procurement/profile\" element={<UserProfileSettings portalTitle=\"Procurement Officer Profile\" /"
+  },
+  {
+    "path": "finance",
+    "element": null,
+    "raw": "path=\"finance\" element={<FinanceDashboard /"
+  },
+  {
+    "path": "finance/work-orders",
+    "element": null,
+    "raw": "path=\"finance/work-orders\" element={<FinanceDashboard /"
+  },
+  {
+    "path": "finance/approvals",
+    "element": null,
+    "raw": "path=\"finance/approvals\" element={<FinanceApprovals /"
+  },
+  {
+    "path": "finance/profile",
+    "element": null,
+    "raw": "path=\"finance/profile\" element={<UserProfileSettings portalTitle=\"Finance Officer Profile\" /"
+  },
+  {
+    "path": "superadmin",
+    "element": null,
+    "raw": "path=\"superadmin\" element={<SuperAdminDashboard /"
+  },
+  {
+    "path": "superadmin/requisitions",
+    "element": null,
+    "raw": "path=\"superadmin/requisitions\" element={<SuperAdminRouteGuard"
+  },
+  {
+    "path": "superadmin/chat",
+    "element": null,
+    "raw": "path=\"superadmin/chat\" element={<AiChat /"
+  },
+  {
+    "path": "superadmin/onboard",
+    "element": null,
+    "raw": "path=\"superadmin/onboard\" element={<OnboardCompany /"
+  },
+  {
+    "path": "superadmin/onboard-vendor",
+    "element": null,
+    "raw": "path=\"superadmin/onboard-vendor\" element={<OnboardVendor /"
+  },
+  {
+    "path": "superadmin/accounts",
+    "element": null,
+    "raw": "path=\"superadmin/accounts\" element={<ConfigureCompanyAccounts /"
+  },
+  {
+    "path": "superadmin/tenants/:tenantId",
+    "element": null,
+    "raw": "path=\"superadmin/tenants/:tenantId\" element={<SuperAdminRouteGuard"
+  },
+  {
+    "path": "superadmin/vendor-accounts",
+    "element": null,
+    "raw": "path=\"superadmin/vendor-accounts\" element={<ConfigureVendorAccounts /"
+  },
+  {
+    "path": "superadmin/admin-accounts",
+    "element": null,
+    "raw": "path=\"superadmin/admin-accounts\" element={<AdminAccounts /"
+  },
+  {
+    "path": "superadmin/admins",
+    "element": null,
+    "raw": "path=\"superadmin/admins\" element={<AdminAccounts /"
+  },
+  {
+    "path": "superadmin/candidate-management",
+    "element": null,
+    "raw": "path=\"superadmin/candidate-management\" element={<SuperAdminCandidateManagement /"
+  },
+  {
+    "path": "candidate-management",
+    "element": null,
+    "raw": "path=\"candidate-management\" element={<SuperAdminCandidateManagement /"
+  },
+  {
+    "path": "superadmin/billing",
+    "element": null,
+    "raw": "path=\"superadmin/billing\" element={<Navigate to=\"/dashboard/superadmin/candidate-management?tab=billing\" replace /"
+  },
+  {
+    "path": "superadmin/candidate-billing",
+    "element": null,
+    "raw": "path=\"superadmin/candidate-billing\" element={<Navigate to=\"/dashboard/superadmin/candidate-management?tab=billing\" replace /"
+  },
+  {
+    "path": "superadmin/candidates",
+    "element": null,
+    "raw": "path=\"superadmin/candidates\" element={<SuperAdminCandidatePool /"
+  },
+  {
+    "path": "superadmin/candidate-pool",
+    "element": null,
+    "raw": "path=\"superadmin/candidate-pool\" element={<SuperAdminCandidatePool /"
+  },
+  {
+    "path": "superadmin/candidatepool",
+    "element": null,
+    "raw": "path=\"superadmin/candidatepool\" element={<SuperAdminCandidatePool /"
+  },
+  {
+    "path": "superadmin/candidates-pool",
+    "element": null,
+    "raw": "path=\"superadmin/candidates-pool\" element={<SuperAdminCandidatePool /"
+  },
+  {
+    "path": "superadmin/outreach",
+    "element": null,
+    "raw": "path=\"superadmin/outreach\" element={<SuperAdminOutreachControl /"
+  },
+  {
+    "path": "superadmin/candidate-outreach",
+    "element": null,
+    "raw": "path=\"superadmin/candidate-outreach\" element={<SuperAdminOutreachControl /"
+  },
+  {
+    "path": "superadmin/archives",
+    "element": null,
+    "raw": "path=\"superadmin/archives\" element={<Navigate to=\"/dashboard/superadmin\" replace /"
+  },
+  {
+    "path": "hr",
+    "element": null,
+    "raw": "path=\"hr\" element={<HRDashboard /"
+  },
+  {
+    "path": "/dashboard/candidate",
+    "element": null,
+    "raw": "path=\"/dashboard/candidate\"\r\n            element={\r\n              <RequireAuth"
+  },
+  {
+    "path": "/candidate/onboarding",
+    "element": null,
+    "raw": "path=\"/candidate/onboarding\"\r\n            element={\r\n              <RequireAuth"
+  },
+  {
+    "path": "/candidate/portal",
+    "element": null,
+    "raw": "path=\"/candidate/portal\"\r\n            element={\r\n              <RequireAuth"
+  },
+  {
+    "path": "/candidate/dashboard",
+    "element": null,
+    "raw": "path=\"/candidate/dashboard\"\r\n            element={\r\n              <RequireAuth"
+  },
+  {
+    "path": "/candidate/assignment",
+    "element": null,
+    "raw": "path=\"/candidate/assignment\"\r\n            element={\r\n              <RequireAuth"
+  },
+  {
+    "path": "/candidate/timesheet",
+    "element": null,
+    "raw": "path=\"/candidate/timesheet\"\r\n            element={\r\n              <RequireAuth"
+  },
+  {
+    "path": "/candidate/attendance",
+    "element": null,
+    "raw": "path=\"/candidate/attendance\"\r\n            element={\r\n              <RequireAuth"
+  },
+  {
+    "path": "/candidate/expenses",
+    "element": null,
+    "raw": "path=\"/candidate/expenses\"\r\n            element={\r\n              <RequireAuth"
+  },
+  {
+    "path": "/candidate/billing",
+    "element": null,
+    "raw": "path=\"/candidate/billing\"\r\n            element={\r\n              <RequireAuth"
+  },
+  {
+    "path": "/candidate/payments",
+    "element": null,
+    "raw": "path=\"/candidate/payments\"\r\n            element={\r\n              <RequireAuth"
+  },
+  {
+    "path": "/dashboard/candidate/billing",
+    "element": null,
+    "raw": "path=\"/dashboard/candidate/billing\"\r\n            element={\r\n              <RequireAuth"
+  },
+  {
+    "path": "/candidatepool",
+    "element": null,
+    "raw": "path=\"/candidatepool\"\r\n            element={\r\n              <RequireAuth"
+  },
+  {
+    "path": "/candidate-pool",
+    "element": null,
+    "raw": "path=\"/candidate-pool\"\r\n            element={\r\n              <RequireAuth"
+  },
+  {
+    "path": "/candidatespool",
+    "element": null,
+    "raw": "path=\"/candidatespool\"\r\n            element={\r\n              <RequireAuth"
+  },
+  {
+    "path": "/candidates-pool",
+    "element": null,
+    "raw": "path=\"/candidates-pool\"\r\n            element={\r\n              <RequireAuth"
+  },
+  {
+    "path": "/superadmin/candidates",
+    "element": null,
+    "raw": "path=\"/superadmin/candidates\"\r\n            element={\r\n              <RequireAuth"
+  },
+  {
+    "path": "/superadmin/candidate-pool",
+    "element": null,
+    "raw": "path=\"/superadmin/candidate-pool\"\r\n            element={\r\n              <RequireAuth"
+  },
+  {
+    "path": "/superadmin/candidatepool",
+    "element": null,
+    "raw": "path=\"/superadmin/candidatepool\"\r\n            element={\r\n              <RequireAuth"
+  },
+  {
+    "path": "*",
+    "element": null,
+    "raw": "path=\"*\" element={<Navigate to=\"/\" replace /"
+  }
+]

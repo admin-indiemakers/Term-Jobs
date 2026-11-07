@@ -9,6 +9,10 @@ def rejects_environment_request(headers, active_cluster):
         return True
     if active_cluster != 'main':
         return False
+    # If the backend itself is receiving the request on localhost / 127.0.0.1, it is local development
+    req_host = (headers.get('host') or '').split(':')[0].strip().lower()
+    if req_host in ('localhost', '127.0.0.1', '::1'):
+        return False
     for name in ('origin', 'referer'):
         try:
             host = urlsplit(headers.get(name, '')).hostname or ''

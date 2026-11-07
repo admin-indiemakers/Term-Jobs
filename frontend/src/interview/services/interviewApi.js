@@ -148,6 +148,28 @@ export const interviewApi = {
     return request(`/api/interviews/rounds/${roundId}/questions${query}`, { noCache: true });
   },
 
+  async azureAiTurn(roundId, payload) {
+    return request(`/api/interviews/rounds/${roundId}/azure-ai-turn`, {
+      method: 'POST',
+      body: payload,
+    });
+  },
+
+  async azureAiComplete(roundId) {
+    return request(`/api/interviews/rounds/${roundId}/azure-ai-complete`, {
+      method: 'POST',
+    });
+  },
+
+  async transcribeAudio(roundId, audioBlob, filename = 'candidate_speech.webm') {
+    const formData = new FormData();
+    formData.append('file', audioBlob, filename);
+    return request(`/api/interviews/rounds/${roundId}/transcribe-audio`, {
+      method: 'POST',
+      body: formData,
+    });
+  },
+
   async saveTranscript(roundId, transcriptTurns) {
     return request(`/api/interviews/rounds/${roundId}/transcript`, {
       method: 'POST',
@@ -235,6 +257,38 @@ export const interviewApi = {
   async generateShortlist(requisitionId, token) {
     return request(`/api/requisitions/${requisitionId}/shortlist/generate`, {
       method: 'POST',
+      token,
+    });
+  },
+
+  // AI Interview Focus Monitoring & Malpractice Prevention
+  async recordFocusConsent(roundId, consent = true, timestamp = null, candidateToken = '') {
+    const query = candidateToken ? `?token=${encodeURIComponent(candidateToken)}` : '';
+    return request(`/api/interviews/rounds/${roundId}/focus-consent${query}`, {
+      method: 'POST',
+      body: {
+        consent: Boolean(consent),
+        timestamp: timestamp || new Date().toISOString(),
+        candidate_token: candidateToken || undefined,
+      },
+    });
+  },
+
+  async recordFocusEvent(roundId, eventData, candidateToken = '') {
+    const query = candidateToken ? `?token=${encodeURIComponent(candidateToken)}` : '';
+    return request(`/api/interviews/rounds/${roundId}/focus-event${query}`, {
+      method: 'POST',
+      body: {
+        ...eventData,
+        candidate_token: candidateToken || undefined,
+      },
+    });
+  },
+
+  async getFocusEvents(roundId, token) {
+    const query = token ? `?token=${encodeURIComponent(token)}` : '';
+    return request(`/api/interviews/rounds/${roundId}/focus-events${query}`, {
+      method: 'GET',
       token,
     });
   },
