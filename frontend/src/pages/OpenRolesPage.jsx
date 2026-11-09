@@ -2812,7 +2812,7 @@ export default function OpenRolesPage({ enabled = true }) {
         {/* Atmospheric Background Layer */}
         <Backdrop tone="dark" active={!isInterviewViewOpen} />
 
-        <div className="relative z-10 flex flex-col flex-1 min-h-fit shrink-0">
+        <div className="relative z-10 flex flex-col flex-[1_0_auto] w-full">
           {/* Top Header Navigation — Optimized for Mobile */}
           <header className="flex items-center justify-between gap-2.5 sm:gap-4 mb-2 sm:mb-2.5 pt-0.5 lg:pt-0 shrink-0">
             {/* Left: Brand logo + back link on mobile, Platform Overview on desktop */}
@@ -3147,8 +3147,8 @@ export default function OpenRolesPage({ enabled = true }) {
           </div>
 
           {/* Opportunities List / Table Section */}
-          <main id="roles-grid-section" className="flex-1 w-full flex flex-col min-h-fit shrink-0">
-            <div className="flex-1 min-h-fit shrink-0 flex flex-col justify-between rounded-2xl sm:rounded-3xl bg-[#0B0D12] border border-white/[0.08] p-3 sm:px-5 sm:pt-2 sm:pb-2.5 shadow-xl will-change-transform">
+          <main id="roles-grid-section" className="w-full flex flex-col flex-[1_0_auto]">
+            <div className="w-full flex-[1_0_auto] min-h-[420px] flex flex-col justify-between rounded-2xl sm:rounded-3xl bg-[#0B0D12] border border-white/[0.08] p-3 sm:px-5 sm:pt-2 sm:pb-2.5 shadow-xl will-change-transform">
 {/* TOP OF ROLES TAB: Search & Filter Console Linked Directly to Table */}
                 <div className="pb-2 mb-2 border-b border-white/[0.06] flex flex-wrap items-center gap-2 sm:gap-2.5 w-full">
                   {/* Keyword Search Input */}
