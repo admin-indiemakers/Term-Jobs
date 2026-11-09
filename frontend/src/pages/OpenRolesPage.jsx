@@ -3404,10 +3404,10 @@ export default function OpenRolesPage({ enabled = true }) {
                 </div>
 
                 {/* Tablet and Desktop: Full Table (>= 640px) */}
-                <div className="hidden sm:block overflow-x-auto scrollbar-thin">
-                  <div className="min-w-[760px]">
+                <div className="hidden sm:block overflow-x-auto no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                  <div className="min-w-[680px] w-full">
                     {/* Table Header Row */}
-                    <div className={`grid grid-cols-[minmax(230px,2fr)_100px_110px_140px_170px_140px] items-center px-4 ${paginatedJobs.length <= 7 ? 'py-2' : 'py-1.5'} text-[10px] font-semibold text-neutral-400 uppercase tracking-wider border-b border-white/[0.06]`}>
+                    <div className={`grid grid-cols-[minmax(190px,1.8fr)_80px_95px_120px_150px_105px] items-center px-4 ${paginatedJobs.length <= 7 ? 'py-2' : 'py-1.5'} text-[10px] font-semibold text-neutral-400 uppercase tracking-wider border-b border-white/[0.06]`}>
                       <div className="flex items-center gap-1.5">
                         <ArrowLeft size={10} className="text-neutral-500" />
                         <span>ROLE &amp; COMPANY</span>
@@ -3446,7 +3446,7 @@ export default function OpenRolesPage({ enabled = true }) {
                           <div
                             key={job.id || job._id}
                             onClick={() => handleOpenJob(job)}
-                            className={`grid grid-cols-[minmax(230px,2fr)_100px_110px_140px_170px_140px] items-center px-4 ${paginatedJobs.length <= 7 ? 'py-2.5' : 'py-2'} hover:bg-white/[0.04] transition-colors duration-100 ease-out rounded-xl group cursor-pointer`}
+                            className={`grid grid-cols-[minmax(190px,1.8fr)_80px_95px_120px_150px_105px] items-center px-4 ${paginatedJobs.length <= 7 ? 'py-2.5' : 'py-2'} hover:bg-white/[0.04] transition-colors duration-100 ease-out rounded-xl group cursor-pointer`}
                           >
                             {/* 1. Role & Company */}
                             <div className="flex items-center gap-3 min-w-0 pr-3">
@@ -3480,19 +3480,19 @@ export default function OpenRolesPage({ enabled = true }) {
                             </div>
 
                             {/* 5. Skills */}
-                            <div className="flex items-center gap-1.5 flex-wrap pr-2">
+                            <div className="flex items-center gap-1.5 flex-nowrap overflow-hidden pr-2">
                               {skills.length > 0 ? (
                                 <>
                                   {skills.slice(0, 2).map((skill) => (
                                     <span
                                       key={skill}
-                                      className="px-2 py-0.5 rounded-md bg-[#16181F] border border-white/[0.08] text-[10.5px] font-medium text-neutral-300 whitespace-nowrap"
+                                      className="px-2 py-0.5 rounded-md bg-[#16181F] border border-white/[0.08] text-[10.5px] font-medium text-neutral-300 whitespace-nowrap truncate max-w-[90px]"
                                     >
                                       {skill}
                                     </span>
                                   ))}
                                   {skills.length > 2 && (
-                                    <span className="px-1.5 py-0.5 rounded-md bg-[#16181F] border border-white/[0.08] text-[10.5px] font-medium text-neutral-400 whitespace-nowrap">
+                                    <span className="px-1.5 py-0.5 rounded-md bg-[#16181F] border border-white/[0.08] text-[10.5px] font-medium text-neutral-400 whitespace-nowrap shrink-0">
                                       +{skills.length - 2}
                                     </span>
                                   )}
