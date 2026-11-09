@@ -319,6 +319,20 @@ export function matchesExperience(job, selectedExp) {
   return true;
 }
 
+export function matchesSearch(text, query) {
+  if (!text || !query) return false;
+  const str = String(text);
+  const rawQ = query.trim();
+  if (!rawQ) return false;
+  const escaped = rawQ.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const wordStart = /^[a-zA-Z0-9_]/.test(rawQ) ? '\\b' : '(^|[^a-zA-Z0-9_])';
+  const wordEnd = /[a-zA-Z0-9_]$/.test(rawQ) ? '\\b' : '([^a-zA-Z0-9_]|$)';
+  if (rawQ.length <= 3) {
+    return new RegExp(`${wordStart}${escaped}${wordEnd}`, 'i').test(str);
+  }
+  return new RegExp(`${wordStart}${escaped}`, 'i').test(str);
+}
+
 function FilterDropdown({
   icon: Icon,
   label,
@@ -2202,16 +2216,31 @@ export default function OpenRolesPage({ enabled = true }) {
   const activePage = currentPage;
   const paginatedJobs = useMemo(() => {
     let items = requisitions || [];
-    const q = searchQuery.trim().toLowerCase();
+    const q = searchQuery.trim();
     if (q) {
       items = items.filter((j) => {
-        const title = (j.title || j.structured_role?.title || '').toLowerCase();
-        const comp = (j.company_name || j.company || '').toLowerCase();
+        const title = j.title || j.structured_role?.title || '';
+        const comp = j.company_name || j.company || '';
         const role = j.structured_role || {};
-        const skills = (role.must_have_skills || []).concat(role.nice_to_have_skills || []).map((s) => String(s).toLowerCase());
-        const desc = (j.generated_jd_markdown || role.job_description || role.role_summary || '').toLowerCase();
-        const loc = (typeof role.location === 'string' ? role.location : Array.isArray(role.location) ? role.location.join(' ') : '').toLowerCase();
-        return title.includes(q) || comp.includes(q) || skills.some((s) => s.includes(q)) || desc.includes(q) || loc.includes(q);
+        const skills = (role.must_have_skills || []).concat(role.nice_to_have_skills || []);
+        const desc = j.generated_jd_markdown || role.job_description || role.role_summary || '';
+        const loc = typeof role.location === 'string' ? role.location : Array.isArray(role.location) ? role.location.join(' ') : '';
+        return (
+          matchesSearch(title, q) ||
+          matchesSearch(comp, q) ||
+          skills.some((s) => matchesSearch(String(s), q)) ||
+          matchesSearch(desc, q) ||
+          matchesSearch(loc, q)
+        );
+      });
+      items.sort((a, b) => {
+        const aTitle = matchesSearch(a.title || a.structured_role?.title || '', q) ? 10 : 0;
+        const bTitle = matchesSearch(b.title || b.structured_role?.title || '', q) ? 10 : 0;
+        if (aTitle !== bTitle) return bTitle - aTitle;
+        const aSkills = (a.structured_role?.must_have_skills || []).concat(a.structured_role?.nice_to_have_skills || []).some((s) => matchesSearch(String(s), q)) ? 5 : 0;
+        const bSkills = (b.structured_role?.must_have_skills || []).concat(b.structured_role?.nice_to_have_skills || []).some((s) => matchesSearch(String(s), q)) ? 5 : 0;
+        if (aSkills !== bSkills) return bSkills - aSkills;
+        return 0;
       });
     }
     if (selectedExperience && selectedExperience !== 'ALL') {
