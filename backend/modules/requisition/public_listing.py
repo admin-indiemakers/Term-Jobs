@@ -98,6 +98,76 @@ def public_listing(page=1, page_size=8, q='', work_mode='', family='', location=
         filters.append({'_locations': {'$regex': re.escape(location), '$options': 'i'}})
     base_match = {'$and': filters} if filters else {}
     selected_match = {'$and': [base_match, {'_category': category}]} if category else base_match
+
+    sort_criteria = {'created_at': -1, 'id': 1}
+    score_fields = []
+    if q.strip():
+        raw_q = q.strip()
+        escaped = re.escape(raw_q)
+        word_start = r'\b' if raw_q[0].isalnum() or raw_q[0] == '_' else r'(^|[^\w])'
+        sort_criteria = {'_search_score': -1, 'created_at': -1, 'id': 1}
+        score_fields = [
+            {'$addFields': {
+                '_title_match': {
+                    '$cond': [
+                        {'$regexMatch': {'input': {'$ifNull': ['$title', '']}, 'regex': rf'{word_start}{escaped}', 'options': 'i'}},
+                        1000,
+                        0
+                    ]
+                },
+                '_company_match': {
+                    '$cond': [
+                        {'$regexMatch': {'input': {'$ifNull': ['$_company', '']}, 'regex': rf'{word_start}{escaped}', 'options': 'i'}},
+                        300,
+                        0
+                    ]
+                },
+                '_skills_match': {
+                    '$cond': [
+                        {'$or': [
+                            {'$gt': [
+                                {'$size': {
+                                    '$filter': {
+                                        'input': {
+                                            '$cond': [
+                                                {'$isArray': '$structured_role.must_have_skills'},
+                                                '$structured_role.must_have_skills',
+                                                []
+                                            ]
+                                        },
+                                        'as': 's',
+                                        'cond': {'$regexMatch': {'input': '$$s', 'regex': rf'{word_start}{escaped}', 'options': 'i'}}
+                                    }
+                                }},
+                                0
+                            ]},
+                            {'$gt': [
+                                {'$size': {
+                                    '$filter': {
+                                        'input': {
+                                            '$cond': [
+                                                {'$isArray': '$structured_role.nice_to_have_skills'},
+                                                '$structured_role.nice_to_have_skills',
+                                                []
+                                            ]
+                                        },
+                                        'as': 's',
+                                        'cond': {'$regexMatch': {'input': '$$s', 'regex': rf'{word_start}{escaped}', 'options': 'i'}}
+                                    }
+                                }},
+                                0
+                            ]}
+                        ]},
+                        500,
+                        0
+                    ]
+                }
+            }},
+            {'$addFields': {
+                '_search_score': {'$add': ['$_title_match', '$_skills_match', '$_company_match']}
+            }}
+        ]
+
     pipeline = [
         {'$match': live},
         {'$lookup': {'from': 'company_profiles', 'localField': 'company_profile_id', 'foreignField': 'id', 'as': '_profiles'}},
@@ -111,8 +181,9 @@ def public_listing(page=1, page_size=8, q='', work_mode='', family='', location=
         {'$addFields': {'_company': {'$ifNull': ['$_profile.name', {'$ifNull': ['$_tenant.name', {'$ifNull': ['$company_name', 'Partner Enterprise']}]}]},
                         '_location': {'$ifNull': ['$structured_role.location', {'$ifNull': ['$_profile.location', 'Remote']}]}}},
         {'$addFields': {'_locations': {'$cond': [{'$isArray': '$_location'}, '$_location', {'$map': {'input': [0], 'as': 'unused', 'in': '$_location'}}]}}},
+        *score_fields,
         {'$facet': {
-            'items': [{'$match': selected_match}, {'$sort': {'created_at': -1, 'id': 1}},
+            'items': [{'$match': selected_match}, {'$sort': sort_criteria},
                       {'$skip': (page - 1) * page_size}, {'$limit': page_size},
                       {'$project': {'_id': 0, 'id': 1, 'title': 1, 'created_at': 1, 'structured_role': 1,
                                     'generated_jd_markdown': 1, 'intent.description': 1,
