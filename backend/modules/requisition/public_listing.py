@@ -73,25 +73,22 @@ def public_listing(page=1, page_size=8, q='', work_mode='', family='', location=
         raw_q = q.strip()
         escaped = re.escape(raw_q)
         word_start = r'\b' if raw_q[0].isalnum() or raw_q[0] == '_' else r'(^|[^\w])'
-        word_end = r'\b' if raw_q[-1].isalnum() or raw_q[-1] == '_' else r'([^\w]|$)'
-        # Boundary matching prevents substring noise (e.g. searching 'UI' will not match 'requirements' or 'guidelines')
-        if len(raw_q) <= 3:
-            term = {'$regex': rf'{word_start}{escaped}{word_end}', '$options': 'i'}
-            desc_term = term
-        else:
-            term = {'$regex': rf'{word_start}{escaped}', '$options': 'i'}
-            desc_term = {'$regex': rf'{word_start}{escaped}{word_end}', '$options': 'i'} if len(raw_q) <= 5 else term
-        filters.append({'$or': [
+        term = {'$regex': rf'{word_start}{escaped}', '$options': 'i'}
+        search_or = [
             {'title': term},
             {'_company': term},
             {'structured_role.must_have_skills': term},
             {'structured_role.nice_to_have_skills': term},
-            {'generated_jd_markdown': desc_term},
-            {'structured_role.job_description': desc_term},
-            {'structured_role.role_summary': desc_term},
-            {'structured_role.summary': desc_term},
-            {'intent.description': desc_term},
-        ]})
+        ]
+        if len(raw_q) >= 2:
+            search_or.extend([
+                {'generated_jd_markdown': term},
+                {'structured_role.job_description': term},
+                {'structured_role.role_summary': term},
+                {'structured_role.summary': term},
+                {'intent.description': term},
+            ])
+        filters.append({'$or': search_or})
     if work_mode and work_mode != 'ALL':
         mode_pattern = r'^(on[- ]?site|in-office)$' if work_mode.lower().replace('-', '').replace(' ', '') == 'onsite' else '^' + re.escape(work_mode) + '$'
         filters.append({'structured_role.work_mode': {'$regex': mode_pattern, '$options': 'i'}})
@@ -137,11 +134,11 @@ def public_listing(page=1, page_size=8, q='', work_mode='', family='', location=
             t = row.get('title') or ''
             stored = row.get('structured_role') or {}
             skills = (stored.get('must_have_skills') or []) + (stored.get('nice_to_have_skills') or [])
-            if re.search(rf'{word_start}{escaped}{word_end}', t, re.I):
+            if re.search(rf'{word_start}{escaped}', t, re.I):
                 return 100
-            if any(re.search(rf'{word_start}{escaped}{word_end}', str(s), re.I) for s in skills):
+            if any(re.search(rf'{word_start}{escaped}', str(s), re.I) for s in skills):
                 return 50
-            if re.search(rf'{word_start}{escaped}{word_end}', row.get('_company') or '', re.I):
+            if re.search(rf'{word_start}{escaped}', row.get('_company') or '', re.I):
                 return 40
             return 10
         raw_items = sorted(raw_items, key=_score, reverse=True)

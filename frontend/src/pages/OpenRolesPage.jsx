@@ -326,10 +326,6 @@ export function matchesSearch(text, query) {
   if (!rawQ) return false;
   const escaped = rawQ.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const wordStart = /^[a-zA-Z0-9_]/.test(rawQ) ? '\\b' : '(^|[^a-zA-Z0-9_])';
-  const wordEnd = /[a-zA-Z0-9_]$/.test(rawQ) ? '\\b' : '([^a-zA-Z0-9_]|$)';
-  if (rawQ.length <= 3) {
-    return new RegExp(`${wordStart}${escaped}${wordEnd}`, 'i').test(str);
-  }
   return new RegExp(`${wordStart}${escaped}`, 'i').test(str);
 }
 
@@ -2225,11 +2221,12 @@ export default function OpenRolesPage({ enabled = true }) {
         const skills = (role.must_have_skills || []).concat(role.nice_to_have_skills || []);
         const desc = j.generated_jd_markdown || role.job_description || role.role_summary || '';
         const loc = typeof role.location === 'string' ? role.location : Array.isArray(role.location) ? role.location.join(' ') : '';
+        const descMatches = q.length >= 2 && matchesSearch(desc, q);
         return (
           matchesSearch(title, q) ||
           matchesSearch(comp, q) ||
           skills.some((s) => matchesSearch(String(s), q)) ||
-          matchesSearch(desc, q) ||
+          descMatches ||
           matchesSearch(loc, q)
         );
       });
