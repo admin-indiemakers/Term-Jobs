@@ -2808,11 +2808,11 @@ export default function OpenRolesPage({ enabled = true }) {
       {/* ============================================================ */}
       {/* RIGHT PANEL: DARK DASHBOARD & OPEN ROLES                    */}
       {/* ============================================================ */}
-      <div className="flex-1 min-w-0 bg-ink text-paper p-3 sm:p-4.5 xl:p-5 flex flex-col relative overflow-hidden">
+      <div className="flex-1 min-w-0 bg-ink text-paper p-3 sm:p-4.5 xl:p-5 flex flex-col relative overflow-y-auto overflow-x-hidden">
         {/* Atmospheric Background Layer */}
         <Backdrop tone="dark" active={!isInterviewViewOpen} />
 
-        <div className="relative z-10 flex flex-col flex-1 min-h-0">
+        <div className="relative z-10 flex flex-col flex-1 min-h-fit shrink-0">
           {/* Top Header Navigation — Optimized for Mobile */}
           <header className="flex items-center justify-between gap-2.5 sm:gap-4 mb-2 sm:mb-2.5 pt-0.5 lg:pt-0 shrink-0">
             {/* Left: Brand logo + back link on mobile, Platform Overview on desktop */}
@@ -3147,8 +3147,8 @@ export default function OpenRolesPage({ enabled = true }) {
           </div>
 
           {/* Opportunities List / Table Section */}
-          <main id="roles-grid-section" className="flex-1 w-full flex flex-col min-h-0">
-            <div className="flex-1 flex flex-col justify-between rounded-2xl sm:rounded-3xl bg-[#0B0D12] border border-white/[0.08] p-3 sm:px-5 sm:pt-2 sm:pb-3 shadow-xl will-change-transform min-h-0">
+          <main id="roles-grid-section" className="flex-1 w-full flex flex-col min-h-fit shrink-0">
+            <div className="flex-1 min-h-fit shrink-0 flex flex-col justify-between rounded-2xl sm:rounded-3xl bg-[#0B0D12] border border-white/[0.08] p-3 sm:px-5 sm:pt-2 sm:pb-2.5 shadow-xl will-change-transform">
 {/* TOP OF ROLES TAB: Search & Filter Console Linked Directly to Table */}
                 <div className="pb-2 mb-2 border-b border-white/[0.06] flex flex-wrap items-center gap-2 sm:gap-2.5 w-full">
                   {/* Keyword Search Input */}
@@ -3407,7 +3407,7 @@ export default function OpenRolesPage({ enabled = true }) {
                 <div className="hidden sm:block overflow-x-auto no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                   <div className="min-w-[680px] w-full">
                     {/* Table Header Row */}
-                    <div className={`grid grid-cols-[minmax(190px,1.8fr)_80px_95px_120px_150px_105px] items-center px-4 ${paginatedJobs.length <= 7 ? 'py-2' : 'py-1.5'} text-[10px] font-semibold text-neutral-400 uppercase tracking-wider border-b border-white/[0.06]`}>
+                    <div className="grid grid-cols-[minmax(190px,1.8fr)_80px_95px_120px_150px_105px] items-center px-4 py-1.5 text-[10px] font-semibold text-neutral-400 uppercase tracking-wider border-b border-white/[0.06]">
                       <div className="flex items-center gap-1.5">
                         <ArrowLeft size={10} className="text-neutral-500" />
                         <span>ROLE &amp; COMPANY</span>
@@ -3446,7 +3446,7 @@ export default function OpenRolesPage({ enabled = true }) {
                           <div
                             key={job.id || job._id}
                             onClick={() => handleOpenJob(job)}
-                            className={`grid grid-cols-[minmax(190px,1.8fr)_80px_95px_120px_150px_105px] items-center px-4 ${paginatedJobs.length <= 7 ? 'py-2.5' : 'py-2'} hover:bg-white/[0.04] transition-colors duration-100 ease-out rounded-xl group cursor-pointer`}
+                            className="grid grid-cols-[minmax(190px,1.8fr)_80px_95px_120px_150px_105px] items-center px-4 py-1.5 sm:py-2 hover:bg-white/[0.04] transition-colors duration-100 ease-out rounded-xl group cursor-pointer"
                           >
                             {/* 1. Role & Company */}
                             <div className="flex items-center gap-3 min-w-0 pr-3">
@@ -3538,7 +3538,7 @@ export default function OpenRolesPage({ enabled = true }) {
                 </div>
 
                 {/* Table Footer: Count & Pagination */}
-                <div className="mt-auto pt-2 border-t border-white/[0.06] flex items-center justify-between px-2 text-xs">
+                <div className="mt-auto pt-1.5 border-t border-white/[0.06] flex items-center justify-between px-2 text-xs">
                   <div className="text-neutral-400 font-medium text-[11.5px]">
                     Showing {paginatedJobs.length === 0 ? 0 : `${(activePage - 1) * ROLES_PER_PAGE + 1}–${(activePage - 1) * ROLES_PER_PAGE + paginatedJobs.length}`} of {rolePage.filtered_total ?? rolePage.total ?? requisitions.length} roles
                   </div>
