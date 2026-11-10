@@ -45,7 +45,7 @@ export default function CandidateOnboardingModal({
         'Track your applications',
       ],
       renderIllustration: () => (
-        <div className="relative w-full max-w-[280px] sm:max-w-[320px] mx-auto p-4 sm:p-5 rounded-2xl bg-white border border-neutral-200 shadow-[0_8px_30px_rgb(0,0,0,0.06)] flex flex-col items-center">
+        <div className="relative w-full max-w-[280px] sm:max-w-[320px] mx-auto p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-white/90 backdrop-blur-md border border-ink/10 shadow-[0_12px_36px_rgba(0,0,0,0.06),inset_0_1px_2px_rgba(255,255,255,0.95)] flex flex-col items-center">
           {/* Card header */}
           <div className="w-full flex items-center gap-3 pb-3 border-b border-neutral-100">
             <div className="w-9 h-9 rounded-xl bg-neutral-100 border border-neutral-200 flex items-center justify-center text-neutral-900">
@@ -107,7 +107,7 @@ export default function CandidateOnboardingModal({
         'Receive interview feedback',
       ],
       renderIllustration: () => (
-        <div className="relative w-full max-w-[280px] sm:max-w-[320px] mx-auto p-4 sm:p-5 rounded-2xl bg-white border border-neutral-200 shadow-[0_8px_30px_rgb(0,0,0,0.06)] flex flex-col items-center">
+        <div className="relative w-full max-w-[280px] sm:max-w-[320px] mx-auto p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-white/90 backdrop-blur-md border border-ink/10 shadow-[0_12px_36px_rgba(0,0,0,0.06),inset_0_1px_2px_rgba(255,255,255,0.95)] flex flex-col items-center">
           {/* Laptop Frame */}
           <div className="w-full bg-neutral-950 rounded-t-xl p-3 pb-4 shadow-inner border border-neutral-800 flex flex-col items-center justify-center relative overflow-hidden">
             {/* Screen shine & camera dot */}
@@ -158,7 +158,7 @@ export default function CandidateOnboardingModal({
         'Next-action guidance',
       ],
       renderIllustration: () => (
-        <div className="relative w-full max-w-[280px] sm:max-w-[320px] mx-auto p-4 sm:p-5 rounded-2xl bg-white border border-neutral-200 shadow-[0_8px_30px_rgb(0,0,0,0.06)] flex flex-col">
+        <div className="relative w-full max-w-[280px] sm:max-w-[320px] mx-auto p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-white/90 backdrop-blur-md border border-ink/10 shadow-[0_12px_36px_rgba(0,0,0,0.06),inset_0_1px_2px_rgba(255,255,255,0.95)] flex flex-col">
           <div className="space-y-3">
             {/* Step 1: Applied */}
             <div className="flex items-center gap-3">
@@ -226,15 +226,15 @@ export default function CandidateOnboardingModal({
           href={`https://t.me/${TELEGRAM_BOT_USERNAME}?start=${candidateUser?.id || candidateUser?.candidate_email || ''}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 px-4 py-2 mt-2 rounded-xl bg-neutral-100 hover:bg-neutral-200 border border-neutral-200 text-neutral-900 text-xs font-bold transition active:scale-95 cursor-pointer"
+          className="inline-flex items-center gap-2 px-4 py-2 mt-1.5 rounded-full border border-ink/15 bg-white/75 hover:bg-white text-ink text-[11px] sm:text-xs font-semibold tracking-wider uppercase backdrop-blur-xl shadow-xs hover:border-ink/35 transition-all duration-300 active:scale-95 cursor-pointer max-w-full"
         >
-          <Send size={13} className="rotate-45 text-neutral-800" />
-          <span>Connect Telegram Alert Bot</span>
-          <ExternalLink size={12} className="opacity-70 text-neutral-500" />
+          <Send size={12} className="rotate-45 text-ink shrink-0" />
+          <span className="truncate">Connect Telegram Alert Bot</span>
+          <ExternalLink size={11} className="opacity-60 text-ink-soft shrink-0" />
         </a>
       ),
       renderIllustration: () => (
-        <div className="relative w-full max-w-[280px] sm:max-w-[320px] mx-auto p-6 sm:p-8 rounded-2xl bg-white border border-neutral-200 shadow-[0_8px_30px_rgb(0,0,0,0.06)] flex flex-col items-center justify-center">
+        <div className="relative w-full max-w-[280px] sm:max-w-[320px] mx-auto p-6 sm:p-7 rounded-2xl sm:rounded-3xl bg-white/90 backdrop-blur-md border border-ink/10 shadow-[0_12px_36px_rgba(0,0,0,0.06),inset_0_1px_2px_rgba(255,255,255,0.95)] flex flex-col items-center justify-center">
           {/* 3D Circular Telegram Paper Plane Icon */}
           <div className="relative">
             <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-[#2AABEE] via-[#229ED9] to-[#1778A9] flex items-center justify-center shadow-xl shadow-[#229ED9]/30 transform -rotate-3 hover:rotate-0 transition duration-300">
@@ -271,20 +271,20 @@ export default function CandidateOnboardingModal({
           href={WHATSAPP_COMMUNITY_URL}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 px-4 py-2 mt-2 rounded-xl bg-neutral-100 hover:bg-neutral-200 border border-neutral-200 text-neutral-900 text-xs font-bold transition active:scale-95 cursor-pointer"
+          className="inline-flex items-center gap-2 px-4 py-2 mt-1.5 rounded-full border border-ink/15 bg-white/75 hover:bg-white text-ink text-[11px] sm:text-xs font-semibold tracking-wider uppercase backdrop-blur-xl shadow-xs hover:border-ink/35 transition-all duration-300 active:scale-95 cursor-pointer max-w-full"
         >
-          <Users size={13} className="text-neutral-800" />
-          <span>Join WhatsApp Community</span>
-          <ExternalLink size={12} className="opacity-70 text-neutral-500" />
+          <Users size={12} className="text-ink shrink-0" />
+          <span className="truncate">Join WhatsApp Community</span>
+          <ExternalLink size={11} className="opacity-60 text-ink-soft shrink-0" />
         </a>
       ) : (
-        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 mt-2 rounded-lg bg-neutral-100 text-neutral-700 text-xs font-medium border border-neutral-200">
-          <ShieldCheck size={13} className="text-neutral-900" />
-          <span>Official candidate community</span>
+        <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 mt-1.5 rounded-full bg-white/60 text-ink-soft text-[10px] sm:text-[11px] font-semibold tracking-wider uppercase border border-ink/12 backdrop-blur-xs max-w-full">
+          <ShieldCheck size={12} className="text-ink shrink-0" />
+          <span className="truncate">Official candidate community</span>
         </div>
       ),
       renderIllustration: () => (
-        <div className="relative w-full max-w-[280px] sm:max-w-[320px] mx-auto p-6 sm:p-8 rounded-2xl bg-white border border-neutral-200 shadow-[0_8px_30px_rgb(0,0,0,0.06)] flex flex-col items-center justify-center">
+        <div className="relative w-full max-w-[280px] sm:max-w-[320px] mx-auto p-6 sm:p-7 rounded-2xl sm:rounded-3xl bg-white/90 backdrop-blur-md border border-ink/10 shadow-[0_12px_36px_rgba(0,0,0,0.06),inset_0_1px_2px_rgba(255,255,255,0.95)] flex flex-col items-center justify-center">
           <div className="relative flex items-center justify-center">
             {/* 3D Green WhatsApp Icon */}
             <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-[#25D366] via-[#20BD5A] to-[#128C7E] flex items-center justify-center shadow-xl shadow-emerald-500/25 transform rotate-3 hover:rotate-0 transition duration-300">
@@ -325,14 +325,14 @@ export default function CandidateOnboardingModal({
             onClose();
             if (openProfileSetup) openProfileSetup();
           }}
-          className="inline-flex items-center gap-2 px-4 py-2 mt-2 rounded-xl bg-neutral-100 hover:bg-neutral-200 border border-neutral-200 text-neutral-900 text-xs font-bold transition active:scale-95 cursor-pointer"
+          className="inline-flex items-center gap-2 px-4 py-2 mt-1.5 rounded-full border border-ink/15 bg-white/75 hover:bg-white text-ink text-[11px] sm:text-xs font-semibold tracking-wider uppercase backdrop-blur-xl shadow-xs hover:border-ink/35 transition-all duration-300 active:scale-95 cursor-pointer max-w-full"
         >
-          <Sparkles size={13} className="text-neutral-700" />
-          <span>Update Profile Details</span>
+          <Sparkles size={12} className="text-ink shrink-0" />
+          <span className="truncate">Update Profile Details</span>
         </button>
       ),
       renderIllustration: () => (
-        <div className="relative w-full max-w-[280px] sm:max-w-[320px] mx-auto p-4 sm:p-5 rounded-2xl bg-white border border-neutral-200 shadow-[0_8px_30px_rgb(0,0,0,0.06)] flex flex-col">
+        <div className="relative w-full max-w-[280px] sm:max-w-[320px] mx-auto p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-white/90 backdrop-blur-md border border-ink/10 shadow-[0_12px_36px_rgba(0,0,0,0.06),inset_0_1px_2px_rgba(255,255,255,0.95)] flex flex-col">
           {/* Top header with match score */}
           <div className="flex items-center justify-between pb-3 border-b border-neutral-100">
             <div className="w-10 h-10 rounded-full bg-neutral-950 text-white font-black text-sm flex items-center justify-center shadow-md">
@@ -426,115 +426,94 @@ export default function CandidateOnboardingModal({
       role="dialog"
       aria-modal="true"
       aria-label="Candidate Onboarding"
-      className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-5 md:p-6 bg-black/75 backdrop-blur-md animate-in fade-in duration-200 font-sans"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-5 md:p-6 bg-black/65 backdrop-blur-md animate-in fade-in duration-200 font-sans"
     >
-      {/* Centered Large White Modal Container */}
+      {/* Centered Large Modal Container - Landing Page Editorial Style with Grid */}
       <div
         ref={modalRef}
-        className="w-full max-w-4xl bg-white rounded-[24px] sm:rounded-[32px] md:rounded-[36px] shadow-2xl border border-neutral-200/80 flex flex-col overflow-hidden relative text-neutral-900 animate-in zoom-in-95 duration-200"
+        className="w-full max-w-4xl bg-paper text-ink rounded-[28px] sm:rounded-[36px] shadow-[0_25px_70px_rgba(0,0,0,0.35)] border border-ink/12 flex flex-col overflow-hidden relative animate-in zoom-in-95 duration-200"
       >
-        {/* Top Header */}
-        <div className="px-5 sm:px-8 pt-5 sm:pt-7 pb-3 sm:pb-4 flex items-center justify-between border-b border-neutral-100">
+        {/* Soft Radial Atmospheric Background (Identical to Landing Page Backdrop) */}
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background:
+              "radial-gradient(120% 90% at 80% 0%, oklch(0.99 0.002 100) 0%, oklch(0.965 0.002 100) 55%, oklch(0.935 0.002 100) 100%)",
+          }}
+          aria-hidden="true"
+        />
+        {/* Subtle Grid Layer System */}
+        <div
+          className="grid-layer absolute inset-0 pointer-events-none text-ink opacity-45"
+          aria-hidden="true"
+        />
+
+        {/* Top Header - Backgroundless & Elevated */}
+        <div className="relative z-10 px-5 sm:px-8 pt-3 sm:pt-4 pb-1 sm:pb-2 flex items-center justify-between bg-transparent">
           {/* Logo & Header Text */}
-          <div className="flex items-center gap-2.5 sm:gap-3">
+          <div className="flex items-center gap-2 sm:gap-2.5">
             <img
               src={logo}
               alt="TermJobs"
-              className="w-8 h-8 sm:w-9 sm:h-9 object-contain rounded-lg shrink-0"
+              className="w-6 h-6 sm:w-7 sm:h-7 object-contain shrink-0"
             />
             <div className="flex flex-col">
-              <span className="text-xs sm:text-sm font-black tracking-wider text-neutral-900 uppercase leading-tight font-sans">
+              <span className="text-[11px] sm:text-xs font-black tracking-[0.22em] text-ink uppercase leading-tight font-sans">
                 TERMJOBS
               </span>
-              <span className="text-[11px] sm:text-xs text-neutral-500 font-medium leading-tight">
+              <span className="text-[8.5px] sm:text-[9.5px] text-ink-soft/75 font-medium tracking-[0.18em] uppercase leading-tight mt-0.5">
                 Candidate Onboarding
               </span>
             </div>
           </div>
 
-          {/* Skip Button */}
-          <div className="flex items-center">
-            <button
-              type="button"
-              onClick={handleComplete}
-              className="text-neutral-500 hover:text-neutral-900 text-xs sm:text-sm font-semibold px-3 py-1.5 rounded-lg hover:bg-neutral-100 transition cursor-pointer"
-            >
-              Skip
-            </button>
-          </div>
+          {/* Skip Button - Landing Pill Style */}
+          <button
+            type="button"
+            onClick={handleComplete}
+            className="text-ink-soft hover:text-ink text-[10px] sm:text-[11px] font-semibold tracking-wider uppercase px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full border border-ink/12 hover:border-ink/30 bg-white/50 hover:bg-white/90 transition backdrop-blur-sm cursor-pointer active:scale-95"
+          >
+            Skip
+          </button>
         </div>
 
-        {/* 6-Step Horizontal Progress Indicator */}
-        <div className="px-5 sm:px-12 pt-4 sm:pt-6 pb-2">
-          <div className="flex items-center justify-between max-w-md mx-auto relative">
-            {slides.map((s, idx) => {
-              const isActive = idx === currentSlide;
-              const isPassed = idx < currentSlide;
-              return (
-                <React.Fragment key={s.id}>
-                  {idx > 0 && (
-                    <div
-                      className={`flex-1 h-0.5 mx-1.5 sm:mx-2.5 transition-colors duration-300 ${
-                        isPassed ? 'bg-neutral-950' : 'bg-neutral-200'
-                      }`}
-                    />
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setCurrentSlide(idx)}
-                    className={`relative w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-200 cursor-pointer ${
-                      isActive
-                        ? 'bg-neutral-950 text-white shadow-md shadow-neutral-950/25 scale-110'
-                        : isPassed
-                        ? 'bg-neutral-900 text-white'
-                        : 'bg-neutral-100 text-neutral-400 border border-neutral-200 hover:bg-neutral-200 hover:text-neutral-700'
-                    }`}
-                    title={`Step ${s.stepNum}: ${s.title}`}
-                  >
-                    {isPassed ? <Check size={12} strokeWidth={3} /> : s.stepNum}
-                  </button>
-                </React.Fragment>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Slide Content Area with Side Arrows */}
-        <div className="relative px-6 sm:px-12 md:px-14 py-4 sm:py-6 flex-1 min-h-[320px] sm:min-h-[360px] flex items-center">
-          {/* Floating Left Arrow */}
+        {/* Slide Content Area with Side Arrows (generous px to ensure zero arrow collision) */}
+        <div className="relative z-10 px-14 sm:px-16 md:px-20 py-3 sm:py-5 flex-1 min-h-[320px] sm:min-h-[360px] flex items-center overflow-hidden">
+          {/* Floating Left Arrow - Landing Page Style */}
           <button
             type="button"
             onClick={handlePrev}
             disabled={isFirstSlide}
-            className={`flex absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-neutral-200 bg-white shadow-sm items-center justify-center transition-all z-20 ${
+            aria-label="Previous Slide"
+            className={`flex absolute left-2 sm:left-3.5 md:left-4 top-1/2 -translate-y-1/2 w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-ink/12 bg-white/85 hover:bg-white text-ink shadow-[0_4px_16px_rgba(0,0,0,0.06),inset_0_1px_1px_rgba(255,255,255,0.95)] backdrop-blur-xl items-center justify-center transition-all z-20 ${
               isFirstSlide
-                ? 'opacity-20 cursor-not-allowed text-neutral-300'
-                : 'hover:bg-neutral-100 hover:border-neutral-300 text-neutral-700 cursor-pointer hover:scale-105 active:scale-95'
+                ? 'opacity-20 cursor-not-allowed text-ink/30'
+                : 'cursor-pointer hover:scale-105 active:scale-95 text-ink'
             }`}
             title="Previous Slide"
           >
-            <ChevronLeft size={18} />
+            <ChevronLeft size={16} />
           </button>
 
           {/* Main Slide Layout: 2 Columns on desktop, single column on mobile */}
           <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8 items-center max-w-3xl mx-auto">
             {/* Left Column: Text & Benefits */}
             <div className="flex flex-col text-left">
-              <h2 className="text-2xl sm:text-3xl font-extrabold text-neutral-900 tracking-tight">
+              <h2 className="text-xl sm:text-2xl md:text-3xl font-extrabold text-ink tracking-tight font-display">
                 {current.title}
               </h2>
-              <p className="mt-2 text-xs sm:text-sm text-neutral-600 leading-relaxed font-normal">
+              <p className="mt-2 text-xs sm:text-sm text-ink-soft leading-relaxed font-normal">
                 {current.description}
               </p>
 
               {/* Bullet Points with clean monochrome checkmarks */}
-              <div className="mt-5 space-y-2.5">
+              <div className="mt-4 sm:mt-5 space-y-2 sm:space-y-2.5">
                 {current.benefits.map((benefit, bIdx) => (
                   <div key={bIdx} className="flex items-start gap-2.5">
-                    <span className="w-5 h-5 rounded-full bg-neutral-100 border border-neutral-300 text-neutral-900 flex items-center justify-center shrink-0 mt-0.5">
-                      <Check size={12} strokeWidth={2.5} />
+                    <span className="w-5 h-5 rounded-full bg-white/90 border border-ink/15 text-ink flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
+                      <Check size={11} strokeWidth={2.5} />
                     </span>
-                    <span className="text-xs sm:text-sm font-semibold text-neutral-800">
+                    <span className="text-xs sm:text-sm font-semibold text-ink">
                       {benefit}
                     </span>
                   </div>
@@ -543,7 +522,7 @@ export default function CandidateOnboardingModal({
 
               {/* Extra optional CTA */}
               {current.extraAction && (
-                <div className="mt-4">{current.extraAction}</div>
+                <div className="mt-4 sm:mt-5 max-w-full overflow-hidden">{current.extraAction}</div>
               )}
             </div>
 
@@ -553,26 +532,40 @@ export default function CandidateOnboardingModal({
             </div>
           </div>
 
-          {/* Floating Right Arrow */}
+          {/* Floating Right Arrow - Landing Page Style */}
           <button
             type="button"
             onClick={handleNext}
             disabled={isLastSlide}
-            className={`flex absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-neutral-200 bg-white shadow-sm items-center justify-center transition-all z-20 ${
+            aria-label="Next Slide"
+            className={`flex absolute right-2 sm:right-3.5 md:right-4 top-1/2 -translate-y-1/2 w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-ink/12 bg-white/85 hover:bg-white text-ink shadow-[0_4px_16px_rgba(0,0,0,0.06),inset_0_1px_1px_rgba(255,255,255,0.95)] backdrop-blur-xl items-center justify-center transition-all z-20 ${
               isLastSlide
-                ? 'opacity-20 cursor-not-allowed text-neutral-300'
-                : 'hover:bg-neutral-100 hover:border-neutral-300 text-neutral-700 cursor-pointer hover:scale-105 active:scale-95'
+                ? 'opacity-20 cursor-not-allowed text-ink/30'
+                : 'cursor-pointer hover:scale-105 active:scale-95 text-ink'
             }`}
             title="Next Slide"
           >
-            <ChevronRight size={18} />
+            <ChevronRight size={16} />
           </button>
         </div>
 
-        {/* Bottom Navigation Controls (Previous and Next removed; centered dots and final Get Started button) */}
-        <div className="px-5 sm:px-10 py-4 sm:py-5 bg-neutral-50/70 border-t border-neutral-100 flex items-center justify-center relative min-h-[58px]">
-          {/* Centered Pagination Dots */}
-          <div className="flex items-center gap-2">
+        {/* Bottom Navigation Controls - Backgroundless (Zero collision layout) */}
+        <div className="relative z-10 px-4 sm:px-8 py-3 sm:py-4 bg-transparent flex items-center justify-between min-h-[52px]">
+          {/* Left Column Spacer (keeps dots centered) */}
+          <div className="flex-1 flex justify-start items-center min-w-[70px] sm:min-w-[100px]">
+            {currentSlide > 0 && (
+              <button
+                type="button"
+                onClick={handlePrev}
+                className="text-ink-soft hover:text-ink text-[10px] sm:text-[11px] font-semibold tracking-wider uppercase px-2.5 py-1 rounded-full border border-transparent hover:border-ink/10 transition cursor-pointer"
+              >
+                ← Back
+              </button>
+            )}
+          </div>
+
+          {/* Center Column: Pagination Dots */}
+          <div className="flex items-center gap-1.5 shrink-0 px-2">
             {slides.map((_, dotIdx) => {
               const isDotActive = dotIdx === currentSlide;
               return (
@@ -580,30 +573,37 @@ export default function CandidateOnboardingModal({
                   key={dotIdx}
                   type="button"
                   onClick={() => setCurrentSlide(dotIdx)}
-                  className={`transition-all duration-200 rounded-full cursor-pointer ${
-                    isDotActive
-                      ? 'w-6 h-2 bg-neutral-950'
-                      : 'w-2 h-2 bg-neutral-300 hover:bg-neutral-400'
-                  }`}
-                  title={`Go to slide ${dotIdx + 1}`}
-                />
+                  aria-label={`Go to slide ${dotIdx + 1}`}
+                  aria-current={isDotActive ? "true" : undefined}
+                  className="group relative flex h-6 w-3 sm:w-3.5 items-center justify-center focus-visible:outline-none cursor-pointer"
+                >
+                  <span
+                    className={`block rounded-full transition-all duration-300 ${
+                      isDotActive
+                        ? 'h-1.5 sm:h-2 w-4 sm:w-5 bg-ink opacity-100'
+                        : 'h-1.5 w-1.5 bg-ink opacity-25 group-hover:opacity-50'
+                    }`}
+                  />
+                </button>
               );
             })}
           </div>
 
-          {/* On final slide: Get Started Action Button on the right */}
-          {isLastSlide && (
-            <div className="absolute right-4 sm:right-8">
+          {/* Right Column: Get Started Action on final slide */}
+          <div className="flex-1 flex justify-end items-center min-w-[70px] sm:min-w-[100px]">
+            {isLastSlide ? (
               <button
                 type="button"
                 onClick={handleComplete}
-                className="inline-flex items-center gap-2 px-5 sm:px-6 py-2.5 rounded-full bg-neutral-950 hover:bg-black text-white text-xs sm:text-sm font-bold shadow-md shadow-neutral-950/20 transition-all active:scale-95 cursor-pointer"
+                className="group inline-flex items-center gap-1.5 px-3.5 sm:px-5 py-1.5 sm:py-2 rounded-full bg-ink hover:bg-ink/90 text-paper text-[10.5px] sm:text-xs font-semibold tracking-[0.14em] uppercase shadow-[0_4px_16px_rgba(0,0,0,0.18),inset_0_1px_1px_rgba(255,255,255,0.3)] backdrop-blur-xl transition-all hover:-translate-y-0.5 active:scale-95 cursor-pointer shrink-0 whitespace-nowrap"
               >
                 <span>Get Started</span>
-                <ArrowRight size={14} />
+                <ArrowRight size={12} className="transition-transform duration-300 group-hover:translate-x-1" />
               </button>
-            </div>
-          )}
+            ) : (
+              <div className="w-12" aria-hidden="true" />
+            )}
+          </div>
         </div>
       </div>
     </div>,

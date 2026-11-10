@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useCallback, useEffect, useState } from "react";
 import { ArrowControl } from "./ArrowControl";
 import { BrandMark } from "./BrandMark";
@@ -49,7 +49,7 @@ export function LandingPage({ enabled = true }: { enabled?: boolean }) {
         <HeroSection
           active={index === 0}
           onJoinWaitlist={openWaitlist}
-          onJoinTalentPool={openTalent}
+          onOpenRolesClick={openRoles}
         />
         <StatementSection active={index === 1} />
         <WorkflowSection active={index === 2} />
@@ -79,7 +79,6 @@ export function LandingPage({ enabled = true }: { enabled?: boolean }) {
           <BrandMark
             dark={dark}
             onHomeClick={() => goTo(0)}
-            onOpenRolesClick={openRoles}
             onJoinWaitlist={openWaitlist}
           />
 
@@ -89,19 +88,6 @@ export function LandingPage({ enabled = true }: { enabled?: boolean }) {
             <SectionNavigation index={index} dark={dark} onSelect={goTo} />
             <ArrowControl isLast={isLast} dark={dark} onClick={() => (isLast ? goTo(0) : step(1))} />
           </div>
-
-          <footer
-            className="absolute inset-x-0 bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] z-40 flex justify-center px-3 md:bottom-3 md:px-36"
-            style={{ color: dark ? "var(--color-paper)" : "var(--color-ink)" }}
-          >
-            <nav aria-label="Directory Navigation" className="flex flex-wrap justify-center items-center gap-x-5 sm:gap-x-7 gap-y-1.5 text-[11px] sm:text-xs font-medium">
-              <Link to="/find-jobs" className="py-2 underline-offset-4 hover:underline transition opacity-80 hover:opacity-100">Find Jobs</Link>
-              <span className="opacity-40 select-none">•</span>
-              <Link to="/employers" className="py-2 underline-offset-4 hover:underline transition opacity-80 hover:opacity-100">For Employers</Link>
-              <span className="opacity-40 select-none">•</span>
-              <Link to="/resources" className="py-2 underline-offset-4 hover:underline transition opacity-80 hover:opacity-100">Resources & Trust</Link>
-            </nav>
-          </footer>
 
           {/* Mobile Bottom Navigation Capsule */}
           <MobileBottomNav
