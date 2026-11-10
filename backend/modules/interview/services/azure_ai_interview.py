@@ -14,6 +14,10 @@ import json
 import logging
 from typing import Dict, Any, List, Optional
 import httpx
+from dotenv import load_dotenv
+
+# Ensure environment variables are loaded
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -29,19 +33,30 @@ UNTRUSTED_DATA_GUARD = (
 )
 
 PROMPT_EXTRACT = f"""You extract structured data from resumes. {UNTRUSTED_DATA_GUARD}
-Return only facts present in the text.
+Return only facts present in the text. Do not invent or assume technical skills or projects if not mentioned.
 JSON keys: name, skills[], experience[{{title,company,start,end,highlights[]}}],
 education[], projects[{{name,description,technologies[],claimed_impact}}], certifications[], achievements[], total_years_experience."""
 
 PROMPT_MATCH = f"""You compare a candidate profile to a job description. {UNTRUSTED_DATA_GUARD}
 For each job requirement mark status met/partial/missing/unclear with short evidence strings.
-List resume claims worth verifying (metrics, leadership, ownership, rare skills).
+List resume claims worth verifying (metrics, leadership, ownership, transferable skills).
+IMPORTANT: The job requirements ALWAYS take precedence over candidate background.
 JSON keys: requirements[{{requirement,status,evidence[]}}], claims_to_verify[{{claim,reason}}], match_summary."""
 
-PROMPT_PLAN = f"""You design structured, fair interviews. {UNTRUSTED_DATA_GUARD}
+PROMPT_PLAN = f"""You design structured, fair, and role-appropriate interviews. {UNTRUSTED_DATA_GUARD}
 Rules:
-- 4-6 tailored questions mixing: technical, project_deep_dive, behavioral, practical, claim_verification.
-- competency must be one of: technical_knowledge, problem_solving, practical_experience, communication, role_specific, behavioral.
+- 4-6 tailored questions mixing: role_knowledge/domain_knowledge, practical_experience/project_deep_dive, behavioral, scenario_problem_solving, claim_verification.
+- STRICT DOMAIN RELEVANCE: Questions must strictly match the target job domain, title, and required responsibilities.
+  * For NON-TECHNICAL roles (e.g., Travel Research, Content, Sales, Marketing, HR, Operations), NEVER generate software engineering, coding, API, or technical architecture questions, even if the candidate has coding projects on their resume.
+  * Use candidate experience and projects ONLY to personalize the context (e.g. asking about transferable skills or specific methods from their projects), but always anchor the question to the target job requirements.
+  * For fresher/intern candidates: Focus on foundational research, curiosity, methodology, attention to detail, learning speed, and practical problem-solving. Do not assume years of enterprise corporate experience.
+- competency must be appropriate to the role domain:
+  * Research: research_methodology, synthesis_and_accuracy, problem_solving, communication
+  * Marketing: campaign_strategy, analytics_and_roi, creative_execution, collaboration
+  * Sales: relationship_and_discovery, negotiation_and_closing, prospecting_and_pipeline, communication
+  * HR: talent_and_people, workplace_relations, problem_solving, communication
+  * Operations: process_execution, problem_solving, vendor_and_stakeholder, ownership
+  * Tech: technical_delivery, problem_solving, collaboration, ownership
 - scoring_criteria keys "0","1","2","3": 0 no evidence, 1 vague, 2 clear & relevant, 3 specific & convincing.
 - behavioral questions: uses_star=true; others false. max_follow_ups 0-2.
 - Never ask about age, gender, ethnicity, family, health, religion, nationality or protected traits.
@@ -51,6 +66,7 @@ JSON keys: duration_minutes, questions[{{id,type,competency,difficulty,text,expe
 PROMPT_EVALUATE = f"""You evaluate interview answers against a fixed rubric and produce a comprehensive recruiter scorecard. {UNTRUSTED_DATA_GUARD}
 Score each question 0-3 using its scoring criteria.
 Generate an overall score (0 to 100), hiring recommendation ("strong_hire" | "hire" | "weak_hire" | "no_hire"), recommendation_rationale, summary, strengths[], development_areas[], and verify claims from resume.
+Ensure evaluation criteria respect the candidate's seniority level (evaluating freshers/interns on potential, methodology, and learning ability).
 JSON keys:
 {{
   "overall_score": number,
@@ -157,13 +173,13 @@ def extract_resume_facts(raw_text: str, candidate_name: str = "") -> Dict[str, A
     if not clean_text:
         return {
             "name": candidate_name or "Candidate",
-            "skills": ["Software Engineering", "Problem Solving", "System Architecture"],
-            "experience": [{"title": "Software Engineer", "company": "Technology Company", "highlights": ["Engineered core backend and web applications."]}],
-            "projects": [{"name": "Core Applications", "description": "Built scalable cloud services.", "technologies": ["Python", "JavaScript"], "claimed_impact": "Improved feature delivery"}],
-            "education": ["Computer Science or Engineering degree"],
+            "skills": [],
+            "experience": [],
+            "projects": [],
+            "education": [],
             "certifications": [],
             "achievements": [],
-            "total_years_experience": 3,
+            "total_years_experience": 0,
         }
 
     try:
@@ -180,32 +196,47 @@ def extract_resume_facts(raw_text: str, candidate_name: str = "") -> Dict[str, A
 
     return {
         "name": candidate_name or "Candidate",
-        "skills": ["Software Engineering", "Full Stack Development", "System Design"],
-        "experience": [{"title": "Software Engineer", "company": "Technology Firm", "highlights": [clean_text[:120]]}],
-        "projects": [{"name": "Engineering Project", "description": "Software architecture & APIs.", "technologies": ["Python", "Cloud"], "claimed_impact": "Production delivery"}],
-        "education": ["Engineering Degree"],
+        "skills": [],
+        "experience": [],
+        "projects": [],
+        "education": [],
         "certifications": [],
         "achievements": [],
-        "total_years_experience": 3,
+        "total_years_experience": 0,
     }
 
 
 def generate_custom_interview_plan(job: Dict[str, Any], profile: Dict[str, Any]) -> Dict[str, Any]:
     """
     Performs AI candidate-job matching and generates 4-6 tailored questions with STAR rubrics
-    specifically probing the candidate's actual projects, claims, and technical depth.
+    specifically probing the candidate's actual projects, claims, and transferable depth.
+    Ensures questions are strictly relevant to the job domain and never default to software engineering.
     """
+    from modules.interview.services.domain_classifier import (
+        classify_job_domain,
+        classify_seniority,
+        get_fallback_questions,
+        get_domain_competencies,
+    )
+
+    job_title = job.get("title", "Position")
+    job_desc = job.get("description", "")
+    job_dept = job.get("department", "")
+    domain, confidence = classify_job_domain(job_title, job_dept, job_desc)
+    seniority = classify_seniority(job_title, job.get("seniority", "mid"), job_desc)
+    domain_comp_dict = get_domain_competencies(domain)
+
     # 1. Matching
     match_result = {
-        "requirements": [{"requirement": f"{job.get('title', 'Role')} requirements", "status": "met", "evidence": profile.get("skills", [])[:4]}],
-        "claims_to_verify": [{"claim": p.get("name", "Project"), "reason": "Verify hands-on technical ownership and architectural decisions."} for p in profile.get("projects", [])[:2]],
-        "match_summary": f"Candidate demonstrates skills in {', '.join(profile.get('skills', [])[:5])}."
+        "requirements": [{"requirement": f"{job_title} requirements", "status": "met", "evidence": profile.get("skills", [])[:4]}],
+        "claims_to_verify": [{"claim": p.get("name", "Project"), "reason": f"Verify hands-on experience relevant to {job_title}."} for p in profile.get("projects", [])[:2]],
+        "match_summary": f"Candidate assessed for {job_title} in {domain.upper()} domain ({seniority})."
     }
 
     try:
         m_data = call_azure_gpt(
             system_prompt=PROMPT_MATCH,
-            user_prompt=f"<job>Title: {job.get('title')}\nDescription:\n{job.get('description')}</job>\n<resume>{json.dumps(profile)}</resume>",
+            user_prompt=f"<job>Title: {job_title}\nDomain: {domain}\nSeniority: {seniority}\nDescription:\n{job_desc}</job>\n<resume>{json.dumps(profile)}</resume>",
         )
         if isinstance(m_data, dict) and m_data.get("requirements"):
             match_result = m_data
@@ -217,29 +248,36 @@ def generate_custom_interview_plan(job: Dict[str, Any], profile: Dict[str, Any])
     try:
         p_data = call_azure_gpt(
             system_prompt=PROMPT_PLAN,
-            user_prompt=f"""Position: {job.get('title')} ({job.get('seniority', 'mid')}) at {job.get('company', 'Company')}
+            user_prompt=f"""Position: {job_title} (Domain: {domain}, Seniority Level: {seniority}) at {job.get('company', 'Company')}
 Job Description & Requirements:
-{job.get('description', '')[:2000]}
+{job_desc[:2500]}
 Candidate Skills: {', '.join(profile.get('skills', []))}
 Candidate Projects to Probe: {json.dumps(profile.get('projects', [])[:3])}
 Candidate Experience: {json.dumps(profile.get('experience', [])[:2])}
 Claims to Verify: {json.dumps(match_result.get('claims_to_verify', []))}
 
-Generate 4 to 6 customized questions testing technical depth, architecture, STAR behavioral execution, and verifying project claims.""",
+CRITICAL DOMAIN GUARDRAIL:
+- The role domain is {domain.upper()}.
+- Generate questions strictly testing competencies and scenarios relevant to {job_title}.
+- Do NOT generate software engineering or technical architecture questions unless domain is TECH.
+- If candidate is a Fresher or Intern, evaluate methodology, problem-solving, curiosity, and structured thinking rather than multi-year enterprise experience.
+
+Generate 4 to 6 customized questions testing domain depth, STAR behavioral execution, and role fit.""",
         )
         if isinstance(p_data, dict) and isinstance(p_data.get("questions"), list) and len(p_data["questions"]) >= 3:
             for idx, q in enumerate(p_data["questions"]):
+                q_comp = q.get("competency") or list(domain_comp_dict.keys())[idx % len(domain_comp_dict)]
                 questions.append({
                     "id": q.get("id") or f"q{idx + 1}",
-                    "competency": q.get("competency") or "technical_knowledge",
-                    "category": (q.get("competency") or "Technical Knowledge").replace("_", " ").title(),
+                    "competency": q_comp,
+                    "category": (q.get("type") or q_comp).replace("_", " ").title(),
                     "phase": f"Phase {idx + 1} of {len(p_data['questions'])}",
-                    "title": q.get("type", "Technical").replace("_", " ").title(),
-                    "prompt": q.get("text") or q.get("prompt") or f"Describe your technical approach with {profile.get('skills', ['engineering'])[0]}.",
-                    "hint": "Use STAR: Situation, Task, Action, Result. Detail your own contributions, trade-offs, and measurable outcomes.",
+                    "title": q.get("type", "Domain Assessment").replace("_", " ").title(),
+                    "prompt": q.get("text") or q.get("prompt"),
+                    "hint": "Use STAR: Situation, Task, Action, Result. Detail your own contributions, approach, and measurable outcomes.",
                     "durationGuide": "2 - 3 mins",
-                    "expected_evidence": q.get("expected_evidence") or ["Clear technical rationale", "Specific trade-offs", "Measurable outcomes"],
-                    "scoring_criteria": q.get("scoring_criteria") or {"0": "No evidence", "1": "Vague", "2": "Clear technical choices", "3": "Deep engineering mastery"},
+                    "expected_evidence": q.get("expected_evidence") or ["Clear rationale", "Specific actions taken", "Measurable outcomes"],
+                    "scoring_criteria": q.get("scoring_criteria") or {"0": "No evidence", "1": "Vague", "2": "Clear relevant response", "3": "Exemplary depth"},
                     "uses_star": bool(q.get("uses_star", True)),
                     "max_follow_ups": q.get("max_follow_ups", 2),
                     "question_style_version": "azure-gpt-6-luna-v1",
@@ -248,71 +286,10 @@ Generate 4 to 6 customized questions testing technical depth, architecture, STAR
         logger.warning(f"[custom plan fallback] {exc}")
 
     if not questions:
-        skills = profile.get("skills", ["Software Architecture", "API Design", "Cloud Infrastructure"])
-        projects = profile.get("projects", [])
-        proj_name = projects[0].get("name") if projects else "scalable systems"
-        questions = [
-            {
-                "id": "q1_technical",
-                "competency": "technical_delivery",
-                "category": "Technical Delivery",
-                "phase": "Phase 1 of 4",
-                "title": "System Architecture & Delivery",
-                "prompt": f"Can you walk me through a system or application you built using {', '.join(skills[:3])}? What major architectural trade-offs did you make?",
-                "hint": "Use STAR: Describe the Situation, Task, your specific Action, and the Result.",
-                "durationGuide": "2 - 3 mins",
-                "expected_evidence": ["Component modularity", "Latency or database trade-offs", "Production monitoring"],
-                "scoring_criteria": {"0": "No explanation", "1": "High-level only", "2": "Sound technical choices", "3": "Deep engineering mastery"},
-                "uses_star": True,
-                "max_follow_ups": 2,
-                "question_style_version": "azure-gpt-6-luna-v1",
-            },
-            {
-                "id": "q2_project_deep_dive",
-                "competency": "problem_solving",
-                "category": "Problem Solving",
-                "phase": "Phase 2 of 4",
-                "title": "Project Deep Dive",
-                "prompt": f"In your experience with {proj_name}, describe a critical technical bottleneck or bug you diagnosed and solved. How did you validate your fix?",
-                "hint": "Explain your diagnostic steps, tools used, and measurable impact on stability or latency.",
-                "durationGuide": "2 - 3 mins",
-                "expected_evidence": ["Root cause analysis", "Metrics/profiling", "Verifiable outcome"],
-                "scoring_criteria": {"0": "Unclear", "1": "Basic troubleshooting", "2": "Methodical diagnosis", "3": "Rigorous profiling with metrics"},
-                "uses_star": True,
-                "max_follow_ups": 2,
-                "question_style_version": "azure-gpt-6-luna-v1",
-            },
-            {
-                "id": "q3_behavioral",
-                "competency": "collaboration",
-                "category": "Collaboration",
-                "phase": "Phase 3 of 4",
-                "title": "Technical Collaboration",
-                "prompt": "Tell me about a time you had a technical disagreement with a team member or stakeholder on architecture or implementation. How did you resolve it?",
-                "hint": "Highlight data-driven decision making and how you reached team consensus.",
-                "durationGuide": "2 - 3 mins",
-                "expected_evidence": ["Active listening", "Data-driven trade-offs", "Team alignment"],
-                "scoring_criteria": {"0": "Avoided conflict", "1": "Compromised without rationale", "2": "Constructive discussion", "3": "Exemplary collaborative leadership"},
-                "uses_star": True,
-                "max_follow_ups": 2,
-                "question_style_version": "azure-gpt-6-luna-v1",
-            },
-            {
-                "id": "q4_ownership",
-                "competency": "ownership",
-                "category": "Ownership & Delivery",
-                "phase": "Phase 4 of 4",
-                "title": "Production Ownership",
-                "prompt": "Describe a delivery risk or critical deadline you took personal responsibility for. What actions did you take, and what was the quantifiable outcome?",
-                "hint": "Detail your personal ownership, risk mitigation, and measurable results.",
-                "durationGuide": "2 - 3 mins",
-                "expected_evidence": ["Proactive risk mitigation", "Personal accountability", "Quantifiable results"],
-                "scoring_criteria": {"0": "Passive role", "1": "Minimal action", "2": "Clear ownership", "3": "Exceptional accountability and impact"},
-                "uses_star": True,
-                "max_follow_ups": 2,
-                "question_style_version": "azure-gpt-6-luna-v1",
-            },
-        ]
+        focus_topic = job_title
+        if profile.get("skills"):
+            focus_topic = f"{job_title} involving {', '.join(profile.get('skills')[:2])}"
+        questions = get_fallback_questions(domain=domain, seniority=seniority, focus_topic=focus_topic)
 
     return {"match": match_result, "questions": questions}
 
@@ -409,9 +386,10 @@ def process_interview_turn(
     job_title = getattr(round_obj, "requisition_title", "Position") or "Position"
     history = previous_turns or []
 
-    system_prompt = f"""You are a world-class, polite, and rigorous Senior Technical Interviewer conducting a live interview for the role of {job_title}.
+    system_prompt = f"""You are a world-class, polite, and rigorous Interviewer conducting a live interview for the role of {job_title}.
 You are speaking directly with candidate {candidate_name}.
 Your job is to evaluate their response to the current interview question against expected evidence and scoring criteria.
+Always maintain domain-relevance: do not steer non-technical candidates toward software engineering or technical architectures.
 
 Rules:
 1. Detect STAR components (Situation, Task, Action, Result) in their response.

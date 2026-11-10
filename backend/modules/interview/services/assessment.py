@@ -41,7 +41,7 @@ def spoken_label(value, limit=60):
     value = re.sub(r'[^\w\s+#.\-/]', ' ', value)
     return ' '.join(value.split())[:limit].strip()
 
-RUBRIC_VERSION = "star-competencies-v1"
+RUBRIC_VERSION = "star-competencies-v2"
 COMPETENCIES = {
     "technical_delivery": {"name": "Technical delivery", "weight": 0.35, "indicators": ["Relevant technical decisions", "Explains trade-offs", "Own contribution", "Verifiable outcomes"]},
     "problem_solving": {"name": "Problem solving", "weight": 0.30, "indicators": ["Diagnoses constraints", "Compares alternatives", "Explains implementation", "Measures results"]},
@@ -58,40 +58,96 @@ RATING_ANCHORS = {
 
 
 def build_questions(resume: dict, requisition: dict) -> list:
+    from modules.interview.services.domain_classifier import (
+        classify_job_domain,
+        classify_seniority,
+        get_domain_competencies,
+        DOMAIN_TECH,
+    )
+
     details = resume.get("details") or {}
     resume_text = resume.get("resume_text") or resume.get("extracted_text") or ""
     experience = details.get("experience") or resume.get("experience") or []
     projects = details.get("projects") or resume.get("projects") or []
     if not resume_text and not experience and not projects:
         raise ValueError("A parsed candidate resume is required before starting the interview.")
+
     role = requisition.get("structured_role") or {}
+    title = requisition.get("title") or role.get("title") or ""
+    department = requisition.get("department") or role.get("department") or ""
     skills = role.get("must_have_skills") or []
     jd = requisition.get("generated_jd_markdown") or role.get("job_description") or ""
     if not skills and not jd:
         raise ValueError("Requisition requirements are required before starting the interview.")
+
+    domain, confidence = classify_job_domain(title=title, department=department, description=jd, required_skills=skills)
+    seniority = classify_seniority(title=title, seniority_hint=role.get("seniority", ""), experience_text=jd)
+    active_competencies = get_domain_competencies(domain)
+
     labels = [spoken_label(item.get('name') or item.get('skill')) if isinstance(item, dict) else spoken_label(item) for item in skills]
     labels = [label for label in labels if label]
     resume_context = json.dumps({'text': resume_text, 'experience': experience, 'projects': projects, 'skills': resume.get('skills') or details.get('skills')}, ensure_ascii=False).casefold()
     shared_skills = [label for label in labels if re.search(r'(?<!\w)' + re.escape(label.casefold()) + r'(?!\w)', resume_context)]
-    focus = ', '.join((shared_skills or labels)[:2])
+    focus = ', '.join((shared_skills or labels)[:2]) or title
+
     project_name = ''
     for project in projects:
         if isinstance(project, dict):
-            project_name = spoken_label(project.get('name') or project.get('title'), 50)
-            if project_name: break
+            p_candidate = spoken_label(project.get('name') or project.get('title'), 50)
+            # Personalize only if transferable or not purely technical for non-tech roles
+            if p_candidate:
+                project_name = p_candidate
+                break
     example = f'your {project_name} project' if project_name else 'a project from your experience'
     focus_clause = f' involving {focus}' if focus else ''
-    prompts = [
-        f'Tell me about {example}{focus_clause}. What did you personally deliver, and what was the outcome?',
-        f'Describe a difficult technical problem{focus_clause}. What options did you consider, and why did you choose your solution?',
-        'Tell me about a disagreement with a teammate or stakeholder. How did you handle it, and what changed?',
-        'Describe a delivery risk you took responsibility for. What did you do, and how did you measure the result?',
-    ]
-    return [{"id": f"q{index + 1}_{key}", "competency": key, "category": value["name"],
-             "phase": f"Phase {index + 1} of 4", "title": value["name"], "prompt": prompts[index],
-             "hint": "Use STAR: Situation, Task, Action, Result. Explain your own contribution and evidence of impact.",
-             "durationGuide": "2 - 3 mins", "rubric_version": RUBRIC_VERSION, "question_style_version": QUESTION_STYLE_VERSION}
-            for index, (key, value) in enumerate(COMPETENCIES.items())]
+
+    # Role-aware prompts based on domain and seniority
+    if domain != DOMAIN_TECH:
+        if seniority == "fresher":
+            prompts = [
+                f'Tell me about {example} or relevant coursework{focus_clause}. What was your personal approach, and what was the outcome?',
+                f'Describe a complex or ambiguous challenge you faced{focus_clause}. What options did you consider, and how did you resolve it?',
+                'Tell me about a disagreement with a teammate or stakeholder. How did you handle it, and what changed?',
+                'Describe a responsibility or deadline you took personal ownership for. What actions did you take, and how did you verify your results?',
+            ]
+        else:
+            prompts = [
+                f'Tell me about {example}{focus_clause}. What did you personally deliver, and what was the measurable outcome?',
+                f'Describe a difficult operational or analytical challenge{focus_clause}. What options did you consider, and why did you choose your solution?',
+                'Tell me about a disagreement with a teammate or stakeholder. How did you handle it, and what changed?',
+                'Describe a delivery risk you took responsibility for. What did you do, and how did you measure the result?',
+            ]
+    else:
+        if seniority == "fresher":
+            prompts = [
+                f'Tell me about {example}{focus_clause}. What was your design approach, and what did you personally build?',
+                f'Describe a difficult technical bug or problem you diagnosed{focus_clause}. What options did you consider, and why did you choose your solution?',
+                'Tell me about a time you collaborated with peers on code or a technical project. How did you handle feedback?',
+                'Describe a project deadline or delivery goal you took personal ownership of. How did you ensure quality and deliver on time?',
+            ]
+        else:
+            prompts = [
+                f'Tell me about {example}{focus_clause}. What did you personally deliver, and what was the outcome?',
+                f'Describe a difficult technical problem{focus_clause}. What options did you consider, and why did you choose your solution?',
+                'Tell me about a disagreement with a teammate or stakeholder. How did you handle it, and what changed?',
+                'Describe a delivery risk you took responsibility for. What did you do, and how did you measure the result?',
+            ]
+
+    comp_items = list(active_competencies.items())
+    return [{
+        "id": f"q{index + 1}_{key}",
+        "competency": key,
+        "category": value["name"],
+        "phase": f"Phase {index + 1} of 4",
+        "title": value["name"],
+        "prompt": prompts[index],
+        "hint": "Use STAR: Situation, Task, Action, Result. Explain your own contribution and evidence of impact.",
+        "durationGuide": "2 - 3 mins",
+        "rubric_version": RUBRIC_VERSION,
+        "question_style_version": QUESTION_STYLE_VERSION,
+        "domain": domain,
+        "seniority": seniority,
+    } for index, (key, value) in enumerate(comp_items[:4])]
 
 
 def load_questions(session, round_obj) -> list:
@@ -139,10 +195,24 @@ def load_questions(session, round_obj) -> list:
     return questions
 
 
-def validate_assessment(payload: dict, questions: list, answers: dict) -> dict:
+def validate_assessment(payload: dict, questions: list, answers: dict, competencies_dict: dict = None) -> dict:
+    from modules.interview.services.domain_classifier import (
+        get_domain_competencies,
+        classify_job_domain,
+        DOMAIN_TECH,
+    )
+
     rows = payload.get("competencies")
     if not isinstance(rows, list) or len(rows) != len(questions):
         raise ValueError("Missing competency assessments")
+
+    # Resolve active competencies dictionary
+    active_comp = dict(competencies_dict or {})
+    if not active_comp and questions and questions[0].get("domain"):
+        active_comp = get_domain_competencies(questions[0].get("domain"))
+    if not active_comp:
+        active_comp = COMPETENCIES
+
     validated = []
     for question in questions:
         matches = [row for row in rows if row.get("question_id") == question["id"]]
@@ -171,19 +241,30 @@ def validate_assessment(payload: dict, questions: list, answers: dict) -> dict:
         rationale = row.get("rationale")
         if not isinstance(rationale, str) or not rationale.strip():
             raise ValueError("Rating rationale required")
-        validated.append({**row, "competency": question["competency"], "weight": COMPETENCIES[question["competency"]]["weight"]})
+        
+        q_comp = question["competency"]
+        weight = active_comp.get(q_comp, {}).get("weight") or (1.0 / len(questions))
+        validated.append({**row, "competency": q_comp, "weight": weight})
     # Compute the overall score on the server; do not accept an invented model total.
     overall = round(sum((row["rating"] - 1) / 4 * row["weight"] * 100 for row in validated))
     return {"status": "scored", "rubric_version": RUBRIC_VERSION, "overall_score": overall,
-            "competencies": validated, "competency_dictionary": COMPETENCIES,
+            "competencies": validated, "competency_dictionary": active_comp,
             "rating_anchors": {str(rating): description for rating, description in RATING_ANCHORS.items()},
             "summary": "STAR and competency assessment based on quoted candidate responses. Human review is required.",
-            "key_strengths": [COMPETENCIES[row["competency"]]["name"] for row in validated if row["rating"] >= 4],
+            "key_strengths": [active_comp.get(row["competency"], {}).get("name", row["competency"]) for row in validated if row["rating"] >= 4],
             "areas_for_improvement": [row["rationale"] for row in validated if row["rating"] <= 2]}
 
 
 async def evaluate_assessment(questions: list, turns: list, duration: int) -> dict:
     from modules.interview.services.communication_analyzer import CommunicationAnalyzer
+    from modules.interview.services.domain_classifier import (
+        get_domain_competencies,
+        DOMAIN_TECH,
+    )
+
+    domain = questions[0].get("domain") if questions and questions[0].get("domain") else None
+    active_comp = get_domain_competencies(domain) if domain else COMPETENCIES
+
     answers = {question["id"]: " ".join(str(turn.get("text") or "") for turn in turns
                if turn.get("speaker") == "candidate" and turn.get("question_id") == question["id"]).strip()
                for question in questions}
@@ -219,10 +300,10 @@ async def evaluate_assessment(questions: list, turns: list, duration: int) -> di
                     "model": settings.groq_default_model or "openai/gpt-oss-120b", "temperature": 0,
                     "max_tokens": 2500, "response_format": {"type": "json_object"},
                     "messages": [{"role": "system", "content": instruction}, {"role": "user", "content": json.dumps(
-                        {"dictionary": COMPETENCIES, "anchors": RATING_ANCHORS, "questions": questions, "answers": answers})}]})
+                        {"dictionary": active_comp, "anchors": RATING_ANCHORS, "questions": questions, "answers": answers})}]})
             response.raise_for_status()
             payload = json.loads(response.json()["choices"][0]["message"]["content"])
-            result["analysis"] = validate_assessment(payload, questions, answers)
+            result["analysis"] = validate_assessment(payload, questions, answers, competencies_dict=active_comp)
     except Exception:
         # Never replace unavailable or unverifiable scoring with word-count-based scores.
         pass

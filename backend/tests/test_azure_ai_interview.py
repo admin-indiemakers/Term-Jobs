@@ -17,9 +17,10 @@ def test_azure_config_present():
 def test_extract_resume_facts_fallback():
     profile = azure_ai_interview.extract_resume_facts("", candidate_name="Test Candidate")
     assert profile["name"] == "Test Candidate"
-    assert len(profile["skills"]) >= 2
-    assert len(profile["experience"]) >= 1
-    assert len(profile["projects"]) >= 1
+    # Empty resume must never fabricate fake skills, experience or projects
+    assert profile["skills"] == []
+    assert profile["experience"] == []
+    assert profile["projects"] == []
 
 
 def test_generate_custom_interview_plan_fallback():
