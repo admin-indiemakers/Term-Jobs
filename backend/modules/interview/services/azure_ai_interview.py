@@ -50,6 +50,7 @@ Rules:
   * For NON-TECHNICAL roles (e.g., Travel Research, Content, Sales, Marketing, HR, Operations), NEVER generate software engineering, coding, API, or technical architecture questions, even if the candidate has coding projects on their resume.
   * Use candidate experience and projects ONLY to personalize the context (e.g. asking about transferable skills or specific methods from their projects), but always anchor the question to the target job requirements.
   * For fresher/intern candidates: Focus on foundational research, curiosity, methodology, attention to detail, learning speed, and practical problem-solving. Do not assume years of enterprise corporate experience.
+  * NEVER assume the candidate has already held the exact advertised job title or worked in this specific position unless their resume clearly confirms it. NEVER phrase questions like "In your role as [Job Title], what did you build...". If the candidate is a fresher or changing domains, frame questions around academic/personal projects, problem-solving methodology, foundational knowledge, or how they would approach hypothetical role scenarios.
 - competency must be appropriate to the role domain:
   * Design (UI/UX, Product Design): design_process_and_ux, visual_and_interaction, problem_solving, collaboration
   * Research: research_methodology, synthesis_and_accuracy, problem_solving, communication

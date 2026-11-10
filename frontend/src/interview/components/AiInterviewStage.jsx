@@ -31,7 +31,7 @@ import { interviewApi } from '../services/interviewApi';
 import { finalizeRecording } from '../utils/recording';
 import { deduplicateOverlap, collapseWordStutters } from '../utils/speechDedup';
 import { InterviewCompletedCard } from './InterviewCompletedCard';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import termjobsLogo from '../../assets/termjobs-logo.png';
 
 /**
@@ -63,12 +63,20 @@ export function AiInterviewStage({
   onInterviewComplete,
 }) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const urlToken = searchParams.get('token') || '';
   const cacheKey = round?.id ? `tj_interview_cache_${round.id}` : null;
   const initialCache = useRef((() => {
     if (!round?.id || typeof window === 'undefined') return null;
     try {
       const raw = sessionStorage.getItem(`tj_interview_cache_${round.id}`);
-      return raw ? JSON.parse(raw) : null;
+      if (!raw) return null;
+      // Invalidate legacy or contaminated cache containing assumption-based "In your role as"
+      if (raw.includes('In your role as') || raw.includes('q1_technical_delivery')) {
+        sessionStorage.removeItem(`tj_interview_cache_${round.id}`);
+        return null;
+      }
+      return JSON.parse(raw);
     } catch (_) {
       return null;
     }
@@ -807,10 +815,17 @@ export function AiInterviewStage({
 
   // Load questions
   const loadQuestions = useCallback(async () => {
+    if (!round?.id) return;
     if (Array.isArray(initialCache?.questions) && initialCache.questions.length > 0) {
-      setQuestions(initialCache.questions);
-      setIsQuestionsLoading(false);
-      return;
+      const hasLegacyPrompt = initialCache.questions.some((q) => {
+        const text = q?.prompt || q?.text || '';
+        return text.includes('In your role as') || q?.id === 'q1_technical_delivery';
+      });
+      if (!hasLegacyPrompt) {
+        setQuestions(initialCache.questions);
+        setIsQuestionsLoading(false);
+        return;
+      }
     }
     setQuestionLoadError('');
     setIsQuestionsLoading(true);
@@ -820,7 +835,8 @@ export function AiInterviewStage({
         setIsQuestionsLoading(false);
         return;
       }
-      const data = await interviewApi.getAssessmentQuestions(round?.id, round?.candidate_token || round?.interviewer_token);
+      const token = urlToken || round?.candidate_token || round?.interviewer_token;
+      const data = await interviewApi.getAssessmentQuestions(round.id, token);
       if (Array.isArray(data?.questions) && data.questions.length > 0) {
         setQuestions(data.questions);
         setIsQuestionsLoading(false);
@@ -829,49 +845,50 @@ export function AiInterviewStage({
       throw new Error('Interview questions format invalid');
     } catch (error) {
       console.warn('Applying role-aligned questions:', error);
+      const roleName = requisitionTitle || 'this position';
       const fallback = [
         {
-          id: 'q1_technical_delivery',
-          competency: 'technical_delivery',
-          category: 'Technical delivery',
+          id: 'q1_motivation_background',
+          competency: 'role_alignment',
+          category: 'Background & Relevance',
           phase: 'Phase 1 of 4',
-          title: 'Technical Delivery',
-          prompt: `In your role as ${requisitionTitle}, describe a key technical system or application you personally designed, built, and delivered. Walk me through the architecture, your personal contributions, and how you validated the outcome.`,
-          hint: 'Use STAR: Situation, Task, Action, Result. Highlight direct contributions.',
+          title: 'Background & Role Relevance',
+          prompt: `Welcome to your interview for the ${roleName} position. To start, please introduce yourself and share what motivated you to apply for this role, as well as the relevant projects, coursework, or hands-on preparation you have undertaken that relate to it.`,
+          hint: 'Summarize your background, motivation, and relevant technical or practical preparation.',
         },
         {
           id: 'q2_problem_solving',
           competency: 'problem_solving',
-          category: 'Problem solving',
+          category: 'Problem Solving',
           phase: 'Phase 2 of 4',
-          title: 'Problem Solving & Debugging',
-          prompt: 'Describe a difficult technical bottleneck, latency issue, or system bug you solved. What diagnostic approaches did you test, and why did you settle on your eventual solution?',
-          hint: 'Detail trade-offs, root cause isolation, and verification metrics.',
+          title: 'Practical Problem Solving',
+          prompt: 'Can you walk me through a complex problem, challenge, or project you worked on recently? Explain the challenge, the steps you took to analyze it, and the final outcome or lessons learned.',
+          hint: 'Highlight your analytical process, choices considered, and how you validated the outcome.',
         },
         {
           id: 'q3_collaboration',
           competency: 'collaboration',
-          category: 'Collaboration',
+          category: 'Collaboration & Communication',
           phase: 'Phase 3 of 4',
-          title: 'Stakeholder Collaboration',
-          prompt: 'Tell me about a conflicting technical priority or disagreement you experienced with a team member or product stakeholder. How did you resolve it constructively?',
-          hint: 'Focus on communication, data-driven reasoning, and shared alignment.',
+          title: 'Collaboration & Communication',
+          prompt: 'Tell me about a time you collaborated with team members, mentors, or peers to complete a project or resolve an obstacle. What was your role, and how did you keep everyone aligned?',
+          hint: 'Focus on communication, adaptability, and working towards a shared objective.',
         },
         {
-          id: 'q4_ownership',
-          competency: 'ownership',
-          category: 'Ownership',
+          id: 'q4_learning_growth',
+          competency: 'adaptability',
+          category: 'Adaptability & Growth',
           phase: 'Phase 4 of 4',
-          title: 'Engineering Ownership & Reliability',
-          prompt: 'Describe a production release risk, deadline shift, or unexpected failure you took personal responsibility for. What immediate steps did you execute, and what preventative measures were adopted?',
-          hint: 'Highlight proactive ownership and post-incident improvements.',
+          title: 'Adaptability & Growth',
+          prompt: 'In a fast-paced work environment, technologies, tools, and priorities evolve rapidly. Can you share an example of how you quickly learned a new concept, tool, or methodology to accomplish a goal?',
+          hint: 'Demonstrate curiosity, structured self-learning, and practical application.',
         },
       ];
       setQuestions(fallback);
     } finally {
       setIsQuestionsLoading(false);
     }
-  }, [round?.id, round?.candidate_token, round?.interviewer_token, round?.interview_questions, requisitionTitle, initialCache?.questions]);
+  }, [round?.id, round?.candidate_token, round?.interviewer_token, round?.interview_questions, requisitionTitle, initialCache?.questions, urlToken]);
 
   useEffect(() => {
     loadQuestions();
@@ -901,7 +918,8 @@ export function AiInterviewStage({
     if (!questions.length) return;
     if (turns.length === 0) {
       const firstQ = questions[0];
-      const firstQText = firstQ.prompt || firstQ.text || `In your role as ${requisitionTitle || 'UI Developer'}, describe a key technical system or application you personally designed, built, and delivered. Walk me through the architecture, your personal contributions, and how you validated the outcome.`;
+      const defaultIntro = `Welcome to your interview for the ${requisitionTitle || 'open'} position. To begin, please introduce yourself and walk me through your background and the relevant projects or skills that prepared you for this role.`;
+      const firstQText = firstQ.prompt || firstQ.text || defaultIntro;
       const initialTurns = [
         {
           role: 'interviewer',
@@ -917,12 +935,12 @@ export function AiInterviewStage({
         speakText(firstQText, 0);
       }, 600);
     }
-  }, [questions, candidateName, turns.length, speakText]);
+  }, [questions, candidateName, turns.length, speakText, requisitionTitle]);
 
   const activeQuestion = questions[currentStep] || {
     id: 'q1',
-    prompt: 'Tell me about a key technical project you delivered.',
-    title: 'Technical Delivery',
+    prompt: `Welcome to your interview for the ${requisitionTitle || 'open'} position. Please introduce yourself and discuss your preparation for this role.`,
+    title: 'Introduction & Role Alignment',
   };
 
   // Submit Answer & Trigger Azure OpenAI gpt-6-luna adaptive STAR evaluation
