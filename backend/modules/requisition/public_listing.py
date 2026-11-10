@@ -72,18 +72,23 @@ def public_listing(page=1, page_size=8, q='', work_mode='', family='', location=
     if q.strip():
         raw_q = q.strip()
         escaped = re.escape(raw_q)
-        term = {'$regex': escaped, '$options': 'i'}
-        filters.append({'$or': [
+        word_start = r'\b' if raw_q[0].isalnum() or raw_q[0] == '_' else r'(^|[^\w])'
+        term = {'$regex': rf'{word_start}{escaped}', '$options': 'i'}
+        search_or = [
             {'title': term},
             {'_company': term},
             {'structured_role.must_have_skills': term},
             {'structured_role.nice_to_have_skills': term},
-            {'generated_jd_markdown': term},
-            {'structured_role.job_description': term},
-            {'structured_role.role_summary': term},
-            {'structured_role.summary': term},
-            {'intent.description': term},
-        ]})
+        ]
+        if len(raw_q) >= 2:
+            search_or.extend([
+                {'generated_jd_markdown': term},
+                {'structured_role.job_description': term},
+                {'structured_role.role_summary': term},
+                {'structured_role.summary': term},
+                {'intent.description': term},
+            ])
+        filters.append({'$or': search_or})
     if work_mode and work_mode != 'ALL':
         mode_pattern = r'^(on[- ]?site|in-office)$' if work_mode.lower().replace('-', '').replace(' ', '') == 'onsite' else '^' + re.escape(work_mode) + '$'
         filters.append({'structured_role.work_mode': {'$regex': mode_pattern, '$options': 'i'}})
@@ -93,6 +98,76 @@ def public_listing(page=1, page_size=8, q='', work_mode='', family='', location=
         filters.append({'_locations': {'$regex': re.escape(location), '$options': 'i'}})
     base_match = {'$and': filters} if filters else {}
     selected_match = {'$and': [base_match, {'_category': category}]} if category else base_match
+
+    sort_criteria = {'created_at': -1, 'id': 1}
+    score_fields = []
+    if q.strip():
+        raw_q = q.strip()
+        escaped = re.escape(raw_q)
+        word_start = r'\b' if raw_q[0].isalnum() or raw_q[0] == '_' else r'(^|[^\w])'
+        sort_criteria = {'_search_score': -1, 'created_at': -1, 'id': 1}
+        score_fields = [
+            {'$addFields': {
+                '_title_match': {
+                    '$cond': [
+                        {'$regexMatch': {'input': {'$ifNull': ['$title', '']}, 'regex': rf'{word_start}{escaped}', 'options': 'i'}},
+                        1000,
+                        0
+                    ]
+                },
+                '_company_match': {
+                    '$cond': [
+                        {'$regexMatch': {'input': {'$ifNull': ['$_company', '']}, 'regex': rf'{word_start}{escaped}', 'options': 'i'}},
+                        300,
+                        0
+                    ]
+                },
+                '_skills_match': {
+                    '$cond': [
+                        {'$or': [
+                            {'$gt': [
+                                {'$size': {
+                                    '$filter': {
+                                        'input': {
+                                            '$cond': [
+                                                {'$isArray': '$structured_role.must_have_skills'},
+                                                '$structured_role.must_have_skills',
+                                                []
+                                            ]
+                                        },
+                                        'as': 's',
+                                        'cond': {'$regexMatch': {'input': '$$s', 'regex': rf'{word_start}{escaped}', 'options': 'i'}}
+                                    }
+                                }},
+                                0
+                            ]},
+                            {'$gt': [
+                                {'$size': {
+                                    '$filter': {
+                                        'input': {
+                                            '$cond': [
+                                                {'$isArray': '$structured_role.nice_to_have_skills'},
+                                                '$structured_role.nice_to_have_skills',
+                                                []
+                                            ]
+                                        },
+                                        'as': 's',
+                                        'cond': {'$regexMatch': {'input': '$$s', 'regex': rf'{word_start}{escaped}', 'options': 'i'}}
+                                    }
+                                }},
+                                0
+                            ]}
+                        ]},
+                        500,
+                        0
+                    ]
+                }
+            }},
+            {'$addFields': {
+                '_search_score': {'$add': ['$_title_match', '$_skills_match', '$_company_match']}
+            }}
+        ]
+
     pipeline = [
         {'$match': live},
         {'$lookup': {'from': 'company_profiles', 'localField': 'company_profile_id', 'foreignField': 'id', 'as': '_profiles'}},
@@ -106,8 +181,9 @@ def public_listing(page=1, page_size=8, q='', work_mode='', family='', location=
         {'$addFields': {'_company': {'$ifNull': ['$_profile.name', {'$ifNull': ['$_tenant.name', {'$ifNull': ['$company_name', 'Partner Enterprise']}]}]},
                         '_location': {'$ifNull': ['$structured_role.location', {'$ifNull': ['$_profile.location', 'Remote']}]}}},
         {'$addFields': {'_locations': {'$cond': [{'$isArray': '$_location'}, '$_location', {'$map': {'input': [0], 'as': 'unused', 'in': '$_location'}}]}}},
+        *score_fields,
         {'$facet': {
-            'items': [{'$match': selected_match}, {'$sort': {'created_at': -1, 'id': 1}},
+            'items': [{'$match': selected_match}, {'$sort': sort_criteria},
                       {'$skip': (page - 1) * page_size}, {'$limit': page_size},
                       {'$project': {'_id': 0, 'id': 1, 'title': 1, 'created_at': 1, 'structured_role': 1,
                                     'generated_jd_markdown': 1, 'intent.description': 1,
@@ -123,8 +199,23 @@ def public_listing(page=1, page_size=8, q='', work_mode='', family='', location=
     total = result['total'][0]['count'] if result['total'] else 0
     stats = result['stats'][0] if result['stats'] else {'roles': 0, 'companies': []}
     work_modes = {'remote', 'hybrid', 'onsite', 'on-site', 'in-office', 'wfh', 'remote / hybrid', 'hybrid / remote', 'work from home'}
+    raw_items = result['items']
+    if q.strip():
+        def _score(row):
+            t = row.get('title') or ''
+            stored = row.get('structured_role') or {}
+            skills = (stored.get('must_have_skills') or []) + (stored.get('nice_to_have_skills') or [])
+            if re.search(rf'{word_start}{escaped}', t, re.I):
+                return 100
+            if any(re.search(rf'{word_start}{escaped}', str(s), re.I) for s in skills):
+                return 50
+            if re.search(rf'{word_start}{escaped}', row.get('_company') or '', re.I):
+                return 40
+            return 10
+        raw_items = sorted(raw_items, key=_score, reverse=True)
+
     return {
-        'items': [_public_item(row) for row in result['items']], 'page': page, 'page_size': page_size,
+        'items': [_public_item(row) for row in raw_items], 'page': page, 'page_size': page_size,
         'total': total, 'total_pages': max(1, math.ceil(total / page_size)),
         'categories': [{'id': row['_id'], 'label': row['_id'], 'count': row['count']} for row in result['categories']],
         'filtered_total': sum(row['count'] for row in result['categories']),
@@ -157,4 +248,5 @@ def _public_item(row):
             'company_location': profile.get('location') or 'India',
             'company_logo_url': profile.get('logo_url') or tenant.get('logo_url') or '',
             'job_family': role['job_family'], 'work_mode': role['work_mode'] or 'Onsite',
+            'due_date': deadline,
             'structured_role': role, 'generated_jd_markdown': row.get('generated_jd_markdown') or role['job_description']}

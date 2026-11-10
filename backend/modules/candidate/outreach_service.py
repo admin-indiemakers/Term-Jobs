@@ -330,6 +330,7 @@ def handle_candidate_rsvp(token: str, action: str, origin: Optional[str] = None)
         )
 
     round_id = None
+    candidate_token = None
     meeting_link = None
     candidate_portal_link = None
     candidate_passcode = None
