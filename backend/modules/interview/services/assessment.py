@@ -151,7 +151,7 @@ def build_questions(resume: dict, requisition: dict) -> list:
 
 
 def load_questions(session, round_obj) -> list:
-    if round_obj.interview_questions and (getattr(round_obj, 'status', '') == 'Completed' or all(q.get('question_style_version') == QUESTION_STYLE_VERSION for q in round_obj.interview_questions)):
+    if round_obj.interview_questions and len(round_obj.interview_questions) >= 3:
         return round_obj.interview_questions
     from modules.requisition.domain.models import Requisition
     from modules.shared.db import db

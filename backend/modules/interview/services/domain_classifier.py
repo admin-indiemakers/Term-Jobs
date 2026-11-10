@@ -9,6 +9,7 @@ from typing import Dict, Any, List, Tuple
 
 # Domain Constants
 DOMAIN_TECH = "tech"
+DOMAIN_DESIGN = "design"
 DOMAIN_RESEARCH = "research"
 DOMAIN_MARKETING = "marketing"
 DOMAIN_SALES = "sales"
@@ -18,6 +19,19 @@ DOMAIN_GENERAL = "general"
 
 # Keywords & Regex for Domain Scoring
 DOMAIN_RULES = {
+    DOMAIN_DESIGN: {
+        "title_keywords": [
+            "ui/ux", "ui designer", "ux designer", "ui/ux designer", "product designer",
+            "interaction designer", "visual designer", "graphic designer", "web designer",
+            "ux researcher", "user experience", "user interface", "creative designer"
+        ],
+        "content_keywords": [
+            "figma", "wireframe", "prototype", "usability", "user research", "design system",
+            "mockup", "typography", "accessibility", "user flow", "persona", "heuristic",
+            "interaction design", "visual hierarchy", "information architecture", "responsive design"
+        ],
+        "weight": 1.2
+    },
     DOMAIN_RESEARCH: {
         "title_keywords": [
             "research", "analyst", "associate intern", "travel research", "market research",
@@ -91,6 +105,28 @@ DOMAIN_RULES = {
 
 # Domain-Specific Competencies and Indicators
 DOMAIN_COMPETENCIES: Dict[str, Dict[str, Any]] = {
+    DOMAIN_DESIGN: {
+        "design_process_and_ux": {
+            "name": "Design Process & User Research",
+            "weight": 0.30,
+            "indicators": ["User-centered discovery", "Research synthesis & personas", "Information architecture", "Usability testing"],
+        },
+        "visual_and_interaction": {
+            "name": "Visual & Interaction Craft",
+            "weight": 0.25,
+            "indicators": ["Typography & hierarchy", "Figma prototyping fidelity", "Design system consistency", "Accessibility standards"],
+        },
+        "problem_solving": {
+            "name": "Design Problem Solving",
+            "weight": 0.25,
+            "indicators": ["Balances user and business constraints", "Compares design iterations", "Addresses usability feedback", "Measurable engagement"],
+        },
+        "collaboration": {
+            "name": "Cross-Functional Handoff",
+            "weight": 0.20,
+            "indicators": ["Developer handoff clarity", "Product partner alignment", "Receives & defends feedback constructively", "Empathy"],
+        },
+    },
     DOMAIN_RESEARCH: {
         "research_methodology": {
             "name": "Research Methodology",
@@ -249,6 +285,76 @@ DOMAIN_COMPETENCIES: Dict[str, Dict[str, Any]] = {
 
 # Domain & Seniority-Aware Question Templates for Fallbacks
 FALLBACK_QUESTION_TEMPLATES: Dict[str, Dict[str, List[Dict[str, Any]]]] = {
+    DOMAIN_DESIGN: {
+        "fresher": [
+            {
+                "id": "q1_design_discovery",
+                "competency": "design_process_and_ux",
+                "title": "Design Process & User Exploration",
+                "prompt": "When starting a design project or interface concept involving {focus}, walk me through your initial process for understanding user needs before jumping into visual mockups.",
+                "hint": "Explain how you research the user, analyze comparable products, and outline user journeys.",
+                "indicators": ["User-centered approach", "Curiosity about user behavior", "Structured exploration"]
+            },
+            {
+                "id": "q2_wireframing",
+                "competency": "visual_and_interaction",
+                "title": "Figma & Interaction Craft",
+                "prompt": "Tell me about a design project or mobile/web screen you designed. How did you structure your components, typography, and visual hierarchy in tools like Figma?",
+                "hint": "Discuss layout principles, design tokens or autolayout, and how you ensured clean presentation.",
+                "indicators": ["Attention to detail", "Figma fluency", "Visual hierarchy"]
+            },
+            {
+                "id": "q3_usability",
+                "competency": "problem_solving",
+                "title": "Handling Usability Feedback",
+                "prompt": "Describe a time someone tested or reviewed your design and found it confusing. How did you diagnose the issue and iterate on the layout?",
+                "hint": "Explain how you evaluated the feedback constructively and simplified the user flow.",
+                "indicators": ["Openness to criticism", "Analytical problem solving", "Iterative design"]
+            },
+            {
+                "id": "q4_handoff",
+                "competency": "collaboration",
+                "title": "Developer Collaboration & Handoff",
+                "prompt": "How do you prepare your design files so developers can inspect and build them accurately without confusion?",
+                "hint": "Mention responsive variants, spacing guidelines, states (hover/active/disabled), and open communication.",
+                "indicators": ["Communication", "Developer empathy", "Design-to-code understanding"]
+            }
+        ],
+        "experienced": [
+            {
+                "id": "q1_design_systems",
+                "competency": "design_process_and_ux",
+                "title": "End-to-End Product Design",
+                "prompt": "Can you walk me through an end-to-end user experience you designed involving {focus}? What was the core user problem and how did your solution move the needle?",
+                "hint": "Use STAR: Situation, user research insights, design iterations, and measurable usability or business outcome.",
+                "indicators": ["Research depth", "User empathy", "Business alignment"]
+            },
+            {
+                "id": "q2_visual_craft",
+                "competency": "visual_and_interaction",
+                "title": "Design Systems & Visual Craft",
+                "prompt": "Describe how you built or contributed to a scalable design system or component library in Figma. How did you maintain consistency and accessibility (WCAG)?",
+                "hint": "Detail tokens, variants, accessibility contrast checks, and cross-platform adaptation.",
+                "indicators": ["Systemic thinking", "Accessibility rigor", "High craftsmanship"]
+            },
+            {
+                "id": "q3_design_tradeoffs",
+                "competency": "problem_solving",
+                "title": "Balancing User Needs & Business Trade-offs",
+                "prompt": "Tell me about a complex design challenge where user preferences conflicted with tight engineering feasibility or business monetization goals. How did you resolve the trade-off?",
+                "hint": "Explain your negotiation, compromise rationale, and the resulting performance.",
+                "indicators": ["Pragmatic compromise", "Stakeholder influence", "Data-informed design"]
+            },
+            {
+                "id": "q4_developer_alignment",
+                "competency": "collaboration",
+                "title": "Engineering Partnership & Handoff",
+                "prompt": "How do you partner with front-end engineers and product managers during sprints to ensure pixel-perfect implementation and solve edge cases?",
+                "hint": "Discuss QA review processes, design specs, and resolving edge cases collaboratively.",
+                "indicators": ["Engineering empathy", "Quality assurance", "Collaborative leadership"]
+            }
+        ]
+    },
     DOMAIN_RESEARCH: {
         "fresher": [
             {

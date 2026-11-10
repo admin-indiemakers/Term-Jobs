@@ -241,13 +241,33 @@ export function AiInterviewRoom({
     onLeave?.();
   };
 
+  // Intercept Browser Back / Forward navigation (popstate) & Page Exit
+  useEffect(() => {
+    if (round?.status === 'Completed' || isStageCompleted) return;
+
+    // Push dummy state to capture browser back action
+    window.history.pushState({ inInterview: true }, '');
+
+    const handlePopState = (e) => {
+      if (isNavigatingAwayRef.current || round?.status === 'Completed' || isStageCompleted) return;
+      // Re-push state so user doesn't immediately leave
+      window.history.pushState({ inInterview: true }, '');
+      setShowExitConfirm(true);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [round?.status, isStageCompleted]);
+
   // Option 2: Native Browser Guard against accidental reload or close
   useEffect(() => {
     const handleBeforeUnload = (e) => {
       if (isNavigatingAwayRef.current || round?.status === 'Completed' || isStageCompleted) return;
       e.preventDefault();
-      e.returnValue = '';
-      return '';
+      e.returnValue = 'Leaving or refreshing this page will interrupt your active interview. Are you sure you want to exit?';
+      return e.returnValue;
     };
 
     window.addEventListener('beforeunload', handleBeforeUnload);
@@ -881,35 +901,33 @@ export function AiInterviewRoom({
 
       {/* Exit Confirmation Dialog */}
       {showExitConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div className={`border rounded-3xl p-6 max-w-sm w-full text-center shadow-2xl ${
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-fade-in">
+          <div className={`border rounded-3xl p-6 max-w-md w-full text-center shadow-2xl relative ${
             aiInterviewMode ? 'bg-white border-slate-200 text-slate-900' : 'bg-zinc-900 border-zinc-800 text-white'
           }`}>
-            <div className="w-12 h-12 rounded-full bg-rose-500/15 text-rose-500 flex items-center justify-center mx-auto mb-3">
-              <PhoneOff size={22} />
+            <div className="w-14 h-14 rounded-2xl bg-amber-500/15 text-amber-500 flex items-center justify-center mx-auto mb-4 border border-amber-500/20">
+              <AlertTriangle size={26} />
             </div>
-            <h3 className={`text-lg font-bold ${aiInterviewMode ? 'text-slate-900' : 'text-white'}`}>
-              Leave Interview Room?
+            <h3 className={`text-xl font-extrabold tracking-tight ${aiInterviewMode ? 'text-slate-900' : 'text-white'}`}>
+              Leave Active Interview?
             </h3>
-            <p className={`text-xs mt-1 mb-6 ${aiInterviewMode ? 'text-slate-500' : 'text-zinc-400'}`}>
-              Are you sure you want to finish or exit? You can return to open roles at any time.
+            <p className={`text-sm mt-2 mb-6 leading-relaxed ${aiInterviewMode ? 'text-slate-600' : 'text-zinc-400'}`}>
+              Navigating back or leaving now will interrupt your ongoing interview. Your progress and answered questions are safely saved.
             </p>
             <div className="flex items-center gap-3">
               <button
                 type="button"
                 onClick={() => setShowExitConfirm(false)}
-                className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition cursor-pointer ${
-                  aiInterviewMode ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300'
-                }`}
+                className="flex-1 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold transition cursor-pointer shadow-lg shadow-emerald-600/20"
               >
-                Stay in Call
+                Stay in Interview
               </button>
               <button
                 type="button"
                 onClick={handleEndCall}
-                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition cursor-pointer shadow-md"
+                className="flex-1 py-3 rounded-xl bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 text-sm font-bold transition cursor-pointer"
               >
-                Leave Room
+                Leave Interview
               </button>
             </div>
           </div>

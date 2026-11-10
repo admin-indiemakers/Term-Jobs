@@ -20,6 +20,7 @@ from modules.interview.services.domain_classifier import (
     DOMAIN_SALES,
     DOMAIN_HR,
     DOMAIN_OPERATIONS,
+    DOMAIN_DESIGN,
     DOMAIN_GENERAL,
 )
 from modules.interview.services.azure_ai_interview import (
@@ -170,4 +171,175 @@ class TestExtractResumeFactsSafety:
         assert facts["total_years_experience"] == 0
         assert facts["projects"] == []
         assert "Software Engineering" not in facts["skills"]
+
+
+class TestAllJobScenariosAndControlledVariation:
+    """
+    Test 6 core audit scenarios:
+    1. Two different Full Stack Developer candidates
+    2. Two different UI/UX Designer candidates
+    3. Travel Research Associate Intern
+    4. Marketing Intern
+    5. Experienced HR Recruiter
+    6. Fresh graduate applying for a technical position
+    """
+
+    def test_scenario_1_two_different_full_stack_developers_get_varied_questions(self):
+        job = {
+            "title": "Full Stack Developer",
+            "company": "Tech Corp",
+            "seniority": "mid",
+            "description": "Develop full-stack web applications using React, Node.js, REST APIs, and relational databases.",
+        }
+        cand1 = {
+            "name": "Arun Kumar",
+            "skills": ["React", "TypeScript", "Node.js", "PostgreSQL"],
+            "projects": [{"name": "Fintech Dashboard", "description": "Payment checkout service with Stripe"}],
+            "experience": [{"title": "Web Developer", "company": "Alpha Tech", "highlights": ["Built checkout engine"]}]
+        }
+        cand2 = {
+            "name": "Priya Sharma",
+            "skills": ["Vue.js", "Python", "FastAPI", "MongoDB"],
+            "projects": [{"name": "Telemetry Ingestion Service", "description": "IoT monitoring system"}],
+            "experience": [{"title": "Backend Engineer", "company": "Beta Cloud", "highlights": ["Async queue processing"]}]
+        }
+
+        plan1 = generate_custom_interview_plan(job, cand1)
+        plan2 = generate_custom_interview_plan(job, cand2)
+
+        prompts1 = [q["prompt"] for q in plan1["questions"]]
+        prompts2 = [q["prompt"] for q in plan2["questions"]]
+
+        assert len(prompts1) >= 4
+        assert len(prompts2) >= 4
+        # Controlled variation: prompts should personalize to individual project/skill contexts
+        assert prompts1 != prompts2
+
+    def test_scenario_2_two_different_ui_ux_designers(self):
+        job = {
+            "title": "UI/UX Designer",
+            "company": "Design Studio",
+            "seniority": "mid",
+            "description": "Create intuitive user journeys, interactive wireframes, and design systems in Figma. Conduct usability testing.",
+        }
+        cand1 = {
+            "name": "Elena Rostova",
+            "skills": ["Figma", "User Research", "Wireframing", "Design Systems"],
+            "projects": [{"name": "Banking Mobile App", "description": "Simplified complex financial onboarding"}],
+            "experience": [{"title": "Product Designer", "company": "BankX", "highlights": ["Created design system"]}]
+        }
+        cand2 = {
+            "name": "Karthik Menon",
+            "skills": ["Figma", "Interaction Design", "Prototyping", "Design Tokens"],
+            "projects": [{"name": "SaaS Analytics Web", "description": "High-density data visualization interfaces"}],
+            "experience": [{"title": "UI Designer", "company": "DataViz", "highlights": ["Accessibility compliance"]}]
+        }
+
+        plan1 = generate_custom_interview_plan(job, cand1)
+        plan2 = generate_custom_interview_plan(job, cand2)
+
+        prompts1 = [q["prompt"] for q in plan1["questions"]]
+        prompts2 = [q["prompt"] for q in plan2["questions"]]
+
+        assert len(prompts1) >= 4
+        assert len(prompts2) >= 4
+        for p in prompts1 + prompts2:
+            p_lower = p.lower()
+            # Must be design-centric, never software coding/backend
+            assert "database" not in p_lower
+            assert "api" not in p_lower
+            assert "microservice" not in p_lower
+
+    def test_scenario_3_travel_research_associate_intern(self):
+        job = {
+            "title": "Travel Research Associate Intern",
+            "company": "Little Known Planet",
+            "seniority": "intern",
+            "description": "Research unique destinations, compile itineraries, verify transit routes and pricing, create guides.",
+        }
+        cand = {
+            "name": "Rhea Sen",
+            "skills": ["Research", "Fact-Checking", "Writing"],
+            "projects": [{"name": "Heritage Trail Guide", "description": "Curated historic trails"}],
+            "experience": []
+        }
+        plan = generate_custom_interview_plan(job, cand)
+        for q in plan["questions"]:
+            p_lower = q["prompt"].lower()
+            assert "software" not in p_lower
+            assert "architecture" not in p_lower
+            assert not any(phrase in p_lower for phrase in ["in your previous job as a travel research associate intern", "when you were employed as"])
+
+    def test_scenario_4_marketing_intern(self):
+        job = {
+            "title": "Marketing Intern",
+            "company": "GrowthWorks",
+            "seniority": "intern",
+            "description": "Support social media campaigns, draft newsletters, analyze audience engagement metrics.",
+        }
+        cand = {
+            "name": "Amit Roy",
+            "skills": ["Social Media", "Copywriting", "Canva"],
+            "projects": [{"name": "University Fest Promo", "description": "Managed social media channels"}],
+            "experience": []
+        }
+        plan = generate_custom_interview_plan(job, cand)
+        assert len(plan["questions"]) >= 4
+        for q in plan["questions"]:
+            p_lower = q["prompt"].lower()
+            assert "software" not in p_lower
+            assert "production codebase" not in p_lower
+            # Validates that every question is marketing, social, communication, or student-project related
+            assert any(term in p_lower for term in [
+                "approach", "campaign", "audience", "learning", "project", "steps",
+                "engagement", "feedback", "social", "media", "post", "newsletter", "promo", "writing", "event"
+            ])
+
+    def test_scenario_5_experienced_hr_recruiter(self):
+        job = {
+            "title": "Senior Talent Acquisition Specialist",
+            "company": "Global Corp",
+            "seniority": "senior",
+            "description": "Lead end-to-end talent acquisition, manage executive candidate pipelines, partner with business leaders.",
+        }
+        cand = {
+            "name": "Sarah Jenkins",
+            "skills": ["Headhunting", "ATS", "Talent Sourcing", "Stakeholder Management"],
+            "projects": [],
+            "experience": [{"title": "Recruiter", "company": "Staffing Pro", "highlights": ["Closed 50+ roles annually"]}]
+        }
+        plan = generate_custom_interview_plan(job, cand)
+        assert len(plan["questions"]) >= 4
+        for q in plan["questions"]:
+            p_lower = q["prompt"].lower()
+            assert "technical architecture" not in p_lower
+            # Validates that every question is HR, talent acquisition, recruiting, or search related
+            assert any(term in p_lower for term in [
+                "talent", "sourcing", "pipeline", "stakeholder", "candidate", "negotiat",
+                "hiring", "experience", "metric", "disagreement", "role", "search", "recruiting",
+                "close", "leader", "ats", "intake", "staffing"
+            ])
+
+    def test_scenario_6_fresh_graduate_applying_for_technical_role(self):
+        job = {
+            "title": "Junior Python Developer",
+            "company": "Cloud Innovators",
+            "seniority": "entry",
+            "description": "Build backend APIs with Python and FastAPI, write unit tests, collaborate in Agile sprints.",
+        }
+        cand = {
+            "name": "Dev Patel",
+            "skills": ["Python", "FastAPI", "Git", "SQL"],
+            "projects": [{"name": "College Library Management", "description": "Student book issue web service"}],
+            "experience": []  # No prior employment
+        }
+        plan = generate_custom_interview_plan(job, cand)
+        for q in plan["questions"]:
+            p_lower = q["prompt"].lower()
+            # Does not demand 5 years of production or enterprise architecture
+            assert "in your previous senior developer role" not in p_lower
+            assert "scalable systems in production" not in p_lower
+            # Focuses on fundamentals, college projects, or diagnostic approach
+            assert any(term in p_lower for term in ["project", "approach", "diagnos", "debug", "coursework", "code", "learn", "built", "fastapi", "library"])
+
 

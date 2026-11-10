@@ -51,6 +51,7 @@ Rules:
   * Use candidate experience and projects ONLY to personalize the context (e.g. asking about transferable skills or specific methods from their projects), but always anchor the question to the target job requirements.
   * For fresher/intern candidates: Focus on foundational research, curiosity, methodology, attention to detail, learning speed, and practical problem-solving. Do not assume years of enterprise corporate experience.
 - competency must be appropriate to the role domain:
+  * Design (UI/UX, Product Design): design_process_and_ux, visual_and_interaction, problem_solving, collaboration
   * Research: research_methodology, synthesis_and_accuracy, problem_solving, communication
   * Marketing: campaign_strategy, analytics_and_roi, creative_execution, collaboration
   * Sales: relationship_and_discovery, negotiation_and_closing, prospecting_and_pipeline, communication
@@ -133,6 +134,52 @@ def azure_configured() -> bool:
     return bool(cfg["endpoint"] and cfg["key"] and cfg["deployment"])
 
 
+def call_ai_chat_json(
+    system_prompt: str, user_prompt: str, timeout: float = 45.0
+) -> Dict[str, Any]:
+    """
+    Calls Azure OpenAI (gpt-6-luna) with automatic fallback to Groq (openai/gpt-oss-120b).
+    Guarantees role-aware, dynamic question planning and turn evaluation regardless of single-provider status.
+    """
+    # 1. Try Azure OpenAI first if configured
+    if azure_configured():
+        try:
+            return call_azure_gpt(system_prompt, user_prompt, timeout=timeout)
+        except Exception as exc:
+            logger.warning(f"[Azure OpenAI Failed, falling back to Groq] {exc}")
+
+    # 2. Seamless fallback to Groq
+    from modules.shared.config import settings
+    groq_key = settings.groq_api_key or os.getenv("GROQ_API_KEY")
+    if groq_key:
+        try:
+            groq_model = settings.groq_default_model or os.getenv("GROQ_MODEL") or "openai/gpt-oss-120b"
+            headers = {
+                "Authorization": f"Bearer {groq_key.strip()}",
+                "Content-Type": "application/json",
+            }
+            payload = {
+                "model": groq_model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                "response_format": {"type": "json_object"},
+                "temperature": 0.4,
+            }
+            with httpx.Client(timeout=timeout) as client:
+                res = client.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload)
+                res.raise_for_status()
+                data = res.json()
+                content = data["choices"][0]["message"]["content"]
+                return json.loads(content)
+        except Exception as groq_exc:
+            logger.error(f"[Groq Fallback Error] {groq_exc}")
+            raise
+
+    raise RuntimeError("Neither Azure OpenAI nor Groq is configured or available.")
+
+
 def call_azure_gpt(
     system_prompt: str, user_prompt: str, timeout: float = 45.0
 ) -> Dict[str, Any]:
@@ -155,16 +202,12 @@ def call_azure_gpt(
         "response_format": {"type": "json_object"},
     }
 
-    try:
-        with httpx.Client(timeout=timeout) as client:
-            res = client.post(url, headers=headers, json=payload)
-            res.raise_for_status()
-            data = res.json()
-            content = data["choices"][0]["message"]["content"]
-            return json.loads(content)
-    except Exception as exc:
-        logger.error(f"[Azure OpenAI Error] {exc}")
-        raise
+    with httpx.Client(timeout=timeout) as client:
+        res = client.post(url, headers=headers, json=payload)
+        res.raise_for_status()
+        data = res.json()
+        content = data["choices"][0]["message"]["content"]
+        return json.loads(content)
 
 
 def extract_resume_facts(raw_text: str, candidate_name: str = "") -> Dict[str, Any]:
@@ -183,7 +226,7 @@ def extract_resume_facts(raw_text: str, candidate_name: str = "") -> Dict[str, A
         }
 
     try:
-        data = call_azure_gpt(
+        data = call_ai_chat_json(
             system_prompt=PROMPT_EXTRACT,
             user_prompt=f"<resume>{clean_text}</resume>",
         )
@@ -234,7 +277,7 @@ def generate_custom_interview_plan(job: Dict[str, Any], profile: Dict[str, Any])
     }
 
     try:
-        m_data = call_azure_gpt(
+        m_data = call_ai_chat_json(
             system_prompt=PROMPT_MATCH,
             user_prompt=f"<job>Title: {job_title}\nDomain: {domain}\nSeniority: {seniority}\nDescription:\n{job_desc}</job>\n<resume>{json.dumps(profile)}</resume>",
         )
@@ -246,9 +289,12 @@ def generate_custom_interview_plan(job: Dict[str, Any], profile: Dict[str, Any])
     # 2. Dynamic Questions
     questions = []
     try:
-        p_data = call_azure_gpt(
+        # Include session salt to ensure controlled variation across candidates
+        candidate_salt = profile.get("name") or str(uuid.uuid4())[:8]
+        p_data = call_ai_chat_json(
             system_prompt=PROMPT_PLAN,
             user_prompt=f"""Position: {job_title} (Domain: {domain}, Seniority Level: {seniority}) at {job.get('company', 'Company')}
+Session / Candidate Variation Key: {candidate_salt}
 Job Description & Requirements:
 {job_desc[:2500]}
 Candidate Skills: {', '.join(profile.get('skills', []))}
@@ -260,7 +306,10 @@ CRITICAL DOMAIN GUARDRAIL:
 - The role domain is {domain.upper()}.
 - Generate questions strictly testing competencies and scenarios relevant to {job_title}.
 - Do NOT generate software engineering or technical architecture questions unless domain is TECH.
-- If candidate is a Fresher or Intern, evaluate methodology, problem-solving, curiosity, and structured thinking rather than multi-year enterprise experience.
+- If candidate is a Fresher or Intern:
+  * NEVER assume previous professional experience in this role.
+  * Frame questions around foundational learning, curiosity, academic/personal projects, or hypothetical scenarios.
+- Avoid duplicate question themes or generic templates. Provide distinct, realistic interview questions tailored to this candidate and job.
 
 Generate 4 to 6 customized questions testing domain depth, STAR behavioral execution, and role fit.""",
         )
@@ -302,9 +351,10 @@ def prepare_round_ai_interview(round_obj, session) -> List[Dict[str, Any]]:
     3. Generates custom interview questions with STAR rubrics via gpt-6-luna.
     4. Attaches questions to the round and saves to database.
     """
-    # If round already has Azure AI questions generated, return them immediately
+    # If round already has generated interview questions (and has at least 3 questions), return them immediately.
+    # This guarantees that refreshing, reconnecting, or navigating back never regenerates or mutates questions!
     existing = getattr(round_obj, "interview_questions", []) or []
-    if existing and all(q.get("question_style_version") == "azure-gpt-6-luna-v1" for q in existing):
+    if existing and len(existing) >= 3:
         return existing
 
     from modules.requisition.domain.models import Requisition
@@ -445,7 +495,7 @@ Candidate Answer:
     }
 
     try:
-        data = call_azure_gpt(system_prompt=system_prompt, user_prompt=user_prompt)
+        data = call_ai_chat_json(system_prompt=system_prompt, user_prompt=user_prompt)
         if isinstance(data, dict) and data.get("next_action"):
             turn_result = {
                 "acknowledgement": data.get("acknowledgement", "Thank you."),
@@ -462,15 +512,15 @@ Candidate Answer:
     except Exception as exc:
         logger.warning(f"[process_interview_turn fallback] {exc}")
         if follow_ups_used < max_follow_ups and len(candidate_answer.split()) < 30:
-            fq = "Could you share the specific technical trade-offs and quantifiable outcome of your solution?"
+            fq = "Could you tell me a bit more about the specific steps you took and the final outcome?"
             turn_result = {
-                "acknowledgement": "Thank you for sharing that overview.",
-                "missing_evidence": ["Quantifiable impact", "Specific architectural trade-offs"],
+                "acknowledgement": "That is really helpful context!",
+                "missing_evidence": ["Quantifiable outcome", "Specific methodology steps"],
                 "star_detected": {"situation": True, "task": False, "action": True, "result": False},
                 "is_complete": False,
                 "follow_up": fq,
                 "next_action": "follow_up",
-                "speech_text": f"Thank you for sharing that overview. {fq}",
+                "speech_text": f"That is really helpful context! {fq}",
             }
 
     # Record turn into round transcript
@@ -552,7 +602,7 @@ Produce a complete, rigorous recruiter scorecard evaluation based strictly on ca
     }
 
     try:
-        ai_eval = call_azure_gpt(system_prompt=PROMPT_EVALUATE, user_prompt=user_prompt, timeout=60.0)
+        ai_eval = call_ai_chat_json(system_prompt=PROMPT_EVALUATE, user_prompt=user_prompt, timeout=60.0)
         if isinstance(ai_eval, dict) and "overall_score" in ai_eval:
             report_data = ai_eval
     except Exception as exc:
