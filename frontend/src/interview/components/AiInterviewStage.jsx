@@ -160,22 +160,30 @@ export function AiInterviewStage({
     const enVoices = voices.filter((v) => v.lang && v.lang.toLowerCase().startsWith('en'));
     const pool = enVoices.length ? enVoices : voices;
 
+    // Energetic, expressive, natural human female voice priority
+    // Prioritizing Microsoft Natural neural voices (Jenny, Sonia, Aria), Apple Enhanced (Ava, Samantha, Zoe), and Google Neural
     const femalePriority = [
       'Microsoft Jenny Online (Natural)',
+      'Microsoft Sonia Online (Natural)',
+      'Microsoft Neerja Online (Natural)', // Highly natural Indian-English female voice
       'Microsoft Aria Online (Natural)',
-      'Jenny',
-      'Aria',
-      'Google US English', // Chrome's high-quality neural female voice
+      'Microsoft Jenny',
+      'Microsoft Sonia',
+      'Jenny (Natural)',
+      'Aria (Natural)',
       'Google UK English Female',
-      'Samantha (Enhanced)',
-      'Samantha',
+      'Google US English', // Chrome neural female voice
+      'Zoe (Enhanced)',
+      'Zoe',
       'Ava (Enhanced)',
       'Ava',
-      'Microsoft Zira', // Windows built-in female voice
-      'Zira',
+      'Samantha (Enhanced)',
+      'Samantha',
       'Karen (Enhanced)',
       'Karen',
       'Victoria',
+      'Microsoft Zira', // Windows fallback
+      'Zira',
       'Female',
     ];
 
@@ -267,8 +275,11 @@ export function AiInterviewStage({
               utterance.lang = 'en-US';
             }
 
-            utterance.rate = 0.96;
-            utterance.pitch = 1.05;
+            // Energetic, engaging speech modulation:
+            // 1.04x rate for crisp, energetic delivery (not sluggish or droning)
+            // 1.08 pitch for bright, friendly, natural female tone
+            utterance.rate = 1.04;
+            utterance.pitch = 1.08;
             utterance.volume = 1.0;
 
             utterance.onstart = () => {
