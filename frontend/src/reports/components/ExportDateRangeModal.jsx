@@ -56,10 +56,10 @@ export function ExportDateRangeModal({ isOpen, onClose, exportFormat = 'excel', 
         return d >= startDate && d <= endDate;
       });
 
-      const filename = `TermJobs_Reports_${startDate}_to_${endDate}.${exportFormat === 'excel' ? 'csv' : 'pdf'}`;
+      const filename = `TermJobs_Reports_${startDate}_to_${endDate}.${exportFormat === 'excel' ? 'xlsx' : 'pdf'}`;
 
       if (exportFormat === 'excel') {
-        exportToExcel(filteredReports, analyticsData, filename, { startDate, endDate });
+        await exportToExcel(filteredReports, analyticsData, filename, { startDate, endDate });
       } else {
         exportToPdf();
       }
@@ -88,7 +88,7 @@ export function ExportDateRangeModal({ isOpen, onClose, exportFormat = 'excel', 
             </div>
             <div>
               <h3 className="font-extrabold text-slate-900 text-sm sm:text-base">
-                {isExcel ? 'Download Excel (.csv)' : 'Export Report (PDF)'}
+                {isExcel ? 'Download Excel (.xlsx)' : 'Export Report (PDF)'}
               </h3>
               <p className="text-[11px] text-slate-400">Choose date coverage for your export</p>
             </div>
@@ -198,7 +198,7 @@ export function ExportDateRangeModal({ isOpen, onClose, exportFormat = 'excel', 
               className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer disabled:opacity-50"
             >
               {isExcel ? <Download size={14} /> : <Printer size={14} />}
-              <span>{loading ? 'Preparing...' : isExcel ? 'Download Excel (.csv)' : 'Print / Export PDF'}</span>
+              <span>{loading ? 'Preparing...' : isExcel ? 'Download Excel (.xlsx)' : 'Print / Export PDF'}</span>
             </button>
           </div>
         </form>

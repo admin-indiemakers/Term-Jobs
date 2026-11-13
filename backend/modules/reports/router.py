@@ -14,6 +14,7 @@ from .service import (
     get_real_db_metrics_for_date,
     generate_reports_csv,
 )
+from .excel_generator import generate_reports_xlsx_bytes
 
 router = APIRouter(prefix="/reports", tags=["Reports & Growth"])
 
@@ -75,6 +76,26 @@ def export_reports_csv_endpoint():
     return Response(
         content=csv_content,
         media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        }
+    )
+
+
+@router.get("/export/excel")
+def export_reports_excel_endpoint(
+    start_date: Optional[str] = Query(None, description="YYYY-MM-DD"),
+    end_date: Optional[str] = Query(None, description="YYYY-MM-DD"),
+):
+    """
+    Download a genuine, beautifully styled single-sheet .xlsx workbook
+    matching the exact executive layout with formulas, conditional styling, and real DB data.
+    """
+    xlsx_bytes = generate_reports_xlsx_bytes(start_date=start_date, end_date=end_date)
+    filename = f"TermJobs_Reports_{start_date or 'all'}_to_{end_date or 'today'}.xlsx"
+    return Response(
+        content=xlsx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={
             "Content-Disposition": f'attachment; filename="{filename}"'
         }
