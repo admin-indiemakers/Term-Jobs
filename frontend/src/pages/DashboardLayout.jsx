@@ -487,6 +487,7 @@ export default function DashboardLayout() {
       ? [
         { to: '/dashboard/admin', label: 'Dashboard', end: true, section: 'WORKSPACE', icon: LayoutDashboard },
         { to: '/dashboard/admin/chat', label: 'AI Chat', end: true, section: 'WORKSPACE', icon: Sparkles },
+        { to: '/reports', label: 'Reports & Growth', end: false, section: 'WORKSPACE', icon: BarChart3 },
         { to: '/dashboard/admin/team', label: 'Team Members', end: false, section: 'MANAGEMENT', icon: Users },
         { to: '/dashboard/admin/hiring-managers', label: 'Hiring', end: false, section: 'MANAGEMENT', icon: Users },
         { to: '/dashboard/admin/directors', label: 'Directors', end: false, section: 'MANAGEMENT', icon: UserCheck },

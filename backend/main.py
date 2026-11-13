@@ -355,6 +355,10 @@ app.include_router(backup_router)
 app.include_router(backup_router, prefix="/api/admin")
 app.include_router(backup_router, prefix="/api/auth")
 
+from modules.reports.router import router as reports_router
+app.include_router(reports_router, prefix="/api", tags=["Reports & Growth"])
+app.include_router(reports_router, tags=["Reports & Growth"])
+
 # Reload trigger for interview module updates
 
 # --- LLM provider selection -------------------------------------------------

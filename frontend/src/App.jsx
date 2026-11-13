@@ -93,6 +93,7 @@ const CandidateInterviewPortal = lazyWithRetry(() => import('./interview/pages/C
 const InterviewerStaffPortal = lazyWithRetry(() => import('./interview/pages/InterviewerStaffPortal').then(m => ({ default: m.InterviewerStaffPortal })));
 const InterviewMeetingRoomPage = lazyWithRetry(() => import('./interview/pages/InterviewMeetingRoomPage').then(m => ({ default: m.InterviewMeetingRoomPage })));
 const HiringManagerInterviews = lazyWithRetry(() => import('./interview/pages/HiringManagerInterviews').then(m => ({ default: m.HiringManagerInterviews })));
+const ReportsModule = lazyWithRetry(() => import('./reports/ReportsModule'));
 
 function FullScreenLoader() {
   return (
@@ -325,6 +326,9 @@ export default function App() {
           <Route path="/requisitions/:reqId/candidates/:candidateId/interview" element={<RequireAuth><CandidateInterviewPanel /></RequireAuth>} />
           <Route path="/admin/login" element={<SuperAdminLogin />} />
           <Route path="/director/login" element={<DirectorLogin />} />
+          <Route path="/reports" element={<RequireAuth><ReportsModule /></RequireAuth>} />
+          <Route path="/growth" element={<RequireAuth><ReportsModule defaultTab="growth" /></RequireAuth>} />
+          <Route path="/reports-growth" element={<RequireAuth><ReportsModule /></RequireAuth>} />
           <Route path="/" element={<LandingPage />} />
           <Route
             path="/dashboard"
