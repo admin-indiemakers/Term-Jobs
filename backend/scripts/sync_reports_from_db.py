@@ -148,7 +148,7 @@ for d in dates:
     else:
         obs_issues.append('No major blockers or bottlenecks faced today.')
 
-    # Real marketing activities logged by user from verified Instagram/Meta Ad Insights
+    # Real marketing activities logged by user from verified Instagram/Meta Ad Insights & Post Insights
     ig_activities = []
     if d == '2026-11-06':
         ig_activities = [{
@@ -170,30 +170,30 @@ for d in dates:
         ig_activities = [{
             'id': 'act_20261107_ig',
             'platform': 'Instagram',
-            'content_type': 'Post',
-            'title': 'Instagram Post - Job Openings Update',
-            'description': 'Daily organic post showcasing active developer and specialist roles',
+            'content_type': 'Post (Organic)',
+            'title': 'The new standard for contract talent',
+            'description': 'Organic Instagram & Facebook post: One platform, from requisition to invoice (Join the pilot)',
             'spend': 0,
-            'reach': 0,
-            'impressions': 0,
+            'reach': 22,
+            'impressions': 43,
             'clicks': 0,
-            'engagement': 0,
+            'engagement': 5,
             'leads': 0,
             'registrations': 0,
-            'applications': 1,
+            'applications': 0,
         }]
     elif d == '2026-11-08':
         ig_activities = [{
             'id': 'act_20261108_ig',
             'platform': 'Instagram',
-            'content_type': 'Post',
-            'title': 'Instagram Post - Candidate Preparation & Resume Tips',
-            'description': 'Educational organic post for candidates preparing for AI interview rounds',
+            'content_type': 'Post (Organic)',
+            'title': 'Candidate Preparation & AI Interview Tips',
+            'description': 'Educational organic post for candidates preparing for AI interview rounds and profile readiness',
             'spend': 0,
-            'reach': 0,
-            'impressions': 0,
-            'clicks': 0,
-            'engagement': 0,
+            'reach': 45,
+            'impressions': 92,
+            'clicks': 2,
+            'engagement': 4,
             'leads': 0,
             'registrations': 1,
             'applications': 2,
@@ -202,17 +202,33 @@ for d in dates:
         ig_activities = [{
             'id': 'act_20261109_ig',
             'platform': 'Instagram',
-            'content_type': 'Post',
-            'title': 'Instagram Post - Tech & Non-Tech Hiring Highlights',
-            'description': 'Organic spotlight on newly active positions and rapid shortlist updates',
+            'content_type': 'Post (Organic)',
+            'title': '5 jobs to apply for this week',
+            'description': 'Organic Instagram & Facebook post: Active roles in Kozhikode, Ernakulam and remote',
             'spend': 0,
-            'reach': 0,
-            'impressions': 0,
-            'clicks': 0,
-            'engagement': 0,
-            'leads': 0,
+            'reach': 288,
+            'impressions': 584,
+            'clicks': 6,
+            'engagement': 9,
+            'leads': 6,
             'registrations': 1,
             'applications': 2,
+        }]
+    elif d == '2026-11-10':
+        ig_activities = [{
+            'id': 'act_20261110_ig',
+            'platform': 'Instagram',
+            'content_type': 'Post (Organic)',
+            'title': 'Your next chapter begins the moment you decide to write it',
+            'description': 'Organic motivational post directing talent to candidate portal and job openings',
+            'spend': 0,
+            'reach': 28,
+            'impressions': 67,
+            'clicks': 0,
+            'engagement': 1,
+            'leads': 0,
+            'registrations': 1,
+            'applications': 1,
         }]
 
     doc = {

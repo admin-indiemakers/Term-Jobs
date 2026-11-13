@@ -21,7 +21,13 @@ import {
   Layers,
   Sparkles,
   FileSpreadsheet,
-  FileText
+  FileText,
+  Activity,
+  Heart,
+  Share2,
+  Eye,
+  MousePointerClick,
+  Megaphone
 } from 'lucide-react';
 import { reportsApi } from '../services/reportsApi';
 import { ChannelIcon } from './ChannelIcons';
@@ -31,7 +37,7 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState(null);
   const [selectedPeriod, setSelectedPeriod] = useState(period);
-  const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'companies' | 'registrations' | 'applications'
+  const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'companies' | 'registrations' | 'applications' | 'activities'
   const [channelView, setChannelView] = useState('channel'); // 'channel' | 'week' | 'campaign'
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [exportFormat, setExportFormat] = useState('excel');
@@ -42,6 +48,8 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
   const [regSearch, setRegSearch] = useState('');
   const [appSearch, setAppSearch] = useState('');
   const [appStatusFilter, setAppStatusFilter] = useState('all');
+  const [actSearch, setActSearch] = useState('');
+  const [actFilter, setActFilter] = useState('all'); // 'all' | 'marketing' | 'operations'
 
   const fetchAnalytics = useCallback(async (p) => {
     setLoading(true);
@@ -80,11 +88,10 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
   const growthTrends = data?.growth_trends || [];
   const funnel = data?.conversion_funnel || [];
   const marketingChannels = data?.marketing_channels || [];
-  const aiInsights = data?.ai_insights || [];
-  const recentActivities = data?.recent_activities || [];
   const detailedCompanies = data?.detailed_companies || [];
   const detailedRegistrations = data?.detailed_registrations || [];
   const detailedApplications = data?.detailed_applications || [];
+  const detailedActivities = data?.detailed_activities || [];
 
   // Date range formatted label for header badge
   const dateRangeLabel = useMemo(() => {
@@ -94,24 +101,28 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
     return 'Oct 14, 2026 – Nov 13, 2026';
   }, [selectedPeriod]);
 
-  // Chart Dimensions & Dynamic Scaling
+  // SVG Chart Dimensions with generous padding so right-most dates never clip
   const chartHeight = 220;
-  const chartWidth = 720;
+  const chartWidth = 760;
+  const leftPad = 40;
+  const rightPad = 45;
+  const innerWidth = chartWidth - leftPad - rightPad;
+
   const maxMetricVal = useMemo(() => {
-    if (!growthTrends.length) return 180;
+    if (!growthTrends.length) return 60;
     const maxVal = Math.max(
       ...growthTrends.map((d) => Math.max(d.visitors || 0, d.registrations || 0, d.applications || 0)),
       30
     );
-    return Math.ceil(maxVal / 30) * 30 || 180;
+    return Math.ceil(maxVal / 20) * 20 || 60;
   }, [growthTrends]);
 
   const getPoints = (key) => {
     if (!growthTrends.length) return '';
     return growthTrends
       .map((d, i) => {
-        const x = (i / (growthTrends.length - 1 || 1)) * (chartWidth - 50) + 40;
-        const y = chartHeight - 30 - ((d[key] || 0) / maxMetricVal) * (chartHeight - 50);
+        const x = leftPad + (i / (growthTrends.length - 1 || 1)) * innerWidth;
+        const y = chartHeight - 32 - ((d[key] || 0) / maxMetricVal) * (chartHeight - 55);
         return `${x},${y}`;
       })
       .join(' ');
@@ -120,13 +131,13 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
   const getAreaPath = (key) => {
     if (!growthTrends.length) return '';
     const points = growthTrends.map((d, i) => {
-      const x = (i / (growthTrends.length - 1 || 1)) * (chartWidth - 50) + 40;
-      const y = chartHeight - 30 - ((d[key] || 0) / maxMetricVal) * (chartHeight - 50);
+      const x = leftPad + (i / (growthTrends.length - 1 || 1)) * innerWidth;
+      const y = chartHeight - 32 - ((d[key] || 0) / maxMetricVal) * (chartHeight - 55);
       return { x, y };
     });
     const firstX = points[0].x;
     const lastX = points[points.length - 1].x;
-    const baseY = chartHeight - 30;
+    const baseY = chartHeight - 32;
 
     let path = `M${firstX},${baseY} L${points[0].x},${points[0].y}`;
     for (let i = 1; i < points.length; i++) {
@@ -136,7 +147,7 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
     return path;
   };
 
-  const yTicks = [180, 150, 120, 90, 60, 30, 0];
+  const yTicks = [60, 30, 0];
 
   // Filtered lists for drill-down tabs
   const filteredCompanies = useMemo(() => {
@@ -174,11 +185,27 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
     return list;
   }, [detailedApplications, appSearch, appStatusFilter]);
 
+  const filteredActivities = useMemo(() => {
+    let list = detailedActivities;
+    if (actFilter !== 'all') {
+      list = list.filter(a => a.type === actFilter);
+    }
+    if (actSearch.trim()) {
+      const q = actSearch.toLowerCase();
+      list = list.filter(a => 
+        a.title.toLowerCase().includes(q) || 
+        (a.description || '').toLowerCase().includes(q) ||
+        (a.date || '').includes(q)
+      );
+    }
+    return list;
+  }, [detailedActivities, actSearch, actFilter]);
+
   // Conversion calculations for Funnel
-  const visitorsCount = kpis.website_visitors?.value || 153;
-  const regsCount = kpis.registrations?.value || 32;
-  const profilesCount = regsCount; // 100% completed
-  const appsCount = kpis.job_applications?.value || 45;
+  const visitorsCount = kpis.website_visitors?.value || 134;
+  const regsCount = kpis.registrations?.value || 27;
+  const profilesCount = regsCount;
+  const appsCount = kpis.job_applications?.value || 27;
 
   const visitorToRegPct = visitorsCount > 0 ? ((regsCount / visitorsCount) * 100).toFixed(1) : '0.0';
   const regToProfilePct = '100.0';
@@ -237,13 +264,11 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
 
         {/* Right Controls: Date Badge, Period Dropdown, Export Excel & PDF */}
         <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
-          {/* Date Range Badge */}
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-700 shadow-2xs">
             <Calendar size={13} className="text-slate-500" />
             <span>{dateRangeLabel}</span>
           </div>
 
-          {/* Period Selector */}
           <div className="relative">
             <select
               value={selectedPeriod}
@@ -258,7 +283,6 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
             <ChevronDown size={13} className="absolute right-2.5 top-2.5 text-slate-400 pointer-events-none" />
           </div>
 
-          {/* Export Excel Button */}
           <button
             type="button"
             onClick={() => handleOpenExport('excel')}
@@ -268,7 +292,6 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
             <span>Export Excel</span>
           </button>
 
-          {/* Export PDF Button */}
           <button
             type="button"
             onClick={() => handleOpenExport('pdf')}
@@ -280,7 +303,7 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
         </div>
       </div>
 
-      {/* Navigation Subtabs: Overview + Extra Tabs Requested by User */}
+      {/* Navigation Subtabs: Overview + Extra Tabs */}
       <div className="bg-white px-6 py-2.5 border-b border-slate-200/90 flex items-center gap-2 overflow-x-auto">
         <button
           type="button"
@@ -347,14 +370,32 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
             {detailedApplications.length}
           </span>
         </button>
+
+        {/* 5th Tab: Daily Activities */}
+        <button
+          type="button"
+          onClick={() => setActiveTab('activities')}
+          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+            activeTab === 'activities'
+              ? 'bg-emerald-600 text-white shadow-xs'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+          }`}
+        >
+          <Activity size={13} />
+          <span>Daily Activities</span>
+          <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-extrabold ${
+            activeTab === 'activities' ? 'bg-emerald-700 text-white' : 'bg-slate-200 text-slate-700'
+          }`}>
+            {detailedActivities.length}
+          </span>
+        </button>
       </div>
 
-      {/* TAB 1: OVERVIEW (Full visual matching reference image) */}
+      {/* TAB 1: OVERVIEW */}
       {activeTab === 'overview' && (
         <div className="p-6 space-y-6">
           {/* Top 4 KPI Cards with Wave Sparklines */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Card 1: Companies Onboarded */}
             <div className="relative overflow-hidden rounded-2xl border border-slate-200/90 bg-white p-5 shadow-2xs hover:shadow-xs transition">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-700">Companies Onboarded</span>
@@ -370,7 +411,6 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
                   <span>↑ +100% vs previous period</span>
                 </p>
               </div>
-              {/* Soft Wave Sparkline SVG */}
               <div className="absolute right-0 bottom-0 w-36 h-12 pointer-events-none opacity-80">
                 <svg viewBox="0 0 100 40" preserveAspectRatio="none" className="w-full h-full">
                   <path d="M0,30 Q25,10 50,22 T100,8 L100,40 L0,40 Z" fill="#ecfdf5" />
@@ -379,7 +419,6 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
               </div>
             </div>
 
-            {/* Card 2: Website Visitors */}
             <div className="relative overflow-hidden rounded-2xl border border-slate-200/90 bg-white p-5 shadow-2xs hover:shadow-xs transition">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-700">Website Visitors</span>
@@ -389,7 +428,7 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
               </div>
               <div className="mt-3">
                 <span className="text-3xl font-extrabold text-slate-900 tracking-tight">
-                  {kpis.website_visitors?.value ?? 153}
+                  {kpis.website_visitors?.value ?? 134}
                 </span>
                 <p className="mt-1 text-[11px] font-bold text-emerald-600 flex items-center gap-1">
                   <span>↑ +100% vs previous period</span>
@@ -403,7 +442,6 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
               </div>
             </div>
 
-            {/* Card 3: Registrations */}
             <div className="relative overflow-hidden rounded-2xl border border-slate-200/90 bg-white p-5 shadow-2xs hover:shadow-xs transition">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-700">Registrations</span>
@@ -413,7 +451,7 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
               </div>
               <div className="mt-3">
                 <span className="text-3xl font-extrabold text-slate-900 tracking-tight">
-                  {kpis.registrations?.value ?? 32}
+                  {kpis.registrations?.value ?? 27}
                 </span>
                 <p className="mt-1 text-[11px] font-bold text-emerald-600 flex items-center gap-1">
                   <span>↑ +100% vs previous period</span>
@@ -427,7 +465,6 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
               </div>
             </div>
 
-            {/* Card 4: Job Applications */}
             <div className="relative overflow-hidden rounded-2xl border border-slate-200/90 bg-white p-5 shadow-2xs hover:shadow-xs transition">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-700">Job Applications</span>
@@ -437,7 +474,7 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
               </div>
               <div className="mt-3">
                 <span className="text-3xl font-extrabold text-slate-900 tracking-tight">
-                  {kpis.job_applications?.value ?? 45}
+                  {kpis.job_applications?.value ?? 27}
                 </span>
                 <p className="mt-1 text-[11px] font-bold text-emerald-600 flex items-center gap-1">
                   <span>↑ +100% vs previous period</span>
@@ -452,7 +489,7 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
             </div>
           </div>
 
-          {/* Row 2: Growth Trend (Left 7 cols) & Conversion Funnel (Right 5 cols) */}
+          {/* Row 2: Growth Trend Chart (Left 7 cols) & Conversion Funnel (Right 5 cols) */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
             {/* Left 7 Cols: Growth Trend Chart */}
             <div className="lg:col-span-7 p-6 bg-white rounded-2xl border border-slate-200/90 shadow-2xs flex flex-col justify-between">
@@ -467,7 +504,6 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
                       Visitors, registrations, and job applications over time
                     </p>
                   </div>
-                  {/* Legend matching Reference Image */}
                   <div className="flex items-center gap-3 text-xs font-semibold text-slate-600">
                     <div className="flex items-center gap-1.5">
                       <span className="w-2.5 h-2.5 rounded-full bg-emerald-600" />
@@ -484,7 +520,7 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
                   </div>
                 </div>
 
-                {/* SVG Line / Area Graph */}
+                {/* SVG Graph with full width and unclipped dates */}
                 <div className="w-full overflow-x-auto pt-2">
                   <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="w-full h-56 select-none">
                     <defs>
@@ -494,13 +530,13 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
                       </linearGradient>
                     </defs>
 
-                    {/* Horizontal Grid lines & Y-axis Ticks */}
+                    {/* Horizontal Grid lines */}
                     {yTicks.map((val) => {
-                      const y = chartHeight - 30 - (val / maxMetricVal) * (chartHeight - 50);
+                      const y = chartHeight - 32 - (val / maxMetricVal) * (chartHeight - 55);
                       return (
                         <g key={val}>
-                          <line x1="40" y1={y} x2={chartWidth - 10} y2={y} stroke="#f1f5f9" strokeWidth="1" strokeDasharray="3 3" />
-                          <text x="25" y={y + 3} textAnchor="end" fontSize="10" fill="#94a3b8" fontWeight="600">
+                          <line x1={leftPad} y1={y} x2={chartWidth - rightPad + 10} y2={y} stroke="#f1f5f9" strokeWidth="1" strokeDasharray="3 3" />
+                          <text x={leftPad - 10} y={y + 3} textAnchor="end" fontSize="10" fill="#94a3b8" fontWeight="600">
                             {val}
                           </text>
                         </g>
@@ -512,35 +548,42 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
                       <path d={getAreaPath('visitors')} fill="url(#visitorAreaGrad)" />
                     )}
 
-                    {/* Trend Line: Visitors (Emerald) */}
+                    {/* Lines */}
                     {getPoints('visitors') && (
                       <polyline fill="none" stroke="#059669" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" points={getPoints('visitors')} />
                     )}
-
-                    {/* Trend Line: Registrations (Purple) */}
                     {getPoints('registrations') && (
                       <polyline fill="none" stroke="#9333ea" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" points={getPoints('registrations')} />
                     )}
-
-                    {/* Trend Line: Applications (Teal/Emerald light) */}
                     {getPoints('applications') && (
                       <polyline fill="none" stroke="#34d399" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" points={getPoints('applications')} />
                     )}
 
                     {/* Data Points on Visitors Line */}
                     {growthTrends.map((d, i) => {
-                      const x = (i / (growthTrends.length - 1 || 1)) * (chartWidth - 50) + 40;
-                      const yVis = chartHeight - 30 - ((d.visitors || 0) / maxMetricVal) * (chartHeight - 50);
+                      const x = leftPad + (i / (growthTrends.length - 1 || 1)) * innerWidth;
+                      const yVis = chartHeight - 32 - ((d.visitors || 0) / maxMetricVal) * (chartHeight - 55);
                       return (
-                        <circle key={`v-${i}`} cx={x} cy={yVis} r="3.5" fill="#ffffff" stroke="#059669" strokeWidth="2" />
+                        <circle key={`v-${i}`} cx={x} cy={yVis} r="3.2" fill="#ffffff" stroke="#059669" strokeWidth="2" />
                       );
                     })}
 
-                    {/* X-axis date labels */}
+                    {/* X-axis date labels: cleanly placed so Nov 13 never clips */}
                     {growthTrends.map((d, i) => {
-                      const x = (i / (growthTrends.length - 1 || 1)) * (chartWidth - 50) + 40;
+                      if (!d.show_label && i !== growthTrends.length - 1 && i !== 0) return null;
+                      const x = leftPad + (i / (growthTrends.length - 1 || 1)) * innerWidth;
+                      const isLast = i === growthTrends.length - 1;
+                      const isFirst = i === 0;
                       return (
-                        <text key={`l-${i}`} x={x} y={chartHeight - 8} textAnchor="middle" fontSize="9" fill="#94a3b8" fontWeight="600">
+                        <text
+                          key={`l-${i}`}
+                          x={isLast ? x + 5 : isFirst ? x - 5 : x}
+                          y={chartHeight - 8}
+                          textAnchor={isLast ? 'end' : isFirst ? 'start' : 'middle'}
+                          fontSize="9"
+                          fill="#64748b"
+                          fontWeight="700"
+                        >
                           {d.label}
                         </text>
                       );
@@ -550,7 +593,7 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
               </div>
             </div>
 
-            {/* Right 5 Cols: Conversion Funnel matching Reference Image */}
+            {/* Right 5 Cols: Conversion Funnel */}
             <div className="lg:col-span-5 p-6 bg-white rounded-2xl border border-slate-200/90 shadow-2xs flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between mb-4">
@@ -562,9 +605,7 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
-                  {/* Left Column of Funnel: Tapered Trapezoid Bands */}
                   <div className="sm:col-span-7 flex flex-col items-center space-y-1.5 py-1">
-                    {/* Tier 1: Website Visitors (Widest) */}
                     <div className="w-full bg-emerald-100/90 border border-emerald-200 rounded-xl py-2 px-3 text-center shadow-2xs transition hover:bg-emerald-100">
                       <div className="text-base font-extrabold text-emerald-950 leading-tight">{visitorsCount}</div>
                       <div className="text-[11px] font-semibold text-emerald-800">Website Visitors</div>
@@ -572,7 +613,6 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
 
                     <ArrowDown size={13} className="text-emerald-600/70" />
 
-                    {/* Tier 2: Registered Candidates */}
                     <div className="w-[88%] bg-emerald-100/80 border border-emerald-200 rounded-xl py-2 px-3 text-center shadow-2xs transition hover:bg-emerald-100">
                       <div className="text-base font-extrabold text-emerald-950 leading-tight">{regsCount}</div>
                       <div className="text-[11px] font-semibold text-emerald-800">Registered Candidates</div>
@@ -580,7 +620,6 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
 
                     <ArrowDown size={13} className="text-emerald-600/70" />
 
-                    {/* Tier 3: Completed Profiles */}
                     <div className="w-[76%] bg-emerald-100/70 border border-emerald-200 rounded-xl py-2 px-3 text-center shadow-2xs transition hover:bg-emerald-100">
                       <div className="text-base font-extrabold text-emerald-950 leading-tight">{profilesCount}</div>
                       <div className="text-[11px] font-semibold text-emerald-800">Completed Profiles</div>
@@ -588,14 +627,12 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
 
                     <ArrowDown size={13} className="text-emerald-600/70" />
 
-                    {/* Tier 4: Job Applications (Narrowest) */}
                     <div className="w-[64%] bg-emerald-100/60 border border-emerald-200 rounded-xl py-2 px-3 text-center shadow-2xs transition hover:bg-emerald-100">
                       <div className="text-base font-extrabold text-emerald-950 leading-tight">{appsCount}</div>
                       <div className="text-[11px] font-semibold text-emerald-800">Job Applications</div>
                     </div>
                   </div>
 
-                  {/* Right Column of Funnel: Conversion Rate Metrics */}
                   <div className="sm:col-span-5 flex flex-col justify-center space-y-3.5 pl-2 border-l border-slate-100">
                     <div>
                       <h4 className="text-xs font-bold text-slate-800 mb-2">Conversion Rate</h4>
@@ -615,7 +652,6 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
                       </div>
                     </div>
 
-                    {/* Overall Visitor-to-Application Badge */}
                     <div className="p-2.5 rounded-xl bg-emerald-50/80 border border-emerald-200/80 text-emerald-900 flex items-center gap-2">
                       <Target size={16} className="text-emerald-600 shrink-0" />
                       <div>
@@ -631,7 +667,7 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
 
           {/* Row 3: 3 Columns matching Reference Image */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            {/* Column 1 (Left 6 Cols): Detailed Performance by Channel */}
+            {/* Column 1: Detailed Performance by Channel */}
             <div className="lg:col-span-6 p-5 bg-white rounded-2xl border border-slate-200/90 shadow-2xs">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
@@ -641,7 +677,6 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
                   <h3 className="text-sm sm:text-base font-bold text-slate-900">Detailed Performance by Channel</h3>
                 </div>
 
-                {/* Subtabs: By Channel / By Week / By Campaign */}
                 <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg text-[11px] font-bold">
                   <button
                     type="button"
@@ -667,7 +702,6 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
                 </div>
               </div>
 
-              {/* Table */}
               <div className="overflow-x-auto rounded-xl border border-slate-200/90 shadow-2xs">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-emerald-50/60 text-slate-700 font-bold border-b border-slate-200">
@@ -700,7 +734,6 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
                         <td className="py-2.5 px-2 font-bold text-emerald-600">{Number(ch.spend) > 0 ? 'Positive' : '—'}</td>
                       </tr>
                     ))}
-                    {/* Total Summary Row */}
                     <tr className="bg-emerald-50/40 font-extrabold text-slate-900 border-t-2 border-slate-200">
                       <td className="py-2.5 px-3">Total</td>
                       <td className="py-2.5 px-2">{channelTotals.spend}</td>
@@ -717,7 +750,7 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
               </div>
             </div>
 
-            {/* Column 2 (Middle 3 Cols): Key Insights */}
+            {/* Column 2: Key Insights */}
             <div className="lg:col-span-3 p-5 bg-white rounded-2xl border border-slate-200/90 shadow-2xs space-y-3">
               <div className="flex items-center gap-2 mb-2">
                 <div className="w-6 h-6 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
@@ -726,7 +759,6 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
                 <h3 className="text-sm sm:text-base font-bold text-slate-900">Key Insights</h3>
               </div>
 
-              {/* 4 Insight Blocks */}
               <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
                 <div className="flex items-center gap-2 text-xs font-bold text-slate-900">
                   <TrendingUp size={13} className="text-emerald-600" />
@@ -743,7 +775,7 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
                   <span>Interview velocity</span>
                 </div>
                 <p className="text-[11px] text-slate-600 leading-snug">
-                  {kpis.interviews?.value || 16} interview sessions completed.
+                  {kpis.interviews?.value || 3} interview sessions completed.
                 </p>
               </div>
 
@@ -753,7 +785,7 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
                   <span>Applicant pipeline</span>
                 </div>
                 <p className="text-[11px] text-slate-600 leading-snug">
-                  {kpis.shortlisted?.value || 27} candidates in shortlisted/fast-track pipeline.
+                  {kpis.shortlisted?.value || 12} candidates in shortlisted/fast-track pipeline.
                 </p>
               </div>
 
@@ -763,12 +795,12 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
                   <span>Action priority</span>
                 </div>
                 <p className="text-[11px] text-slate-600 leading-snug">
-                  {kpis.shortlisted?.value || 27} candidates shortlisted. Send dossiers to hiring managers.
+                  {kpis.shortlisted?.value || 12} candidates shortlisted. Send dossiers to hiring managers.
                 </p>
               </div>
             </div>
 
-            {/* Column 3 (Right 3 Cols): Recent Activity */}
+            {/* Column 3: Recent Activity */}
             <div className="lg:col-span-3 p-5 bg-white rounded-2xl border border-slate-200/90 shadow-2xs flex flex-col justify-between">
               <div>
                 <div className="flex items-center gap-2 mb-3">
@@ -806,10 +838,10 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
               <div className="pt-4 mt-4 border-t border-slate-100 text-right">
                 <button
                   type="button"
-                  onClick={() => setActiveTab('applications')}
+                  onClick={() => setActiveTab('activities')}
                   className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center justify-end gap-1 cursor-pointer"
                 >
-                  <span>View All Activity</span>
+                  <span>View All Activities</span>
                   <span>→</span>
                 </button>
               </div>
@@ -818,7 +850,7 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
         </div>
       )}
 
-      {/* TAB 2: COMPANIES ONBOARDED (Extra Tab requested by user) */}
+      {/* TAB 2: COMPANIES ONBOARDED */}
       {activeTab === 'companies' && (
         <div className="p-6 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -828,7 +860,6 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
                 All 19 verified client companies that onboarded and published jobs on TermJobs.
               </p>
             </div>
-            {/* Search Input */}
             <div className="relative w-full sm:w-72">
               <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
               <input
@@ -901,17 +932,16 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
         </div>
       )}
 
-      {/* TAB 3: REGISTRATIONS (Extra Tab requested by user) */}
+      {/* TAB 3: REGISTRATIONS */}
       {activeTab === 'registrations' && (
         <div className="p-6 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-extrabold text-slate-900">Candidate Registrations</h2>
               <p className="text-xs text-slate-500 font-medium">
-                All 32 registered candidate accounts in the TermJobs talent pool.
+                All 27 verified candidate accounts in the TermJobs talent pool.
               </p>
             </div>
-            {/* Search Input */}
             <div className="relative w-full sm:w-72">
               <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
               <input
@@ -980,17 +1010,16 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
         </div>
       )}
 
-      {/* TAB 4: JOB APPLICATIONS (Extra Tab requested by user) */}
+      {/* TAB 4: JOB APPLICATIONS */}
       {activeTab === 'applications' && (
         <div className="p-6 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-extrabold text-slate-900">Job Applications</h2>
               <p className="text-xs text-slate-500 font-medium">
-                All 45 candidate applications submitted across open positions.
+                All 27 verified candidate applications submitted across open positions.
               </p>
             </div>
-            {/* Filter and Search */}
             <div className="flex items-center gap-2">
               <select
                 value={appStatusFilter}
@@ -998,11 +1027,9 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
                 className="bg-white border border-slate-200 text-xs font-bold text-slate-700 rounded-lg px-2.5 py-1.5 shadow-2xs focus:outline-emerald-600 cursor-pointer"
               >
                 <option value="all">All Statuses</option>
-                <option value="Interested - Fast Track">Interested - Fast Track (25)</option>
-                <option value="Available">Available (10)</option>
+                <option value="Interested - Fast Track">Interested - Fast Track (12)</option>
+                <option value="Available">Available (9)</option>
                 <option value="Submitted">Submitted (6)</option>
-                <option value="Shortlisted">Shortlisted (2)</option>
-                <option value="Screened">Screened (2)</option>
               </select>
 
               <div className="relative w-full sm:w-64">
@@ -1068,8 +1095,171 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
             </div>
             <div className="bg-slate-50 px-4 py-2.5 border-t border-slate-200 text-xs font-semibold text-slate-600 flex items-center justify-between">
               <span>Showing {filteredApplications.length} of {detailedApplications.length} applications</span>
-              <span className="text-emerald-700 font-bold">27 Shortlisted / Fast-Tracked</span>
+              <span className="text-emerald-700 font-bold">12 Shortlisted / Fast-Tracked</span>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 5: DAILY ACTIVITIES (Instagram Posts & Platform Milestones) */}
+      {activeTab === 'activities' && (
+        <div className="p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                <Megaphone size={18} className="text-emerald-600" />
+                <span>Daily Activities & Marketing Timeline</span>
+              </h2>
+              <p className="text-xs text-slate-500 font-medium">
+                Day-by-day record of marketing posts, Instagram campaigns, company onboarding, and operational milestones.
+              </p>
+            </div>
+
+            {/* Filter & Search */}
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => setActFilter('all')}
+                  className={`px-2.5 py-1 rounded-md transition ${actFilter === 'all' ? 'bg-emerald-700 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}
+                >
+                  All ({detailedActivities.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActFilter('marketing')}
+                  className={`px-2.5 py-1 rounded-md transition ${actFilter === 'marketing' ? 'bg-emerald-700 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}
+                >
+                  Instagram Posts
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActFilter('operations')}
+                  className={`px-2.5 py-1 rounded-md transition ${actFilter === 'operations' ? 'bg-emerald-700 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}
+                >
+                  Milestones
+                </button>
+              </div>
+
+              <div className="relative w-full sm:w-64">
+                <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search activities..."
+                  value={actSearch}
+                  onChange={(e) => setActSearch(e.target.value)}
+                  className="w-full pl-9 pr-3 py-1.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:outline-emerald-600 bg-white shadow-2xs"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Activity Cards List */}
+          <div className="space-y-3">
+            {filteredActivities.map((act, idx) => (
+              <div 
+                key={act.id || idx} 
+                className={`p-4 rounded-2xl border transition shadow-2xs bg-white ${
+                  act.type === 'marketing' 
+                    ? 'border-pink-200/90 hover:border-pink-300' 
+                    : 'border-slate-200 hover:border-emerald-300'
+                }`}
+              >
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2.5 mb-2.5">
+                  <div className="flex items-center gap-2.5">
+                    {act.platform === 'Instagram' ? (
+                      <div className="w-8 h-8 rounded-xl bg-pink-50 text-pink-600 flex items-center justify-center shrink-0">
+                        <ChannelIcon channel="Instagram" size={16} />
+                      </div>
+                    ) : (
+                      <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                        <CheckCircle2 size={16} />
+                      </div>
+                    )}
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-900 leading-snug">{act.title}</h4>
+                      <p className="text-xs text-slate-500 font-medium">{act.description}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 self-start sm:self-center">
+                    <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                      act.content_type?.includes('Boosted')
+                        ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                        : act.type === 'marketing'
+                        ? 'bg-pink-50 text-pink-700 border border-pink-200'
+                        : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                    }`}>
+                      {act.content_type}
+                    </span>
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold">
+                      <Calendar size={12} className="text-slate-500" />
+                      <span>{act.date}</span>
+                    </span>
+                  </div>
+                </div>
+
+                {/* Metrics chips for Instagram / marketing posts */}
+                {act.type === 'marketing' && (
+                  <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 pt-1 text-xs">
+                    <div className="p-2 rounded-xl bg-slate-50 border border-slate-100">
+                      <div className="text-[10px] text-slate-400 font-semibold uppercase flex items-center gap-1">
+                        <Eye size={11} />
+                        <span>Views</span>
+                      </div>
+                      <div className="text-sm font-black text-slate-900 mt-0.5">{act.views.toLocaleString()}</div>
+                    </div>
+
+                    <div className="p-2 rounded-xl bg-slate-50 border border-slate-100">
+                      <div className="text-[10px] text-slate-400 font-semibold uppercase flex items-center gap-1">
+                        <Users size={11} />
+                        <span>Viewers (Reach)</span>
+                      </div>
+                      <div className="text-sm font-black text-slate-900 mt-0.5">{act.reach.toLocaleString()}</div>
+                    </div>
+
+                    <div className="p-2 rounded-xl bg-slate-50 border border-slate-100">
+                      <div className="text-[10px] text-slate-400 font-semibold uppercase flex items-center gap-1">
+                        <Heart size={11} />
+                        <span>Likes / Eng.</span>
+                      </div>
+                      <div className="text-sm font-black text-slate-900 mt-0.5">{act.engagement || 0}</div>
+                    </div>
+
+                    <div className="p-2 rounded-xl bg-slate-50 border border-slate-100">
+                      <div className="text-[10px] text-slate-400 font-semibold uppercase flex items-center gap-1">
+                        <MousePointerClick size={11} />
+                        <span>Clicks / Visits</span>
+                      </div>
+                      <div className="text-sm font-black text-slate-900 mt-0.5">{act.clicks || 0}</div>
+                    </div>
+
+                    <div className="p-2 rounded-xl bg-slate-50 border border-slate-100">
+                      <div className="text-[10px] text-slate-400 font-semibold uppercase flex items-center gap-1">
+                        <Briefcase size={11} />
+                        <span>Applications</span>
+                      </div>
+                      <div className="text-sm font-black text-emerald-700 mt-0.5">{act.applications || 0}</div>
+                    </div>
+
+                    <div className="p-2 rounded-xl bg-slate-50 border border-slate-100">
+                      <div className="text-[10px] text-slate-400 font-semibold uppercase flex items-center gap-1">
+                        <span>Spend</span>
+                      </div>
+                      <div className={`text-sm font-black mt-0.5 ${act.spend > 0 ? 'text-purple-700' : 'text-slate-700'}`}>
+                        {act.spend > 0 ? `₹${act.spend.toLocaleString()}` : '₹0 (Organic)'}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {!filteredActivities.length && (
+              <div className="py-12 text-center text-xs text-slate-400 bg-white rounded-2xl border border-slate-200">
+                No activities found matching your criteria.
+              </div>
+            )}
           </div>
         </div>
       )}

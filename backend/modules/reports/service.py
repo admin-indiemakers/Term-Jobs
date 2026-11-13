@@ -476,12 +476,14 @@ def calculate_growth_analytics(
 
     # Time-series trend curve using REAL daily numbers
     time_series = []
-    bucket_count = min(days, 15)
-    step_days = max(1, days // bucket_count)
-    for i in range(bucket_count):
-        bucket_dt = start_dt + timedelta(days=i * step_days)
-        d_str = _format_date(bucket_dt)
-        lbl = bucket_dt.strftime("%b %d")
+    curr = start_dt
+    day_idx = 0
+    total_period_days = (end_dt - start_dt).days + 1
+    label_step = max(2, total_period_days // 7)
+
+    while curr <= end_dt:
+        d_str = _format_date(curr)
+        lbl = curr.strftime("%b %d")
         matched = next((r for r in cur_reports if r.get("report_date") == d_str), None)
         if matched and matched.get("metrics"):
             m = matched["metrics"]
@@ -493,13 +495,21 @@ def calculate_growth_analytics(
             reg = 0
             app = 0
 
+        # Show label on X-axis for first, last, and evenly spaced intervals
+        is_last = (curr == end_dt)
+        is_first = (curr == start_dt)
+        show_label = is_first or is_last or (day_idx % label_step == 0)
+
         time_series.append({
             "date": d_str,
             "label": lbl,
+            "show_label": show_label,
             "visitors": vis,
             "registrations": reg,
             "applications": app,
         })
+        curr += timedelta(days=1)
+        day_idx += 1
 
     # Real Candidate Conversion Funnel
     max_vis = max(effective_visitors, 1)
@@ -755,6 +765,47 @@ def calculate_growth_analytics(
                 "applied_date": d,
                 "status": st,
             })
+        # 4. Activities (Marketing & Milestones)
+        detailed_activities = []
+        for r in sorted(cur_reports, key=lambda x: x.get("report_date", ""), reverse=True):
+            r_date = r.get("report_date")
+            for act in (r.get("marketing_activities") or []):
+                detailed_activities.append({
+                    "id": act.get("id"),
+                    "date": r_date,
+                    "type": "marketing",
+                    "platform": act.get("platform") or "Instagram",
+                    "title": act.get("title") or "Marketing Campaign",
+                    "description": act.get("description") or "",
+                    "content_type": act.get("content_type") or "Post",
+                    "spend": float(act.get("spend") or 0),
+                    "reach": int(act.get("reach") or 0),
+                    "views": int(act.get("impressions") or act.get("reach") or 0),
+                    "clicks": int(act.get("clicks") or 0),
+                    "engagement": int(act.get("engagement") or 0),
+                    "leads": int(act.get("leads") or 0),
+                    "registrations": int(act.get("registrations") or 0),
+                    "applications": int(act.get("applications") or 0),
+                })
+            for wp in (r.get("work_progress") or []):
+                if wp.get("checked") and wp.get("note") and "No new" not in wp.get("note") and "Monitored" not in wp.get("note"):
+                    detailed_activities.append({
+                        "id": f"wp_{r_date}_{wp.get('id')}",
+                        "date": r_date,
+                        "type": "operations",
+                        "platform": "Platform",
+                        "title": wp.get("label"),
+                        "description": wp.get("note"),
+                        "content_type": "Milestone",
+                        "spend": 0,
+                        "reach": 0,
+                        "views": 0,
+                        "clicks": 0,
+                        "engagement": 0,
+                        "leads": 0,
+                        "registrations": 0,
+                        "applications": 0,
+                    })
     except Exception as exc:
         print(f"[REPORTS] Error extracting detailed records: {exc}")
 
@@ -777,6 +828,7 @@ def calculate_growth_analytics(
         "detailed_companies": detailed_companies,
         "detailed_registrations": detailed_registrations,
         "detailed_applications": detailed_applications,
+        "detailed_activities": detailed_activities,
         "reports_count": len(cur_reports),
     }
 
