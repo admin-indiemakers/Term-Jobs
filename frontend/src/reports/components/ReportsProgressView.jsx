@@ -37,6 +37,7 @@ import {
 import { ChannelIcon } from './ChannelIcons';
 import { reportsApi } from '../services/reportsApi';
 import { exportToExcel, exportToPdf } from '../services/exportReports';
+import { ExportDateRangeModal } from './ExportDateRangeModal';
 
 const DEFAULT_METRICS = {
   companies_onboarded: '',
@@ -78,6 +79,8 @@ export function ReportsProgressView({ user, onReportSaved }) {
   const [reportStatus, setReportStatus] = useState('draft'); // 'draft' | 'submitted'
   const [currentReportId, setCurrentReportId] = useState(null);
   const [showObsTextareas, setShowObsTextareas] = useState(false);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [exportFormat, setExportFormat] = useState('excel');
 
   // Form State
   const [metrics, setMetrics] = useState(DEFAULT_METRICS);
@@ -217,24 +220,9 @@ export function ReportsProgressView({ user, onReportSaved }) {
     }
   };
 
-  const handleExportExcel = () => {
-    const currentReport = {
-      report_date: reportDate,
-      report_type: reportType,
-      status: reportStatus,
-      author_name: user?.name || user?.full_name || 'Team Member',
-      metrics,
-      work_progress: workProgress,
-      marketing_activities: marketingActivities,
-      observations,
-      action_items: actionItems,
-    };
-    exportToExcel([currentReport], null, `TermJobs_Report_${reportDate}.csv`);
-    showToast('Downloaded Excel (.csv) report');
-  };
-
-  const handleExportPdf = () => {
-    exportToPdf();
+  const handleOpenExport = (format) => {
+    setExportFormat(format);
+    setExportModalOpen(true);
   };
 
   const handleSave = async (submitStatus = 'draft') => {
@@ -558,9 +546,9 @@ export function ReportsProgressView({ user, onReportSaved }) {
           {/* Export Excel Button */}
           <button
             type="button"
-            onClick={handleExportExcel}
+            onClick={() => handleOpenExport('excel')}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 text-xs font-semibold shadow-2xs transition cursor-pointer"
-            title="Download Report as Excel CSV"
+            title="Download Report as Excel CSV with Date Range"
           >
             <Download size={13.5} className="text-emerald-600" />
             <span>Excel</span>
@@ -569,9 +557,9 @@ export function ReportsProgressView({ user, onReportSaved }) {
           {/* Export PDF Button */}
           <button
             type="button"
-            onClick={handleExportPdf}
+            onClick={() => handleOpenExport('pdf')}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 text-xs font-semibold shadow-2xs transition cursor-pointer"
-            title="Print or Save as PDF"
+            title="Print or Save as PDF with Date Range"
           >
             <Printer size={13.5} className="text-slate-600" />
             <span>PDF</span>
@@ -1365,6 +1353,14 @@ export function ReportsProgressView({ user, onReportSaved }) {
           </div>
         </div>
       )}
+
+      {/* Date Range Export Modal */}
+      <ExportDateRangeModal
+        isOpen={exportModalOpen}
+        onClose={() => setExportModalOpen(false)}
+        exportFormat={exportFormat}
+        onExportComplete={(msg) => showToast(msg)}
+      />
     </div>
   );
 }

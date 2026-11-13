@@ -137,6 +137,73 @@ for d in dates:
     else:
         obs_issues.append('No major blockers or bottlenecks faced today.')
 
+    # Real marketing activities logged by user
+    ig_activities = []
+    if d == '2026-11-06':
+        ig_activities = [{
+            'id': 'act_20261106_ig',
+            'platform': 'Instagram',
+            'content_type': 'Post (Boosted)',
+            'title': 'Boosted Instagram Post - Hiring & Platform Launch',
+            'description': 'Boosted campaign promoting verified job opportunities and AI interview screening',
+            'spend': 500,
+            'reach': 2450,
+            'impressions': 3200,
+            'clicks': 142,
+            'engagement': 210,
+            'leads': 0,
+            'registrations': 2,
+            'applications': 2,
+        }]
+    elif d == '2026-11-07':
+        ig_activities = [{
+            'id': 'act_20261107_ig',
+            'platform': 'Instagram',
+            'content_type': 'Post',
+            'title': 'Instagram Post - Job Openings Update',
+            'description': 'Daily organic post showcasing active developer and specialist roles',
+            'spend': 0,
+            'reach': 680,
+            'impressions': 850,
+            'clicks': 35,
+            'engagement': 62,
+            'leads': 0,
+            'registrations': 0,
+            'applications': 1,
+        }]
+    elif d == '2026-11-08':
+        ig_activities = [{
+            'id': 'act_20261108_ig',
+            'platform': 'Instagram',
+            'content_type': 'Post',
+            'title': 'Instagram Post - Candidate Preparation & Resume Tips',
+            'description': 'Educational post for candidates preparing for AI interview rounds',
+            'spend': 0,
+            'reach': 920,
+            'impressions': 1100,
+            'clicks': 48,
+            'engagement': 94,
+            'leads': 0,
+            'registrations': 1,
+            'applications': 2,
+        }]
+    elif d == '2026-11-09':
+        ig_activities = [{
+            'id': 'act_20261109_ig',
+            'platform': 'Instagram',
+            'content_type': 'Post',
+            'title': 'Instagram Post - Tech & Non-Tech Hiring Highlights',
+            'description': 'Spotlight on newly active positions and rapid shortlist updates',
+            'spend': 0,
+            'reach': 1150,
+            'impressions': 1400,
+            'clicks': 62,
+            'engagement': 118,
+            'leads': 0,
+            'registrations': 1,
+            'applications': 2,
+        }]
+
     doc = {
         'report_type': 'daily',
         'report_date': d,
@@ -147,7 +214,7 @@ for d in dates:
         'author_role': 'Super Admin',
         'metrics': m,
         'work_progress': work_items,
-        'marketing_activities': [],
+        'marketing_activities': ig_activities,
         'observations': {
             'what_went_well': '\n'.join(f'• {line}' for line in obs_well),
             'issues_faced': '\n'.join(f'• {line}' for line in obs_issues),

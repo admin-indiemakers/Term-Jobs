@@ -2,13 +2,16 @@
  * Utility to download reports and growth analytics as Excel (CSV with BOM) and PDF.
  */
 
-export function exportToExcel(reportsInput = [], analytics = null, filename = null) {
+export function exportToExcel(reportsInput = [], analytics = null, filename = null, dateRange = null) {
   const reports = Array.isArray(reportsInput) ? reportsInput : (reportsInput ? [reportsInput] : []);
   const rows = [];
 
   // UTF-8 BOM so Excel opens with proper character encoding
   rows.push('\ufeff"TermJobs Reports & Growth Management Export"');
   rows.push(`"Exported At","${new Date().toLocaleString()}"`);
+  if (dateRange?.startDate && dateRange?.endDate) {
+    rows.push(`"Date Coverage Range","${dateRange.startDate} to ${dateRange.endDate}"`);
+  }
   rows.push('');
 
   // 1. Executive KPIs Summary
