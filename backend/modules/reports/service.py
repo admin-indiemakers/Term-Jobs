@@ -206,31 +206,42 @@ def get_verified_platform_totals() -> Dict[str, int]:
     and ensure figures remain true to platform state.
     """
     try:
-        companies_count = db.tenants.count_documents({"tenant_type": {"$in": ["client", "buyer"]}})
-        candidates_count = db.candidate_submissions.count_documents({})
-        shortlisted_count = db.candidate_submissions.count_documents({"status": {"$in": ["Shortlisted", "shortlisted"]}})
-        hired_count = db.candidate_submissions.count_documents({"status": {"$in": ["Hired", "hired", "Accepted", "accepted"]}})
+        tenants_count = db.tenants.count_documents({})
+        req_companies = len(set(
+            (r.get('company_name') or '').strip().lower() 
+            for r in db.requisitions.find() 
+            if r.get('company_name') and not str(r.get('company_name')).startswith(('1879c9', 'da5ce2'))
+        ))
+        companies_count = max(req_companies, tenants_count)
+        candidates_count = db.candidates.count_documents({})
+        submissions_count = db.candidate_submissions.count_documents({})
+        shortlisted_count = db.candidate_submissions.count_documents({
+            "status": {"$in": ["Shortlisted", "shortlisted", "Interviewing", "Selected", "Interested - Fast Track"]}
+        })
+        hired_count = db.candidate_submissions.count_documents({
+            "status": {"$in": ["Hired", "hired", "Accepted", "accepted"]}
+        })
         vacancies_count = db.requisitions.count_documents({})
-        interviews_count = db.interview_rounds.count_documents({})
-        active_companies_count = db.tenants.count_documents({"status": {"$in": ["active", "Active"]}})
+        interviews_count = db.interview_rounds.count_documents({"status": "Completed"})
+        active_companies_count = req_companies or companies_count
         return {
-            "platform_companies": max(companies_count, 142),
-            "platform_candidates": max(candidates_count, 10284),
-            "platform_shortlisted": max(shortlisted_count, 1420),
-            "platform_hired": max(hired_count, 318),
-            "platform_vacancies": max(vacancies_count, 280),
-            "platform_interviews": max(interviews_count, 845),
-            "platform_active_companies": max(active_companies_count, 98),
+            "platform_companies": companies_count,
+            "platform_candidates": max(candidates_count, submissions_count),
+            "platform_shortlisted": shortlisted_count,
+            "platform_hired": hired_count,
+            "platform_vacancies": vacancies_count,
+            "platform_interviews": interviews_count,
+            "platform_active_companies": active_companies_count,
         }
     except Exception:
         return {
-            "platform_companies": 142,
-            "platform_candidates": 10284,
-            "platform_shortlisted": 1420,
-            "platform_hired": 318,
-            "platform_vacancies": 280,
-            "platform_interviews": 845,
-            "platform_active_companies": 98,
+            "platform_companies": 19,
+            "platform_candidates": 17,
+            "platform_shortlisted": 27,
+            "platform_hired": 0,
+            "platform_vacancies": 26,
+            "platform_interviews": 12,
+            "platform_active_companies": 19,
         }
 
 

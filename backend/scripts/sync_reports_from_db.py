@@ -21,16 +21,8 @@ def to_date_str(val):
     s = str(val)[:10]
     return s if len(s) == 10 and s[4] == '-' and s[7] == '-' else None
 
-dates = [
-    '2026-11-06',
-    '2026-11-07',
-    '2026-11-08',
-    '2026-11-09',
-    '2026-11-10',
-    '2026-11-11',
-    '2026-11-12',
-    '2026-11-13'
-]
+# Full date range starting from 2026-11-01 to 2026-11-13
+dates = [f'2026-11-{i:02d}' for i in range(1, 14)]
 
 # Daily data templates
 daily_data = {d: {
@@ -52,11 +44,30 @@ daily_data = {d: {
     'interviews': [],
 } for d in dates}
 
-for t in db.tenants.find():
-    d = to_date_str(t.get('created_at'))
-    if d in daily_data:
-        daily_data[d]['metrics']['companies_onboarded'] += 1
-        daily_data[d]['tenants'].append(t.get('name'))
+# Map companies onboarded to their first active/created date across requisitions & tenants
+companies_first_seen = {}
+for r in db.requisitions.find().sort('created_at', 1):
+    cname = (r.get('company_name') or '').strip()
+    if not cname or cname.lower() in ['termjobs', 'term jobs platform', 'termjobs pvt ltd'] or cname.startswith(('1879c9', 'da5ce2')):
+        continue
+    c_date = to_date_str(r.get('created_at'))
+    norm = cname.lower()
+    if norm not in companies_first_seen and c_date:
+        companies_first_seen[norm] = (cname, c_date)
+
+for t in db.tenants.find().sort('created_at', 1):
+    tname = (t.get('name') or '').strip()
+    if not tname or tname.lower() in ['termjobs', 'term jobs platform', 'termjobs pvt ltd', 'test screening agency']:
+        continue
+    t_date = to_date_str(t.get('created_at'))
+    norm = tname.lower()
+    if norm not in companies_first_seen and t_date:
+        companies_first_seen[norm] = (tname, t_date)
+
+for norm, (cname, c_date) in companies_first_seen.items():
+    if c_date in daily_data:
+        daily_data[c_date]['metrics']['companies_onboarded'] += 1
+        daily_data[c_date]['tenants'].append(cname)
 
 for r in db.requisitions.find():
     d = to_date_str(r.get('created_at'))
@@ -119,7 +130,7 @@ for d in dates:
     
     obs_well = []
     if m['companies_onboarded'] > 0:
-        obs_well.append(f"{m['companies_onboarded']} hiring agency/company onboarded: {tenants_str}.")
+        obs_well.append(f"{m['companies_onboarded']} hiring client company onboarded: {tenants_str}.")
     if m['new_vacancies_posted'] > 0:
         obs_well.append(f"{m['new_vacancies_posted']} vacancies posted across tech and non-tech categories: {vacancies_str}.")
     if m['interviews_conducted'] > 0:
@@ -238,5 +249,4 @@ for d in dates:
     )
     print(f"Synced real report for {d}: {m}")
 
-print('All reports from 2026-11-06 to 2026-11-13 synced successfully!')
-
+print('All reports from 2026-11-01 to 2026-11-13 synced successfully!')
