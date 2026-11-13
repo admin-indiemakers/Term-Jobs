@@ -374,7 +374,7 @@ export function ReportsProgressView({ user, onReportSaved }) {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <div className="w-full flex flex-col flex-1 divide-y divide-slate-100/90 text-left">
       {/* Toast Notification */}
       {toastMsg && (
         <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-slate-900 text-white px-4 py-2.5 rounded-xl shadow-xl border border-slate-700 text-xs font-semibold animate-fade-in">
@@ -383,37 +383,38 @@ export function ReportsProgressView({ user, onReportSaved }) {
         </div>
       )}
 
-      {/* Header Bar: Report Type Switcher, Date Selector & Actions */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-2 border-b border-slate-200">
+      {/* Workspace Top Header inside Big Container */}
+      <div className="reports-workspace-header flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
               Reports & Progress
             </h1>
             <span
-              className={`px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider ${
+              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider ${
                 reportStatus === 'submitted'
-                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                  : 'bg-amber-100 text-amber-800 border border-amber-200'
+                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                  : 'bg-amber-50 text-amber-700 border border-amber-200'
               }`}
             >
+              <span className={`w-1.5 h-1.5 rounded-full ${reportStatus === 'submitted' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
               {reportStatus === 'submitted' ? 'Submitted' : 'Draft'}
             </span>
           </div>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1">
+          <p className="text-xs sm:text-[13px] text-slate-500 mt-1">
             Log your daily work, business metrics, marketing results, and strategic observations.
           </p>
         </div>
 
         {/* Date Selector & Action Buttons */}
-        <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
+        <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
           {/* Sub-tabs: Daily Report / Weekly Summary / Monthly Summary */}
-          <div className="bg-slate-100 p-1 rounded-xl flex items-center gap-1 border border-slate-200">
+          <div className="bg-slate-100 p-1 rounded-xl flex items-center gap-0.5 border border-slate-200/80">
             <button
               type="button"
               onClick={() => setReportType('daily')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                reportType === 'daily' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                reportType === 'daily' ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               Daily Report
@@ -421,8 +422,8 @@ export function ReportsProgressView({ user, onReportSaved }) {
             <button
               type="button"
               onClick={() => setReportType('weekly')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                reportType === 'weekly' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                reportType === 'weekly' ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               Weekly Summary
@@ -430,21 +431,21 @@ export function ReportsProgressView({ user, onReportSaved }) {
             <button
               type="button"
               onClick={() => setReportType('monthly')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                reportType === 'monthly' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                reportType === 'monthly' ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               Monthly Summary
             </button>
           </div>
 
-          {/* Date Picker */}
+          {/* Date Picker Input */}
           <div className="relative">
             <input
               type="date"
               value={reportDate}
               onChange={(e) => setReportDate(e.target.value)}
-              className="px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 shadow-2xs focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+              className="px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 shadow-2xs focus:ring-2 focus:ring-slate-900 cursor-pointer"
             />
           </div>
 
@@ -455,7 +456,7 @@ export function ReportsProgressView({ user, onReportSaved }) {
             className="p-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 transition shadow-2xs cursor-pointer"
             title="View Past Reports"
           >
-            <History size={16} />
+            <History size={15} />
           </button>
 
           {/* Save Draft Button */}
@@ -463,9 +464,9 @@ export function ReportsProgressView({ user, onReportSaved }) {
             type="button"
             disabled={saving}
             onClick={() => handleSave('draft')}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition cursor-pointer disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 text-xs font-semibold shadow-2xs transition cursor-pointer disabled:opacity-50"
           >
-            <Save size={14} />
+            <Save size={13.5} />
             <span>Save Draft</span>
           </button>
 
@@ -474,22 +475,20 @@ export function ReportsProgressView({ user, onReportSaved }) {
             type="button"
             disabled={saving}
             onClick={() => handleSave('submitted')}
-            className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-xs hover:shadow-sm transition cursor-pointer disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-bold shadow-xs transition cursor-pointer disabled:opacity-50"
           >
-            <Send size={14} />
+            <Send size={13.5} />
             <span>{saving ? 'Saving...' : 'Submit Report'}</span>
           </button>
         </div>
       </div>
 
       {/* 1. Today's Key Numbers (Business Metrics) */}
-      <section className="reports-card p-6 bg-white border border-slate-200 rounded-2xl shadow-xs">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <span className="flex items-center justify-center w-6 h-6 rounded-full bg-indigo-50 text-indigo-600 text-xs font-extrabold">
-              1
-            </span>
-            <h2 className="text-base font-bold text-slate-900">
+      <section className="reports-section-block">
+        <div className="reports-section-heading">
+          <div className="flex items-center gap-2.5">
+            <span className="reports-number-badge">1</span>
+            <h2 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight">
               Today's Key Numbers
             </h2>
             <div className="group relative">
@@ -499,175 +498,195 @@ export function ReportsProgressView({ user, onReportSaved }) {
               </div>
             </div>
           </div>
-          <span className="text-xs text-slate-400 font-medium">All numbers saved to live growth analytics</span>
+          <span className="text-[11px] text-slate-400 font-medium">All numbers saved to live growth analytics</span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-3.5">
           <div className="metric-input-card">
-            <div className="flex items-center gap-2 text-slate-500 mb-1">
-              <Building2 size={15} className="text-indigo-500" />
-              <span className="text-xs font-semibold">Companies Onboarded</span>
+            <div className="flex items-center gap-2 text-slate-500">
+              <div className="w-5 h-5 rounded-md bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                <Building2 size={13} />
+              </div>
+              <span className="text-xs font-semibold truncate">Companies Onboarded</span>
             </div>
             <input
               type="number"
               placeholder="0"
               value={metrics.companies_onboarded}
               onChange={(e) => handleMetricChange('companies_onboarded', e.target.value)}
-              className="w-full text-lg font-bold text-slate-900 bg-transparent border-0 focus:outline-hidden p-0"
+              className="w-full text-lg sm:text-xl font-bold text-slate-900 bg-transparent border-0 focus:outline-hidden p-0 tracking-tight"
             />
           </div>
 
           <div className="metric-input-card">
-            <div className="flex items-center gap-2 text-slate-500 mb-1">
-              <Globe size={15} className="text-blue-500" />
-              <span className="text-xs font-semibold">Website Visitors</span>
+            <div className="flex items-center gap-2 text-slate-500">
+              <div className="w-5 h-5 rounded-md bg-sky-50 text-sky-600 flex items-center justify-center shrink-0">
+                <Globe size={13} />
+              </div>
+              <span className="text-xs font-semibold truncate">Website Visitors</span>
             </div>
             <input
               type="number"
               placeholder="0"
               value={metrics.website_visitors}
               onChange={(e) => handleMetricChange('website_visitors', e.target.value)}
-              className="w-full text-lg font-bold text-slate-900 bg-transparent border-0 focus:outline-hidden p-0"
+              className="w-full text-lg sm:text-xl font-bold text-slate-900 bg-transparent border-0 focus:outline-hidden p-0 tracking-tight"
             />
           </div>
 
           <div className="metric-input-card">
-            <div className="flex items-center gap-2 text-slate-500 mb-1">
-              <Users size={15} className="text-purple-500" />
-              <span className="text-xs font-semibold">New Registrations</span>
+            <div className="flex items-center gap-2 text-slate-500">
+              <div className="w-5 h-5 rounded-md bg-violet-50 text-violet-600 flex items-center justify-center shrink-0">
+                <Users size={13} />
+              </div>
+              <span className="text-xs font-semibold truncate">New Registrations</span>
             </div>
             <input
               type="number"
               placeholder="0"
               value={metrics.new_registrations}
               onChange={(e) => handleMetricChange('new_registrations', e.target.value)}
-              className="w-full text-lg font-bold text-slate-900 bg-transparent border-0 focus:outline-hidden p-0"
+              className="w-full text-lg sm:text-xl font-bold text-slate-900 bg-transparent border-0 focus:outline-hidden p-0 tracking-tight"
             />
           </div>
 
           <div className="metric-input-card">
-            <div className="flex items-center gap-2 text-slate-500 mb-1">
-              <Briefcase size={15} className="text-emerald-500" />
-              <span className="text-xs font-semibold">Job Applications</span>
+            <div className="flex items-center gap-2 text-slate-500">
+              <div className="w-5 h-5 rounded-md bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                <Briefcase size={13} />
+              </div>
+              <span className="text-xs font-semibold truncate">Job Applications</span>
             </div>
             <input
               type="number"
               placeholder="0"
               value={metrics.job_applications}
               onChange={(e) => handleMetricChange('job_applications', e.target.value)}
-              className="w-full text-lg font-bold text-slate-900 bg-transparent border-0 focus:outline-hidden p-0"
+              className="w-full text-lg sm:text-xl font-bold text-slate-900 bg-transparent border-0 focus:outline-hidden p-0 tracking-tight"
             />
           </div>
 
           <div className="metric-input-card">
-            <div className="flex items-center gap-2 text-slate-500 mb-1">
-              <UserCheck size={15} className="text-teal-500" />
-              <span className="text-xs font-semibold">Shortlisted</span>
+            <div className="flex items-center gap-2 text-slate-500">
+              <div className="w-5 h-5 rounded-md bg-teal-50 text-teal-600 flex items-center justify-center shrink-0">
+                <UserCheck size={13} />
+              </div>
+              <span className="text-xs font-semibold truncate">Shortlisted</span>
             </div>
             <input
               type="number"
               placeholder="0"
               value={metrics.candidates_shortlisted}
               onChange={(e) => handleMetricChange('candidates_shortlisted', e.target.value)}
-              className="w-full text-lg font-bold text-slate-900 bg-transparent border-0 focus:outline-hidden p-0"
+              className="w-full text-lg sm:text-xl font-bold text-slate-900 bg-transparent border-0 focus:outline-hidden p-0 tracking-tight"
             />
           </div>
 
           <div className="metric-input-card">
-            <div className="flex items-center gap-2 text-slate-500 mb-1">
-              <Video size={15} className="text-cyan-500" />
-              <span className="text-xs font-semibold">Interviews Conducted</span>
+            <div className="flex items-center gap-2 text-slate-500">
+              <div className="w-5 h-5 rounded-md bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                <Video size={13} />
+              </div>
+              <span className="text-xs font-semibold truncate">Interviews Conducted</span>
             </div>
             <input
               type="number"
               placeholder="0"
               value={metrics.interviews_conducted}
               onChange={(e) => handleMetricChange('interviews_conducted', e.target.value)}
-              className="w-full text-lg font-bold text-slate-900 bg-transparent border-0 focus:outline-hidden p-0"
+              className="w-full text-lg sm:text-xl font-bold text-slate-900 bg-transparent border-0 focus:outline-hidden p-0 tracking-tight"
             />
           </div>
 
           <div className="metric-input-card">
-            <div className="flex items-center gap-2 text-slate-500 mb-1">
-              <CheckCircle2 size={15} className="text-emerald-600" />
-              <span className="text-xs font-semibold">Candidates Hired</span>
+            <div className="flex items-center gap-2 text-slate-500">
+              <div className="w-5 h-5 rounded-md bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                <CheckCircle2 size={13} />
+              </div>
+              <span className="text-xs font-semibold truncate">Candidates Hired</span>
             </div>
             <input
               type="number"
               placeholder="0"
               value={metrics.candidates_hired}
               onChange={(e) => handleMetricChange('candidates_hired', e.target.value)}
-              className="w-full text-lg font-bold text-slate-900 bg-transparent border-0 focus:outline-hidden p-0"
+              className="w-full text-lg sm:text-xl font-bold text-slate-900 bg-transparent border-0 focus:outline-hidden p-0 tracking-tight"
             />
           </div>
 
           <div className="metric-input-card">
-            <div className="flex items-center gap-2 text-slate-500 mb-1">
-              <BarChart2 size={15} className="text-amber-500" />
-              <span className="text-xs font-semibold">Vacancies Posted</span>
+            <div className="flex items-center gap-2 text-slate-500">
+              <div className="w-5 h-5 rounded-md bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                <BarChart2 size={13} />
+              </div>
+              <span className="text-xs font-semibold truncate">Vacancies Posted</span>
             </div>
             <input
               type="number"
               placeholder="0"
               value={metrics.new_vacancies_posted}
               onChange={(e) => handleMetricChange('new_vacancies_posted', e.target.value)}
-              className="w-full text-lg font-bold text-slate-900 bg-transparent border-0 focus:outline-hidden p-0"
+              className="w-full text-lg sm:text-xl font-bold text-slate-900 bg-transparent border-0 focus:outline-hidden p-0 tracking-tight"
             />
           </div>
 
-          <div className="metric-input-card">
-            <div className="flex items-center gap-2 text-slate-500 mb-1">
-              <UserCheck size={15} className="text-indigo-400" />
-              <span className="text-xs font-semibold">Profile Completions</span>
+          <div className="metric-input-card col-span-2 sm:col-span-1">
+            <div className="flex items-center gap-2 text-slate-500">
+              <div className="w-5 h-5 rounded-md bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+                <UserCheck size={13} />
+              </div>
+              <span className="text-xs font-semibold truncate">Profile Completions</span>
             </div>
             <input
               type="number"
               placeholder="0"
               value={metrics.profile_completions}
               onChange={(e) => handleMetricChange('profile_completions', e.target.value)}
-              className="w-full text-lg font-bold text-slate-900 bg-transparent border-0 focus:outline-hidden p-0"
+              className="w-full text-lg sm:text-xl font-bold text-slate-900 bg-transparent border-0 focus:outline-hidden p-0 tracking-tight"
             />
           </div>
         </div>
       </section>
 
       {/* 2. Today's Work & Progress */}
-      <section className="reports-card p-6 bg-white border border-slate-200 rounded-2xl shadow-xs">
-        <div className="flex items-center gap-2 mb-4">
-          <span className="flex items-center justify-center w-6 h-6 rounded-full bg-indigo-50 text-indigo-600 text-xs font-extrabold">
-            2
-          </span>
-          <h2 className="text-base font-bold text-slate-900">
-            Today's Work & Progress
-          </h2>
+      <section className="reports-section-block">
+        <div className="reports-section-heading">
+          <div className="flex items-center gap-2.5">
+            <span className="reports-number-badge">2</span>
+            <h2 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight">
+              Today's Work & Progress
+            </h2>
+          </div>
+          <span className="text-[11px] text-slate-400 font-medium">Track operational milestones & daily tasks</span>
         </div>
 
-        <div className="space-y-3">
+        <div className="rounded-2xl border border-slate-200/90 overflow-hidden divide-y divide-slate-100 bg-white">
           {workProgress.map((item) => (
             <div
               key={item.id}
-              className={`p-3.5 rounded-xl border transition flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
-                item.checked ? 'bg-indigo-50/40 border-indigo-100' : 'bg-slate-50/50 border-slate-200'
+              className={`p-3 sm:p-3.5 transition flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
+                item.checked ? 'bg-slate-50/50' : 'bg-white'
               }`}
             >
-              <label className="flex items-center gap-3 cursor-pointer select-none">
+              <label className="flex items-center gap-3 cursor-pointer select-none min-w-[240px]">
                 <input
                   type="checkbox"
                   checked={Boolean(item.checked)}
                   onChange={() => toggleWorkItem(item.id)}
-                  className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
+                  className="w-4 h-4 rounded text-slate-900 focus:ring-slate-900 border-slate-300 cursor-pointer"
                 />
-                <span className={`text-xs sm:text-sm font-semibold ${item.checked ? 'text-slate-900' : 'text-slate-600'}`}>
+                <span className={`text-xs sm:text-[13px] font-semibold ${item.checked ? 'text-slate-900' : 'text-slate-500'}`}>
                   {item.label}
                 </span>
+                <span className="text-[10px] text-slate-400 font-normal">(optional)</span>
               </label>
 
               <input
                 type="text"
                 value={item.note || ''}
-                placeholder="Details, e.g., AI interview updates, bug fixes, outreach"
+                placeholder="Enter details, e.g., Onboarded 5 new client companies..."
                 onChange={(e) => updateWorkNote(item.id, e.target.value)}
-                className="w-full sm:w-2/3 px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
+                className="w-full sm:flex-1 px-3 py-1.5 text-xs bg-slate-50/80 hover:bg-white focus:bg-white border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-slate-900/10 focus:border-slate-900 focus:outline-hidden transition"
               />
             </div>
           ))}
@@ -675,13 +694,11 @@ export function ReportsProgressView({ user, onReportSaved }) {
       </section>
 
       {/* 3. Content & Marketing Activity Table */}
-      <section className="reports-card p-6 bg-white border border-slate-200 rounded-2xl shadow-xs">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <span className="flex items-center justify-center w-6 h-6 rounded-full bg-indigo-50 text-indigo-600 text-xs font-extrabold">
-              3
-            </span>
-            <h2 className="text-base font-bold text-slate-900">
+      <section className="reports-section-block">
+        <div className="reports-section-heading">
+          <div className="flex items-center gap-2.5">
+            <span className="reports-number-badge">3</span>
+            <h2 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight">
               Content & Marketing Activity
             </h2>
           </div>
@@ -689,82 +706,82 @@ export function ReportsProgressView({ user, onReportSaved }) {
           <button
             type="button"
             onClick={handleOpenAddActivity}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition shadow-2xs cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-bold transition shadow-2xs cursor-pointer"
           >
-            <Plus size={14} />
+            <Plus size={13} strokeWidth={2.5} />
             <span>Add Activity</span>
           </button>
         </div>
 
         {marketingActivities.length === 0 ? (
-          <div className="p-8 text-center border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
+          <div className="p-8 text-center border border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
             <Globe size={28} className="mx-auto text-slate-300 mb-2" />
             <p className="text-xs font-semibold text-slate-600">No marketing activities logged for this date.</p>
-            <p className="text-[11px] text-slate-400 mt-0.5">Click "Add Activity" to log campaigns, ads, or posts.</p>
+            <p className="text-[11px] text-slate-400 mt-0.5">Click "Add Activity" to log campaigns, ads, reels, or posts.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto rounded-xl border border-slate-200">
+          <div className="overflow-x-auto rounded-2xl border border-slate-200/90 shadow-2xs">
             <table className="w-full text-left reports-table">
-              <thead className="bg-slate-50">
+              <thead className="bg-slate-50/80">
                 <tr>
-                  <th>Platform</th>
-                  <th>Type</th>
+                  <th>Platform / Channel</th>
+                  <th>Content Type</th>
                   <th>Activity / Details</th>
-                  <th>Spend</th>
-                  <th>Results (Reach / Clicks / Regs)</th>
+                  <th>Spend (₹)</th>
+                  <th>Result (Reach / Clicks / Leads)</th>
                   <th className="text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">
                 {marketingActivities.map((act) => (
-                  <tr key={act.id}>
+                  <tr key={act.id} className="hover:bg-slate-50/60 transition-colors">
                     <td className="font-semibold text-slate-900">
                       <div className="flex items-center gap-2">
-                        <ChannelIcon channel={act.platform} size={15} />
+                        <ChannelIcon channel={act.platform} size={16} />
                         <span>{act.platform}</span>
                       </div>
                     </td>
                     <td>
-                      <span className="inline-block px-2 py-0.5 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-700">
+                      <span className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200/60">
                         {act.content_type}
                       </span>
                     </td>
                     <td>
-                      <div className="font-semibold text-slate-900">{act.title}</div>
+                      <div className="font-semibold text-slate-900 text-xs sm:text-[13px]">{act.title}</div>
                       {act.description && <div className="text-[11px] text-slate-400 truncate max-w-xs">{act.description}</div>}
                     </td>
                     <td className="font-bold text-slate-900">
                       {act.spend ? `₹${Number(act.spend).toLocaleString()}` : '₹0'}
                     </td>
                     <td>
-                      <div className="text-xs text-slate-700 font-medium">
-                        Reach: <span className="font-bold text-slate-900">{Number(act.reach || 0).toLocaleString()}</span>
-                        {' · '}
-                        Clicks: <span className="font-bold text-slate-900">{Number(act.clicks || 0).toLocaleString()}</span>
+                      <div className="text-xs text-slate-700 font-medium flex items-center gap-2 flex-wrap">
+                        <span>Reach: <strong className="text-slate-900">{Number(act.reach || 0).toLocaleString()}</strong></span>
+                        <span className="text-slate-300">|</span>
+                        <span>Clicks: <strong className="text-slate-900">{Number(act.clicks || 0).toLocaleString()}</strong></span>
                         {act.registrations ? (
                           <>
-                            {' · '}
-                            Regs: <span className="font-bold text-indigo-600">{act.registrations}</span>
+                            <span className="text-slate-300">|</span>
+                            <span>Regs: <strong className="text-indigo-600">{act.registrations}</strong></span>
                           </>
                         ) : null}
                       </div>
                     </td>
-                    <td className="text-right space-x-2">
+                    <td className="text-right space-x-1.5">
                       <button
                         type="button"
                         onClick={() => handleEditActivity(act)}
-                        className="p-1 hover:bg-slate-100 text-slate-500 hover:text-slate-800 rounded transition cursor-pointer"
+                        className="p-1.5 hover:bg-slate-100 text-slate-500 hover:text-slate-900 rounded-lg transition cursor-pointer"
                         title="Edit activity"
                       >
-                        <Edit3 size={14} />
+                        <Edit3 size={13.5} />
                       </button>
                       <button
                         type="button"
                         onClick={() => handleDeleteActivity(act.id)}
-                        className="p-1 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded transition cursor-pointer"
+                        className="p-1.5 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition cursor-pointer"
                         title="Delete activity"
                       >
-                        <Trash2 size={14} />
+                        <Trash2 size={13.5} />
                       </button>
                     </td>
                   </tr>
@@ -776,53 +793,58 @@ export function ReportsProgressView({ user, onReportSaved }) {
       </section>
 
       {/* 4. Observations & Insights */}
-      <section className="reports-card p-6 bg-white border border-slate-200 rounded-2xl shadow-xs">
-        <div className="flex items-center gap-2 mb-4">
-          <span className="flex items-center justify-center w-6 h-6 rounded-full bg-indigo-50 text-indigo-600 text-xs font-extrabold">
-            4
-          </span>
-          <h2 className="text-base font-bold text-slate-900">
-            Observations & Insights
-          </h2>
+      <section className="reports-section-block">
+        <div className="reports-section-heading">
+          <div className="flex items-center gap-2.5">
+            <span className="reports-number-badge">4</span>
+            <h2 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight">
+              Observations & Insights
+            </h2>
+          </div>
+          <span className="text-[11px] text-slate-400 font-medium">Record what worked, conversion roadblocks & company feedback</span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="p-4 rounded-xl border border-emerald-100 bg-emerald-50/20">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-800 mb-2">
-              What went well today?
-            </h3>
+          <div className="p-4 sm:p-5 rounded-2xl border border-emerald-100/90 bg-emerald-50/20">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+              <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-900">
+                What went well today?
+              </h3>
+            </div>
             <textarea
               rows={4}
               value={observations.what_went_well || ''}
               onChange={(e) => setObservations({ ...observations, what_went_well: e.target.value })}
-              placeholder="Good responses, milestone achievements, successful onboarding..."
-              className="w-full text-xs text-slate-800 bg-white border border-slate-200 rounded-lg p-3 focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
+              placeholder="Good responses, milestone achievements, successful onboarding, positive campaigns..."
+              className="w-full text-xs text-slate-800 bg-white border border-slate-200/90 rounded-xl p-3 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 focus:outline-hidden leading-relaxed shadow-2xs transition"
             />
           </div>
 
-          <div className="p-4 rounded-xl border border-amber-100 bg-amber-50/20">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-amber-800 mb-2">
-              Issues / Why candidates didn't apply?
-            </h3>
+          <div className="p-4 sm:p-5 rounded-2xl border border-amber-100/90 bg-amber-50/20">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="w-2 h-2 rounded-full bg-amber-500" />
+              <h3 className="text-xs font-bold uppercase tracking-wider text-amber-900">
+                Issues / Why candidates didn't apply?
+              </h3>
+            </div>
             <textarea
               rows={4}
               value={observations.issues_faced || ''}
               onChange={(e) => setObservations({ ...observations, issues_faced: e.target.value })}
               placeholder="Candidate feedback, drop-off reasons, technical bottlenecks, hiring partner queries..."
-              className="w-full text-xs text-slate-800 bg-white border border-slate-200 rounded-lg p-3 focus:ring-2 focus:ring-amber-500 focus:outline-hidden"
+              className="w-full text-xs text-slate-800 bg-white border border-slate-200/90 rounded-xl p-3 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 focus:outline-hidden leading-relaxed shadow-2xs transition"
             />
           </div>
         </div>
       </section>
 
       {/* 5. Next Steps / Action Items */}
-      <section className="reports-card p-6 bg-white border border-slate-200 rounded-2xl shadow-xs">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <span className="flex items-center justify-center w-6 h-6 rounded-full bg-indigo-50 text-indigo-600 text-xs font-extrabold">
-              5
-            </span>
-            <h2 className="text-base font-bold text-slate-900">
+      <section className="reports-section-block">
+        <div className="reports-section-heading">
+          <div className="flex items-center gap-2.5">
+            <span className="reports-number-badge">5</span>
+            <h2 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight">
               Next Steps / Action Items
             </h2>
           </div>
@@ -832,7 +854,7 @@ export function ReportsProgressView({ user, onReportSaved }) {
             onClick={addActionItem}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold transition cursor-pointer"
           >
-            <Plus size={14} />
+            <Plus size={13} strokeWidth={2.5} />
             <span>Add Task</span>
           </button>
         </div>
@@ -841,42 +863,43 @@ export function ReportsProgressView({ user, onReportSaved }) {
           {actionItems.map((item) => (
             <div
               key={item.id}
-              className={`p-3 rounded-xl border transition flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
-                item.completed ? 'bg-slate-50 border-slate-200 opacity-60' : 'bg-white border-slate-200 shadow-2xs'
+              className={`p-3 sm:p-3.5 rounded-2xl border transition flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
+                item.completed ? 'bg-slate-50/80 border-slate-200/60 opacity-60' : 'bg-white border-slate-200/90 shadow-2xs'
               }`}
             >
-              <div className="flex items-center gap-3 w-full sm:w-auto">
+              <div className="flex items-center gap-3 w-full sm:w-auto flex-1">
                 <input
                   type="checkbox"
                   checked={Boolean(item.completed)}
                   onChange={() => toggleActionItem(item.id)}
-                  className="w-4 h-4 rounded text-indigo-600 border-slate-300 cursor-pointer"
+                  className="w-4 h-4 rounded text-slate-900 focus:ring-slate-900 border-slate-300 cursor-pointer"
                 />
                 <input
                   type="text"
                   value={item.task}
+                  placeholder="Task description..."
                   onChange={(e) =>
                     setActionItems((prev) =>
                       prev.map((a) => (a.id === item.id ? { ...a, task: e.target.value } : a))
                     )
                   }
-                  className={`text-xs sm:text-sm font-semibold bg-transparent border-0 focus:outline-hidden w-full ${
-                    item.completed ? 'line-through text-slate-500' : 'text-slate-900'
+                  className={`text-xs sm:text-[13px] font-semibold bg-transparent border-0 focus:outline-hidden w-full ${
+                    item.completed ? 'line-through text-slate-400' : 'text-slate-900'
                   }`}
                 />
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700">
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200/60">
                   {item.assignee || 'Operations'}
                 </span>
                 <span
-                  className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                  className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
                     item.priority === 'High'
-                      ? 'bg-rose-50 text-rose-700'
+                      ? 'bg-rose-50 text-rose-700 border border-rose-200/60'
                       : item.priority === 'Medium'
-                      ? 'bg-amber-50 text-amber-700'
-                      : 'bg-slate-100 text-slate-600'
+                      ? 'bg-amber-50 text-amber-700 border border-amber-200/60'
+                      : 'bg-slate-100 text-slate-600 border border-slate-200/60'
                   }`}
                 >
                   {item.priority || 'Normal'}
@@ -888,6 +911,7 @@ export function ReportsProgressView({ user, onReportSaved }) {
                   type="button"
                   onClick={() => setActionItems((prev) => prev.filter((a) => a.id !== item.id))}
                   className="p-1 hover:text-rose-600 text-slate-300 rounded cursor-pointer"
+                  title="Delete task"
                 >
                   <Trash2 size={13} />
                 </button>
