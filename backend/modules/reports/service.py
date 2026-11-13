@@ -15,8 +15,13 @@ def _utcnow_str() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _format_date(dt: datetime) -> str:
-    return dt.strftime("%Y-%m-%d")
+def _format_date(dt: Any) -> str:
+    if not dt:
+        return ""
+    if isinstance(dt, datetime):
+        return dt.strftime("%Y-%m-%d")
+    s = str(dt)[:10]
+    return s if len(s) == 10 and s[4] == '-' and s[7] == '-' else str(dt)[:10]
 
 
 def _parse_date(d_str: str) -> datetime:
@@ -693,6 +698,66 @@ def calculate_growth_analytics(
             {"title": "Candidate screening and interview pipeline active", "category": "AI Interview", "date": "Live", "status": "Active"},
         ]
 
+    # Detailed records for drill-down tabs (Companies Onboarded, Registrations, Job Applications)
+    detailed_companies = []
+    detailed_registrations = []
+    detailed_applications = []
+    try:
+        # 1. Companies
+        companies_map = {}
+        for r in db.requisitions.find().sort("created_at", 1):
+            cname = (r.get("company_name") or "").strip()
+            if not cname or cname.lower() in ["termjobs", "term jobs platform", "termjobs pvt ltd", "test screening agency"] or cname.startswith(("1879c9", "da5ce2")):
+                continue
+            norm = cname.lower()
+            d = _format_date(r.get("created_at"))
+            title = r.get("title") or r.get("job_title") or "Open Position"
+            if norm not in companies_map:
+                companies_map[norm] = {
+                    "name": cname,
+                    "onboarded_date": d,
+                    "roles": [title],
+                    "vacancies_count": 1,
+                    "status": "Active",
+                }
+            else:
+                if title not in companies_map[norm]["roles"]:
+                    companies_map[norm]["roles"].append(title)
+                companies_map[norm]["vacancies_count"] += 1
+        detailed_companies = sorted(companies_map.values(), key=lambda x: (x["onboarded_date"], x["name"]))
+
+        # 2. Registrations
+        for c in db.candidates.find().sort("created_at", -1):
+            d = _format_date(c.get("created_at"))
+            detailed_registrations.append({
+                "id": str(c.get("_id")),
+                "name": c.get("candidate_name") or "Registered Candidate",
+                "email": c.get("candidate_email") or "—",
+                "title": c.get("candidate_title") or "Registered Talent",
+                "registration_date": d,
+                "profile_status": "Completed" if c.get("candidate_email") and (c.get("candidate_title") or c.get("skills")) else "Basic",
+            })
+
+        # 3. Job Applications
+        req_lookup = {str(r["_id"]): r for r in db.requisitions.find()}
+        for s in db.candidate_submissions.find().sort("created_at", -1):
+            d = _format_date(s.get("created_at"))
+            rid = str(s.get("requisition_id") or "")
+            req = req_lookup.get(rid, {})
+            title = req.get("title") or s.get("job_title") or s.get("role_title") or "General Application"
+            cname = req.get("company_name") or s.get("company_name") or "TermJobs Network"
+            st = s.get("status") or "Submitted"
+            detailed_applications.append({
+                "id": str(s.get("_id")),
+                "candidate_name": s.get("candidate_name") or "Anonymous Applicant",
+                "role_title": title,
+                "company_name": cname,
+                "applied_date": d,
+                "status": st,
+            })
+    except Exception as exc:
+        print(f"[REPORTS] Error extracting detailed records: {exc}")
+
     return {
         "period": period,
         "date_range": {
@@ -709,6 +774,9 @@ def calculate_growth_analytics(
         "company_analytics": company_analytics,
         "ai_insights": ai_insights,
         "recent_activities": recent_activities[:15],
+        "detailed_companies": detailed_companies,
+        "detailed_registrations": detailed_registrations,
+        "detailed_applications": detailed_applications,
         "reports_count": len(cur_reports),
     }
 
