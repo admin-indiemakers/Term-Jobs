@@ -1004,36 +1004,11 @@ export function ReportsProgressView({ user, onReportSaved }) {
                 </button>
               </div>
 
-              {/* Option D Mini Visual Bar Chart */}
-              <div className="pt-4 pb-2">
-                <div className="flex items-end justify-between h-20 px-2 gap-2">
-                  {[
-                    { day: 'Mon', h: '35%' },
-                    { day: 'Tue', h: '55%' },
-                    { day: 'Wed', h: '75%' },
-                    { day: 'Thu', h: '100%' },
-                    { day: 'Fri', h: '60%' },
-                    { day: 'Sat', h: '25%' },
-                    { day: 'Sun', h: '15%' },
-                  ].map((bar, i) => (
-                    <div key={i} className="flex-1 flex flex-col items-center h-full justify-end gap-1.5">
-                      <div className="w-full bg-slate-100 rounded-t-sm h-full flex items-end">
-                        <div
-                          className="w-full bg-gradient-to-t from-emerald-600 to-emerald-400 rounded-t-sm transition-all duration-500 hover:brightness-110"
-                          style={{ height: bar.h }}
-                        />
-                      </div>
-                      <span className="text-[10px] font-semibold text-slate-400">{bar.day}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
               {/* Activities Content */}
               {marketingActivities.length === 0 ? (
-                <div className="mt-3 p-4 text-center border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
+                <div className="mt-3.5 p-6 text-center border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
                   <p className="text-xs font-semibold text-slate-600">No marketing activities logged for this date.</p>
-                  <p className="text-[11px] text-slate-400 mt-0.5">Add campaigns, ads, reels, or posts.</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Click "+ Add Activity" above to log campaigns, ads, reels, or posts.</p>
                 </div>
               ) : (
                 <div className="mt-3 divide-y divide-slate-100">
