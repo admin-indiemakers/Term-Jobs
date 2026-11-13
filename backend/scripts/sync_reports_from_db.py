@@ -172,3 +172,4 @@ for d in dates:
     print(f"Synced real report for {d}: {m}")
 
 print('All reports from 2026-11-06 to 2026-11-13 synced successfully!')
+

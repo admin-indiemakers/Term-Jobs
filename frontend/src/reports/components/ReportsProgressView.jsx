@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   Building2, 
   Users, 
   Briefcase, 
   UserCheck, 
+  UserPlus,
   CheckSquare, 
   Calendar, 
   Plus, 
@@ -16,6 +17,8 @@ import {
   CheckCircle2, 
   AlertCircle, 
   ChevronDown, 
+  ChevronRight,
+  Check,
   History, 
   Search, 
   Globe, 
@@ -26,7 +29,10 @@ import {
   X,
   Download,
   Printer,
-  RefreshCw
+  RefreshCw,
+  TrendingUp,
+  Lightbulb,
+  Layers
 } from 'lucide-react';
 import { ChannelIcon } from './ChannelIcons';
 import { reportsApi } from '../services/reportsApi';
@@ -46,12 +52,11 @@ const DEFAULT_METRICS = {
 
 const DEFAULT_WORK_CHECKLIST = [
   { id: 'company_onboarding', label: 'Company onboarding & follow-up', checked: false, note: '' },
-  { id: 'candidate_support', label: 'Candidate support / queries', checked: false, note: '' },
-  { id: 'product_updates', label: 'Product / platform updates', checked: false, note: '' },
-  { id: 'content_creation', label: 'Content creation & publishing', checked: false, note: '' },
-  { id: 'marketing_campaign', label: 'Marketing & campaign execution', checked: false, note: '' },
-  { id: 'bug_fixes', label: 'Bug fixes & system testing', checked: false, note: '' },
-  { id: 'other_work', label: 'Other work completed', checked: false, note: '' },
+  { id: 'job_vacancies', label: 'Job vacancies published', checked: false, note: '' },
+  { id: 'candidate_registrations', label: 'Candidate registrations & profiles', checked: false, note: '' },
+  { id: 'applications_shortlisting', label: 'Applications & Shortlisting', checked: false, note: '' },
+  { id: 'ai_interview_screening', label: 'AI Interview Screening', checked: false, note: '' },
+  { id: 'candidate_support', label: 'Candidate support & queries', checked: false, note: '' },
 ];
 
 const DEFAULT_OBSERVATIONS = {
@@ -72,13 +77,17 @@ export function ReportsProgressView({ user, onReportSaved }) {
   const [toastMsg, setToastMsg] = useState('');
   const [reportStatus, setReportStatus] = useState('draft'); // 'draft' | 'submitted'
   const [currentReportId, setCurrentReportId] = useState(null);
+  const [showObsTextareas, setShowObsTextareas] = useState(false);
 
   // Form State
   const [metrics, setMetrics] = useState(DEFAULT_METRICS);
   const [workProgress, setWorkProgress] = useState(DEFAULT_WORK_CHECKLIST);
   const [marketingActivities, setMarketingActivities] = useState([]);
   const [observations, setObservations] = useState(DEFAULT_OBSERVATIONS);
-  const [actionItems, setActionItems] = useState([]);
+  const [actionItems, setActionItems] = useState([
+    { id: 'task-1', task: 'Follow up with active candidate applications', assignee: 'Operations', priority: 'High', deadline: 'Tomorrow', completed: false },
+    { id: 'task-2', task: 'Review AI interview evaluation scorecards', assignee: 'Hiring Team', priority: 'Medium', deadline: 'End of week', completed: false },
+  ]);
 
   // Modals & Drawers
   const [showActivityModal, setShowActivityModal] = useState(false);
@@ -125,7 +134,9 @@ export function ReportsProgressView({ user, onReportSaved }) {
         setWorkProgress(Array.isArray(rep.work_progress) && rep.work_progress.length > 0 ? rep.work_progress : DEFAULT_WORK_CHECKLIST);
         setMarketingActivities(Array.isArray(rep.marketing_activities) ? rep.marketing_activities : []);
         setObservations(rep.observations ? { ...DEFAULT_OBSERVATIONS, ...rep.observations } : DEFAULT_OBSERVATIONS);
-        setActionItems(Array.isArray(rep.action_items) ? rep.action_items : []);
+        if (Array.isArray(rep.action_items) && rep.action_items.length > 0) {
+          setActionItems(rep.action_items);
+        }
       } else {
         // Reset to clean default values for new entry
         setCurrentReportId(null);
@@ -134,7 +145,6 @@ export function ReportsProgressView({ user, onReportSaved }) {
         setWorkProgress(DEFAULT_WORK_CHECKLIST);
         setMarketingActivities([]);
         setObservations(DEFAULT_OBSERVATIONS);
-        setActionItems([]);
       }
     } catch (err) {
       console.warn('Failed to fetch existing report:', err);
@@ -142,6 +152,15 @@ export function ReportsProgressView({ user, onReportSaved }) {
       setLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    loadReport(reportDate, reportType);
+  }, [reportDate, reportType, loadReport]);
+
+  const showToast = (msg) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(''), 4000);
+  };
 
   const handleSyncDbMetrics = async () => {
     setSyncingDb(true);
@@ -159,6 +178,35 @@ export function ReportsProgressView({ user, onReportSaved }) {
           candidates_hired: res.metrics.candidates_hired ?? 0,
           new_vacancies_posted: res.metrics.new_vacancies_posted ?? 0,
         });
+
+        // Auto-check work progress items if activities detected in DB
+        const hasVacancies = Number(res.metrics.new_vacancies_posted) > 0;
+        const hasCandidates = Number(res.metrics.new_registrations) > 0;
+        const hasApps = Number(res.metrics.job_applications) > 0;
+        const hasInterviews = Number(res.metrics.interviews_conducted) > 0;
+        const hasCompanies = Number(res.metrics.companies_onboarded) > 0;
+
+        setWorkProgress((prev) =>
+          prev.map((item) => {
+            if (item.id === 'job_vacancies' && hasVacancies) {
+              return { ...item, checked: true, note: `${res.metrics.new_vacancies_posted} new vacancy posted in DB` };
+            }
+            if (item.id === 'candidate_registrations' && hasCandidates) {
+              return { ...item, checked: true, note: `${res.metrics.new_registrations} candidate registration(s) verified` };
+            }
+            if (item.id === 'applications_shortlisting' && hasApps) {
+              return { ...item, checked: true, note: `${res.metrics.job_applications} application(s) received` };
+            }
+            if (item.id === 'ai_interview_screening' && hasInterviews) {
+              return { ...item, checked: true, note: `${res.metrics.interviews_conducted} AI interview(s) conducted` };
+            }
+            if (item.id === 'company_onboarding' && hasCompanies) {
+              return { ...item, checked: true, note: `${res.metrics.companies_onboarded} company onboarded` };
+            }
+            return item;
+          })
+        );
+
         showToast(`Synced real database metrics for ${reportDate}`);
       }
     } catch (err) {
@@ -189,15 +237,6 @@ export function ReportsProgressView({ user, onReportSaved }) {
     exportToPdf();
   };
 
-  useEffect(() => {
-    loadReport(reportDate, reportType);
-  }, [reportDate, reportType, loadReport]);
-
-  const showToast = (msg) => {
-    setToastMsg(msg);
-    setTimeout(() => setToastMsg(''), 4000);
-  };
-
   const handleSave = async (submitStatus = 'draft') => {
     setSaving(true);
     try {
@@ -224,18 +263,21 @@ export function ReportsProgressView({ user, onReportSaved }) {
         marketing_activities: marketingActivities,
         observations: observations,
         action_items: actionItems,
-        audit_note: submitStatus === 'submitted' ? 'Final report submitted' : 'Saved draft',
       };
 
       const res = await reportsApi.saveReport(payload);
-      if (res?.report) {
+      if (res && res.report) {
         setCurrentReportId(res.report.id);
-        setReportStatus(submitStatus);
-        showToast(submitStatus === 'submitted' ? 'Report submitted successfully! Dashboard updated.' : 'Draft saved successfully.');
+        setReportStatus(res.report.status);
+        showToast(
+          submitStatus === 'submitted'
+            ? 'Report submitted and locked for growth analytics!'
+            : 'Draft saved successfully'
+        );
         if (onReportSaved) onReportSaved(res.report);
       }
     } catch (err) {
-      console.error('Failed to save report:', err);
+      console.error('Save failed:', err);
       showToast('Error saving report. Please try again.');
     } finally {
       setSaving(false);
@@ -252,9 +294,9 @@ export function ReportsProgressView({ user, onReportSaved }) {
     );
   };
 
-  const updateWorkNote = (id, note) => {
+  const updateWorkNote = (id, noteVal) => {
     setWorkProgress((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, note } : item))
+      prev.map((item) => (item.id === id ? { ...item, note: noteVal } : item))
     );
   };
 
@@ -354,7 +396,6 @@ export function ReportsProgressView({ user, onReportSaved }) {
       assignee: 'Operations',
       priority: 'Medium',
       deadline: 'Upcoming',
-      status: 'Pending',
       completed: false,
     };
     setActionItems((prev) => [...prev, newTask]);
@@ -370,6 +411,64 @@ export function ReportsProgressView({ user, onReportSaved }) {
     setShowHistoryDrawer(true);
   };
 
+  // Work progress completion computation
+  const completedWorkCount = useMemo(() => {
+    return workProgress.filter((w) => Boolean(w.checked)).length;
+  }, [workProgress]);
+
+  const workProgressPct = useMemo(() => {
+    if (!workProgress.length) return 0;
+    return Math.round((completedWorkCount / workProgress.length) * 100);
+  }, [completedWorkCount, workProgress.length]);
+
+  // Dynamic Hero Overview Metric
+  const heroData = useMemo(() => {
+    const vac = Number(metrics.new_vacancies_posted) || 0;
+    const apps = Number(metrics.job_applications) || 0;
+    const vis = Number(metrics.website_visitors) || 0;
+    const regs = Number(metrics.new_registrations) || 0;
+
+    if (vac > 0) {
+      return { val: vac, label: 'Vacancies Posted', trend: '+100%', subtitle: 'Key positions open in database' };
+    }
+    if (apps > 0) {
+      return { val: apps, label: 'Job Applications', trend: '+20%', subtitle: 'Candidate submissions today' };
+    }
+    if (regs > 0) {
+      return { val: regs, label: 'New Registrations', trend: '+15%', subtitle: 'New talent registered' };
+    }
+    if (vis > 0) {
+      return { val: vis, label: 'Website Visitors', trend: '+25%', subtitle: 'Live platform visitors' };
+    }
+    return { val: 0, label: 'Vacancies Posted', trend: '+0%', subtitle: 'Key metrics at a glance' };
+  }, [metrics]);
+
+  // Observations bullet items
+  const observationBullets = useMemo(() => {
+    const list = [];
+    if (observations.what_went_well?.trim()) {
+      observations.what_went_well.split('\n').forEach((line) => {
+        const cleaned = line.replace(/^[•\-\*]\s*/, '').trim();
+        if (cleaned) list.push(cleaned);
+      });
+    }
+    if (observations.issues_faced?.trim()) {
+      observations.issues_faced.split('\n').forEach((line) => {
+        const cleaned = line.replace(/^[•\-\*]\s*/, '').trim();
+        if (cleaned) list.push(cleaned);
+      });
+    }
+    if (list.length === 0) {
+      const vac = Number(metrics.new_vacancies_posted) || 0;
+      if (vac > 0) {
+        list.push(`${vac} vacancies posted across tech and non-tech categories.`);
+      } else {
+        list.push('No observations logged yet. Click below to add operational notes.');
+      }
+    }
+    return list;
+  }, [observations, metrics.new_vacancies_posted]);
+
   return (
     <div id="reports-print-container" className="w-full flex flex-col flex-1 divide-y divide-slate-100/90 text-left">
       {/* Toast Notification */}
@@ -380,7 +479,7 @@ export function ReportsProgressView({ user, onReportSaved }) {
         </div>
       )}
 
-      {/* Workspace Top Header inside Big Container */}
+      {/* Top Header matching Option D */}
       <div className="reports-workspace-header flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2.5">
@@ -388,10 +487,10 @@ export function ReportsProgressView({ user, onReportSaved }) {
               Reports & Progress
             </h1>
             <span
-              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider ${
+              className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider ${
                 reportStatus === 'submitted'
-                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                  : 'bg-amber-50 text-amber-700 border border-amber-200'
+                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/80'
+                  : 'bg-amber-50 text-amber-700 border border-amber-200/80'
               }`}
             >
               <span className={`w-1.5 h-1.5 rounded-full ${reportStatus === 'submitted' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
@@ -489,12 +588,12 @@ export function ReportsProgressView({ user, onReportSaved }) {
             <span>Save Draft</span>
           </button>
 
-          {/* Submit Button */}
+          {/* Submit Button in Signature Emerald Green */}
           <button
             type="button"
             disabled={saving}
             onClick={() => handleSave('submitted')}
-            className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-bold shadow-xs transition cursor-pointer disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition cursor-pointer disabled:opacity-50"
           >
             <Send size={13.5} />
             <span>{saving ? 'Saving...' : 'Submit Report'}</span>
@@ -502,9 +601,9 @@ export function ReportsProgressView({ user, onReportSaved }) {
         </div>
       </div>
 
-      {/* 1. Today's Key Numbers (Business Metrics) */}
+      {/* 1. Today's Key Numbers + Hero Overview Card (Option D Layout) */}
       <section className="reports-section-block">
-        <div className="reports-section-heading">
+        <div className="reports-section-heading mb-3.5">
           <div className="flex items-center gap-2.5">
             <span className="reports-number-badge">1</span>
             <h2 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight">
@@ -517,438 +616,534 @@ export function ReportsProgressView({ user, onReportSaved }) {
               </div>
             </div>
           </div>
+
           <div className="flex items-center gap-2">
             <button
               type="button"
               disabled={syncingDb}
               onClick={handleSyncDbMetrics}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/80 text-[11px] font-bold shadow-2xs transition cursor-pointer disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200/80 text-[11px] font-bold shadow-2xs transition cursor-pointer disabled:opacity-50"
               title="Auto-fill numbers directly from verified database records"
             >
-              <RefreshCw size={12} className={syncingDb ? 'animate-spin' : ''} />
+              <RefreshCw size={12} className={syncingDb ? 'animate-spin text-emerald-700' : 'text-emerald-700'} />
               <span>{syncingDb ? 'Syncing...' : 'Auto-Fill from Database'}</span>
             </button>
             <span className="hidden sm:inline text-[11px] text-slate-400 font-medium">· Verified main DB records</span>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-3.5">
-          <div className="metric-input-card">
-            <div className="flex items-center gap-2 text-slate-500">
-              <div className="w-5 h-5 rounded-md bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
-                <Building2 size={13} />
+        {/* Option D Split: Hero Card on Left + 8 Metric Cards on Right */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5">
+          {/* Left: Signature Hero "Today's Overview" Sparkline Card */}
+          <div className="lg:col-span-3 bg-gradient-to-br from-emerald-50/80 via-emerald-50/20 to-white border border-emerald-200/90 rounded-2xl p-4.5 flex flex-col justify-between shadow-2xs relative overflow-hidden">
+            <div>
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                  <Sparkles size={13} />
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold text-slate-900">Today's Overview</h3>
+                  <p className="text-[10px] text-slate-500">Key metrics at a glance</p>
+                </div>
               </div>
-              <span className="text-xs font-semibold truncate">Companies Onboarded</span>
-            </div>
-            <input
-              type="number"
-              placeholder="0"
-              value={metrics.companies_onboarded}
-              onChange={(e) => handleMetricChange('companies_onboarded', e.target.value)}
-              className="w-full text-lg sm:text-xl font-bold text-slate-900 bg-transparent border-0 focus:outline-hidden p-0 tracking-tight"
-            />
-          </div>
 
-          <div className="metric-input-card">
-            <div className="flex items-center gap-2 text-slate-500">
-              <div className="w-5 h-5 rounded-md bg-sky-50 text-sky-600 flex items-center justify-center shrink-0">
-                <Globe size={13} />
+              <div className="mt-4">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-3xl font-extrabold text-slate-900 tracking-tight">
+                    {heroData.val}
+                  </span>
+                  <span className="text-xs font-bold text-slate-700">{heroData.label}</span>
+                </div>
+                <div className="mt-1 flex items-center gap-1.5 text-[11px] font-bold text-emerald-700">
+                  <TrendingUp size={12} />
+                  <span>{heroData.trend} vs yesterday</span>
+                </div>
               </div>
-              <span className="text-xs font-semibold truncate">Website Visitors</span>
             </div>
-            <input
-              type="number"
-              placeholder="0"
-              value={metrics.website_visitors}
-              onChange={(e) => handleMetricChange('website_visitors', e.target.value)}
-              className="w-full text-lg sm:text-xl font-bold text-slate-900 bg-transparent border-0 focus:outline-hidden p-0 tracking-tight"
-            />
-          </div>
 
-          <div className="metric-input-card">
-            <div className="flex items-center gap-2 text-slate-500">
-              <div className="w-5 h-5 rounded-md bg-violet-50 text-violet-600 flex items-center justify-center shrink-0">
-                <Users size={13} />
-              </div>
-              <span className="text-xs font-semibold truncate">New Registrations</span>
-            </div>
-            <input
-              type="number"
-              placeholder="0"
-              value={metrics.new_registrations}
-              onChange={(e) => handleMetricChange('new_registrations', e.target.value)}
-              className="w-full text-lg sm:text-xl font-bold text-slate-900 bg-transparent border-0 focus:outline-hidden p-0 tracking-tight"
-            />
-          </div>
-
-          <div className="metric-input-card">
-            <div className="flex items-center gap-2 text-slate-500">
-              <div className="w-5 h-5 rounded-md bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-                <Briefcase size={13} />
-              </div>
-              <span className="text-xs font-semibold truncate">Job Applications</span>
-            </div>
-            <input
-              type="number"
-              placeholder="0"
-              value={metrics.job_applications}
-              onChange={(e) => handleMetricChange('job_applications', e.target.value)}
-              className="w-full text-lg sm:text-xl font-bold text-slate-900 bg-transparent border-0 focus:outline-hidden p-0 tracking-tight"
-            />
-          </div>
-
-          <div className="metric-input-card">
-            <div className="flex items-center gap-2 text-slate-500">
-              <div className="w-5 h-5 rounded-md bg-teal-50 text-teal-600 flex items-center justify-center shrink-0">
-                <UserCheck size={13} />
-              </div>
-              <span className="text-xs font-semibold truncate">Shortlisted</span>
-            </div>
-            <input
-              type="number"
-              placeholder="0"
-              value={metrics.candidates_shortlisted}
-              onChange={(e) => handleMetricChange('candidates_shortlisted', e.target.value)}
-              className="w-full text-lg sm:text-xl font-bold text-slate-900 bg-transparent border-0 focus:outline-hidden p-0 tracking-tight"
-            />
-          </div>
-
-          <div className="metric-input-card">
-            <div className="flex items-center gap-2 text-slate-500">
-              <div className="w-5 h-5 rounded-md bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-                <Video size={13} />
-              </div>
-              <span className="text-xs font-semibold truncate">Interviews Conducted</span>
-            </div>
-            <input
-              type="number"
-              placeholder="0"
-              value={metrics.interviews_conducted}
-              onChange={(e) => handleMetricChange('interviews_conducted', e.target.value)}
-              className="w-full text-lg sm:text-xl font-bold text-slate-900 bg-transparent border-0 focus:outline-hidden p-0 tracking-tight"
-            />
-          </div>
-
-          <div className="metric-input-card">
-            <div className="flex items-center gap-2 text-slate-500">
-              <div className="w-5 h-5 rounded-md bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-                <CheckCircle2 size={13} />
-              </div>
-              <span className="text-xs font-semibold truncate">Candidates Hired</span>
-            </div>
-            <input
-              type="number"
-              placeholder="0"
-              value={metrics.candidates_hired}
-              onChange={(e) => handleMetricChange('candidates_hired', e.target.value)}
-              className="w-full text-lg sm:text-xl font-bold text-slate-900 bg-transparent border-0 focus:outline-hidden p-0 tracking-tight"
-            />
-          </div>
-
-          <div className="metric-input-card">
-            <div className="flex items-center gap-2 text-slate-500">
-              <div className="w-5 h-5 rounded-md bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-                <BarChart2 size={13} />
-              </div>
-              <span className="text-xs font-semibold truncate">Vacancies Posted</span>
-            </div>
-            <input
-              type="number"
-              placeholder="0"
-              value={metrics.new_vacancies_posted}
-              onChange={(e) => handleMetricChange('new_vacancies_posted', e.target.value)}
-              className="w-full text-lg sm:text-xl font-bold text-slate-900 bg-transparent border-0 focus:outline-hidden p-0 tracking-tight"
-            />
-          </div>
-
-          <div className="metric-input-card col-span-2 sm:col-span-1">
-            <div className="flex items-center gap-2 text-slate-500">
-              <div className="w-5 h-5 rounded-md bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
-                <UserCheck size={13} />
-              </div>
-              <span className="text-xs font-semibold truncate">Profile Completions</span>
-            </div>
-            <input
-              type="number"
-              placeholder="0"
-              value={metrics.profile_completions}
-              onChange={(e) => handleMetricChange('profile_completions', e.target.value)}
-              className="w-full text-lg sm:text-xl font-bold text-slate-900 bg-transparent border-0 focus:outline-hidden p-0 tracking-tight"
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* 2. Today's Work & Progress */}
-      <section className="reports-section-block">
-        <div className="reports-section-heading">
-          <div className="flex items-center gap-2.5">
-            <span className="reports-number-badge">2</span>
-            <h2 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight">
-              Today's Work & Progress
-            </h2>
-          </div>
-          <span className="text-[11px] text-slate-400 font-medium">Track operational milestones & daily tasks</span>
-        </div>
-
-        <div className="rounded-2xl border border-slate-200/90 overflow-hidden divide-y divide-slate-100 bg-white">
-          {workProgress.map((item) => (
-            <div
-              key={item.id}
-              className={`p-3 sm:p-3.5 transition flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
-                item.checked ? 'bg-slate-50/50' : 'bg-white'
-              }`}
-            >
-              <label className="flex items-center gap-3 cursor-pointer select-none min-w-[240px]">
-                <input
-                  type="checkbox"
-                  checked={Boolean(item.checked)}
-                  onChange={() => toggleWorkItem(item.id)}
-                  className="w-4 h-4 rounded text-slate-900 focus:ring-slate-900 border-slate-300 cursor-pointer"
+            {/* Emerald SVG Decorative Wave Sparkline */}
+            <div className="mt-3 -mx-4.5 -mb-4.5 pt-2">
+              <svg viewBox="0 0 200 55" className="w-full h-12 overflow-visible" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="emeraldWaveGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#10b981" stopOpacity="0.28" />
+                    <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
+                  </linearGradient>
+                </defs>
+                <path
+                  d="M0,45 Q30,15 60,32 T120,20 T170,10 T200,18 L200,55 L0,55 Z"
+                  fill="url(#emeraldWaveGrad)"
                 />
-                <span className={`text-xs sm:text-[13px] font-semibold ${item.checked ? 'text-slate-900' : 'text-slate-500'}`}>
-                  {item.label}
-                </span>
-                <span className="text-[10px] text-slate-400 font-normal">(optional)</span>
-              </label>
+                <path
+                  d="M0,45 Q30,15 60,32 T120,20 T170,10 T200,18"
+                  fill="none"
+                  stroke="#10b981"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </div>
+          </div>
 
+          {/* Right: 8 Compact Metric Cards in 4x2 Grid */}
+          <div className="lg:col-span-9 grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {/* 1. Companies Onboarded */}
+            <div className="metric-input-card bg-white hover:border-emerald-300">
+              <div className="flex items-center gap-2 text-slate-500">
+                <div className="w-6 h-6 rounded-md bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                  <Building2 size={13} />
+                </div>
+                <span className="text-xs font-semibold truncate">Companies</span>
+              </div>
               <input
-                type="text"
-                value={item.note || ''}
-                placeholder="Enter details, e.g., Onboarded 5 new client companies..."
-                onChange={(e) => updateWorkNote(item.id, e.target.value)}
-                className="w-full sm:flex-1 px-3 py-1.5 text-xs bg-slate-50/80 hover:bg-white focus:bg-white border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-slate-900/10 focus:border-slate-900 focus:outline-hidden transition"
+                type="number"
+                placeholder="0"
+                value={metrics.companies_onboarded}
+                onChange={(e) => handleMetricChange('companies_onboarded', e.target.value)}
+                className="w-full text-xl sm:text-2xl font-extrabold text-slate-900 bg-transparent border-0 focus:outline-hidden p-0 tracking-tight"
               />
             </div>
-          ))}
-        </div>
-      </section>
 
-      {/* 3. Content & Marketing Activity Table */}
-      <section className="reports-section-block">
-        <div className="reports-section-heading">
-          <div className="flex items-center gap-2.5">
-            <span className="reports-number-badge">3</span>
-            <h2 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight">
-              Content & Marketing Activity
-            </h2>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleOpenAddActivity}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-bold transition shadow-2xs cursor-pointer"
-          >
-            <Plus size={13} strokeWidth={2.5} />
-            <span>Add Activity</span>
-          </button>
-        </div>
-
-        {marketingActivities.length === 0 ? (
-          <div className="p-8 text-center border border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
-            <Globe size={28} className="mx-auto text-slate-300 mb-2" />
-            <p className="text-xs font-semibold text-slate-600">No marketing activities logged for this date.</p>
-            <p className="text-[11px] text-slate-400 mt-0.5">Click "Add Activity" to log campaigns, ads, reels, or posts.</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto rounded-2xl border border-slate-200/90 shadow-2xs">
-            <table className="w-full text-left reports-table">
-              <thead className="bg-slate-50/80">
-                <tr>
-                  <th>Platform / Channel</th>
-                  <th>Content Type</th>
-                  <th>Activity / Details</th>
-                  <th>Spend (₹)</th>
-                  <th>Result (Reach / Clicks / Leads)</th>
-                  <th className="text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 bg-white">
-                {marketingActivities.map((act) => (
-                  <tr key={act.id} className="hover:bg-slate-50/60 transition-colors">
-                    <td className="font-semibold text-slate-900">
-                      <div className="flex items-center gap-2">
-                        <ChannelIcon channel={act.platform} size={16} />
-                        <span>{act.platform}</span>
-                      </div>
-                    </td>
-                    <td>
-                      <span className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200/60">
-                        {act.content_type}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="font-semibold text-slate-900 text-xs sm:text-[13px]">{act.title}</div>
-                      {act.description && <div className="text-[11px] text-slate-400 truncate max-w-xs">{act.description}</div>}
-                    </td>
-                    <td className="font-bold text-slate-900">
-                      {act.spend ? `₹${Number(act.spend).toLocaleString()}` : '₹0'}
-                    </td>
-                    <td>
-                      <div className="text-xs text-slate-700 font-medium flex items-center gap-2 flex-wrap">
-                        <span>Reach: <strong className="text-slate-900">{Number(act.reach || 0).toLocaleString()}</strong></span>
-                        <span className="text-slate-300">|</span>
-                        <span>Clicks: <strong className="text-slate-900">{Number(act.clicks || 0).toLocaleString()}</strong></span>
-                        {act.registrations ? (
-                          <>
-                            <span className="text-slate-300">|</span>
-                            <span>Regs: <strong className="text-indigo-600">{act.registrations}</strong></span>
-                          </>
-                        ) : null}
-                      </div>
-                    </td>
-                    <td className="text-right space-x-1.5">
-                      <button
-                        type="button"
-                        onClick={() => handleEditActivity(act)}
-                        className="p-1.5 hover:bg-slate-100 text-slate-500 hover:text-slate-900 rounded-lg transition cursor-pointer"
-                        title="Edit activity"
-                      >
-                        <Edit3 size={13.5} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteActivity(act.id)}
-                        className="p-1.5 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition cursor-pointer"
-                        title="Delete activity"
-                      >
-                        <Trash2 size={13.5} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-
-      {/* 4. Observations & Insights */}
-      <section className="reports-section-block">
-        <div className="reports-section-heading">
-          <div className="flex items-center gap-2.5">
-            <span className="reports-number-badge">4</span>
-            <h2 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight">
-              Observations & Insights
-            </h2>
-          </div>
-          <span className="text-[11px] text-slate-400 font-medium">Record what worked, conversion roadblocks & company feedback</span>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="p-4 sm:p-5 rounded-2xl border border-emerald-100/90 bg-emerald-50/20">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-500" />
-              <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-900">
-                What went well today?
-              </h3>
+            {/* 2. Website Visitors */}
+            <div className="metric-input-card bg-white hover:border-emerald-300">
+              <div className="flex items-center gap-2 text-slate-500">
+                <div className="w-6 h-6 rounded-md bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                  <Globe size={13} />
+                </div>
+                <span className="text-xs font-semibold truncate">Website Visitors</span>
+              </div>
+              <input
+                type="number"
+                placeholder="0"
+                value={metrics.website_visitors}
+                onChange={(e) => handleMetricChange('website_visitors', e.target.value)}
+                className="w-full text-xl sm:text-2xl font-extrabold text-slate-900 bg-transparent border-0 focus:outline-hidden p-0 tracking-tight"
+              />
             </div>
-            <textarea
-              rows={4}
-              value={observations.what_went_well || ''}
-              onChange={(e) => setObservations({ ...observations, what_went_well: e.target.value })}
-              placeholder="Good responses, milestone achievements, successful onboarding, positive campaigns..."
-              className="w-full text-xs text-slate-800 bg-white border border-slate-200/90 rounded-xl p-3 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 focus:outline-hidden leading-relaxed shadow-2xs transition"
-            />
-          </div>
 
-          <div className="p-4 sm:p-5 rounded-2xl border border-amber-100/90 bg-amber-50/20">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="w-2 h-2 rounded-full bg-amber-500" />
-              <h3 className="text-xs font-bold uppercase tracking-wider text-amber-900">
-                Issues / Why candidates didn't apply?
-              </h3>
+            {/* 3. New Registrations */}
+            <div className="metric-input-card bg-white hover:border-emerald-300">
+              <div className="flex items-center gap-2 text-slate-500">
+                <div className="w-6 h-6 rounded-md bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                  <Users size={13} />
+                </div>
+                <span className="text-xs font-semibold truncate">Registrations</span>
+              </div>
+              <input
+                type="number"
+                placeholder="0"
+                value={metrics.new_registrations}
+                onChange={(e) => handleMetricChange('new_registrations', e.target.value)}
+                className="w-full text-xl sm:text-2xl font-extrabold text-slate-900 bg-transparent border-0 focus:outline-hidden p-0 tracking-tight"
+              />
             </div>
-            <textarea
-              rows={4}
-              value={observations.issues_faced || ''}
-              onChange={(e) => setObservations({ ...observations, issues_faced: e.target.value })}
-              placeholder="Candidate feedback, drop-off reasons, technical bottlenecks, hiring partner queries..."
-              className="w-full text-xs text-slate-800 bg-white border border-slate-200/90 rounded-xl p-3 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 focus:outline-hidden leading-relaxed shadow-2xs transition"
-            />
+
+            {/* 4. Job Applications */}
+            <div className="metric-input-card bg-white hover:border-emerald-300">
+              <div className="flex items-center gap-2 text-slate-500">
+                <div className="w-6 h-6 rounded-md bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                  <Briefcase size={13} />
+                </div>
+                <span className="text-xs font-semibold truncate">Applications</span>
+              </div>
+              <input
+                type="number"
+                placeholder="0"
+                value={metrics.job_applications}
+                onChange={(e) => handleMetricChange('job_applications', e.target.value)}
+                className="w-full text-xl sm:text-2xl font-extrabold text-slate-900 bg-transparent border-0 focus:outline-hidden p-0 tracking-tight"
+              />
+            </div>
+
+            {/* 5. Shortlisted */}
+            <div className="metric-input-card bg-white hover:border-emerald-300">
+              <div className="flex items-center gap-2 text-slate-500">
+                <div className="w-6 h-6 rounded-md bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                  <UserCheck size={13} />
+                </div>
+                <span className="text-xs font-semibold truncate">Shortlisted</span>
+              </div>
+              <input
+                type="number"
+                placeholder="0"
+                value={metrics.candidates_shortlisted}
+                onChange={(e) => handleMetricChange('candidates_shortlisted', e.target.value)}
+                className="w-full text-xl sm:text-2xl font-extrabold text-slate-900 bg-transparent border-0 focus:outline-hidden p-0 tracking-tight"
+              />
+            </div>
+
+            {/* 6. Interviews Conducted */}
+            <div className="metric-input-card bg-white hover:border-emerald-300">
+              <div className="flex items-center gap-2 text-slate-500">
+                <div className="w-6 h-6 rounded-md bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                  <Video size={13} />
+                </div>
+                <span className="text-xs font-semibold truncate">Interviews</span>
+              </div>
+              <input
+                type="number"
+                placeholder="0"
+                value={metrics.interviews_conducted}
+                onChange={(e) => handleMetricChange('interviews_conducted', e.target.value)}
+                className="w-full text-xl sm:text-2xl font-extrabold text-slate-900 bg-transparent border-0 focus:outline-hidden p-0 tracking-tight"
+              />
+            </div>
+
+            {/* 7. Candidates Hired */}
+            <div className="metric-input-card bg-white hover:border-emerald-300">
+              <div className="flex items-center gap-2 text-slate-500">
+                <div className="w-6 h-6 rounded-md bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                  <CheckCircle2 size={13} />
+                </div>
+                <span className="text-xs font-semibold truncate">Hired</span>
+              </div>
+              <input
+                type="number"
+                placeholder="0"
+                value={metrics.candidates_hired}
+                onChange={(e) => handleMetricChange('candidates_hired', e.target.value)}
+                className="w-full text-xl sm:text-2xl font-extrabold text-slate-900 bg-transparent border-0 focus:outline-hidden p-0 tracking-tight"
+              />
+            </div>
+
+            {/* 8. Profile Completions */}
+            <div className="metric-input-card bg-white hover:border-emerald-300">
+              <div className="flex items-center gap-2 text-slate-500">
+                <div className="w-6 h-6 rounded-md bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                  <UserPlus size={13} />
+                </div>
+                <span className="text-xs font-semibold truncate">Profile Completions</span>
+              </div>
+              <input
+                type="number"
+                placeholder="0"
+                value={metrics.profile_completions}
+                onChange={(e) => handleMetricChange('profile_completions', e.target.value)}
+                className="w-full text-xl sm:text-2xl font-extrabold text-slate-900 bg-transparent border-0 focus:outline-hidden p-0 tracking-tight"
+              />
+            </div>
           </div>
         </div>
       </section>
 
-      {/* 5. Next Steps / Action Items */}
+      {/* Middle Section: 2-Column Dashboard Layout (Option D) */}
       <section className="reports-section-block">
-        <div className="reports-section-heading">
-          <div className="flex items-center gap-2.5">
-            <span className="reports-number-badge">5</span>
-            <h2 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight">
-              Next Steps / Action Items
-            </h2>
-          </div>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Left Column (Work & Progress + Action Items) - 7 cols */}
+          <div className="lg:col-span-7 space-y-6">
+            {/* 2. Today's Work & Progress */}
+            <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-2xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3.5 border-b border-slate-100">
+                <div className="flex items-center gap-2.5">
+                  <span className="reports-number-badge">2</span>
+                  <h2 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight">
+                    Today's Work & Progress
+                  </h2>
+                </div>
 
-          <button
-            type="button"
-            onClick={addActionItem}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold transition cursor-pointer"
-          >
-            <Plus size={13} strokeWidth={2.5} />
-            <span>Add Task</span>
-          </button>
-        </div>
-
-        <div className="space-y-2.5">
-          {actionItems.map((item) => (
-            <div
-              key={item.id}
-              className={`p-3 sm:p-3.5 rounded-2xl border transition flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
-                item.completed ? 'bg-slate-50/80 border-slate-200/60 opacity-60' : 'bg-white border-slate-200/90 shadow-2xs'
-              }`}
-            >
-              <div className="flex items-center gap-3 w-full sm:w-auto flex-1">
-                <input
-                  type="checkbox"
-                  checked={Boolean(item.completed)}
-                  onChange={() => toggleActionItem(item.id)}
-                  className="w-4 h-4 rounded text-slate-900 focus:ring-slate-900 border-slate-300 cursor-pointer"
-                />
-                <input
-                  type="text"
-                  value={item.task}
-                  placeholder="Task description..."
-                  onChange={(e) =>
-                    setActionItems((prev) =>
-                      prev.map((a) => (a.id === item.id ? { ...a, task: e.target.value } : a))
-                    )
-                  }
-                  className={`text-xs sm:text-[13px] font-semibold bg-transparent border-0 focus:outline-hidden w-full ${
-                    item.completed ? 'line-through text-slate-400' : 'text-slate-900'
-                  }`}
-                />
+                {/* Progress Bar & Counter (Option D Signature) */}
+                <div className="flex items-center gap-2.5">
+                  <span className="text-xs font-medium text-slate-500">
+                    <strong className="text-slate-900">{completedWorkCount}</strong> of {workProgress.length} completed
+                  </span>
+                  <div className="w-24 sm:w-32 bg-slate-100 rounded-full h-2 overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                      style={{ width: `${workProgressPct}%` }}
+                    />
+                  </div>
+                  <span className="text-xs font-extrabold text-emerald-600 w-8 text-right">
+                    {workProgressPct}%
+                  </span>
+                </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200/60">
-                  {item.assignee || 'Operations'}
-                </span>
-                <span
-                  className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                    item.priority === 'High'
-                      ? 'bg-rose-50 text-rose-700 border border-rose-200/60'
-                      : item.priority === 'Medium'
-                      ? 'bg-amber-50 text-amber-700 border border-amber-200/60'
-                      : 'bg-slate-100 text-slate-600 border border-slate-200/60'
-                  }`}
-                >
-                  {item.priority || 'Normal'}
-                </span>
-                <span className="text-[11px] text-slate-400 font-medium">
-                  {item.deadline || 'Upcoming'}
-                </span>
+              {/* Checklist Items */}
+              <div className="divide-y divide-slate-100 mt-2">
+                {workProgress.map((item) => (
+                  <div
+                    key={item.id}
+                    className={`py-3 transition flex items-center justify-between gap-3 ${
+                      item.checked ? 'bg-slate-50/30' : 'bg-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      {/* Custom Green Checkbox */}
+                      <button
+                        type="button"
+                        onClick={() => toggleWorkItem(item.id)}
+                        className={`w-4.5 h-4.5 rounded-md border flex items-center justify-center transition shrink-0 cursor-pointer ${
+                          item.checked
+                            ? 'bg-emerald-500 border-emerald-500 text-white'
+                            : 'border-slate-300 bg-white hover:border-emerald-400'
+                        }`}
+                      >
+                        {item.checked && <Check size={11} strokeWidth={3} />}
+                      </button>
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-xs sm:text-[13px] font-semibold ${item.checked ? 'text-slate-900' : 'text-slate-600'}`}>
+                            {item.label}
+                          </span>
+                        </div>
+                        <input
+                          type="text"
+                          value={item.note || ''}
+                          placeholder="Details or updates (e.g. Monitored active requisitions)..."
+                          onChange={(e) => updateWorkNote(item.id, e.target.value)}
+                          className="w-full text-xs text-slate-500 hover:text-slate-800 focus:text-slate-900 bg-transparent border-0 focus:outline-hidden p-0 mt-0.5 truncate"
+                        />
+                      </div>
+                    </div>
+
+                    <ChevronRight size={14} className="text-slate-300 shrink-0" />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 3. Next Steps / Action Items */}
+            <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-2xs">
+              <div className="flex items-center justify-between pb-3.5 border-b border-slate-100">
+                <div className="flex items-center gap-2.5">
+                  <span className="reports-number-badge">3</span>
+                  <h2 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight">
+                    Next Steps / Action Items
+                  </h2>
+                </div>
+
                 <button
                   type="button"
-                  onClick={() => setActionItems((prev) => prev.filter((a) => a.id !== item.id))}
-                  className="p-1 hover:text-rose-600 text-slate-300 rounded cursor-pointer"
-                  title="Delete task"
+                  onClick={addActionItem}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold transition cursor-pointer"
                 >
-                  <Trash2 size={13} />
+                  <Plus size={12} strokeWidth={2.5} />
+                  <span>Add Task</span>
                 </button>
               </div>
+
+              <div className="divide-y divide-slate-100 mt-2">
+                {actionItems.map((item) => (
+                  <div
+                    key={item.id}
+                    className={`py-3 transition flex items-center justify-between gap-3 ${
+                      item.completed ? 'opacity-60' : ''
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <button
+                        type="button"
+                        onClick={() => toggleActionItem(item.id)}
+                        className={`w-4.5 h-4.5 rounded-md border flex items-center justify-center transition shrink-0 cursor-pointer ${
+                          item.completed
+                            ? 'bg-emerald-500 border-emerald-500 text-white'
+                            : 'border-slate-300 bg-white hover:border-emerald-400'
+                        }`}
+                      >
+                        {item.completed && <Check size={11} strokeWidth={3} />}
+                      </button>
+
+                      <input
+                        type="text"
+                        value={item.task}
+                        placeholder="Task description..."
+                        onChange={(e) =>
+                          setActionItems((prev) =>
+                            prev.map((a) => (a.id === item.id ? { ...a, task: e.target.value } : a))
+                          )
+                        }
+                        className={`text-xs sm:text-[13px] font-semibold bg-transparent border-0 focus:outline-hidden w-full ${
+                          item.completed ? 'line-through text-slate-400' : 'text-slate-900'
+                        }`}
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600">
+                        {item.assignee || 'Operations'}
+                      </span>
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          item.priority === 'High'
+                            ? 'bg-rose-50 text-rose-700 border border-rose-200/60'
+                            : item.priority === 'Medium'
+                            ? 'bg-amber-50 text-amber-700 border border-amber-200/60'
+                            : 'bg-slate-100 text-slate-600'
+                        }`}
+                      >
+                        {item.priority || 'Normal'}
+                      </span>
+                      <span className="text-[11px] text-slate-400 hidden sm:inline">
+                        {item.deadline || 'Upcoming'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setActionItems((prev) => prev.filter((a) => a.id !== item.id))}
+                        className="p-1 hover:text-rose-600 text-slate-300 rounded cursor-pointer"
+                        title="Delete task"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-          ))}
+          </div>
+
+          {/* Right Column (Content & Marketing + Observations) - 5 cols */}
+          <div className="lg:col-span-5 space-y-6">
+            {/* 4. Content & Marketing Activity with Visual Bar Chart */}
+            <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-2xs">
+              <div className="flex items-center justify-between pb-3.5 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-5 rounded-md bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                    <BarChart2 size={13} />
+                  </div>
+                  <h3 className="text-sm font-bold text-slate-900 tracking-tight">
+                    Content & Marketing Activity
+                  </h3>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleOpenAddActivity}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition shadow-2xs cursor-pointer"
+                >
+                  <Plus size={12} strokeWidth={2.5} />
+                  <span>Add Activity</span>
+                </button>
+              </div>
+
+              {/* Option D Mini Visual Bar Chart */}
+              <div className="pt-4 pb-2">
+                <div className="flex items-end justify-between h-20 px-2 gap-2">
+                  {[
+                    { day: 'Mon', h: '35%' },
+                    { day: 'Tue', h: '55%' },
+                    { day: 'Wed', h: '75%' },
+                    { day: 'Thu', h: '100%' },
+                    { day: 'Fri', h: '60%' },
+                    { day: 'Sat', h: '25%' },
+                    { day: 'Sun', h: '15%' },
+                  ].map((bar, i) => (
+                    <div key={i} className="flex-1 flex flex-col items-center h-full justify-end gap-1.5">
+                      <div className="w-full bg-slate-100 rounded-t-sm h-full flex items-end">
+                        <div
+                          className="w-full bg-gradient-to-t from-emerald-600 to-emerald-400 rounded-t-sm transition-all duration-500 hover:brightness-110"
+                          style={{ height: bar.h }}
+                        />
+                      </div>
+                      <span className="text-[10px] font-semibold text-slate-400">{bar.day}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Activities Content */}
+              {marketingActivities.length === 0 ? (
+                <div className="mt-3 p-4 text-center border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
+                  <p className="text-xs font-semibold text-slate-600">No marketing activities logged for this date.</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Add campaigns, ads, reels, or posts.</p>
+                </div>
+              ) : (
+                <div className="mt-3 divide-y divide-slate-100">
+                  {marketingActivities.map((act) => (
+                    <div key={act.id} className="py-2.5 flex items-center justify-between gap-3 text-xs">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <ChannelIcon channel={act.platform} size={15} />
+                        <div className="truncate">
+                          <span className="font-bold text-slate-900 block truncate">{act.title}</span>
+                          <span className="text-[10px] text-slate-400">
+                            Spend: ₹{Number(act.spend || 0).toLocaleString()} · Reach: {Number(act.reach || 0).toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleEditActivity(act)}
+                          className="p-1 hover:bg-slate-100 text-slate-400 hover:text-slate-700 rounded cursor-pointer"
+                        >
+                          <Edit3 size={12} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteActivity(act.id)}
+                          className="p-1 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded cursor-pointer"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* 5. Observations & Insights in Soft Emerald Tint */}
+            <div className="bg-emerald-50/40 border border-emerald-200/80 rounded-2xl p-5 shadow-2xs">
+              <div className="flex items-center justify-between pb-3 border-b border-emerald-100">
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-5 rounded-md bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                    <Lightbulb size={13} />
+                  </div>
+                  <h3 className="text-sm font-bold text-slate-900 tracking-tight">
+                    Observations & Insights
+                  </h3>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowObsTextareas(!showObsTextareas)}
+                  className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 cursor-pointer"
+                >
+                  {showObsTextareas ? 'Done Editing' : 'Edit Notes'}
+                </button>
+              </div>
+
+              {/* Option D Bullet Display */}
+              {!showObsTextareas ? (
+                <div className="mt-3.5 space-y-2">
+                  {observationBullets.map((bullet, idx) => (
+                    <div key={idx} className="flex items-start gap-2 text-xs text-slate-700 leading-relaxed">
+                      <span className="text-emerald-600 font-bold text-sm leading-none mt-0.5">•</span>
+                      <span>{bullet}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-3.5 space-y-3">
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-emerald-900 mb-1">
+                      What went well today?
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={observations.what_went_well || ''}
+                      onChange={(e) => setObservations({ ...observations, what_went_well: e.target.value })}
+                      placeholder="e.g. 2 vacancies posted across tech and non-tech categories..."
+                      className="w-full text-xs text-slate-800 bg-white border border-emerald-200 rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500/20 focus:outline-hidden leading-relaxed shadow-2xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-amber-900 mb-1">
+                      Issues / Roadblocks
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={observations.issues_faced || ''}
+                      onChange={(e) => setObservations({ ...observations, issues_faced: e.target.value })}
+                      placeholder="Candidate drop-offs, queries, or pending items..."
+                      className="w-full text-xs text-slate-800 bg-white border border-amber-200 rounded-xl p-2.5 focus:ring-2 focus:ring-amber-500/20 focus:outline-hidden leading-relaxed shadow-2xs"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </section>
 
@@ -976,7 +1171,7 @@ export function ReportsProgressView({ user, onReportSaved }) {
                   <select
                     value={activityForm.platform}
                     onChange={(e) => setActivityForm({ ...activityForm, platform: e.target.value })}
-                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
                   >
                     <option value="Instagram">Instagram</option>
                     <option value="LinkedIn">LinkedIn</option>
@@ -992,7 +1187,7 @@ export function ReportsProgressView({ user, onReportSaved }) {
                   <select
                     value={activityForm.content_type}
                     onChange={(e) => setActivityForm({ ...activityForm, content_type: e.target.value })}
-                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
                   >
                     <option value="Post">Post</option>
                     <option value="Post (Boosted)">Post (Boosted)</option>
@@ -1013,7 +1208,7 @@ export function ReportsProgressView({ user, onReportSaved }) {
                   placeholder="e.g. Contract Hiring Guide for Tech Roles"
                   value={activityForm.title}
                   onChange={(e) => setActivityForm({ ...activityForm, title: e.target.value })}
-                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
 
@@ -1024,7 +1219,7 @@ export function ReportsProgressView({ user, onReportSaved }) {
                   placeholder="Target audience, hook, or purpose..."
                   value={activityForm.description}
                   onChange={(e) => setActivityForm({ ...activityForm, description: e.target.value })}
-                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
 
@@ -1036,7 +1231,7 @@ export function ReportsProgressView({ user, onReportSaved }) {
                     placeholder="0"
                     value={activityForm.spend}
                     onChange={(e) => setActivityForm({ ...activityForm, spend: e.target.value })}
-                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
                   />
                 </div>
                 <div>
@@ -1046,7 +1241,7 @@ export function ReportsProgressView({ user, onReportSaved }) {
                     placeholder="0"
                     value={activityForm.reach}
                     onChange={(e) => setActivityForm({ ...activityForm, reach: e.target.value })}
-                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
                   />
                 </div>
                 <div>
@@ -1056,7 +1251,7 @@ export function ReportsProgressView({ user, onReportSaved }) {
                     placeholder="0"
                     value={activityForm.clicks}
                     onChange={(e) => setActivityForm({ ...activityForm, clicks: e.target.value })}
-                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
                   />
                 </div>
               </div>
@@ -1069,7 +1264,7 @@ export function ReportsProgressView({ user, onReportSaved }) {
                     placeholder="0"
                     value={activityForm.registrations}
                     onChange={(e) => setActivityForm({ ...activityForm, registrations: e.target.value })}
-                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
                   />
                 </div>
                 <div>
@@ -1079,7 +1274,7 @@ export function ReportsProgressView({ user, onReportSaved }) {
                     placeholder="0"
                     value={activityForm.applications}
                     onChange={(e) => setActivityForm({ ...activityForm, applications: e.target.value })}
-                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
                   />
                 </div>
               </div>
@@ -1094,7 +1289,7 @@ export function ReportsProgressView({ user, onReportSaved }) {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
                 >
                   {editingActivity ? 'Save Changes' : 'Add Activity'}
                 </button>
@@ -1110,7 +1305,7 @@ export function ReportsProgressView({ user, onReportSaved }) {
           <div className="w-full max-w-md bg-white h-full shadow-2xl flex flex-col border-l border-slate-200 animate-slide-left">
             <div className="p-4 border-b border-slate-200 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <History size={18} className="text-indigo-600" />
+                <History size={18} className="text-emerald-600" />
                 <h3 className="font-extrabold text-slate-900 text-sm">Past Reports Archive</h3>
               </div>
               <button
@@ -1134,9 +1329,9 @@ export function ReportsProgressView({ user, onReportSaved }) {
                       setReportType(rep.report_type || 'daily');
                       setShowHistoryDrawer(false);
                     }}
-                    className={`p-3.5 rounded-xl border transition cursor-pointer hover:border-indigo-300 hover:bg-indigo-50/20 ${
+                    className={`p-3.5 rounded-xl border transition cursor-pointer hover:border-emerald-300 hover:bg-emerald-50/20 ${
                       rep.report_date === reportDate && rep.report_type === reportType
-                        ? 'border-indigo-600 bg-indigo-50/40'
+                        ? 'border-emerald-600 bg-emerald-50/40'
                         : 'border-slate-200 bg-white'
                     }`}
                   >
