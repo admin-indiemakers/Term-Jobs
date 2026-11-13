@@ -66,4 +66,11 @@ export const reportsApi = {
     if (endDate) query.set('end_date', endDate);
     return request(`/api/reports/analytics?${query.toString()}`, { noCache: true });
   },
+
+  /**
+   * Directly fetch un-manipulated live database figures for a specific date.
+   */
+  async getDbMetrics(date) {
+    return request(`/api/reports/db-metrics?date=${encodeURIComponent(date)}`, { noCache: true });
+  },
 };

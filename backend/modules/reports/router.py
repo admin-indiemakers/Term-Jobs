@@ -1,5 +1,5 @@
 from typing import Optional, Dict, Any, List
-from fastapi import APIRouter, HTTPException, Query, Header, Depends, Body, status
+from fastapi import APIRouter, HTTPException, Query, Header, Depends, Body, status, Response
 
 from modules.shared.db import get_session
 from modules.identity.services.auth_service import decode_access_token
@@ -11,6 +11,8 @@ from .service import (
     save_or_update_report,
     delete_report,
     calculate_growth_analytics,
+    get_real_db_metrics_for_date,
+    generate_reports_csv,
 )
 
 router = APIRouter(prefix="/reports", tags=["Reports & Growth"])
@@ -51,6 +53,32 @@ def get_report_by_date_endpoint(
     """Retrieve an existing report for a specific date and type."""
     report = get_report_by_date_and_type(report_date=date, report_type=report_type)
     return {"report": report}
+
+
+@router.get("/db-metrics", response_model=Dict[str, Any])
+def get_db_metrics_endpoint(
+    date: str = Query(..., description="YYYY-MM-DD to check directly against DB"),
+):
+    """
+    Directly query MongoDB collections (tenants, candidates, applications,
+    requisitions, interviews, views) to return real un-manipulated figures for a date.
+    """
+    data = get_real_db_metrics_for_date(date)
+    return data
+
+
+@router.get("/export/csv")
+def export_reports_csv_endpoint():
+    """Download an Excel-friendly CSV spreadsheet of all logged reports."""
+    csv_content = generate_reports_csv()
+    filename = "termjobs_team_reports.csv"
+    return Response(
+        content=csv_content,
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        }
+    )
 
 
 @router.get("/analytics", response_model=Dict[str, Any])

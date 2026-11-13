@@ -22,13 +22,17 @@ import {
   Check, 
   Lightbulb, 
   Layers, 
-  Clock 
+  Clock,
+  Download,
+  Printer 
 } from 'lucide-react';
 import { reportsApi } from '../services/reportsApi';
+import { exportToExcel, exportToPdf } from '../services/exportReports';
 import { ChannelIcon } from './ChannelIcons';
 
 export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const [data, setData] = useState(null);
   const [selectedPeriod, setSelectedPeriod] = useState(period);
   const [activeChartMetric, setActiveChartMetric] = useState('all'); // 'all' | 'visitors' | 'registrations' | 'applications'
@@ -57,6 +61,23 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
     fetchAnalytics(p);
   };
 
+  const handleExportExcel = async () => {
+    setExporting(true);
+    try {
+      const res = await reportsApi.getReports({ limit: 100 });
+      exportToExcel(res?.reports || [], data, `TermJobs_Growth_Analytics_${selectedPeriod}.csv`);
+    } catch (e) {
+      console.error('Export error:', e);
+      exportToExcel([], data, `TermJobs_Growth_Analytics_${selectedPeriod}.csv`);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExportPdf = () => {
+    exportToPdf();
+  };
+
   const kpis = data?.kpis || {};
   const growthTrends = data?.growth_trends || [];
   const funnel = data?.conversion_funnel || [];
@@ -70,10 +91,10 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
   const chartHeight = 220;
   const chartWidth = 720;
   const maxMetricVal = useMemo(() => {
-    if (!growthTrends.length) return 10000;
+    if (!growthTrends.length) return 10;
     return Math.max(
       ...growthTrends.map((d) => Math.max(d.visitors || 0, d.registrations || 0, d.applications || 0)),
-      1000
+      10
     );
   }, [growthTrends]);
 
@@ -89,7 +110,7 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
   };
 
   return (
-    <div className="w-full flex flex-col flex-1 divide-y divide-slate-100/90 text-left">
+    <div id="growth-print-container" className="w-full flex flex-col flex-1 divide-y divide-slate-100/90 text-left">
       {/* Dashboard Top Header inside Big Container */}
       <div className="reports-workspace-header flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
         <div>
@@ -124,6 +145,29 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
             ))}
           </div>
 
+          {/* Export Excel Button */}
+          <button
+            type="button"
+            disabled={exporting}
+            onClick={handleExportExcel}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 text-xs font-semibold shadow-2xs transition cursor-pointer disabled:opacity-50"
+            title="Download Reports & Analytics as Excel CSV"
+          >
+            <Download size={13.5} className="text-emerald-600" />
+            <span className="hidden sm:inline">Excel</span>
+          </button>
+
+          {/* Export PDF Button */}
+          <button
+            type="button"
+            onClick={handleExportPdf}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 text-xs font-semibold shadow-2xs transition cursor-pointer"
+            title="Print or Save as PDF"
+          >
+            <Printer size={13.5} className="text-slate-600" />
+            <span className="hidden sm:inline">PDF</span>
+          </button>
+
           <button
             type="button"
             onClick={() => fetchAnalytics(selectedPeriod)}
@@ -149,12 +193,12 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
             </div>
             <div className="mt-2 flex items-baseline gap-2">
               <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-                {kpis.companies_onboarded?.formatted || '142'}
+                {kpis.companies_onboarded?.formatted ?? '0'}
               </span>
             </div>
             <div className="mt-1.5 flex items-center gap-1.5 text-xs font-bold text-emerald-600">
               <ArrowUpRight size={13} />
-              <span>{kpis.companies_onboarded?.change?.value || '+18%'}</span>
+              <span>{kpis.companies_onboarded?.change?.value ?? '+0%'}</span>
               <span className="text-slate-400 font-normal">vs prev period</span>
             </div>
           </div>
@@ -169,12 +213,12 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
             </div>
             <div className="mt-2 flex items-baseline gap-2">
               <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-                {kpis.website_visitors?.formatted || '87,430'}
+                {kpis.website_visitors?.formatted ?? '0'}
               </span>
             </div>
             <div className="mt-1.5 flex items-center gap-1.5 text-xs font-bold text-emerald-600">
               <ArrowUpRight size={13} />
-              <span>{kpis.website_visitors?.change?.value || '+26%'}</span>
+              <span>{kpis.website_visitors?.change?.value ?? '+0%'}</span>
               <span className="text-slate-400 font-normal">vs prev period</span>
             </div>
           </div>
@@ -189,12 +233,12 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
             </div>
             <div className="mt-2 flex items-baseline gap-2">
               <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-                {kpis.registrations?.formatted || '10,284'}
+                {kpis.registrations?.formatted ?? '0'}
               </span>
             </div>
             <div className="mt-1.5 flex items-center gap-1.5 text-xs font-bold text-emerald-600">
               <ArrowUpRight size={13} />
-              <span>{kpis.registrations?.change?.value || '+22%'}</span>
+              <span>{kpis.registrations?.change?.value ?? '+0%'}</span>
               <span className="text-slate-400 font-normal">vs prev period</span>
             </div>
           </div>
@@ -209,12 +253,12 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
             </div>
             <div className="mt-2 flex items-baseline gap-2">
               <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-                {kpis.job_applications?.formatted || '6,713'}
+                {kpis.job_applications?.formatted ?? '0'}
               </span>
             </div>
             <div className="mt-1.5 flex items-center gap-1.5 text-xs font-bold text-emerald-600">
               <ArrowUpRight size={13} />
-              <span>{kpis.job_applications?.change?.value || '+20%'}</span>
+              <span>{kpis.job_applications?.change?.value ?? '+0%'}</span>
               <span className="text-slate-400 font-normal">vs prev period</span>
             </div>
           </div>
@@ -377,7 +421,7 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
             <div className="pt-4 mt-4 border-t border-slate-200/80 text-[11px] text-slate-500 flex items-center justify-between">
               <span>Overall Visitor-to-Application:</span>
               <span className="font-bold text-slate-900">
-                {funnel[3]?.percentage ? `${funnel[3].percentage}%` : '7.7%'}
+                {funnel[3]?.percentage !== undefined ? `${funnel[3].percentage}%` : '0%'}
               </span>
             </div>
           </div>
@@ -498,7 +542,7 @@ export function GrowthDashboardView({ period = '30d', onPeriodChange }) {
 
                 <div className="absolute text-center">
                   <span className="block text-xl font-extrabold text-slate-900 tracking-tight">
-                    {data?.not_applied_total ? data.not_applied_total.toLocaleString() : '3,571'}
+                    {data?.not_applied_total != null ? data.not_applied_total.toLocaleString() : '0'}
                   </span>
                   <span className="text-[10px] font-bold text-slate-400 uppercase">Not Applied</span>
                 </div>

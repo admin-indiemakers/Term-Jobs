@@ -23,10 +23,14 @@ import {
   BarChart2, 
   FileText,
   HelpCircle,
-  X
+  X,
+  Download,
+  Printer,
+  RefreshCw
 } from 'lucide-react';
 import { ChannelIcon } from './ChannelIcons';
 import { reportsApi } from '../services/reportsApi';
+import { exportToExcel, exportToPdf } from '../services/exportReports';
 
 const DEFAULT_METRICS = {
   companies_onboarded: '',
@@ -41,26 +45,30 @@ const DEFAULT_METRICS = {
 };
 
 const DEFAULT_WORK_CHECKLIST = [
-  { id: 'company_onboarding', label: 'Company onboarding & follow-up', checked: true, note: 'Onboarded 5 new client companies and followed up on hiring criteria' },
-  { id: 'candidate_support', label: 'Candidate support / queries', checked: true, note: 'Resolved 18 candidate profile verification and interview room queries' },
-  { id: 'product_updates', label: 'Product / platform updates', checked: false, note: 'AI interview role-awareness patch and browser back navigation protection' },
-  { id: 'content_creation', label: 'Content creation & publishing', checked: true, note: 'Published interview prep guide and short video on AI screening' },
-  { id: 'marketing_campaign', label: 'Marketing & campaign execution', checked: true, note: 'Active Instagram boosted post and LinkedIn outreach campaign' },
+  { id: 'company_onboarding', label: 'Company onboarding & follow-up', checked: false, note: '' },
+  { id: 'candidate_support', label: 'Candidate support / queries', checked: false, note: '' },
+  { id: 'product_updates', label: 'Product / platform updates', checked: false, note: '' },
+  { id: 'content_creation', label: 'Content creation & publishing', checked: false, note: '' },
+  { id: 'marketing_campaign', label: 'Marketing & campaign execution', checked: false, note: '' },
   { id: 'bug_fixes', label: 'Bug fixes & system testing', checked: false, note: '' },
   { id: 'other_work', label: 'Other work completed', checked: false, note: '' },
 ];
 
-const DEFAULT_ACTION_ITEMS = [
-  { id: '1', task: 'Follow up with 3 potential enterprise company leads', assignee: 'Sales Team', priority: 'High', deadline: 'Tomorrow', status: 'Pending', completed: false },
-  { id: '2', task: 'Run a new content campaign (Interview tips & candidate guides)', assignee: 'Marketing', priority: 'Medium', deadline: 'In 2 days', status: 'Pending', completed: false },
-  { id: '3', task: 'Improve application conversion email reminders for incomplete profiles', assignee: 'Product Team', priority: 'High', deadline: 'This Friday', status: 'In Progress', completed: false },
-];
+const DEFAULT_OBSERVATIONS = {
+  what_went_well: '',
+  issues_faced: '',
+  why_candidates_not_applying: '',
+  why_visitors_leaving: '',
+  company_feedback: '',
+  improvements_needed: '',
+};
 
 export function ReportsProgressView({ user, onReportSaved }) {
   const [reportType, setReportType] = useState('daily'); // 'daily' | 'weekly' | 'monthly'
   const [reportDate, setReportDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [syncingDb, setSyncingDb] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
   const [reportStatus, setReportStatus] = useState('draft'); // 'draft' | 'submitted'
   const [currentReportId, setCurrentReportId] = useState(null);
@@ -68,62 +76,9 @@ export function ReportsProgressView({ user, onReportSaved }) {
   // Form State
   const [metrics, setMetrics] = useState(DEFAULT_METRICS);
   const [workProgress, setWorkProgress] = useState(DEFAULT_WORK_CHECKLIST);
-  const [marketingActivities, setMarketingActivities] = useState([
-    {
-      id: 'act-1',
-      platform: 'Instagram',
-      content_type: 'Post (Boosted)',
-      title: 'Job tips - Boosted for 2 days',
-      description: 'Promoted contract developer tips targeting fresher & mid-tier tech candidates',
-      spend: 1500,
-      reach: 24680,
-      impressions: 29500,
-      clicks: 1240,
-      engagement: 3200,
-      leads: 0,
-      registrations: 144,
-      applications: 92,
-    },
-    {
-      id: 'act-2',
-      platform: 'LinkedIn',
-      content_type: 'Post',
-      title: 'New companies on TermJobs',
-      description: 'Organic company announcement post highlighting verified hiring partners',
-      spend: 0,
-      reach: 8420,
-      impressions: 10200,
-      clicks: 412,
-      engagement: 890,
-      leads: 0,
-      registrations: 58,
-      applications: 41,
-    },
-    {
-      id: 'act-3',
-      platform: 'YouTube',
-      content_type: 'Video',
-      title: 'How AI Interview works',
-      description: 'Short explainer walkthrough on WebRTC room, camera checks and automated evaluation',
-      spend: 0,
-      reach: 3960,
-      impressions: 5100,
-      clicks: 310,
-      engagement: 540,
-      leads: 128,
-      registrations: 34,
-      applications: 22,
-    },
-  ]);
-  const [observations, setObservations] = useState({
-    what_went_well: '• Strong response for the Instagram boosted post (24,680 reach, 1,240 clicks).\n• 5 new verified hiring partner companies onboarded smoothly.\n• Candidate speech recognition completed with zero packet drops.',
-    issues_faced: '• 144 candidates registered but did not apply for active jobs.\n• Possible reasons: candidates exploring, or missing specific regional openings.\n• Action: send job recommendations & profile completion alerts.',
-    why_candidates_not_applying: 'Looking for remote-only roles or entry-level non-technical listings.',
-    why_visitors_leaving: 'Bounced on job details page without signing in.',
-    company_feedback: 'Requested quicker turnaround on candidate shortlists.',
-    improvements_needed: 'Streamline 1-click apply and add automated job alert notifications.',
-  });
-  const [actionItems, setActionItems] = useState(DEFAULT_ACTION_ITEMS);
+  const [marketingActivities, setMarketingActivities] = useState([]);
+  const [observations, setObservations] = useState(DEFAULT_OBSERVATIONS);
+  const [actionItems, setActionItems] = useState([]);
 
   // Modals & Drawers
   const [showActivityModal, setShowActivityModal] = useState(false);
@@ -167,23 +122,19 @@ export function ReportsProgressView({ user, onReportSaved }) {
           candidates_hired: rep.metrics?.candidates_hired ?? '',
           new_vacancies_posted: rep.metrics?.new_vacancies_posted ?? '',
         });
-        if (Array.isArray(rep.work_progress) && rep.work_progress.length > 0) {
-          setWorkProgress(rep.work_progress);
-        }
-        if (Array.isArray(rep.marketing_activities)) {
-          setMarketingActivities(rep.marketing_activities);
-        }
-        if (rep.observations) {
-          setObservations(rep.observations);
-        }
-        if (Array.isArray(rep.action_items) && rep.action_items.length > 0) {
-          setActionItems(rep.action_items);
-        }
+        setWorkProgress(Array.isArray(rep.work_progress) && rep.work_progress.length > 0 ? rep.work_progress : DEFAULT_WORK_CHECKLIST);
+        setMarketingActivities(Array.isArray(rep.marketing_activities) ? rep.marketing_activities : []);
+        setObservations(rep.observations ? { ...DEFAULT_OBSERVATIONS, ...rep.observations } : DEFAULT_OBSERVATIONS);
+        setActionItems(Array.isArray(rep.action_items) ? rep.action_items : []);
       } else {
         // Reset to clean default values for new entry
         setCurrentReportId(null);
         setReportStatus('draft');
         setMetrics(DEFAULT_METRICS);
+        setWorkProgress(DEFAULT_WORK_CHECKLIST);
+        setMarketingActivities([]);
+        setObservations(DEFAULT_OBSERVATIONS);
+        setActionItems([]);
       }
     } catch (err) {
       console.warn('Failed to fetch existing report:', err);
@@ -191,6 +142,52 @@ export function ReportsProgressView({ user, onReportSaved }) {
       setLoading(false);
     }
   }, []);
+
+  const handleSyncDbMetrics = async () => {
+    setSyncingDb(true);
+    try {
+      const res = await reportsApi.getDbMetrics(reportDate);
+      if (res && res.metrics) {
+        setMetrics({
+          companies_onboarded: res.metrics.companies_onboarded ?? 0,
+          website_visitors: res.metrics.website_visitors ?? 0,
+          new_registrations: res.metrics.new_registrations ?? 0,
+          profile_completions: res.metrics.profile_completions ?? 0,
+          job_applications: res.metrics.job_applications ?? 0,
+          candidates_shortlisted: res.metrics.candidates_shortlisted ?? 0,
+          interviews_conducted: res.metrics.interviews_conducted ?? 0,
+          candidates_hired: res.metrics.candidates_hired ?? 0,
+          new_vacancies_posted: res.metrics.new_vacancies_posted ?? 0,
+        });
+        showToast(`Synced real database metrics for ${reportDate}`);
+      }
+    } catch (err) {
+      console.error('Failed to sync DB metrics:', err);
+      showToast('Could not fetch metrics from database');
+    } finally {
+      setSyncingDb(false);
+    }
+  };
+
+  const handleExportExcel = () => {
+    const currentReport = {
+      report_date: reportDate,
+      report_type: reportType,
+      status: reportStatus,
+      author_name: user?.name || user?.full_name || 'Team Member',
+      metrics,
+      work_progress: workProgress,
+      marketing_activities: marketingActivities,
+      observations,
+      action_items: actionItems,
+    };
+    exportToExcel([currentReport], null, `TermJobs_Report_${reportDate}.csv`);
+    showToast('Downloaded Excel (.csv) report');
+  };
+
+  const handleExportPdf = () => {
+    exportToPdf();
+  };
 
   useEffect(() => {
     loadReport(reportDate, reportType);
@@ -374,7 +371,7 @@ export function ReportsProgressView({ user, onReportSaved }) {
   };
 
   return (
-    <div className="w-full flex flex-col flex-1 divide-y divide-slate-100/90 text-left">
+    <div id="reports-print-container" className="w-full flex flex-col flex-1 divide-y divide-slate-100/90 text-left">
       {/* Toast Notification */}
       {toastMsg && (
         <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-slate-900 text-white px-4 py-2.5 rounded-xl shadow-xl border border-slate-700 text-xs font-semibold animate-fade-in">
@@ -459,6 +456,28 @@ export function ReportsProgressView({ user, onReportSaved }) {
             <History size={15} />
           </button>
 
+          {/* Export Excel Button */}
+          <button
+            type="button"
+            onClick={handleExportExcel}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 text-xs font-semibold shadow-2xs transition cursor-pointer"
+            title="Download Report as Excel CSV"
+          >
+            <Download size={13.5} className="text-emerald-600" />
+            <span>Excel</span>
+          </button>
+
+          {/* Export PDF Button */}
+          <button
+            type="button"
+            onClick={handleExportPdf}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 text-xs font-semibold shadow-2xs transition cursor-pointer"
+            title="Print or Save as PDF"
+          >
+            <Printer size={13.5} className="text-slate-600" />
+            <span>PDF</span>
+          </button>
+
           {/* Save Draft Button */}
           <button
             type="button"
@@ -498,7 +517,19 @@ export function ReportsProgressView({ user, onReportSaved }) {
               </div>
             </div>
           </div>
-          <span className="text-[11px] text-slate-400 font-medium">All numbers saved to live growth analytics</span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={syncingDb}
+              onClick={handleSyncDbMetrics}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/80 text-[11px] font-bold shadow-2xs transition cursor-pointer disabled:opacity-50"
+              title="Auto-fill numbers directly from verified database records"
+            >
+              <RefreshCw size={12} className={syncingDb ? 'animate-spin' : ''} />
+              <span>{syncingDb ? 'Syncing...' : 'Auto-Fill from Database'}</span>
+            </button>
+            <span className="hidden sm:inline text-[11px] text-slate-400 font-medium">· Verified main DB records</span>
+          </div>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-3.5">
