@@ -14,7 +14,6 @@ from .service import (
     get_real_db_metrics_for_date,
     generate_reports_csv,
 )
-from .excel_generator import generate_reports_xlsx_bytes
 
 router = APIRouter(prefix="/reports", tags=["Reports & Growth"])
 
@@ -91,7 +90,12 @@ def export_reports_excel_endpoint(
     Download a genuine, beautifully styled single-sheet .xlsx workbook
     matching the exact executive layout with formulas, conditional styling, and real DB data.
     """
-    xlsx_bytes = generate_reports_xlsx_bytes(start_date=start_date, end_date=end_date)
+    try:
+        from .excel_generator import generate_reports_xlsx_bytes
+        xlsx_bytes = generate_reports_xlsx_bytes(start_date=start_date, end_date=end_date)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to generate Excel export: {exc}")
+
     filename = f"TermJobs_Reports_{start_date or 'all'}_to_{end_date or 'today'}.xlsx"
     return Response(
         content=xlsx_bytes,
