@@ -36,3 +36,27 @@ test('existing chunks are served from disk and dashboard HTML is revalidated', (
 test('API requests use the environment-verifying server proxy', () => {
   assert.equal(resolve('/api/auth/me').dest, '/api/proxy?__path=auth/me');
 });
+
+test('static assets override wildcard CORS without overriding API CORS', () => {
+  const asset = '/assets/rolldown-runtime-BYOrzxDO.js';
+  for (const files of [new Set([asset]), new Set()]) {
+    assert.equal(resolve(asset, files).headers['Access-Control-Allow-Origin'], 'https://www.termjobs.in');
+  }
+  assert.equal(resolve('/api/auth/me').headers['Access-Control-Allow-Origin'], undefined);
+});
+
+test('HSTS covers HTML, static assets, missing assets, and proxied APIs', () => {
+  const asset = '/assets/current.js';
+  const files = new Set([asset, '/index.html', '/favicon.svg']);
+  for (const path of ['/', '/open-roles', '/index.html', asset, '/assets/missing.js', '/favicon.svg', '/api/auth/me']) {
+    assert.equal(resolve(path, files).headers['Strict-Transport-Security'], 'max-age=31536000');
+  }
+});
+
+test('both API deployment roots configure HSTS for every path', () => {
+  for (const path of ['../../vercel.json', '../../backend/vercel.json']) {
+    const config = JSON.parse(readFileSync(new URL(path, import.meta.url), 'utf8'));
+    const rule = config.headers.find(rule => rule.source === '/(.*)');
+    assert.equal(rule.headers.find(header => header.key === 'Strict-Transport-Security').value, 'max-age=31536000');
+  }
+});

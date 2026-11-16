@@ -34,6 +34,7 @@ load_dotenv()
 from fastapi import Depends, FastAPI, HTTPException, UploadFile, File, Form, Query, Request, BackgroundTasks
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.cors import CORSMiddleware
+from modules.shared.cors import ALLOWED_ORIGINS, cors_headers_for_origin
 from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
 
 from pydantic import BaseModel, Field, field_validator
@@ -150,15 +151,7 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:3000",
-        "https://termjobs.in",
-        "https://www.termjobs.in",
-        "https://termjobs.vercel.app",
-    ],
-    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:[0-9]+)?$|^https://.*\.vercel\.app$|^https://(www\.)?termjobs\.in$",
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -176,13 +169,6 @@ async def vercel_routing_middleware(request: Request, call_next):
         request.scope["path"] = target
         request.scope["root_path"] = ""
 
-    origin = request.headers.get("origin")
-    req_headers = request.headers.get("access-control-request-headers")
-    default_headers = "Authorization, Content-Type, Accept, Origin, X-Requested-With, X-CSRF-Token, Cache-Control, Accept-Version, Content-Length, Content-MD5, Date, X-Api-Version"
-    allowed_headers = req_headers if req_headers and req_headers.strip() and req_headers.strip() != "*" else default_headers
-
-    print(f" [CORS LOG] {request.method} {request.url.path} | Origin: {origin} | AllowedHeaders: {allowed_headers}")
-
     # Deployment branch is authoritative; client headers cannot select production.
     from modules.shared.config import current_cluster_var, is_dev_qa_environment
     target_cluster = "dev_qa" if is_dev_qa_environment() else "main"
@@ -192,30 +178,8 @@ async def vercel_routing_middleware(request: Request, call_next):
     token = current_cluster_var.set(target_cluster)
 
     try:
-        # Handle OPTIONS preflight explicitly to prevent Vercel / serverless CORS blocking
-        if request.method == "OPTIONS":
-            from fastapi.responses import Response
-            res_origin = origin if origin else "*"
-            return Response(
-                status_code=200,
-                headers={
-                    "Access-Control-Allow-Origin": res_origin,
-                    "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-                    "Access-Control-Allow-Headers": allowed_headers,
-                    "Access-Control-Allow-Credentials": "true",
-                },
-            )
-
-        response = await call_next(request)
-
-        # Ensure CORS headers on all HTTP responses for any origin
-        if origin:
-            response.headers["Access-Control-Allow-Origin"] = origin
-            response.headers["Access-Control-Allow-Credentials"] = "true"
-            response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
-            response.headers["Access-Control-Allow-Headers"] = allowed_headers
-
-        return response
+        # CORSMiddleware validates preflight requests and adds headers only for trusted origins.
+        return await call_next(request)
     finally:
         current_cluster_var.reset(token)
 
@@ -226,23 +190,7 @@ from fastapi.responses import JSONResponse
 def _get_cors_headers(request: Request) -> dict:
     headers = getattr(request, "headers", None)
     origin = headers.get("origin") if headers and hasattr(headers, "get") else None
-    allowed_origins = [
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:3000",
-        "https://termjobs.in",
-        "https://www.termjobs.in",
-        "https://termjobs.vercel.app",
-    ]
-    res_origin = origin if origin and (origin in allowed_origins or "localhost" in origin or "127.0.0.1" in origin or "vercel.app" in origin) else (origin or "*")
-    cors_headers = {
-        "Access-Control-Allow-Origin": res_origin,
-        "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-        "Access-Control-Allow-Headers": "Authorization, Content-Type, Accept, Origin, X-Requested-With, Cache-Control",
-    }
-    if res_origin != "*":
-        cors_headers["Access-Control-Allow-Credentials"] = "true"
-    return cors_headers
+    return cors_headers_for_origin(origin)
 
 
 @app.exception_handler(Exception)
