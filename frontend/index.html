@@ -50,26 +50,10 @@
     <link rel="dns-prefetch" href="http://localhost:8000" />
 
     <!-- Zero-Latency Speculative Prefetch for Public Requisitions (starts at 0ms in parallel with JS bundles) -->
-    <script>
-      (function() {
-        try {
-          var publicJobRoutes = ['/', '/open-roles', '/openroles', '/jobs', '/careers', '/apply'];
-          var isPublicJobPage = publicJobRoutes.indexOf(location.pathname) !== -1;
-          var hasSession = !!localStorage.getItem('token') || !!localStorage.getItem('auth_token') || !!localStorage.getItem('auth_user');
-          if (!isPublicJobPage || hasSession) return;
-          var isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
-          var base = isLocal ? 'http://' + location.hostname + ':8000' : '';
-          var url = base + '/api/public/requisitions/page?page=1&page_size=8';
-          window.__PREFETCHED_REQUISITIONS__ = fetch(url, { cache: 'no-store', headers: { 'Accept': 'application/json' } })
-            .then(function(r) { return r.ok ? r.json() : null; })
-            .catch(function() { return null; });
-
-        } catch(e) {}
-      })();
-    </script>
+    <script src="/startup.js"></script>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&family=Inter:wght@400;500;600;700&display=swap" />
     <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" media="print" onload="this.media='all'" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" media="print" data-deferred-fonts />
     <noscript>
       <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" />
     </noscript>
