@@ -4,7 +4,7 @@ import pytest
 from modules.shared import config
 
 
-@pytest.mark.parametrize('branch', ['dev', 'qa', 'feature/new', 'staging', 'master', 'production', '', 'detached-sha'])
+@pytest.mark.parametrize('branch', ['dev', 'qa', 'bashaar_edit', 'Bashaar_edit', 'feature/new', 'staging', 'master', 'production', '', 'detached-sha'])
 def test_every_non_main_branch_ignores_production_overrides(monkeypatch, branch):
     monkeypatch.setattr(config, 'detect_branch_name', lambda: branch)
     monkeypatch.setenv('MONGODB_URL', 'mongodb://production')
