@@ -3,10 +3,7 @@ import { Link } from "react-router-dom";
 import {
   Plus,
   History,
-  PhoneCall,
   Menu,
-  PanelLeftClose,
-  PanelLeftOpen,
   X,
   MessageSquare,
   Trash2,
@@ -14,7 +11,6 @@ import {
   ChevronRight,
   Clock
 } from "lucide-react";
-import { useUserAiConfig, openAiConfigDialog } from "../hooks/useUserAiConfig";
 
 /**
  * Workspace Header matching NEXUS AI Workspace 1:1.
@@ -30,18 +26,10 @@ export function ChatHeader({
   activeConversationId,
   isLegacyActive = false,
   onSelectConversation,
-  onDeleteConversation,
-  onStartVoiceCall
+  onDeleteConversation
 }) {
-  const { stats } = useUserAiConfig();
   const [historyOpen, setHistoryOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-
-  const handleToggleSidebar = () => {
-    setSidebarCollapsed((prev) => !prev);
-    window.dispatchEvent(new CustomEvent("toggle_nexus_sidebar"));
-  };
 
   const handleOpenMobileNav = () => {
     window.dispatchEvent(new CustomEvent("open_nexus_mobile_nav"));
@@ -55,17 +43,10 @@ export function ChatHeader({
     (c.title || "").toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const modelRaw = stats?.selectedModel || "";
-  const modelDisplayName = modelRaw.includes("free")
-    ? "OpenRouter Free Router"
-    : modelRaw
-    ? modelRaw.split("/").pop()
-    : "OpenRouter Free Router";
-
   return (
     <>
       <header className="h-14 border-b border-[#EAEAEA] pl-4 sm:pl-6 pr-3 sm:pr-4 flex items-center justify-between shrink-0 bg-white z-20 select-none">
-        {/* Left Side: Sidebar Toggle & Title */}
+        {/* Left Side: Title */}
         <div className="flex items-center gap-2">
           {/* Mobile Menu Toggle */}
           <button
@@ -77,16 +58,6 @@ export function ChatHeader({
             <Menu className="size-4" />
           </button>
 
-          {/* Desktop Sidebar Toggle */}
-          <button
-            type="button"
-            onClick={handleToggleSidebar}
-            className="hidden md:flex size-8 rounded-lg text-[#777777] hover:text-[#111111] hover:bg-[#F0F0F0] items-center justify-center transition-colors cursor-pointer"
-            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-          >
-            {sidebarCollapsed ? <PanelLeftOpen className="size-4" /> : <PanelLeftClose className="size-4" />}
-          </button>
-
           <span className="text-xs font-medium text-[#777777]">TermJobs AI Workspace</span>
 
           {isLegacyActive && (
@@ -96,32 +67,8 @@ export function ChatHeader({
           )}
         </div>
 
-        {/* Right Side Controls: [● OpenRouter Free Router] [Call Agent] [+] [History] */}
+        {/* Right Side Controls: [+] [History] */}
         <div className="flex items-center gap-1.5 sm:gap-2">
-          {/* Model & Limit Badge */}
-          <button
-            type="button"
-            onClick={openAiConfigDialog}
-            className="h-7 px-3 rounded-full border border-[#E8E3D8] bg-white hover:bg-[#F4F1EA] text-[#48433C] text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
-            title="Configure AI model and API keys"
-          >
-            <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="font-medium text-[11px] sm:text-xs truncate max-w-[140px]">
-              {modelDisplayName}
-            </span>
-          </button>
-
-          {/* Live Voice Call Agent Button */}
-          <button
-            type="button"
-            onClick={onStartVoiceCall}
-            className="h-7 gap-1.5 px-3 rounded-full text-xs font-semibold border border-[#E8E3D8] bg-white hover:bg-[#F4F1EA] text-[#111111] flex items-center transition cursor-pointer shadow-2xs"
-            title="Start voice call with conversational AI agent"
-          >
-            <PhoneCall className="size-3 text-emerald-600" />
-            <span>Call Agent</span>
-          </button>
-
           {/* New Chat Icon Button (+) */}
           <button
             type="button"
