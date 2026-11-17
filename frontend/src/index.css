@@ -6630,3 +6630,28 @@ label[data-field-requirement='optional'][data-field-requirement-placement='befor
 .bg-white select:not([class*='text-']) {
   color: #111827;
 }
+/* A soft metallic sheen draws attention to the hero's roles link. */
+.roles-hero-cta {
+  box-shadow: 0 4px 18px rgb(0 0 0 / 8%), 0 0 20px rgb(193 207 227 / 30%), inset 0 1px 0 white;
+}
+.roles-hero-cta::before {
+  content: "";
+  position: absolute;
+  inset: -50% auto -50% -80%;
+  width: 55%;
+  background: linear-gradient(110deg, transparent, rgb(255 255 255 / 95%), rgb(210 224 242 / 45%), transparent);
+  transform: skewX(-20deg);
+  pointer-events: none;
+  animation: roles-hero-sheen 5s ease-in-out infinite;
+}
+.roles-hero-cta:hover {
+  box-shadow: 0 8px 24px rgb(0 0 0 / 12%), 0 0 26px rgb(193 207 227 / 55%), inset 0 1px 0 white;
+}
+@keyframes roles-hero-sheen {
+  0%, 55% { left: -80%; }
+  85%, 100% { left: 140%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .roles-hero-cta::before { animation: none; }
+  .roles-hero-cta, .roles-hero-cta span { transition: none; }
+}

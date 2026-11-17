@@ -1,4 +1,5 @@
-import { loadOpenRolesPage } from '../utils/loadOpenRoles';
+import './OpenRolesPage.css';
+import { OPEN_ROLES_PAGE_SIZE, loadOpenRolesPage } from '../utils/loadOpenRoles';
 import { trackRoleView } from '../utils/trackRoleView';
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -1482,7 +1483,7 @@ export default function OpenRolesPage({ enabled = true }) {
   }, []);
 
   const categoryTabs = [{ id: 'ALL', label: 'All Roles', count: rolePage.filtered_total }, ...rolePage.categories];
-  const ROLES_PER_PAGE = 8;
+  const ROLES_PER_PAGE = OPEN_ROLES_PAGE_SIZE;
   const totalPages = rolePage.total_pages;
   const activePage = currentPage;
   const paginatedJobs = requisitions;
@@ -1896,7 +1897,7 @@ export default function OpenRolesPage({ enabled = true }) {
           {/* ============================================================ */}
           {/* LEFT PANEL: LIGHT EDITORIAL COLUMN (HIDDEN ON MOBILE)        */}
           {/* ============================================================ */}
-          <aside className="hidden lg:flex w-full lg:w-[360px] xl:w-[400px] 2xl:w-[430px] shrink-0 bg-paper text-ink border-b lg:border-b-0 lg:border-r border-ink/10 flex-col relative self-stretch lg:min-h-screen">
+          <aside className="hidden lg:flex w-full lg:w-[280px] xl:w-[300px] 2xl:w-[340px] shrink-0 bg-paper text-ink border-b lg:border-b-0 lg:border-r border-ink/10 flex-col relative self-stretch lg:min-h-screen">
         {/* Light Atmospheric Background Layer - mathematically synced with Landing Page */}
         <Backdrop tone="sidebar" active={!isInterviewViewOpen} />
 
@@ -2006,7 +2007,7 @@ export default function OpenRolesPage({ enabled = true }) {
       {/* ============================================================ */}
       {/* RIGHT PANEL: DARK DASHBOARD & OPEN ROLES                    */}
       {/* ============================================================ */}
-      <div className="flex-1 min-w-0 bg-ink text-paper p-3.5 sm:p-5 xl:p-7 flex flex-col relative overflow-hidden">
+      <div className="open-roles-content flex-1 min-w-0 bg-ink text-paper p-3 sm:p-4 xl:p-5 flex flex-col relative overflow-hidden">
         {/* Atmospheric Background Layer */}
         <Backdrop tone="dark" active={!isInterviewViewOpen} />
 
@@ -2321,7 +2322,7 @@ export default function OpenRolesPage({ enabled = true }) {
 
           {/* Glass Search & Filter Control Console — Optimized for Mobile */}
           <div className="mt-1 mb-3.5 sm:mb-5 flex flex-col sm:flex-row items-center justify-between gap-2.5 sm:gap-3">
-            <div className="w-[90%] sm:w-full max-w-lg sm:max-w-4xl mx-auto sm:mx-0 p-2 sm:p-1.5 rounded-2xl bg-white/[0.04] hover:bg-white/[0.06] border border-white/[0.12] focus-within:border-white/35 backdrop-blur-2xl shadow-[0_8px_32px_0_rgba(0,0,0,0.37),inset_0_1px_1px_0_rgba(255,255,255,0.14)] flex flex-col sm:flex-row items-center gap-2 transition-all">
+            <div className="open-roles-search w-full sm:w-full max-w-lg sm:max-w-4xl mx-auto sm:mx-0 p-2 sm:p-1.5 rounded-2xl bg-white/[0.04] hover:bg-white/[0.06] border border-white/[0.12] focus-within:border-white/35 backdrop-blur-2xl shadow-[0_8px_32px_0_rgba(0,0,0,0.37),inset_0_1px_1px_0_rgba(255,255,255,0.14)] flex flex-col sm:flex-row items-center gap-2 transition-all">
               {/* Keyword Search Input */}
               <div className="relative flex-1 w-full min-w-[150px]">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" />
@@ -2329,6 +2330,7 @@ export default function OpenRolesPage({ enabled = true }) {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
+                  aria-label="Search roles, skills or company"
                   placeholder="Search roles, skills, company..."
                   className="w-full bg-transparent pl-8 pr-6 py-1.5 text-xs text-white placeholder-white/40 focus:outline-none font-sans"
                 />
@@ -2344,10 +2346,11 @@ export default function OpenRolesPage({ enabled = true }) {
               </div>
 
               {/* Filter Dropdowns & Glass Action Button */}
-              <div className="flex items-center gap-1.5 w-full sm:w-auto shrink-0 justify-between sm:justify-start">
+              <div className="open-roles-filters flex items-center gap-1.5 w-full sm:w-auto shrink-0 justify-between sm:justify-start">
                 {/* Work Mode Filter */}
                 <div className="relative flex-1 sm:flex-initial">
                   <select
+                    aria-label="Work mode"
                     value={selectedWorkMode}
                     onChange={(e) => { setSelectedWorkMode(e.target.value); setCurrentPage(1); }}
                     className="w-full sm:w-auto appearance-none bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.1] rounded-xl pl-6 pr-5 py-1.5 text-[11px] text-white/90 font-medium cursor-pointer focus:outline-none focus:border-white/30 transition shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]"
@@ -2364,6 +2367,7 @@ export default function OpenRolesPage({ enabled = true }) {
                 {/* Department Filter */}
                 <div className="relative flex-1 sm:flex-initial">
                   <select
+                    aria-label="Department"
                     value={selectedFamily}
                     onChange={(e) => { setSelectedFamily(e.target.value); setCurrentPage(1); }}
                     className="w-full sm:w-auto appearance-none bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.1] rounded-xl pl-6 pr-5 py-1.5 text-[11px] text-white/90 font-medium cursor-pointer focus:outline-none focus:border-white/30 transition max-w-[130px] truncate shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]"
@@ -2380,8 +2384,9 @@ export default function OpenRolesPage({ enabled = true }) {
                 </div>
 
                 {/* Location Filter (Tablet / Desktop) */}
-                <div className="relative flex-1 sm:flex-initial hidden md:block">
+                <div className="relative flex-1 sm:flex-initial">
                   <select
+                    aria-label="Location"
                     value={selectedLocation}
                     onChange={(e) => { setSelectedLocation(e.target.value); setCurrentPage(1); }}
                     className="w-full sm:w-auto appearance-none bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.1] rounded-xl pl-6 pr-5 py-1.5 text-[11px] text-white/90 font-medium cursor-pointer focus:outline-none focus:border-white/30 transition max-w-[115px] truncate shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]"
@@ -2456,7 +2461,7 @@ export default function OpenRolesPage({ enabled = true }) {
           </div>
 
           {/* Opportunities List / Table Section */}
-          <main id="roles-grid-section" className="flex-1 w-full flex flex-col pb-20 sm:pb-24">
+          <main id="roles-grid-section" className="w-full min-w-0 flex flex-col pb-24 md:pb-6">
             {loading ? (
               <div className="py-24 text-center space-y-3">
                 <div className="w-10 h-10 rounded-full border-2 border-white/80 border-t-transparent animate-spin mx-auto" />
@@ -2511,12 +2516,12 @@ export default function OpenRolesPage({ enabled = true }) {
                 </div>
               </div>
             ) : (
-              <div className="rounded-2xl sm:rounded-3xl bg-[#0B0D12] border border-white/[0.08] p-3 sm:p-5 shadow-xl will-change-transform">
+              <div className="open-roles-results rounded-2xl bg-[#0B0D12] border border-white/[0.08] p-2 sm:p-3 shadow-xl">
                 {/* Scrollable table container */}
-                <div className="overflow-x-auto scrollbar-thin">
-                  <div className="min-w-[760px]">
+                <div className="open-roles-list">
+                  <div className="min-w-0">
                     {/* Table Header Row */}
-                    <div className="grid grid-cols-[minmax(230px,2fr)_100px_110px_140px_170px_140px] items-center px-4 py-2.5 text-[10px] font-semibold text-neutral-400 uppercase tracking-wider border-b border-white/[0.06]">
+                    <div className="open-roles-table-header items-center px-2 py-2 text-[10px] font-semibold text-neutral-400 uppercase tracking-wider border-b border-white/[0.06]">
                       <div className="flex items-center gap-1.5">
                         <ArrowLeft size={10} className="text-neutral-500" />
                         <span>ROLE &amp; COMPANY</span>
@@ -2555,16 +2560,16 @@ export default function OpenRolesPage({ enabled = true }) {
                           <div
                             key={job.id || job._id}
                             onClick={() => handleOpenJob(job)}
-                            className="grid grid-cols-[minmax(230px,2fr)_100px_110px_140px_170px_140px] items-center px-4 py-3 hover:bg-white/[0.04] transition-colors duration-100 ease-out rounded-xl group cursor-pointer"
+                            className="open-role-row items-center px-2 py-2 hover:bg-white/[0.04] transition-colors duration-100 ease-out rounded-xl group cursor-pointer"
                           >
                             {/* 1. Role & Company */}
-                            <div className="flex items-center gap-3 min-w-0 pr-3">
+                            <div className="open-role-identity flex items-center gap-2 min-w-0 pr-2">
                               <div className="w-8 h-8 rounded-lg bg-white text-black font-extrabold text-xs flex items-center justify-center shrink-0 shadow-sm">
                                 {companyInitial}
                               </div>
                               <div className="min-w-0 flex-1">
                                 <h3 className="text-[13px] font-bold text-white tracking-tight truncate group-hover:text-white transition-colors">
-                                  {job.title}
+                                  <button type="button" className="text-left cursor-pointer" onClick={(e) => { e.stopPropagation(); handleOpenJob(job); }}>{job.title}</button>
                                 </h3>
                                 <p className="text-[11px] text-neutral-400 truncate mt-0.5 font-medium">
                                   {compName ? compName : (locDisplay ? locDisplay : 'Direct Requisition')}
@@ -2573,7 +2578,7 @@ export default function OpenRolesPage({ enabled = true }) {
                             </div>
 
                             {/* 2. Type */}
-                            <div>
+                            <div className="open-role-mode">
                               <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10.5px] font-medium bg-[#16181F] border border-white/[0.08] text-neutral-200">
                                 <span
                                   className={`w-1.5 h-1.5 rounded-full ${
@@ -2589,24 +2594,25 @@ export default function OpenRolesPage({ enabled = true }) {
                             </div>
 
                             {/* 3. Experience */}
-                            <div className="text-[11.5px] text-neutral-300 font-medium truncate pr-2">
+                            <div className="open-role-experience text-[11.5px] text-neutral-300 font-medium truncate pr-2">
                               {expDisplay ? expDisplay : <span className="text-neutral-500">—</span>}
                             </div>
 
                             {/* 4. Location */}
-                            <div className="flex items-center gap-1.5 text-[11.5px] text-neutral-300 min-w-0 pr-2">
+                            <div className="open-role-location flex items-center gap-1.5 text-[11.5px] text-neutral-300 min-w-0 pr-2">
                               <MapPin size={11} className="text-neutral-400 shrink-0" />
                               <span className="truncate">{locDisplay || 'Location flexible'}</span>
                             </div>
 
                             {/* 5. Skills */}
-                            <div className="flex items-center gap-1.5 flex-wrap pr-2">
+                            <div className="open-role-skills flex items-center gap-1.5 min-w-0 pr-2">
                               {skills.length > 0 ? (
                                 <>
                                   {skills.slice(0, 2).map((skill) => (
                                     <span
                                       key={skill}
-                                      className="px-2 py-0.5 rounded-md bg-[#16181F] border border-white/[0.08] text-[10.5px] font-medium text-neutral-300 whitespace-nowrap"
+                                      title={skill}
+                                      className="min-w-0 truncate px-2 py-0.5 rounded-md bg-[#16181F] border border-white/[0.08] text-[10.5px] font-medium text-neutral-300 whitespace-nowrap"
                                     >
                                       {skill}
                                     </span>
@@ -2623,7 +2629,7 @@ export default function OpenRolesPage({ enabled = true }) {
                             </div>
 
                             {/* 6. Bookmark & Apply */}
-                            <div className="flex items-center justify-end gap-2 pr-1">
+                            <div className="open-role-actions flex items-center justify-end gap-1">
                               <button
                                 type="button"
                                 onClick={(e) => toggleSaveJob(job.id || job._id, e)}
@@ -2670,7 +2676,7 @@ export default function OpenRolesPage({ enabled = true }) {
                 </div>
 
                 {/* Table Footer: Count & Pagination */}
-                <div className="mt-4 pt-3 border-t border-white/[0.06] flex items-center justify-between px-2 text-xs">
+                <div className="open-roles-pagination mt-2 pt-3 border-t border-white/[0.06] flex flex-wrap gap-3 items-center justify-between px-2 text-xs">
                   <div className="text-neutral-400 font-medium text-[11.5px]">
                     Showing {(activePage - 1) * ROLES_PER_PAGE + 1}–{(activePage - 1) * ROLES_PER_PAGE + paginatedJobs.length} of {rolePage.total} roles
                   </div>

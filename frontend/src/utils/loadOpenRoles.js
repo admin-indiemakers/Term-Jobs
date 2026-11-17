@@ -12,7 +12,9 @@ export async function loadOpenRoles(request, prefetched) {
   return rows;
 }
 
-export function openRolesPagePath({ page = 1, pageSize = 8, q = '', workMode = 'ALL', family = 'ALL', location = 'ALL', category = 'ALL' } = {}) {
+export const OPEN_ROLES_PAGE_SIZE = 16;
+
+export function openRolesPagePath({ page = 1, pageSize = OPEN_ROLES_PAGE_SIZE, q = '', workMode = 'ALL', family = 'ALL', location = 'ALL', category = 'ALL' } = {}) {
   const query = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
   for (const [key, value] of Object.entries({ q: q.trim(), work_mode: workMode, family, location, category })) {
     if (value && value !== 'ALL') query.set(key, value);
