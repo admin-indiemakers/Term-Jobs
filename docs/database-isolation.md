@@ -12,6 +12,7 @@ environment variables. Hosted browser code cannot bypass this function using
 | --- | --- | --- |
 | QA | `QA_BACKEND_URL` | `dev_qa` |
 | dev | `DEV_BACKEND_URL` | `dev_qa` |
+| `Bashaar_edit` | `BASHAAR_BACKEND_URL` (optional; defaults to QA backend) | `dev_qa` |
 | Other previews | `DEV_QA_BACKEND_URL` | `dev_qa` |
 | main, production environment | `PRODUCTION_BACKEND_URL` (optional) | `main` |
 
@@ -20,6 +21,15 @@ QA defaults to the confirmed backend alias
 `QA_BACKEND_URL` overrides that alias; `DEV_QA_BACKEND_URL` is also a fallback
 for QA/dev when their specific variable is unset. There is no fallback to
 production for previews. Dev requires its own configured backend URL.
+
+`Bashaar_edit` shares the testing database through the QA backend by default.
+Its routing precedence is `BASHAAR_BACKEND_URL`, `QA_BACKEND_URL`,
+`DEV_QA_BACKEND_URL`, then the QA alias above. A dedicated Bashaar backend can
+be configured with `BASHAAR_BACKEND_URL`; it must report `dev_qa` before the proxy
+forwards requests. Only main production deployments can select production.
+After deploying Bashaar, verify its `/api/environment` returns
+`{"active_cluster":"dev_qa"}`. Deployment protection still requires the server-only
+bypass configuration described below when enabled on the QA backend.
 
 ## Deployment steps
 
