@@ -4,8 +4,10 @@ const QA_BACKEND = 'https://term-jobs-j8ja-git-qa-i-ndiemakers.vercel.app';
 export function backendTarget(env = process.env) {
   const branch = (env.VERCEL_GIT_COMMIT_REF || '').toLowerCase();
   const production = branch === 'main' && env.VERCEL_ENV === 'production';
+  const bashaar = branch === 'bashaar_edit';
   const configured = production ? env.PRODUCTION_BACKEND_URL || PRODUCTION_BACKEND
-    : (branch === 'qa' ? env.QA_BACKEND_URL || env.DEV_QA_BACKEND_URL || QA_BACKEND : branch === 'dev' ? env.DEV_BACKEND_URL || env.DEV_QA_BACKEND_URL : env.DEV_QA_BACKEND_URL);
+    : bashaar ? env.BASHAAR_BACKEND_URL || env.QA_BACKEND_URL || env.DEV_QA_BACKEND_URL || QA_BACKEND
+      : (branch === 'qa' ? env.QA_BACKEND_URL || env.DEV_QA_BACKEND_URL || QA_BACKEND : branch === 'dev' ? env.DEV_BACKEND_URL || env.DEV_QA_BACKEND_URL : env.DEV_QA_BACKEND_URL);
   if (!configured) throw new Error('QA/dev API is disabled until QA_BACKEND_URL, DEV_BACKEND_URL, or DEV_QA_BACKEND_URL is configured.');
   const target = new URL(configured);
   if (target.protocol !== 'https:' || target.username || target.password || !['', '/', '/api', '/api/'].includes(target.pathname) || target.search || target.hash) {
