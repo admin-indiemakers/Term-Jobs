@@ -15,6 +15,38 @@ function response() {
 const preview = { VERCEL_GIT_COMMIT_REF: 'qa', VERCEL_ENV: 'preview', QA_BACKEND_URL: 'https://qa-backend.example.test' };
 const request = () => ({ url: '/api/proxy?__path=candidates&status=Shortlisted', method: 'GET', headers: { authorization: 'Bearer private-test', 'x-termjobs-required-cluster': 'main' } });
 
+test('Bashaar uses the testing backend, including when marked as a production deployment', () => {
+  for (const branch of ['Bashaar_edit', 'bashaar_edit']) {
+    for (const environment of ['preview', 'production']) {
+      assert.deepEqual(backendTarget({ VERCEL_GIT_COMMIT_REF: branch, VERCEL_ENV: environment }), {
+        origin: 'https://term-jobs-j8ja-git-qa-i-ndiemakers.vercel.app', cluster: 'dev_qa',
+      });
+    }
+  }
+  const env = { VERCEL_GIT_COMMIT_REF: 'Bashaar_edit', BASHAAR_BACKEND_URL: 'https://bashaar-backend.example.test' };
+  assert.equal(backendTarget(env).origin, env.BASHAAR_BACKEND_URL);
+  assert.throws(() => backendTarget({ ...env, BASHAAR_BACKEND_URL: 'https://term-jobs-j8ja-seven.vercel.app' }), /production/);
+});
+
+test('Bashaar verifies the testing cluster before forwarding authenticated requests', async () => {
+  for (const cluster of ['main', 'dev_qa']) {
+    const calls = [];
+    const res = response();
+    await proxyRequest(request(), res, { VERCEL_GIT_COMMIT_REF: 'Bashaar_edit' }, async (url, options) => {
+      calls.push([String(url), options]);
+      if (calls.length === 1) {
+        assert.equal(String(url), 'https://term-jobs-j8ja-git-qa-i-ndiemakers.vercel.app/api/environment');
+        assert.equal(options.headers, undefined);
+        return Response.json({ active_cluster: cluster });
+      }
+      assert.equal(options.headers.get('x-termjobs-required-cluster'), 'dev_qa');
+      return Response.json({ ok: true });
+    });
+    assert.equal(calls.length, cluster === 'main' ? 1 : 2);
+    assert.equal(res.statusCode, cluster === 'main' ? 503 : 200);
+  }
+});
+
 test('only main production deployments may use production backend', () => {
   assert.equal(backendTarget({ VERCEL_GIT_COMMIT_REF: 'main', VERCEL_ENV: 'production' }).cluster, 'main');
   for (const branch of ['dev', 'main', '', 'feature/test']) {
