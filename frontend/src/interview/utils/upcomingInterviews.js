@@ -1,15 +1,16 @@
-export function upcomingInterviewRounds(rounds = [], requisitions = [], now = new Date()) {
+export function upcomingInterviewRounds(rounds = [], requisitions = null, now = new Date()) {
   if (!Array.isArray(rounds)) return [];
-  const reqList = Array.isArray(requisitions) ? requisitions : [];
-  const hasReqFilter = reqList.length > 0;
-  const requisitionIds = new Set(reqList.map(row => String(row?.id || row?.requisition_id || '')));
+  const hasReqFilter = Array.isArray(requisitions);
+  const requisitionIds = hasReqFilter
+    ? new Set(requisitions.map(row => String(row?.id || row?.requisition_id || '')))
+    : null;
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const seen = new Set();
   return rounds.filter(round => {
     if (!round) return false;
     const id = round.id || round.round_id;
     if (!id || seen.has(id)) return false;
-    if (hasReqFilter && round.requisition_id && !requisitionIds.has(String(round.requisition_id))) return false;
+    if (hasReqFilter && (!round.requisition_id || !requisitionIds.has(String(round.requisition_id)))) return false;
     if (!round.candidate_submission_id && !round.candidate_id) return false;
     if (!['scheduled', 'confirmed'].includes(String(round.status || '').toLowerCase())) return false;
     if (!round.scheduled_date) return false;

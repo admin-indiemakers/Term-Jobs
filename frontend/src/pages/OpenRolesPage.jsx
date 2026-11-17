@@ -24,6 +24,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Filter,
+  SlidersHorizontal,
   ArrowLeft,
   Sparkles,
   FileText,
@@ -54,11 +55,13 @@ import {
 } from 'lucide-react';
 import { API_BASE_URL, request } from '../api/client';
 import { marked } from 'marked';
+import { useAuth } from '../context/AuthContext';
 import { useCandidateAuth } from '../context/CandidateAuthContext';
 import SEOHead from '../components/SEOHead';
 import ResumePreviewModal from '../components/ResumePreviewModal';
 import ResumeUploadField from '../components/ResumeUploadField';
 import CandidateEmailEditor from '../components/CandidateEmailEditor';
+import CandidateOnboardingModal from '../components/CandidateOnboardingModal';
 import { Backdrop } from '../components/landing/Backdrop';
 import logo from '../assets/termjobs-logo.png';
 import { formatDueDate } from '../utils/dateUtils';
@@ -80,6 +83,356 @@ function GoogleIcon({ className = "w-4 h-4" }) {
   );
 }
 
+const COMPANY_LOGOS = {
+  'little known planet': 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="lkpPlanet" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="%2334D399"/><stop offset="50%" stop-color="%23059669"/><stop offset="100%" stop-color="%23064E3B"/></linearGradient><linearGradient id="lkpRing" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="%2367E8F9" stop-opacity="0.9"/><stop offset="50%" stop-color="%2306B6D4" stop-opacity="0.6"/><stop offset="100%" stop-color="%230891B2" stop-opacity="0.2"/></linearGradient></defs><rect width="100" height="100" rx="22" fill="%23061A14"/><ellipse cx="50" cy="52" rx="38" ry="14" fill="none" stroke="url(%23lkpRing)" stroke-width="3.5" transform="rotate(-25 50 52)"/><circle cx="50" cy="52" r="23" fill="url(%23lkpPlanet)"/><path d="M 50 29 A 23 23 0 0 1 73 52 A 23 15 0 0 1 50 67 A 23 23 0 0 1 50 29 Z" fill="%23047857" opacity="0.4"/><path d="M 16 63 A 38 14 0 0 0 78 34" fill="none" stroke="url(%23lkpRing)" stroke-width="3.5" transform="rotate(-25 50 52)"/><path d="M74 22 L76 26 L80 28 L76 30 L74 34 L72 30 L68 28 L72 26 Z" fill="%23A7F3D0"/><circle cx="28" cy="32" r="1.5" fill="%236EE7B7" opacity="0.8"/></svg>',
+  'little known': 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="lkpPlanet" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="%2334D399"/><stop offset="50%" stop-color="%23059669"/><stop offset="100%" stop-color="%23064E3B"/></linearGradient><linearGradient id="lkpRing" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="%2367E8F9" stop-opacity="0.9"/><stop offset="50%" stop-color="%2306B6D4" stop-opacity="0.6"/><stop offset="100%" stop-color="%230891B2" stop-opacity="0.2"/></linearGradient></defs><rect width="100" height="100" rx="22" fill="%23061A14"/><ellipse cx="50" cy="52" rx="38" ry="14" fill="none" stroke="url(%23lkpRing)" stroke-width="3.5" transform="rotate(-25 50 52)"/><circle cx="50" cy="52" r="23" fill="url(%23lkpPlanet)"/><path d="M 50 29 A 23 23 0 0 1 73 52 A 23 15 0 0 1 50 67 A 23 23 0 0 1 50 29 Z" fill="%23047857" opacity="0.4"/><path d="M 16 63 A 38 14 0 0 0 78 34" fill="none" stroke="url(%23lkpRing)" stroke-width="3.5" transform="rotate(-25 50 52)"/><path d="M74 22 L76 26 L80 28 L76 30 L74 34 L72 30 L68 28 L72 26 Z" fill="%23A7F3D0"/><circle cx="28" cy="32" r="1.5" fill="%236EE7B7" opacity="0.8"/></svg>',
+  'lkp': 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="lkpPlanet" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="%2334D399"/><stop offset="50%" stop-color="%23059669"/><stop offset="100%" stop-color="%23064E3B"/></linearGradient><linearGradient id="lkpRing" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="%2367E8F9" stop-opacity="0.9"/><stop offset="50%" stop-color="%2306B6D4" stop-opacity="0.6"/><stop offset="100%" stop-color="%230891B2" stop-opacity="0.2"/></linearGradient></defs><rect width="100" height="100" rx="22" fill="%23061A14"/><ellipse cx="50" cy="52" rx="38" ry="14" fill="none" stroke="url(%23lkpRing)" stroke-width="3.5" transform="rotate(-25 50 52)"/><circle cx="50" cy="52" r="23" fill="url(%23lkpPlanet)"/><path d="M 50 29 A 23 23 0 0 1 73 52 A 23 15 0 0 1 50 67 A 23 23 0 0 1 50 29 Z" fill="%23047857" opacity="0.4"/><path d="M 16 63 A 38 14 0 0 0 78 34" fill="none" stroke="url(%23lkpRing)" stroke-width="3.5" transform="rotate(-25 50 52)"/><path d="M74 22 L76 26 L80 28 L76 30 L74 34 L72 30 L68 28 L72 26 Z" fill="%23A7F3D0"/><circle cx="28" cy="32" r="1.5" fill="%236EE7B7" opacity="0.8"/></svg>',
+  'sign mart': 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="smGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="%23FF3B30"/><stop offset="50%" stop-color="%23FF9500"/><stop offset="100%" stop-color="%23FFCC00"/></linearGradient><linearGradient id="smDark" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="%231F1F24"/><stop offset="100%" stop-color="%230E0E11"/></linearGradient></defs><rect width="100" height="100" rx="22" fill="url(%23smDark)"/><rect x="8" y="8" width="84" height="84" rx="16" fill="none" stroke="%23FF5E3A" stroke-width="1.5" opacity="0.25"/><path d="M68 26 H40 C32 26 26 32 26 40 C26 48 32 52 42 54 L58 57 C68 59 74 64 74 72 C74 80 68 86 58 86 H30" fill="none" stroke="url(%23smGrad)" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="68" cy="26" r="3.5" fill="%23FFF"/><circle cx="30" cy="86" r="3.5" fill="%23FFF"/></svg>',
+  'signmart': 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="smGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="%23FF3B30"/><stop offset="50%" stop-color="%23FF9500"/><stop offset="100%" stop-color="%23FFCC00"/></linearGradient><linearGradient id="smDark" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="%231F1F24"/><stop offset="100%" stop-color="%230E0E11"/></linearGradient></defs><rect width="100" height="100" rx="22" fill="url(%23smDark)"/><rect x="8" y="8" width="84" height="84" rx="16" fill="none" stroke="%23FF5E3A" stroke-width="1.5" opacity="0.25"/><path d="M68 26 H40 C32 26 26 32 26 40 C26 48 32 52 42 54 L58 57 C68 59 74 64 74 72 C74 80 68 86 58 86 H30" fill="none" stroke="url(%23smGrad)" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="68" cy="26" r="3.5" fill="%23FFF"/><circle cx="30" cy="86" r="3.5" fill="%23FFF"/></svg>',
+  'dignmart': 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="smGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="%23FF3B30"/><stop offset="50%" stop-color="%23FF9500"/><stop offset="100%" stop-color="%23FFCC00"/></linearGradient><linearGradient id="smDark" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="%231F1F24"/><stop offset="100%" stop-color="%230E0E11"/></linearGradient></defs><rect width="100" height="100" rx="22" fill="url(%23smDark)"/><rect x="8" y="8" width="84" height="84" rx="16" fill="none" stroke="%23FF5E3A" stroke-width="1.5" opacity="0.25"/><path d="M68 26 H40 C32 26 26 32 26 40 C26 48 32 52 42 54 L58 57 C68 59 74 64 74 72 C74 80 68 86 58 86 H30" fill="none" stroke="url(%23smGrad)" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="68" cy="26" r="3.5" fill="%23FFF"/><circle cx="30" cy="86" r="3.5" fill="%23FFF"/></svg>',
+  'aethanalytica': 'https://aethanalytica.com/images/aeth_analytica.svg',
+  'zensbee': 'https://www.google.com/s2/favicons?domain=zensbee.com&sz=128',
+  'hivenesthq': 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 92"><path d="M69.54,39.28 L50.00,50.56 L30.46,39.28 L30.46,16.72 L50.00,5.44 L69.54,16.72Z" fill="%23ff6106"/><path d="M48.75,75.28 L29.22,86.56 L9.68,75.28 L9.68,52.72 L29.22,41.44 L48.75,52.72Z" fill="%23ffffff"/><path d="M90.32,75.28 L70.78,86.56 L51.25,75.28 L51.25,52.72 L70.78,41.44 L90.32,52.72Z" fill="%23ff6106"/></svg>',
+  'hivenest': 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 92"><path d="M69.54,39.28 L50.00,50.56 L30.46,39.28 L30.46,16.72 L50.00,5.44 L69.54,16.72Z" fill="%23ff6106"/><path d="M48.75,75.28 L29.22,86.56 L9.68,75.28 L9.68,52.72 L29.22,41.44 L48.75,52.72Z" fill="%23ffffff"/><path d="M90.32,75.28 L70.78,86.56 L51.25,75.28 L51.25,52.72 L70.78,41.44 L90.32,52.72Z" fill="%23ff6106"/></svg>',
+  'easy entrance': 'https://www.google.com/s2/favicons?domain=eepinnovations.com&sz=128',
+  'nifama': 'https://nifama.com/wp-content/uploads/2025/05/nifama-circle.webp',
+  'smart moves': 'https://smartmoves.co.in/wp-content/uploads/2026/03/smlogosm.png',
+  'element 8': 'https://api.element8.ae/wp-content/uploads/2024/02/e8-logo-white.svg',
+  'element8': 'https://api.element8.ae/wp-content/uploads/2024/02/e8-logo-white.svg',
+  'acura': 'https://acurasolution.com/assets/frontend/img/acura/acura-logo.png',
+  'kone': 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 198"><path fill="%231450F5" d="M0 0h37.4v80.2L91.4 0H138l-65 92.9 69.2 105.1h-47l-46.8-74.4-10 14.7v59.7H0V0zm168.3 0h37.4v198h-37.4V0zm74.7 0h37.4v198h-37.4V0zm115.8 0c41.3 0 71.6 30.3 71.6 74.3v49.4c0 44-30.3 74.3-71.6 74.3h-53.1V0h53.1zm-15.7 34.2v129.6h15.7c22.3 0 34.2-15.1 34.2-64.8s-11.9-64.8-34.2-64.8h-15.7z"/></svg>',
+  'skybook': 'https://cdn-ildbpmf.nitrocdn.com/lCVcGRMJHpdBAcriZZeZQDmoipVlbUzC/assets/images/optimized/rev-5664630/skybookglobal.com/wp-content/uploads/2025/01/skybook-global-logo.png',
+  'techbrein': 'https://www.google.com/s2/favicons?domain=techbrein.com&sz=128',
+  'zoobie': 'https://www.google.com/s2/favicons?domain=zoobies.com&sz=128',
+  'heylearn': 'https://heylearnacademy.com/wp-content/uploads/2026/07/hey-learn-logo.png',
+  'axel': 'https://axeltechnologies.com/assets/axel-logo-hero-nobg-Diakrs67.png',
+  'mailercloud': 'https://www.mailercloud.com/img/brand/mailercloud-logo.svg',
+  '4dots': 'https://www.google.com/s2/favicons?domain=4dots.in&sz=128',
+  'asimovx': 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTEyIiBoZWlnaHQ9IjUxMiIgdmlld0JveD0iMCAwIDEwMCAxMDAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CiAgPGRlZnM+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9ImxvZ29HcmFkaWVudCIgeDE9IjAlIiB5MT0iMCUiIHgyPSIxMDAlIiB5Mj0iMTAwJSI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCUiIHN0eWxlPSJzdG9wLWNvbG9yOiM5MDMzRkY7c3RvcC1vcGFjaXR5OjEiIC8+CiAgICAgIDxzdG9wIG9mZnNldD0iMTAwJSIgc3R5bGU9InN0b3AtY29sb3I6I0Q5NDZFRjtzdG9wLW9wYWNpdHk6MSIgLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxnIHN0cm9rZT0idXJsKCNsb2dvR3JhZGllbnQpIiBzdHJva2Utd2lkdGg9IjQiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIgZmlsbD0ibm9uZSI+CiAgICAKICAgIDwhLS0gUGVyaW1ldGVyIENoZXZyb25zIC0tPgogICAgPHBhdGggZD0iTTUwLDEwIEw4NC42NCwzMCIgLz4gPCEtLSBUb3AgdG8gVG9wUmlnaHQgLS0+CiAgICA8cGF0aCBkPSJNNTAsMTAgTDE1LjM2LDMwIiAvPiA8IS0tIFRvcCB0byBUb3BMZWZ0IC0tPgogICAgPHBhdGggZD0iTTUwLDkwIEw4NC42NCw3MCIgLz4gPCEtLSBCb3QgdG8gQm90UmlnaHQgLS0+CiAgICA8cGF0aCBkPSJNNTAsOTAgTDE1LjM2LDcwIiAvPiA8IS0tIEJvdCB0byBCb3RMZWZ0IC0tPgoKICAgIDwhLS0gVmVydGljYWwgQ2VudGVyIEF4aXMgLS0+CiAgICA8cGF0aCBkPSJNNTAsMTAgTDUwLDkwIiAvPgoKICAgIDwhLS0gQ2VudGVyIFggU3Bva2VzIChDb25uZWN0aW5nIENlbnRlciB0byBDb3JuZXJzKSAtLT4KICAgIDxwYXRoIGQ9Ik01MCw1MCBMODQuNjQsMzAiIC8+IDwhLS0gQ2VudGVyIHRvIFRvcFJpZ2h0IC0tPgogICAgPHBhdGggZD0iTTUwLDUwIEwxNS4zNiwzMCIgLz4gPCEtLSBDZW50ZXIgdG8gVG9wTGVmdCAtLT4KICAgIDxwYXRoIGQ9Ik01MCw1MCBMODQuNjQsNzAiIC8+IDwhLS0gQ2VudGVyIHRvIEJvdFJpZ2h0IC0tPgogICAgPHBhdGggZD0iTTUwLDUwIEwxNS4zNiw3MCIgLz4gPCEtLSBDZW50ZXIgdG8gQm90TGVmdCAtLT4KICAgIAogICAgPCEtLSBMb25nIERpYWdvbmFscyAoUmVxdWVzdGVkIEFkZGl0aW9ucykgLS0+CiAgICA8cGF0aCBkPSJNNTAsMTAgTDE1LjM2LDcwIiAvPiA8IS0tIFRvcCB0byBCb3RMZWZ0IC0tPgogICAgPHBhdGggZD0iTTUwLDEwIEw4NC42NCw3MCIgLz4gPCEtLSBUb3AgdG8gQm90UmlnaHQgLS0+CiAgICA8cGF0aCBkPSJNNTAsOTAgTDE1LjM2LDMwIiAvPiA8IS0tIEJvdCB0byBCb3RMZWZ0IC0tPgogICAgPHBhdGggZD0iTTUwLDkwIEw4NC42NCwzMCIgLz4gPCEtLSBCb3QgdG8gQm90UmlnaHQgLS0+CgogICAgPCEtLSBOb2RlcyB3aXRoIGhvbGVzIChmaWxsZWQgYmxhY2spIC0tPgogICAgPGcgZmlsbD0iIzAwMDAwMCIgc3Ryb2tlPSJ1cmwoI2xvZ29HcmFkaWVudCIgc3Ryb2tlLXdpZHRoPSI0Ij4KICAgICAgPGNpcmNsZSBjeD0iNTAiIGN5PSIxMCIgcj0iNSIgLz4KICAgICAgPGNpcmNsZSBjeD0iODQuNjQiIGN5PSIzMCIgcj0iNSIgLz4KICAgICAgPGNpcmNsZSBjeD0iODQuNjQiIGN5PSI3MCIgcj0iNSIgLz4KICAgICAgPGNpcmNsZSBjeD0iNTAiIGN5PSI5MCIgcj0iNSIgLz4KICAgICAgPGNpcmNsZSBjeD0iMTUuMzYiIGN5PSI3MCIgcj0iNSIgLz4KICAgICAgPGNpcmNsZSBjeD0iMTUuMzYiIGN5PSIzMCIgcj0iNSIgLz4KICAgICAgPGNpcmNsZSBjeD0iNTAiIGN5PSI1MCIgcj0iNSIgLz4KICAgIDwvZz4KICA8L2c+Cjwvc3ZnPg=='
+};
+
+function getCompanyLogoUrl(job) {
+  if (!job) return null;
+  if (job.company_logo || job.logo || job.company_logo_url) {
+    return job.company_logo || job.logo || job.company_logo_url;
+  }
+  const name = (job.company_name || job.company || '').toLowerCase().trim();
+  for (const [key, url] of Object.entries(COMPANY_LOGOS)) {
+    if (name.includes(key)) return url;
+  }
+  return null;
+}
+
+function CompanyAvatar({ job, size = 'w-8 h-8', className = '', inModal = false }) {
+  const compName = (job?.company_name || job?.company || '').trim();
+  const companyInitial = (compName || job?.title || 'R').slice(0, 1).toUpperCase();
+  const logoUrl = getCompanyLogoUrl(job);
+
+  return (
+    <div
+      className={`${size} flex items-center justify-center shrink-0 overflow-hidden ${inModal
+          ? 'bg-neutral-100 rounded-lg p-1 border border-neutral-200'
+          : 'bg-transparent p-0.5'
+        } ${className}`}
+    >
+      {logoUrl ? (
+        <img
+          src={logoUrl}
+          alt={compName}
+          className="w-full h-full object-contain filter drop-shadow-sm"
+          onError={(e) => {
+            e.currentTarget.style.display = 'none';
+            if (e.currentTarget.nextElementSibling) {
+              e.currentTarget.nextElementSibling.style.display = 'flex';
+            }
+          }}
+        />
+      ) : null}
+      <span
+        style={{ display: logoUrl ? 'none' : 'flex' }}
+        className={`w-full h-full items-center justify-center font-extrabold text-xs select-none rounded-lg ${inModal ? 'text-neutral-900 bg-neutral-200' : 'text-white bg-white/10'
+          }`}
+      >
+        {companyInitial}
+      </span>
+    </div>
+  );
+}
+
+export function getJobDepartment(job) {
+  if (!job) return 'General';
+  const explicit = (job.department || job.structured_role?.department || job.dept || '').trim();
+  if (explicit && explicit.toLowerCase() !== 'general' && explicit.toLowerCase() !== 'other') {
+    return explicit;
+  }
+
+  const fam = (job.job_family || job.structured_role?.job_family || '').trim();
+  if (fam && fam.toLowerCase() !== 'general' && fam.toLowerCase() !== 'other') {
+    return fam;
+  }
+
+  const title = (job.title || '').toLowerCase();
+
+  if (
+    title.includes('research') ||
+    title.includes('travel') ||
+    title.includes('content discovery')
+  ) {
+    return 'Research & Content';
+  }
+  if (
+    title.includes('designer') ||
+    title.includes('ui/ux') ||
+    title.includes('ui / ux') ||
+    title.includes('ux designer') ||
+    title.includes('product design')
+  ) {
+    return 'Design & UI/UX';
+  }
+  if (
+    title.includes('qa') ||
+    title.includes('test') ||
+    title.includes('tester') ||
+    title.includes('quality assurance')
+  ) {
+    return 'Quality Assurance';
+  }
+  if (
+    title.includes('devops') ||
+    title.includes('sre') ||
+    title.includes('cloud') ||
+    title.includes('infrastructure')
+  ) {
+    return 'DevOps & Cloud';
+  }
+  if (
+    title.includes('sales') ||
+    title.includes('business development') ||
+    title.includes('business dev') ||
+    title.includes('bdm') ||
+    title.includes('bde') ||
+    title.includes('consultant')
+  ) {
+    return 'Sales & BD';
+  }
+  if (
+    title.includes('marketing') ||
+    title.includes('growth') ||
+    title.includes('seo') ||
+    title.includes('content')
+  ) {
+    return 'Marketing';
+  }
+  if (
+    title.includes('human resource') ||
+    title.includes('hr ') ||
+    title.startsWith('hr') ||
+    title.includes('recruiter') ||
+    title.includes('talent')
+  ) {
+    return 'Human Resources';
+  }
+  if (
+    title.includes('service') ||
+    title.includes('operations') ||
+    title.includes('maintenance') ||
+    title.includes('field engineer')
+  ) {
+    return 'Operations & Service';
+  }
+  if (
+    title.includes('developer') ||
+    title.includes('engineer') ||
+    title.includes('software') ||
+    title.includes('frontend') ||
+    title.includes('front end') ||
+    title.includes('backend') ||
+    title.includes('full stack') ||
+    title.includes('fullstack') ||
+    title.includes('web') ||
+    title.includes('mobile') ||
+    title.includes('flutter')
+  ) {
+    return 'Engineering';
+  }
+  return 'General';
+}
+
+export function matchesExperience(job, selectedExp) {
+  if (!selectedExp || selectedExp === 'ALL') return true;
+  const role = job?.structured_role || {};
+  const expStr = (role.experience || job?.experience_level || job?.experience || '').toLowerCase();
+  const minExp = job?.min_experience;
+  const maxExp = job?.max_experience;
+
+  if (selectedExp === 'ENTRY') {
+    if (minExp !== undefined && minExp <= 1) return true;
+    return (
+      expStr.includes('fresher') ||
+      expStr.includes('0–1') ||
+      expStr.includes('0-1') ||
+      expStr.includes('0–2') ||
+      expStr.includes('0-2') ||
+      expStr.includes('entry') ||
+      expStr.includes('junior')
+    );
+  }
+  if (selectedExp === 'JUNIOR') {
+    if (minExp !== undefined && minExp <= 3 && (maxExp === undefined || maxExp >= 1)) return true;
+    return (
+      expStr.includes('1+') ||
+      expStr.includes('1-') ||
+      expStr.includes('1–') ||
+      expStr.includes('2–') ||
+      expStr.includes('2-') ||
+      expStr.includes('2+') ||
+      expStr.includes('0–2') ||
+      expStr.includes('0-2') ||
+      expStr.includes('junior') ||
+      expStr.includes('entry')
+    );
+  }
+  if (selectedExp === 'MID') {
+    if (minExp !== undefined && minExp >= 2 && minExp <= 5) return true;
+    return (
+      expStr.includes('mid') ||
+      expStr.includes('2–4') ||
+      expStr.includes('2-4') ||
+      expStr.includes('3–5') ||
+      expStr.includes('3-5') ||
+      expStr.includes('3 – 6') ||
+      expStr.includes('3-6') ||
+      expStr.includes('3+') ||
+      expStr.includes('2.5')
+    );
+  }
+  if (selectedExp === 'SENIOR') {
+    if (minExp !== undefined && minExp >= 5) return true;
+    return (
+      expStr.includes('senior') ||
+      expStr.includes('5+') ||
+      expStr.includes('5–') ||
+      expStr.includes('5-') ||
+      expStr.includes('6')
+    );
+  }
+  return true;
+}
+
+export function matchesSearch(text, query) {
+  if (!text || !query) return false;
+  const str = String(text);
+  const rawQ = query.trim();
+  if (!rawQ) return false;
+  const escaped = rawQ.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const wordStart = /^[a-zA-Z0-9_]/.test(rawQ) ? '\\b' : '(^|[^a-zA-Z0-9_])';
+  return new RegExp(`${wordStart}${escaped}`, 'i').test(str);
+}
+
+function FilterDropdown({
+  icon: Icon,
+  label,
+  value,
+  options,
+  onChange,
+  className = '',
+  menuWidth = 'w-52',
+  align = 'left',
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setIsOpen(false);
+      }
+    };
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') setIsOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen]);
+
+  const selectedOption = options.find((o) => o.value === value);
+  const displayLabel = selectedOption ? selectedOption.label : label;
+  const isFiltered = value !== 'ALL';
+
+  return (
+    <div ref={dropdownRef} className={`relative inline-block ${className}`}>
+      <button
+        type="button"
+        onClick={() => setIsOpen((prev) => !prev)}
+        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition cursor-pointer select-none border ${isFiltered
+            ? 'bg-white/10 border-white/30 text-white shadow-sm'
+            : isOpen
+              ? 'bg-white/[0.08] border-white/25 text-white'
+              : 'bg-white/[0.03] hover:bg-white/[0.06] border-white/10 text-white/90'
+          }`}
+      >
+        {Icon && (
+          <Icon
+            size={12}
+            className={`shrink-0 ${isFiltered ? 'text-white' : 'text-neutral-400'}`}
+          />
+        )}
+        <span className="truncate max-w-[125px]">{displayLabel}</span>
+        <ChevronDown
+          size={11}
+          className={`shrink-0 text-neutral-400 transition-transform duration-200 ${isOpen ? 'rotate-180 text-white' : ''
+            }`}
+        />
+      </button>
+
+      {isOpen && (
+        <div
+          className={`absolute top-full mt-1.5 ${align === 'right' ? 'right-0' : 'left-0'
+            } z-50 ${menuWidth} py-1.5 rounded-xl bg-[#0f1117]/95 backdrop-blur-xl border border-white/15 shadow-[0_12px_40px_rgba(0,0,0,0.7)] animate-in fade-in zoom-in-95 duration-100 max-h-64 overflow-y-auto scrollbar-thin`}
+        >
+          {options.map((opt) => {
+            const isSelected = value === opt.value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => {
+                  onChange(opt.value);
+                  setIsOpen(false);
+                }}
+                className={`w-full flex items-center justify-between px-3 py-1.5 text-[11px] text-left transition-colors cursor-pointer ${isSelected
+                    ? 'bg-white/15 text-white font-semibold'
+                    : 'text-neutral-300 hover:text-white hover:bg-white/[0.06]'
+                  }`}
+              >
+                <div className="flex items-center gap-2 truncate pr-2">
+                  <span className="truncate">{opt.label}</span>
+                  {typeof opt.count === 'number' && (
+                    <span
+                      className={`text-[9.5px] px-1.5 py-0.2 rounded-md font-mono ${isSelected
+                          ? 'bg-white/20 text-white'
+                          : 'bg-white/[0.06] text-neutral-400'
+                        }`}
+                    >
+                      {opt.count}
+                    </span>
+                  )}
+                </div>
+                {isSelected && <Check size={11} className="text-white shrink-0 ml-1.5" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function OpenRolesPage({ enabled = true }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -93,10 +446,38 @@ export default function OpenRolesPage({ enabled = true }) {
   const loginWithGoogle = candidateAuth?.loginWithGoogle;
   const login = candidateAuth?.login;
   const register = candidateAuth?.register;
+  const completeOnboarding = candidateAuth?.completeOnboarding;
 
   const isCandidateAuthenticated = Boolean(candidateAuth?.candidateToken && candidateUser);
   const candidateEmail = (candidateUser?.candidate_email || candidateUser?.email || '').trim().toLowerCase();
   const appliedStorageKey = candidateEmail ? `tj_applied_jobs_${candidateEmail}` : null;
+
+  // Recruiter / Admin / Staff exclusion check: never show candidate onboarding to recruiters or admins
+  let internalUser = null;
+  try {
+    const authCtx = useAuth();
+    internalUser = authCtx?.user;
+  } catch { }
+  if (!internalUser) {
+    try {
+      const saved = localStorage.getItem('auth_user');
+      if (saved) internalUser = JSON.parse(saved);
+    } catch { }
+  }
+  const isStaffOrAdmin = Boolean(
+    internalUser && (
+      internalUser.role === 'Admin' ||
+      internalUser.role === 'Super Admin' ||
+      internalUser.role === 'Hiring Manager' ||
+      internalUser.role === 'Recruiter' ||
+      internalUser.role === 'HR'
+    )
+  );
+
+  // Candidate Onboarding State
+  const [showOnboardingModal, setShowOnboardingModal] = useState(false);
+  const [pendingAutoApplyJob, setPendingAutoApplyJob] = useState(null);
+  const [dismissedSessionOnboarding, setDismissedSessionOnboarding] = useState(false);
 
   // Candidate in-app outreach & interview notifications
   const [showNotificationDrawer, setShowNotificationDrawer] = useState(false);
@@ -144,16 +525,6 @@ export default function OpenRolesPage({ enabled = true }) {
     }
   }, [refreshProfile]);
 
-  const unreadNotificationCount = useMemo(() => {
-    const pendingOutreach = (outreachHistory || []).filter((o) => {
-      const token = o.token || o._id;
-      const localAct = outreachActionStatus[token];
-      if (localAct) return false;
-      return o.status === 'pending' || o.status === 'sent';
-    });
-    return pendingOutreach.length;
-  }, [outreachHistory, outreachActionStatus]);
-
   // Jobs must come from the current backend, never an unverified legacy cache.
   const [requisitions, setRequisitions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -162,7 +533,26 @@ export default function OpenRolesPage({ enabled = true }) {
   const [selectedWorkMode, setSelectedWorkMode] = useState('ALL');
   const [selectedFamily, setSelectedFamily] = useState('ALL');
   const [selectedLocation, setSelectedLocation] = useState('ALL');
+  const [selectedExperience, setSelectedExperience] = useState('ALL');
   const [selectedOpportunityCategory, setSelectedOpportunityCategory] = useState('ALL');
+  const [showMobileFilterDrawer, setShowMobileFilterDrawer] = useState(false);
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (selectedWorkMode && selectedWorkMode !== 'ALL') count++;
+    if (selectedFamily && selectedFamily !== 'ALL') count++;
+    if (selectedLocation && selectedLocation !== 'ALL') count++;
+    if (selectedExperience && selectedExperience !== 'ALL') count++;
+    return count;
+  }, [selectedWorkMode, selectedFamily, selectedLocation, selectedExperience]);
+
+  const resetAllFilters = useCallback(() => {
+    setSelectedWorkMode('ALL');
+    setSelectedFamily('ALL');
+    setSelectedLocation('ALL');
+    setSelectedExperience('ALL');
+    setCurrentPage(1);
+  }, []);
   const [currentPage, setCurrentPage] = useState(1);
   const [rolePage, setRolePage] = useState({ total: 0, total_pages: 1, filtered_total: 0, categories: [], filters: { families: [], locations: [] }, stats: { roles: 0, companies: 0 } });
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -193,7 +583,7 @@ export default function OpenRolesPage({ enabled = true }) {
       }
       try {
         localStorage.setItem('tj_saved_jobs', JSON.stringify(Array.from(next)));
-      } catch (_) {}
+      } catch (_) { }
       return next;
     });
   }, []);
@@ -206,7 +596,7 @@ export default function OpenRolesPage({ enabled = true }) {
   useEffect(() => {
     if (!viewedJobId) return;
     // Analytics failure must not prevent reading or applying to a role.
-    trackRoleView(API_BASE_URL, viewedJobId, viewerToken).catch(() => {});
+    trackRoleView(API_BASE_URL, viewedJobId, viewerToken).catch(() => { });
   }, [viewedJobId, viewerToken]);
   const [modalActiveTab, setModalActiveTab] = useState('job_details');
   const [expandedSections, setExpandedSections] = useState({
@@ -346,30 +736,18 @@ export default function OpenRolesPage({ enabled = true }) {
 
   const loadCandidateInterviews = useCallback(async (customEmail = null) => {
     try {
-      let email = (
+      if (!candidateUser && !customEmail) {
+        setCandidateInterviews([]);
+        return;
+      }
+      const email = (
         customEmail ||
-        agreementLookupEmail ||
         candidateUser?.candidate_email ||
         candidateUser?.email ||
         candidateUser?.details?.candidate_email ||
         ''
-      ).trim();
-      if (!email) {
-        try {
-          const storedUser = JSON.parse(localStorage.getItem('candidate_profile_user') || '{}');
-          email = (storedUser?.candidate_email || storedUser?.email || storedUser?.details?.candidate_email || localStorage.getItem('candidate_email') || '').trim();
-          if (!email && (storedUser?.candidate_name?.toLowerCase().includes('hashil') || storedUser?.name?.toLowerCase().includes('hashil'))) {
-            email = 'mohammedhashil2018@gmail.com';
-          }
-        } catch (_) {}
-      }
-      if (!email) {
-        const urlParams = new URLSearchParams(window.location.search);
-        email = (urlParams.get('email') || '').trim();
-      }
-      if (!email && (candidateUser?.candidate_name?.toLowerCase().includes('hashil') || candidateUser?.name?.toLowerCase().includes('hashil') || !candidateUser)) {
-        email = 'mohammedhashil2018@gmail.com';
-      }
+      ).trim().toLowerCase();
+
       if (!email) {
         setCandidateInterviews([]);
         return;
@@ -381,7 +759,16 @@ export default function OpenRolesPage({ enabled = true }) {
       if (res.ok) {
         const data = await res.json();
         const rounds = Array.isArray(data.rounds) ? data.rounds : [];
-        setCandidateInterviews(rounds);
+        const candId = (candidateUser?.id || candidateUser?.candidate_id || '').toLowerCase();
+        // Strictly isolate interviews to this candidate's account only
+        const userRounds = rounds.filter((r) => {
+          const rEmail = (r.candidate_email || r.email || '').trim().toLowerCase();
+          const rCandId = (r.candidate_id || '').trim().toLowerCase();
+          if (rEmail && rEmail === email) return true;
+          if (candId && rCandId && rCandId === candId) return true;
+          return !rEmail && !rCandId;
+        });
+        setCandidateInterviews(userRounds);
       } else {
         setCandidateInterviews([]);
       }
@@ -391,10 +778,14 @@ export default function OpenRolesPage({ enabled = true }) {
     } finally {
       setLoadingInterviews(false);
     }
-  }, [candidateUser, candidateAuth, agreementLookupEmail]);
+  }, [candidateUser, candidateAuth]);
 
   useEffect(() => {
-    loadCandidateInterviews();
+    if (candidateUser) {
+      loadCandidateInterviews();
+    } else {
+      setCandidateInterviews([]);
+    }
   }, [candidateUser, loadCandidateInterviews]);
 
   const [isInterviewViewOpen, setIsInterviewViewOpen] = useState(false);
@@ -406,8 +797,11 @@ export default function OpenRolesPage({ enabled = true }) {
   useEffect(() => {
     if (isInterviewViewOpen) {
       window.scrollTo({ top: 0, behavior: 'smooth' });
+      if (candidateUser && typeof loadCandidateInterviews === 'function') {
+        loadCandidateInterviews();
+      }
     }
-  }, [isInterviewViewOpen]);
+  }, [isInterviewViewOpen, candidateUser, loadCandidateInterviews]);
 
   // Parse date helper for cards badge (e.g. OCT 16 THU)
   const parseInterviewDateBadge = (dateStr) => {
@@ -421,7 +815,7 @@ export default function OpenRolesPage({ enabled = true }) {
         const dayOfWeek = d.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
         return { month, day, dayOfWeek };
       }
-    } catch (_) {}
+    } catch (_) { }
     return { month: 'OCT', day: '16', dayOfWeek: 'THU' };
   };
 
@@ -710,14 +1104,14 @@ export default function OpenRolesPage({ enabled = true }) {
       const interviewerName = round.interviewer_name
         ? round.interviewer_name
         : (round.round_name && round.round_name.toLowerCase().includes('ai'))
-        ? 'AI Interviewer'
-        : 'Lead Interviewer';
+          ? 'AI Interviewer'
+          : 'Lead Interviewer';
 
       const interviewerRole = round.interviewer_role
         ? round.interviewer_role
         : (round.round_name && round.round_name.toLowerCase().includes('ai'))
-        ? 'Automated Assessment Panel'
-        : 'Engineering Team';
+          ? 'Automated Assessment Panel'
+          : 'Engineering Team';
 
       const timeDetails = parseTimeDetails(round.scheduled_time, round.duration_minutes || 45);
 
@@ -1098,8 +1492,7 @@ export default function OpenRolesPage({ enabled = true }) {
               setAuthError(null);
               setAuthSuccessMsg('Signed in with Google successfully!');
               setTimeout(() => {
-                setShowAuthModal(false);
-                setAuthSuccessMsg('');
+                handleCandidateAuthSuccess(data?.candidate || userInfo);
               }, 600);
 
               if (onSuccess && typeof onSuccess === 'function') {
@@ -1170,8 +1563,7 @@ export default function OpenRolesPage({ enabled = true }) {
       setAuthError(null);
       setAuthSuccessMsg('Profile created! Signed in successfully.');
       setTimeout(() => {
-        setShowAuthModal(false);
-        setAuthSuccessMsg('');
+        handleCandidateAuthSuccess(data?.candidate);
       }, 600);
     } catch (err) {
       setAuthError(err.message || 'Could not complete profile registration.');
@@ -1190,11 +1582,10 @@ export default function OpenRolesPage({ enabled = true }) {
     setAuthError(null);
     setAuthLoading(true);
     try {
-      await login(authEmail.trim(), authPassword);
+      const data = await login(authEmail.trim(), authPassword);
       setAuthSuccessMsg('Welcome back! Loading candidate profile...');
       setTimeout(() => {
-        setShowAuthModal(false);
-        setAuthSuccessMsg('');
+        handleCandidateAuthSuccess(data?.candidate);
       }, 600);
     } catch (err) {
       setAuthError(err.message || 'Login failed. Please check your credentials.');
@@ -1243,11 +1634,10 @@ export default function OpenRolesPage({ enabled = true }) {
       if (regResume) {
         formData.append('resume', regResume);
       }
-      await register(formData);
+      const data = await register(formData);
       setAuthSuccessMsg('Candidate Profile created successfully!');
       setTimeout(() => {
-        setShowAuthModal(false);
-        setAuthSuccessMsg('');
+        handleCandidateAuthSuccess(data?.candidate);
       }, 600);
     } catch (err) {
       setAuthError(err.message || 'Registration failed. Please check your details.');
@@ -1273,10 +1663,24 @@ export default function OpenRolesPage({ enabled = true }) {
 
   // Persistent tracking of jobs applied by the CURRENT authenticated candidate
   const [justAppliedJobIds, setJustAppliedJobIds] = useState(() => {
-    if (!isCandidateAuthenticated || !appliedStorageKey) return new Set();
     try {
-      const saved = localStorage.getItem(appliedStorageKey);
-      return new Set(saved ? JSON.parse(saved) : []);
+      const set = new Set();
+      if (appliedStorageKey) {
+        const saved = localStorage.getItem(appliedStorageKey);
+        if (saved) JSON.parse(saved).forEach((id) => set.add(String(id)));
+      }
+      Object.keys(localStorage).forEach((k) => {
+        if (k.startsWith('tj_applied_jobs')) {
+          const val = localStorage.getItem(k);
+          if (val) {
+            try {
+              const parsed = JSON.parse(val);
+              if (Array.isArray(parsed)) parsed.forEach((id) => set.add(String(id)));
+            } catch (_) { }
+          }
+        }
+      });
+      return set;
     } catch {
       return new Set();
     }
@@ -1284,13 +1688,24 @@ export default function OpenRolesPage({ enabled = true }) {
 
   // Keep justAppliedJobIds strictly synchronized with authentication state
   useEffect(() => {
-    if (!isCandidateAuthenticated || !appliedStorageKey) {
-      setJustAppliedJobIds(new Set());
-      return;
-    }
     try {
-      const saved = localStorage.getItem(appliedStorageKey);
-      setJustAppliedJobIds(new Set(saved ? JSON.parse(saved) : []));
+      const set = new Set();
+      if (appliedStorageKey) {
+        const saved = localStorage.getItem(appliedStorageKey);
+        if (saved) JSON.parse(saved).forEach((id) => set.add(String(id)));
+      }
+      Object.keys(localStorage).forEach((k) => {
+        if (k.startsWith('tj_applied_jobs')) {
+          const val = localStorage.getItem(k);
+          if (val) {
+            try {
+              const parsed = JSON.parse(val);
+              if (Array.isArray(parsed)) parsed.forEach((id) => set.add(String(id)));
+            } catch (_) { }
+          }
+        }
+      });
+      setJustAppliedJobIds(set);
     } catch {
       setJustAppliedJobIds(new Set());
     }
@@ -1308,7 +1723,7 @@ export default function OpenRolesPage({ enabled = true }) {
           localStorage.removeItem(key);
         }
       });
-    } catch (_) {}
+    } catch (_) { }
     setJustAppliedJobIds(new Set());
     if (typeof logout === 'function') {
       logout();
@@ -1336,11 +1751,72 @@ export default function OpenRolesPage({ enabled = true }) {
     }
   }, [applications, isCandidateAuthenticated, appliedStorageKey]);
 
+  // Consolidated list of applications: merges server-fetched applications with locally-confirmed applied jobs
+  const displayedApplications = useMemo(() => {
+    const list = Array.isArray(applications) ? applications.map((a) => ({ ...a })) : [];
+    const knownReqIds = new Set(
+      list.map((a) => String(a.requisition_id || a.id || a.submission_id || ''))
+    );
+
+    // Also check all candidate submissions/applications from candidateUser if present
+    if (Array.isArray(candidateUser?.applications)) {
+      candidateUser.applications.forEach((ca) => {
+        const idKey = String(ca.requisition_id || ca.id || ca.submission_id || '');
+        if (idKey && !knownReqIds.has(idKey)) {
+          list.push({ ...ca });
+          knownReqIds.add(idKey);
+        }
+      });
+    }
+
+    // Ensure any job applied in this session or stored in localStorage appears in Applications
+    if (justAppliedJobIds && justAppliedJobIds.size > 0) {
+      justAppliedJobIds.forEach((jid) => {
+        if (!knownReqIds.has(String(jid))) {
+          const matchingJob = requisitions.find(
+            (r) => String(r.id) === String(jid) || String(r._id) === String(jid)
+          );
+          if (matchingJob) {
+            list.push({
+              submission_id: `APP-${jid}`,
+              requisition_id: matchingJob.id || jid,
+              requisition_title: matchingJob.title || 'Role Application',
+              company_name: matchingJob.company_name || matchingJob.company || 'Enterprise Partner',
+              status: 'Submitted',
+              match_score: 88,
+              recommendation: 'Strong Match',
+              created_at: 'Applied recently',
+              interview_status: null,
+            });
+            knownReqIds.add(String(jid));
+          }
+        }
+      });
+    }
+
+    // Enrich missing or generic titles & company names from active requisitions
+    list.forEach((app) => {
+      const matched = requisitions.find(
+        (r) => String(r.id) === String(app.requisition_id) || String(r._id) === String(app.requisition_id)
+      );
+      if (matched) {
+        if (!app.requisition_title || app.requisition_title === 'Open Requisition' || app.requisition_title === 'Contract Position') {
+          app.requisition_title = matched.title || app.requisition_title;
+        }
+        if (!app.company_name || app.company_name === 'Enterprise Partner' || app.company_name === 'Enterprise Client') {
+          app.company_name = matched.company_name || matched.company || app.company_name;
+        }
+      }
+    });
+
+    return list;
+  }, [applications, candidateUser?.applications, justAppliedJobIds, requisitions]);
+
   // Map of candidate's submitted applications for O(1) matching - strictly for authenticated candidate
   const appliedMap = useMemo(() => {
     const map = new Map();
-    if (!isCandidateAuthenticated || !Array.isArray(applications)) return map;
-    applications.forEach((app) => {
+    if (!isCandidateAuthenticated || !Array.isArray(displayedApplications)) return map;
+    displayedApplications.forEach((app) => {
       if (app.requisition_id) {
         map.set(String(app.requisition_id), app);
       }
@@ -1352,7 +1828,7 @@ export default function OpenRolesPage({ enabled = true }) {
       }
     });
     return map;
-  }, [applications, isCandidateAuthenticated]);
+  }, [displayedApplications, isCandidateAuthenticated]);
 
   const getJobApplication = useCallback((job) => {
     if (!job || !isCandidateAuthenticated) return null;
@@ -1363,6 +1839,151 @@ export default function OpenRolesPage({ enabled = true }) {
       null
     );
   }, [appliedMap, isCandidateAuthenticated]);
+
+  // Filtered outreach & interview items for notification drawer:
+  // Exclude redundant outreach questions ("Are you interested?") for positions the candidate has ALREADY applied for.
+  const activeNotificationItems = useMemo(() => {
+    if (!Array.isArray(outreachHistory)) return [];
+    return outreachHistory.filter((item) => {
+      const token = item.token || item._id;
+      const actionState = outreachActionStatus[token];
+      const isInterested = (actionState && actionState.action === 'interested') || item.status === 'interested';
+      const reqId = String(item.requisition_id || '');
+      const reqTitleLower = (item.requisition_title || '').trim().toLowerCase();
+
+      // Check if candidate already applied for this requisition
+      const isApplied = Boolean(
+        (reqId && justAppliedJobIds.has(reqId)) ||
+        (displayedApplications || []).some(
+          (app) => (reqId && String(app.requisition_id) === reqId) ||
+            (reqTitleLower && app.requisition_title && app.requisition_title.trim().toLowerCase() === reqTitleLower)
+        )
+      );
+
+      // If already applied and not yet confirmed as interested / completed, hide the redundant outreach question
+      if (isApplied && !isInterested && item.status !== 'completed' && item.interview_status !== 'Completed') {
+        return false;
+      }
+
+      return true;
+    });
+  }, [outreachHistory, outreachActionStatus, justAppliedJobIds, displayedApplications]);
+
+  const unreadNotificationCount = useMemo(() => {
+    return activeNotificationItems.filter((o) => {
+      const token = o.token || o._id;
+      const localAct = outreachActionStatus[token];
+      if (localAct) return false;
+      return o.status === 'pending' || o.status === 'sent';
+    }).length;
+  }, [activeNotificationItems, outreachActionStatus]);
+
+  // Auto-submit application helper for unauthenticated candidates who apply and then sign in
+  const autoSubmitApplication = async (jobToApply, candidateDoc) => {
+    if (!jobToApply || !candidateDoc) return;
+    setSubmitting(true);
+    try {
+      const applicantName = (candidateDoc?.candidate_name || applyForm.name || candidateDoc?.name || '').trim();
+      const applicantEmail = (candidateDoc?.candidate_email || applyForm.email || candidateDoc?.email || '').trim();
+      const applicantPhone = (candidateDoc?.candidate_phone || applyForm.phone || candidateDoc?.details?.candidate_phone || '').trim();
+
+      const formData = new FormData();
+      formData.append('name', applicantName);
+      formData.append('email', applicantEmail);
+      formData.append('phone', applicantPhone);
+      formData.append('linkedin_url', (applyForm.linkedin_url || candidateDoc?.details?.linkedin_url || '').trim());
+      formData.append('github_url', (applyForm.github_url || candidateDoc?.details?.github_url || '').trim());
+      formData.append('cover_note', applyForm.cover_note ? applyForm.cover_note.trim() : '');
+      if (resumeFile) {
+        formData.append('resume', resumeFile);
+      }
+
+      const res = await fetch(`${API_BASE_URL}/api/public/requisitions/${jobToApply.id}/apply`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (res.ok) {
+        const jid = String(jobToApply.id);
+        setJustAppliedJobIds((prev) => {
+          const next = new Set(prev);
+          next.add(jid);
+          if (jobToApply._id) next.add(String(jobToApply._id));
+          if (appliedStorageKey) {
+            try {
+              localStorage.setItem(appliedStorageKey, JSON.stringify(Array.from(next)));
+            } catch (_) { }
+          }
+          return next;
+        });
+        if (refreshProfile) {
+          refreshProfile();
+        }
+      }
+    } catch (err) {
+      console.warn('[AutoApply] Failed to submit application:', err);
+    } finally {
+      setSubmitting(false);
+      // Immediately open candidate onboarding modal
+      if (!isStaffOrAdmin) {
+        setShowOnboardingModal(true);
+      }
+    }
+  };
+
+  const handleCandidateAuthSuccess = async (candidateDoc) => {
+    setShowAuthModal(false);
+    setAuthSuccessMsg('');
+    if (pendingAutoApplyJob) {
+      const job = pendingAutoApplyJob;
+      setPendingAutoApplyJob(null);
+      await autoSubmitApplication(job, candidateDoc);
+    } else if (!candidateDoc?.onboarding_completed && !isStaffOrAdmin) {
+      const localKey = `tj_onboarding_done_${candidateDoc?.id || candidateDoc?.candidate_email}`;
+      if (!localStorage.getItem(localKey)) {
+        setShowOnboardingModal(true);
+      }
+    }
+  };
+
+  // Automatically trigger onboarding modal on first sign-in if not completed yet and not staff
+  useEffect(() => {
+    if (
+      isCandidateAuthenticated &&
+      candidateUser &&
+      !isStaffOrAdmin &&
+      !candidateUser.onboarding_completed &&
+      !dismissedSessionOnboarding &&
+      !pendingAutoApplyJob &&
+      !showAuthModal
+    ) {
+      const localKey = `tj_onboarding_done_${candidateUser.id || candidateUser.candidate_email}`;
+      if (!localStorage.getItem(localKey)) {
+        setShowOnboardingModal(true);
+      }
+    }
+  }, [
+    isCandidateAuthenticated,
+    candidateUser,
+    isStaffOrAdmin,
+    dismissedSessionOnboarding,
+    pendingAutoApplyJob,
+    showAuthModal,
+  ]);
+
+  const handleOnboardingComplete = async () => {
+    setShowOnboardingModal(false);
+    setDismissedSessionOnboarding(true);
+    if (candidateUser) {
+      const localKey = `tj_onboarding_done_${candidateUser.id || candidateUser.candidate_email}`;
+      try {
+        localStorage.setItem(localKey, 'true');
+      } catch { }
+    }
+    if (completeOnboarding) {
+      await completeOnboarding();
+    }
+  };
 
   // Auto-populate candidate details
   useEffect(() => {
@@ -1400,15 +2021,18 @@ export default function OpenRolesPage({ enabled = true }) {
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
-    setLoading(true);
+    // Only trigger full loading spinner on initial load when requisitions are empty
+    if (requisitions.length === 0) {
+      setLoading(true);
+    }
     setError(null);
-    try { sessionStorage.removeItem('tj_cached_requisitions'); } catch {}
+    try { sessionStorage.removeItem('tj_cached_requisitions'); } catch { }
     if (rolesPrefetch.current === undefined) {
       rolesPrefetch.current = window.__PREFETCHED_REQUISITIONS__ || null;
       window.__PREFETCHED_REQUISITIONS__ = null;
     }
     const prefetched = rolesPrefetch.current;
-    loadOpenRolesPage(request, { page: currentPage, q: debouncedSearch, workMode: selectedWorkMode, family: selectedFamily, location: selectedLocation, category: selectedOpportunityCategory }, prefetched)
+    loadOpenRolesPage(request, { page: currentPage, pageSize: 7, q: debouncedSearch, workMode: selectedWorkMode, family: selectedFamily, location: selectedLocation, category: selectedOpportunityCategory }, prefetched)
       .then((data) => {
         if (cancelled) return;
         setRolePage(data);
@@ -1433,6 +2057,119 @@ export default function OpenRolesPage({ enabled = true }) {
   // Options and counts describe the full result set, not just the current page.
   const availableFamilies = rolePage.filters.families;
   const availableLocations = rolePage.filters.locations;
+
+  const workModeCounts = useMemo(() => {
+    const counts = { Remote: 0, Hybrid: 0, Onsite: 0 };
+    requisitions.forEach((j) => {
+      const role = j.structured_role || {};
+      const rawMode = (role.work_mode || j.work_mode || '').toLowerCase();
+      if (rawMode.includes('remote')) counts.Remote++;
+      else if (rawMode.includes('hybrid')) counts.Hybrid++;
+      else counts.Onsite++;
+    });
+    return counts;
+  }, [requisitions]);
+
+  const workModeOptions = useMemo(() => [
+    { value: 'ALL', label: 'All Modes' },
+    { value: 'Remote', label: 'Remote', count: workModeCounts.Remote },
+    { value: 'Hybrid', label: 'Hybrid', count: workModeCounts.Hybrid },
+    { value: 'Onsite', label: 'Onsite', count: workModeCounts.Onsite },
+  ], [workModeCounts]);
+
+  const departmentOptions = useMemo(() => {
+    const opts = [{ value: 'ALL', label: 'All Depts' }];
+    const deptMap = new Map();
+
+    // 1. Families from backend filters
+    if (Array.isArray(availableFamilies)) {
+      availableFamilies.forEach((d) => {
+        if (d && d !== 'General' && d !== 'ALL' && d !== 'Other') {
+          deptMap.set(d.toLowerCase(), d);
+        }
+      });
+    }
+
+    // 2. Categories from rolePage
+    if (Array.isArray(rolePage?.categories)) {
+      rolePage.categories.forEach((c) => {
+        const id = c.id || c.label;
+        if (id && id !== 'General' && id !== 'ALL' && id !== 'Other') {
+          if (!deptMap.has(id.toLowerCase())) {
+            deptMap.set(id.toLowerCase(), id);
+          }
+        }
+      });
+    }
+
+    // 3. Derived from loaded requisitions
+    if (Array.isArray(requisitions)) {
+      requisitions.forEach((j) => {
+        const d = getJobDepartment(j);
+        if (d && d !== 'General' && d !== 'ALL' && d !== 'Other') {
+          if (!deptMap.has(d.toLowerCase())) {
+            deptMap.set(d.toLowerCase(), d);
+          }
+        }
+      });
+    }
+
+    // 4. Standard known departments
+    const STANDARD_DEPTS = [
+      'Engineering',
+      'Sales & BD',
+      'Marketing',
+      'Design & UI/UX',
+      'Quality Assurance',
+      'DevOps & Cloud',
+      'Human Resources',
+      'Research & Content',
+      'Operations & Service',
+    ];
+    STANDARD_DEPTS.forEach((d) => {
+      if (!deptMap.has(d.toLowerCase())) {
+        deptMap.set(d.toLowerCase(), d);
+      }
+    });
+
+    deptMap.forEach((label, valKey) => {
+      const catMatch = rolePage?.categories?.find((c) => (c.id || c.label || '').toLowerCase() === valKey);
+      const count = catMatch ? catMatch.count : requisitions.filter((j) => getJobDepartment(j).toLowerCase() === valKey).length;
+      opts.push({ value: label, label, count: count > 0 ? count : undefined });
+    });
+
+    return opts;
+  }, [availableFamilies, rolePage, requisitions]);
+
+  const locationOptions = useMemo(() => {
+    const opts = [{ value: 'ALL', label: 'All Locations' }];
+    availableLocations.forEach((loc) => {
+      const count = requisitions.filter((j) => {
+        const role = j.structured_role || {};
+        const locVal = Array.isArray(role.location)
+          ? role.location.join(' ')
+          : (role.location || j.location || j.company_location || '');
+        return locVal.toLowerCase().includes(loc.toLowerCase());
+      }).length;
+      opts.push({ value: loc, label: loc, count });
+    });
+    return opts;
+  }, [availableLocations, requisitions]);
+
+  const experienceOptions = useMemo(() => {
+    const entryCount = requisitions.filter((j) => matchesExperience(j, 'ENTRY')).length;
+    const juniorCount = requisitions.filter((j) => matchesExperience(j, 'JUNIOR')).length;
+    const midCount = requisitions.filter((j) => matchesExperience(j, 'MID')).length;
+    const seniorCount = requisitions.filter((j) => matchesExperience(j, 'SENIOR')).length;
+
+    return [
+      { value: 'ALL', label: 'All Experience' },
+      { value: 'ENTRY', label: 'Fresher / Entry (0–1 yr)', count: entryCount },
+      { value: 'JUNIOR', label: 'Junior (1–3 yrs)', count: juniorCount },
+      { value: 'MID', label: 'Mid-Level (3–5 yrs)', count: midCount },
+      { value: 'SENIOR', label: 'Senior (5+ yrs)', count: seniorCount },
+    ];
+  }, [requisitions]);
 
   // Guard: if selectedLocation ever holds a work mode, reset it to 'ALL'
   useEffect(() => {
@@ -1483,10 +2220,48 @@ export default function OpenRolesPage({ enabled = true }) {
   }, []);
 
   const categoryTabs = [{ id: 'ALL', label: 'All Roles', count: rolePage.filtered_total }, ...rolePage.categories];
+<<<<<<< HEAD
   const ROLES_PER_PAGE = OPEN_ROLES_PAGE_SIZE;
+=======
+  const ROLES_PER_PAGE = 7;
+>>>>>>> cecd28a2bd468ddda2d45b5f32774a3cf61146fe
   const totalPages = rolePage.total_pages;
   const activePage = currentPage;
-  const paginatedJobs = requisitions;
+  const paginatedJobs = useMemo(() => {
+    let items = requisitions || [];
+    const q = searchQuery.trim();
+    if (q) {
+      items = items.filter((j) => {
+        const title = j.title || j.structured_role?.title || '';
+        const comp = j.company_name || j.company || '';
+        const role = j.structured_role || {};
+        const skills = (role.must_have_skills || []).concat(role.nice_to_have_skills || []);
+        const desc = j.generated_jd_markdown || role.job_description || role.role_summary || '';
+        const loc = typeof role.location === 'string' ? role.location : Array.isArray(role.location) ? role.location.join(' ') : '';
+        const descMatches = q.length >= 2 && matchesSearch(desc, q);
+        return (
+          matchesSearch(title, q) ||
+          matchesSearch(comp, q) ||
+          skills.some((s) => matchesSearch(String(s), q)) ||
+          descMatches ||
+          matchesSearch(loc, q)
+        );
+      });
+      items.sort((a, b) => {
+        const aTitle = matchesSearch(a.title || a.structured_role?.title || '', q) ? 10 : 0;
+        const bTitle = matchesSearch(b.title || b.structured_role?.title || '', q) ? 10 : 0;
+        if (aTitle !== bTitle) return bTitle - aTitle;
+        const aSkills = (a.structured_role?.must_have_skills || []).concat(a.structured_role?.nice_to_have_skills || []).some((s) => matchesSearch(String(s), q)) ? 5 : 0;
+        const bSkills = (b.structured_role?.must_have_skills || []).concat(b.structured_role?.nice_to_have_skills || []).some((s) => matchesSearch(String(s), q)) ? 5 : 0;
+        if (aSkills !== bSkills) return bSkills - aSkills;
+        return 0;
+      });
+    }
+    if (selectedExperience && selectedExperience !== 'ALL') {
+      items = items.filter((j) => matchesExperience(j, selectedExperience));
+    }
+    return items.slice(0, 7);
+  }, [requisitions, searchQuery, selectedExperience]);
   const pageStart = Math.max(1, Math.min(activePage - 2, totalPages - 4));
   const visiblePages = Array.from({ length: Math.min(5, totalPages) }, (_, index) => pageStart + index);
 
@@ -1524,6 +2299,7 @@ export default function OpenRolesPage({ enabled = true }) {
     if (!selectedJob) return;
 
     if (!candidateUser) {
+      setPendingAutoApplyJob(selectedJob);
       setSubmitError('Candidate sign-in or registration is mandatory to submit an application. Please sign in or create your profile.');
       setShowAuthModal(true);
       return;
@@ -1610,6 +2386,12 @@ export default function OpenRolesPage({ enabled = true }) {
       }
       if (refreshProfile) {
         refreshProfile();
+      }
+      if (typeof loadCandidateInterviews === 'function') {
+        loadCandidateInterviews(applicantEmail);
+      }
+      if (!candidateUser?.onboarding_completed && !isStaffOrAdmin) {
+        setShowOnboardingModal(true);
       }
     } catch (err) {
       console.error('Error applying to requisition:', err);
@@ -1769,6 +2551,12 @@ export default function OpenRolesPage({ enabled = true }) {
       if (refreshProfile) {
         refreshProfile();
       }
+      if (typeof loadCandidateInterviews === 'function') {
+        loadCandidateInterviews(applicantEmail);
+      }
+      if (!candidateUser?.onboarding_completed && !isStaffOrAdmin) {
+        setShowOnboardingModal(true);
+      }
     } catch (err) {
       const displayMsg = formatApiErrorMessage(err?.message || err, 'Failed to submit profile. Please ensure all required fields are filled out.');
       setPoolError(displayMsg);
@@ -1795,6 +2583,28 @@ export default function OpenRolesPage({ enabled = true }) {
     const role = selectedJob.structured_role || {};
     const markdown = selectedJob.generated_jd_markdown || '';
 
+    // Helper to sanitize "About the Role" text so it never contains Responsibilities,
+    // Requirements, Skills, Salary, Employment Type, etc. (which have their own dedicated sections).
+    const cleanAboutRole = (text) => {
+      if (!text) return '';
+      const stopPatterns = [
+        /(?:\r?\n|^)\s*(?:#{1,6}\s*)?(?:\*\*)?\s*(?:key\s+|core\s+)?responsibilit(?:ies|y)[:\s*]*/i,
+        /(?:\r?\n|^)\s*(?:#{1,6}\s*)?(?:\*\*)?\s*(?:required\s+)?(?:requirements?|qualifications?)[:\s*]*/i,
+        /(?:\r?\n|^)\s*(?:#{1,6}\s*)?(?:\*\*)?\s*(?:preferred\s+|nice\s+to\s+have\s+)?skills?[:\s*]*/i,
+        /(?:\r?\n|^)\s*(?:#{1,6}\s*)?(?:\*\*)?\s*(?:salary|compensation|stipend)[:\s*]*/i,
+        /(?:\r?\n|^)\s*(?:#{1,6}\s*)?(?:\*\*)?\s*(?:employment\s+type|work\s+mode|duration|location)[:\s*]*/i,
+      ];
+
+      let cleanest = text;
+      for (const pat of stopPatterns) {
+        const match = cleanest.search(pat);
+        if (match !== -1) {
+          cleanest = cleanest.slice(0, match).trim();
+        }
+      }
+      return cleanest.trim();
+    };
+
     const sections = {
       overview: '',
       company: '',
@@ -1807,50 +2617,58 @@ export default function OpenRolesPage({ enabled = true }) {
 
     if (markdown) {
       const parts = markdown.split(/\*\*([^*]+)\*\*/);
+      // parts[0] is the introductory overview preceding the first bold heading
+      if (parts[0] && parts[0].trim()) {
+        sections.role = cleanAboutRole(parts[0].trim());
+      }
+
       let currentKey = 'overview';
 
       for (let i = 1; i < parts.length; i += 2) {
         const header = parts[i].trim();
+        const cleanHeader = header.replace(/:+$/, '').trim();
         const content = (parts[i + 1] || '').trim();
-        const hLower = header.toLowerCase();
+        const hLower = cleanHeader.toLowerCase();
 
-        if (hLower.includes('about') && !hLower.includes('role')) {
+        if (hLower.includes('about the company') || (hLower.includes('about') && !hLower.includes('role'))) {
           currentKey = 'company';
           sections.company = content;
-        } else if (hLower.includes('about the role') || hLower === 'the role' || hLower.includes('role overview')) {
+        } else if (hLower.includes('about the role') || hLower === 'the role' || hLower.includes('role overview') || hLower.includes('job summary')) {
           currentKey = 'role';
-          sections.role = content;
-          if (!sections.overview) {
-            sections.overview = content.split('\n\n')[0] || content;
-          }
+          sections.role = cleanAboutRole(content);
         } else if (hLower.includes('responsibilit') || /^\d+\.\s+/.test(header)) {
           currentKey = 'responsibilities';
-          sections.responsibilities += (sections.responsibilities ? '\n\n' : '') + `**${header}**\n` + content;
+          sections.responsibilities += (sections.responsibilities ? '\n\n' : '') + content;
         } else if (hLower.includes('qualification') || hLower.includes('requirement')) {
           currentKey = 'qualifications';
-          sections.qualifications += (sections.qualifications ? '\n\n' : '') + `**${header}**\n` + content;
+          sections.qualifications += (sections.qualifications ? '\n\n' : '') + content;
         } else if (hLower.includes('preferred skill') || hLower === 'skills') {
           currentKey = 'skills';
-          sections.skills += (sections.skills ? '\n\n' : '') + `**${header}**\n` + content;
-        } else if (hLower.includes('employment')) {
+          sections.skills += (sections.skills ? '\n\n' : '') + content;
+        } else if (hLower.includes('salary') || hLower.includes('employment') || hLower.includes('work mode') || hLower.includes('location')) {
           currentKey = 'employment';
-          sections.employment += (sections.employment ? '\n\n' : '') + content;
+          sections.employment += (sections.employment ? '\n- ' : '- ') + `**${cleanHeader}:** ` + content;
         } else {
-          if (currentKey && sections[currentKey] !== undefined) {
-            sections[currentKey] += (sections[currentKey] ? '\n\n' : '') + `**${header}**\n` + content;
+          if (currentKey && sections[currentKey] !== undefined && currentKey !== 'role') {
+            sections[currentKey] += (sections[currentKey] ? '\n\n' : '') + `**${cleanHeader}**\n` + content;
           }
         }
       }
     }
 
+    if (!sections.role) {
+      sections.role = cleanAboutRole(role.job_description || role.role_summary || role.summary || '');
+    }
+    if (!sections.role) {
+      sections.role = 'We are seeking passionate talent to join our team.';
+    }
+    sections.role = cleanAboutRole(sections.role);
+
     if (!sections.overview) {
-      sections.overview = sections.role || role.job_description || role.role_summary || role.summary || '';
+      sections.overview = sections.role;
     }
     if (!sections.company) {
       sections.company = selectedJob.company_description || `${selectedJob.company_name || 'Hiring partner'} is actively recruiting for this position.`;
-    }
-    if (!sections.role) {
-      sections.role = role.job_description || role.role_summary || role.summary || 'We are seeking passionate talent to join our team.';
     }
     if (!sections.responsibilities) {
       sections.responsibilities = Array.isArray(role.responsibilities)
@@ -1886,9 +2704,8 @@ export default function OpenRolesPage({ enabled = true }) {
 
       {/* HORIZONTAL SLIDING TRACK: 200vw width, smoothly moves -100vw to right */}
       <div
-        className={`flex w-[200vw] transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-          isInterviewViewOpen ? '-translate-x-[100vw]' : 'translate-x-0'
-        }`}
+        className={`flex w-[200vw] transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] ${isInterviewViewOpen ? '-translate-x-[100vw]' : 'translate-x-0'
+          }`}
       >
         {/* ============================================================ */}
         {/* VIEW 1: OPEN ROLES (w-[100vw] min-w-[100vw] min-h-screen)    */}
@@ -1897,360 +2714,575 @@ export default function OpenRolesPage({ enabled = true }) {
           {/* ============================================================ */}
           {/* LEFT PANEL: LIGHT EDITORIAL COLUMN (HIDDEN ON MOBILE)        */}
           {/* ============================================================ */}
+<<<<<<< HEAD
           <aside className="hidden lg:flex w-full lg:w-[280px] xl:w-[300px] 2xl:w-[340px] shrink-0 bg-paper text-ink border-b lg:border-b-0 lg:border-r border-ink/10 flex-col relative self-stretch lg:min-h-screen">
         {/* Light Atmospheric Background Layer - mathematically synced with Landing Page */}
         <Backdrop tone="sidebar" active={!isInterviewViewOpen} />
+=======
+          <aside className="hidden lg:flex w-full lg:w-[360px] xl:w-[400px] 2xl:w-[430px] shrink-0 bg-paper text-ink border-b lg:border-b-0 lg:border-r border-ink/10 flex-col relative self-stretch lg:min-h-screen">
+            {/* Light Atmospheric Background Layer - mathematically synced with Landing Page */}
+            <Backdrop tone="sidebar" active={!isInterviewViewOpen} />
+>>>>>>> cecd28a2bd468ddda2d45b5f32774a3cf61146fe
 
-        {/* Sticky Editorial Sidebar Content: stays in viewport while left panel stretches with right content */}
-        <div className="relative z-10 w-full flex-1 flex flex-col justify-between lg:sticky lg:top-0 lg:h-screen lg:max-h-screen">
+            {/* Sticky Editorial Sidebar Content: stays in viewport while left panel stretches with right content */}
+            <div className="relative z-10 w-full flex-1 flex flex-col justify-between lg:sticky lg:top-0 lg:h-screen lg:max-h-screen">
 
-        {/* Zone 1: Main Scrollable Editorial Content (takes remaining height, never pushes bottom) */}
-        <div className="relative z-10 flex-1 min-h-0 lg:overflow-y-auto custom-scrollbar-none p-6 sm:p-7 xl:p-8 pb-2 flex flex-col justify-between">
-          <div>
-            {/* Official TermJobs Logo & Brand Mark */}
-            <Link to="/" className="inline-flex items-center gap-2.5 group cursor-pointer">
-              <img
-                src={logo}
-                alt="TermJobs"
-                className="w-7 h-7 object-contain shrink-0 group-hover:scale-105 transition-transform"
-              />
-              <div>
-                <span className="text-[13px] font-extrabold tracking-[0.2em] text-neutral-900 block leading-none">
-                  TERMJOBS
-                </span>
-                <span className="text-[0.58rem] font-bold tracking-[0.15em] text-neutral-400 uppercase block mt-0.5">
-                  Contract Workforce Platform
-                </span>
+              {/* Zone 1: Main Scrollable Editorial Content (takes remaining height, never pushes bottom) */}
+              <div className="relative z-10 flex-1 min-h-0 lg:overflow-y-auto custom-scrollbar-none p-6 sm:p-7 xl:p-8 pb-2 flex flex-col justify-between">
+                <div>
+                  {/* Official TermJobs Logo & Brand Mark */}
+                  <Link to="/" className="inline-flex items-center gap-2.5 group cursor-pointer">
+                    <img
+                      src={logo}
+                      alt="TermJobs"
+                      className="w-7 h-7 object-contain shrink-0 group-hover:scale-105 transition-transform"
+                    />
+                    <div>
+                      <span className="text-[13px] font-extrabold tracking-[0.2em] text-neutral-900 block leading-none">
+                        TERMJOBS
+                      </span>
+                      <span className="text-[0.58rem] font-bold tracking-[0.15em] text-neutral-400 uppercase block mt-0.5">
+                        Contract Workforce Platform
+                      </span>
+                    </div>
+                  </Link>
+
+                  {/* Accent vertical separator */}
+                  <div className="w-[2px] h-7 bg-neutral-400 my-5 sm:my-6" />
+
+                  {/* Eyebrow */}
+                  <div className="text-[0.62rem] font-bold tracking-[0.18em] text-neutral-400 uppercase mb-2.5 sm:mb-3">
+                    Contract Workforce Platform
+                  </div>
+
+                  {/* Headline */}
+                  <h1 className="text-3xl sm:text-4xl xl:text-[42px] font-extrabold tracking-[-0.03em] leading-[1.08] text-neutral-950">
+                    Explore<br />
+                    Open Roles.<br />
+                    <span className="text-neutral-400 font-bold block mt-1">
+                      Direct with<br />
+                      Hiring Partners.
+                    </span>
+                  </h1>
+
+                  {/* Subtext */}
+                  <p className="mt-4 sm:mt-5 text-xs text-neutral-500 leading-relaxed max-w-sm font-normal">
+                    Browse live contract opportunities from verified enterprise partners. Apply directly with 1-click
+                    resume parsing, instant skill matching, and verified compliance.
+                  </p>
+
+                  {/* Pure Transparent Glass Platform Metrics */}
+                  <div className="mt-4 sm:mt-5 grid grid-cols-2 gap-2 relative z-10 max-w-sm">
+                    {/* Card 1: Open Roles */}
+                    <div className="flex flex-col items-center justify-center p-2 sm:p-2.5 rounded-xl bg-black/[0.02] hover:bg-black/[0.04] border border-neutral-900/15 hover:border-neutral-900/30 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.7)] transition-all group cursor-default">
+                      <Briefcase size={13} className="text-neutral-500 group-hover:text-neutral-900 transition-colors shrink-0" />
+                      <div className="text-sm sm:text-base font-extrabold text-neutral-900 tracking-tight leading-none my-1">
+                        {rolePage.stats.roles}
+                      </div>
+                      <div className="text-[8.5px] sm:text-[9.5px] font-bold text-neutral-500 uppercase tracking-wider leading-tight text-center">
+                        Open Roles
+                      </div>
+                    </div>
+
+                    {/* Card 2: Avg Review Time */}
+                    <div className="flex flex-col items-center justify-center p-2 sm:p-2.5 rounded-xl bg-black/[0.02] hover:bg-black/[0.04] border border-neutral-900/15 hover:border-neutral-900/30 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.7)] transition-all group cursor-default">
+                      <Zap size={13} className="text-neutral-500 group-hover:text-neutral-900 transition-colors shrink-0" />
+                      <div className="text-sm sm:text-base font-extrabold text-neutral-900 tracking-tight leading-none my-1">
+                        &lt; 48h
+                      </div>
+                      <div className="text-[8.5px] sm:text-[9.5px] font-bold text-neutral-500 uppercase tracking-wider leading-tight text-center">
+                        Review Time
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
-            </Link>
 
-            {/* Accent vertical separator */}
-            <div className="w-[2px] h-7 bg-neutral-400 my-5 sm:my-6" />
+              {/* Zone 2: Bottom Talent Pool Callout - Pinned & Fixed at Bottom */}
+              <div className="relative z-20 shrink-0 px-6 sm:px-7 xl:px-8 pt-2.5 pb-6 sm:pb-7 xl:pb-8 bg-transparent">
+                <div className="flex items-stretch gap-3 max-w-sm">
+                  {/* Vertical Accent Line running alongside sentence and button */}
+                  <div className="w-[2px] bg-neutral-400 rounded-full shrink-0" />
 
-            {/* Eyebrow */}
-            <div className="text-[0.62rem] font-bold tracking-[0.18em] text-neutral-400 uppercase mb-2.5 sm:mb-3">
-              Contract Workforce Platform
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-1.5 text-neutral-700">
+                      <Sparkles size={13} className="text-neutral-900 shrink-0" />
+                      <span className="text-[11.5px] sm:text-xs font-medium text-neutral-700 leading-snug">
+                        Don't see your role? Join the verified talent pool.
+                      </span>
+                    </div>
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => setShowGeneralPoolModal(true)}
+                        className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-neutral-900 hover:bg-neutral-800 text-white font-semibold text-[11px] tracking-tight transition cursor-pointer active:scale-95 shadow-md shadow-neutral-900/10"
+                      >
+                        <span>Join Talent Pool</span>
+                        <ArrowRight size={12} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
+          </aside>
 
-            {/* Headline */}
-            <h1 className="text-3xl sm:text-4xl xl:text-[42px] font-extrabold tracking-[-0.03em] leading-[1.08] text-neutral-950">
-              Explore<br />
-              Open Roles.<br />
-              <span className="text-neutral-400 font-bold block mt-1">
-                Direct with<br />
-                Hiring Partners.
-              </span>
-            </h1>
+          {/* ============================================================ */}
+          {/* RIGHT PANEL: DARK DASHBOARD & OPEN ROLES                    */}
+          {/* ============================================================ */}
+          <div className="flex-1 min-w-0 bg-ink text-paper p-3 sm:p-4.5 xl:p-5 flex flex-col relative overflow-y-auto overflow-x-hidden">
+            {/* Atmospheric Background Layer */}
+            <Backdrop tone="dark" active={!isInterviewViewOpen} />
 
-            {/* Subtext */}
-            <p className="mt-4 sm:mt-5 text-xs text-neutral-500 leading-relaxed max-w-sm font-normal">
-              Browse live contract opportunities from verified enterprise partners. Apply directly with 1-click
-              resume parsing, instant skill matching, and verified compliance.
-            </p>
-
-            {/* Pure Transparent Glass Platform Metrics */}
-            <div className="mt-4 sm:mt-5 grid grid-cols-2 gap-2 relative z-10 max-w-sm">
-              {/* Card 1: Open Roles */}
-              <div className="flex flex-col items-center justify-center p-2 sm:p-2.5 rounded-xl bg-black/[0.02] hover:bg-black/[0.04] border border-neutral-900/15 hover:border-neutral-900/30 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.7)] transition-all group cursor-default">
-                <Briefcase size={13} className="text-neutral-500 group-hover:text-neutral-900 transition-colors shrink-0" />
-                <div className="text-sm sm:text-base font-extrabold text-neutral-900 tracking-tight leading-none my-1">
-                  {rolePage.stats.roles}
-                </div>
-                <div className="text-[8.5px] sm:text-[9.5px] font-bold text-neutral-500 uppercase tracking-wider leading-tight text-center">
-                  Open Roles
-                </div>
-              </div>
-
-              {/* Card 2: Avg Review Time */}
-              <div className="flex flex-col items-center justify-center p-2 sm:p-2.5 rounded-xl bg-black/[0.02] hover:bg-black/[0.04] border border-neutral-900/15 hover:border-neutral-900/30 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.7)] transition-all group cursor-default">
-                <Zap size={13} className="text-neutral-500 group-hover:text-neutral-900 transition-colors shrink-0" />
-                <div className="text-sm sm:text-base font-extrabold text-neutral-900 tracking-tight leading-none my-1">
-                  &lt; 48h
-                </div>
-                <div className="text-[8.5px] sm:text-[9.5px] font-bold text-neutral-500 uppercase tracking-wider leading-tight text-center">
-                  Review Time
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Zone 2: Bottom Talent Pool Callout - Pinned & Fixed at Bottom */}
-        <div className="relative z-20 shrink-0 px-6 sm:px-7 xl:px-8 pt-2.5 pb-6 sm:pb-7 xl:pb-8 bg-transparent">
-          <div className="flex items-stretch gap-3 max-w-sm">
-            {/* Vertical Accent Line running alongside sentence and button */}
-            <div className="w-[2px] bg-neutral-400 rounded-full shrink-0" />
-
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-1.5 text-neutral-700">
-                <Sparkles size={13} className="text-neutral-900 shrink-0" />
-                <span className="text-[11.5px] sm:text-xs font-medium text-neutral-700 leading-snug">
-                  Don't see your role? Join the verified talent pool.
-                </span>
-              </div>
-              <div>
-                <button
-                  type="button"
-                  onClick={() => setShowGeneralPoolModal(true)}
-                  className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-neutral-900 hover:bg-neutral-800 text-white font-semibold text-[11px] tracking-tight transition cursor-pointer active:scale-95 shadow-md shadow-neutral-900/10"
+            <div className="relative z-10 flex flex-col flex-[1_0_auto] w-full">
+              {/* Top Header Navigation — Optimized for Mobile */}
+              <header className="flex items-center justify-between gap-2.5 sm:gap-4 mb-2 sm:mb-2.5 pt-0.5 lg:pt-0 shrink-0">
+                {/* Left: Brand logo + back link on mobile, Platform Overview on desktop */}
+                <Link
+                  to="/"
+                  className="inline-flex items-center gap-2 group cursor-pointer transition-transform active:scale-95 shrink-0"
+                  title="Return to Home"
                 >
-                  <span>Join Talent Pool</span>
-                  <ArrowRight size={12} />
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-        </div>
-      </aside>
+                  <ArrowLeft size={14} className="text-paper/70 group-hover:text-white transition-transform group-hover:-translate-x-0.5" />
+                  <img src={logo} alt="TermJobs" className="h-5 w-5 object-contain invert lg:hidden" />
+                  <span className="text-[12px] font-extrabold tracking-[0.2em] text-white lg:hidden">TERMJOBS</span>
+                  <span className="hidden lg:inline text-xs text-paper/60 hover:text-white font-medium">Platform Overview</span>
+                </Link>
 
+<<<<<<< HEAD
       {/* ============================================================ */}
       {/* RIGHT PANEL: DARK DASHBOARD & OPEN ROLES                    */}
       {/* ============================================================ */}
       <div className="open-roles-content flex-1 min-w-0 bg-ink text-paper p-3 sm:p-4 xl:p-5 flex flex-col relative overflow-hidden">
         {/* Atmospheric Background Layer */}
         <Backdrop tone="dark" active={!isInterviewViewOpen} />
+=======
+                {/* Right Action Buttons */}
+                <div className="flex items-center gap-1.5 sm:gap-2.5 ml-auto shrink-0">
+                  {candidateUser ? (
+                    <div className="flex items-center gap-1.5 sm:gap-2">
+                      {/* Interview Quick Access Trigger (Visible on Desktop only) */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsInterviewViewOpen(true);
+                          setActiveNavTab('interview');
+                        }}
+                        className="hidden md:inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full border border-white/15 bg-white/[0.04] hover:bg-white/[0.08] hover:border-white/30 text-white/90 hover:text-white text-[10px] sm:text-[11px] font-medium transition backdrop-blur-md active:scale-95 cursor-pointer"
+                        title="Open My Interviews"
+                      >
+                        <span>Interview</span>
+                        {allCandidateInterviewRounds.filter((r) => r.status === 'Upcoming').length > 0 && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse ml-0.5" />
+                        )}
+                      </button>
+>>>>>>> cecd28a2bd468ddda2d45b5f32774a3cf61146fe
 
-        <div className="relative z-10 flex flex-col flex-1">
-          {/* Top Header Navigation — Optimized for Mobile */}
-          <header className="flex items-center justify-between gap-2.5 sm:gap-4 mb-3 sm:mb-5 pt-1 lg:pt-0">
-            {/* Left: Brand logo + back link on mobile, Platform Overview on desktop */}
-            <Link
-              to="/"
-              className="inline-flex items-center gap-2 group cursor-pointer transition-transform active:scale-95 shrink-0"
-              title="Return to Home"
-            >
-              <ArrowLeft size={14} className="text-paper/70 group-hover:text-white transition-transform group-hover:-translate-x-0.5" />
-              <img src={logo} alt="TermJobs" className="h-5 w-5 object-contain invert lg:hidden" />
-              <span className="text-[12px] font-extrabold tracking-[0.2em] text-white lg:hidden">TERMJOBS</span>
-              <span className="hidden lg:inline text-xs text-paper/60 hover:text-white font-medium">Platform Overview</span>
-            </Link>
+                      {/* Modern Monochrome Notification Bell (Visible on Desktop only) */}
+                      <div className="relative hidden md:block">
+                        <button
+                          type="button"
+                          onClick={() => setShowNotificationDrawer((prev) => !prev)}
+                          className={`relative p-1.5 sm:p-2 rounded-full transition-all cursor-pointer flex items-center justify-center border ${showNotificationDrawer
+                              ? 'bg-white text-black border-white shadow-lg'
+                              : 'bg-white/[0.06] hover:bg-white/[0.12] border-white/15 text-white/90 hover:text-white'
+                            }`}
+                          title="Interview & Match Notifications"
+                        >
+                          <Bell size={13} className={showNotificationDrawer ? 'text-black' : 'text-white'} />
+                          {unreadNotificationCount > 0 && (
+                            <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-0.5 rounded-full bg-white text-black font-black text-[8.5px] flex items-center justify-center border border-black/30 shadow-md">
+                              {unreadNotificationCount}
+                            </span>
+                          )}
+                        </button>
 
-            {/* Right Action Buttons */}
-            <div className="flex items-center gap-1.5 sm:gap-2.5 ml-auto shrink-0">
-              {candidateUser ? (
-                <div className="flex items-center gap-1.5 sm:gap-2">
-                  {/* Modern Monochrome Notification Bell */}
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onClick={() => setShowNotificationDrawer((prev) => !prev)}
-                      className={`relative p-1.5 sm:p-2 rounded-full transition-all cursor-pointer flex items-center justify-center border ${
-                        showNotificationDrawer
-                          ? 'bg-white text-black border-white shadow-lg'
-                          : 'bg-white/[0.06] hover:bg-white/[0.12] border-white/15 text-white/90 hover:text-white'
-                      }`}
-                      title="Interview & Match Notifications"
-                    >
-                      <Bell size={13} className={showNotificationDrawer ? 'text-black' : 'text-white'} />
-                      {unreadNotificationCount > 0 && (
-                        <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-0.5 rounded-full bg-white text-black font-black text-[8.5px] flex items-center justify-center border border-black/30 shadow-md">
-                          {unreadNotificationCount}
-                        </span>
-                      )}
-                    </button>
+                        {/* Modern Monochrome Notifications Dropdown */}
+                        {showNotificationDrawer && (
+                          <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 max-h-[82vh] overflow-y-auto rounded-2xl bg-[#090a0e]/95 border border-white/15 backdrop-blur-2xl shadow-[0_24px_60px_rgba(0,0,0,0.85),inset_0_1px_1px_rgba(255,255,255,0.12)] p-4 z-50 text-white">
+                            <div className="flex items-center justify-between pb-3 mb-3 border-b border-white/10">
+                              <div className="flex items-center gap-2">
+                                <div className="w-5 h-5 rounded-md bg-white/10 flex items-center justify-center text-white">
+                                  <Bell size={12} />
+                                </div>
+                                <span className="text-[11px] font-black text-white tracking-widest uppercase">Notifications & Alerts</span>
+                                {unreadNotificationCount > 0 && (
+                                  <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-white text-black shadow-sm">
+                                    {unreadNotificationCount} New
+                                  </span>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setShowNotificationDrawer(false)}
+                                className="p-1 rounded-md text-white/40 hover:text-white hover:bg-white/10 transition cursor-pointer"
+                                title="Close"
+                              >
+                                <X size={12} />
+                              </button>
+                            </div>
 
-                    {/* Modern Monochrome Notifications Dropdown */}
-                    {showNotificationDrawer && (
-                      <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 max-h-[82vh] overflow-y-auto rounded-2xl bg-[#090a0e]/95 border border-white/15 backdrop-blur-2xl shadow-[0_24px_60px_rgba(0,0,0,0.85),inset_0_1px_1px_rgba(255,255,255,0.12)] p-4 z-50 text-white">
-                        <div className="flex items-center justify-between pb-3 mb-3 border-b border-white/10">
-                          <div className="flex items-center gap-2">
-                            <Bell size={13} className="text-white" />
-                            <span className="text-[11px] font-extrabold text-white tracking-widest uppercase">Notifications & Alerts</span>
-                            {unreadNotificationCount > 0 && (
-                              <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-white text-black">
-                                {unreadNotificationCount} New
-                              </span>
+                            {/* List of Outreach Notifications & Match Alerts */}
+                            {activeNotificationItems.length === 0 ? (
+                              <div className="py-8 text-center px-4">
+                                <div className="w-10 h-10 rounded-full bg-white/[0.04] border border-white/10 flex items-center justify-center mx-auto mb-2.5 text-white/40">
+                                  <Bell size={16} />
+                                </div>
+                                <p className="text-xs font-semibold text-white/80">No new notifications</p>
+                                <p className="text-[11px] text-white/40 mt-1 max-w-[240px] mx-auto leading-relaxed">
+                                  When you receive interview invitations or fast-track updates, they will appear here.
+                                </p>
+                              </div>
+                            ) : (
+                              <div className="space-y-3">
+                                {activeNotificationItems.map((item, idx) => {
+                                  const token = item.token || item._id;
+                                  const actionState = outreachActionStatus[token];
+
+                                  const matchingRound = (allCandidateInterviewRounds || []).find(
+                                    (r) => (item.round_id && String(r.id) === String(item.round_id)) ||
+                                      (item.requisition_id && String(r.requisition_id) === String(item.requisition_id)) ||
+                                      (item.requisition_title && r.requisition_title && item.requisition_title.toLowerCase() === r.requisition_title.toLowerCase())
+                                  );
+                                  const matchingApp = (displayedApplications || []).find(
+                                    (app) => (item.requisition_id && String(app.requisition_id) === String(item.requisition_id)) ||
+                                      (item.requisition_title && app.requisition_title && item.requisition_title.toLowerCase() === app.requisition_title.toLowerCase())
+                                  );
+
+                                  const isCompleted = Boolean(
+                                    matchingRound?.status === 'Completed' ||
+                                    matchingRound?.status === 'Evaluated' ||
+                                    matchingRound?.evaluation?.overall_score !== undefined ||
+                                    (matchingRound?.evaluation && Object.keys(matchingRound.evaluation).length > 0) ||
+                                    matchingApp?.status === 'Completed' ||
+                                    matchingApp?.interview_status === 'Completed' ||
+                                    item.status === 'completed' ||
+                                    item.interview_status === 'Completed'
+                                  );
+
+                                  const isInterested = (actionState && actionState.action === 'interested') || item.status === 'interested';
+                                  const isUnavailable = (actionState && actionState.action === 'unavailable') || item.status === 'unavailable';
+                                  const meetingLink = actionState?.meeting_link || item.meeting_link;
+
+                                  return (
+                                    <div
+                                      key={token || idx}
+                                      className="p-3.5 rounded-2xl bg-white/[0.03] hover:bg-white/[0.05] border border-white/10 transition-all flex flex-col gap-2.5"
+                                    >
+                                      <div className="flex items-start justify-between gap-2">
+                                        <div>
+                                          <div className="text-xs font-bold text-white leading-tight">
+                                            {item.requisition_title || 'Position Match Alert'}
+                                          </div>
+                                          <div className="text-[10.5px] text-white/50 mt-0.5 font-medium">
+                                            {item.company_name || 'Enterprise Partner'}
+                                          </div>
+                                        </div>
+                                        {item.telegram_chat_id || item.telegram_sent ? (
+                                          <span className="shrink-0 px-2 py-0.5 rounded-full text-[9px] font-semibold bg-white/[0.06] text-white/80 border border-white/15 flex items-center gap-1.5">
+                                            <Send size={9} className="text-white/60" />
+                                            <span>Telegram Synced</span>
+                                          </span>
+                                        ) : null}
+                                      </div>
+
+                                      {isCompleted ? (
+                                        <div className="p-3 rounded-xl bg-white/[0.04] border border-white/15 flex flex-col gap-2">
+                                          <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-1.5 text-xs font-bold text-white">
+                                              <CheckCircle2 size={13} className="text-emerald-400" />
+                                              <span>AI Interview Completed</span>
+                                            </div>
+                                            <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-white text-black tracking-wide uppercase">
+                                              Completed
+                                            </span>
+                                          </div>
+                                          <p className="text-[11px] text-white/50 leading-relaxed">
+                                            Your voice responses and autonomous screening have been submitted for recruiter review.
+                                          </p>
+                                          <div className="flex items-center gap-2 pt-1 border-t border-white/5">
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setShowNotificationDrawer(false);
+                                                setIsInterviewViewOpen(true);
+                                                setActiveNavTab('interview');
+                                              }}
+                                              className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-[10.5px] font-semibold transition cursor-pointer flex items-center gap-1.5"
+                                            >
+                                              <Eye size={11} className="text-white/70" />
+                                              <span>View in Interviews</span>
+                                              <ArrowRight size={10} className="text-white/50" />
+                                            </button>
+                                          </div>
+                                        </div>
+                                      ) : isInterested ? (
+                                        <div className="p-3.5 rounded-xl bg-white/[0.04] border border-white/15 flex flex-col gap-2.5">
+                                          <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-1.5 text-xs font-bold text-white">
+                                              <CheckCircle2 size={13} className="text-emerald-400" />
+                                              <span>Status Confirmed: Available & Interested</span>
+                                            </div>
+                                            <span className="px-2.5 py-0.5 rounded-full text-[9px] font-bold bg-white/10 text-emerald-400 border border-emerald-500/20">
+                                              Ready
+                                            </span>
+                                          </div>
+                                          <p className="text-[11px] text-white/60 leading-relaxed">
+                                            Your AI Interview is ready. You can attend immediately with your camera & mic.
+                                          </p>
+                                          <div className="pt-0.5">
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setShowNotificationDrawer(false);
+                                                if (meetingLink && meetingLink.startsWith('http')) {
+                                                  window.open(meetingLink, '_blank');
+                                                } else if (item.round_id) {
+                                                  navigate(`/interview/ai/${item.round_id}?role=candidate&name=${encodeURIComponent(candidateUser?.candidate_name || 'Candidate')}&token=${encodeURIComponent(item.token || '')}`);
+                                                } else {
+                                                  setIsInterviewViewOpen(true);
+                                                  setActiveNavTab('interview');
+                                                }
+                                              }}
+                                              className="w-full sm:w-auto px-4 py-2 rounded-xl bg-white hover:bg-neutral-200 text-black font-extrabold text-[11px] flex items-center justify-center gap-2 shadow-sm transition active:scale-95 cursor-pointer"
+                                            >
+                                              <Sparkles size={12} className="text-black" />
+                                              <span>Start AI Interview</span>
+                                            </button>
+                                          </div>
+                                        </div>
+                                      ) : isUnavailable ? (
+                                        <div className="text-[10.5px] text-white/40 italic py-1">
+                                          Marked as unavailable for this requisition.
+                                        </div>
+                                      ) : (
+                                        <>
+                                          <p className="text-[11.5px] text-white/80 leading-relaxed">
+                                            Are you currently available & interested in exploring this role and taking the AI Interview?
+                                          </p>
+                                          <div className="flex items-center gap-2 pt-1">
+                                            <button
+                                              type="button"
+                                              disabled={respondingOutreachToken === token}
+                                              onClick={() => handleOutreachRsvp(token, 'interested')}
+                                              className="flex-1 py-1.5 px-3 rounded-xl bg-white hover:bg-neutral-200 text-black text-[11px] font-extrabold flex items-center justify-center gap-1.5 shadow transition active:scale-95 cursor-pointer disabled:opacity-50"
+                                            >
+                                              {respondingOutreachToken === token ? (
+                                                <span>Fast-Tracking...</span>
+                                              ) : (
+                                                <>
+                                                  <Check size={12} className="text-black" />
+                                                  <span>Yes, I am Interested</span>
+                                                </>
+                                              )}
+                                            </button>
+                                            <button
+                                              type="button"
+                                              disabled={respondingOutreachToken === token}
+                                              onClick={() => handleOutreachRsvp(token, 'unavailable')}
+                                              className="py-1.5 px-3 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] border border-white/15 text-white/70 hover:text-white text-[11px] font-medium transition cursor-pointer disabled:opacity-50"
+                                            >
+                                              No
+                                            </button>
+                                          </div>
+                                        </>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
                             )}
                           </div>
+                        )}
+                      </div>
+
+                      {/* Candidate Pill */}
+                      <div className="flex items-center gap-1.5 sm:gap-2 p-0.5 pl-1.5 pr-1.5 rounded-full bg-paper/[0.06] border border-paper/15 backdrop-blur-md">
+                        <button
+                          type="button"
+                          onClick={() => setShowSetupModal(true)}
+                          className="flex items-center gap-1.5 cursor-pointer hover:opacity-90 transition p-0.5 rounded-full"
+                          title="Profile Settings"
+                        >
+                          <div className="w-5.5 h-5.5 rounded-full bg-white/10 text-white font-bold text-[9.5px] flex items-center justify-center border border-white/20 shrink-0">
+                            {(candidateUser.candidate_name || 'C').slice(0, 1).toUpperCase()}
+                          </div>
+                          <span className="text-[11px] sm:text-xs font-semibold text-white max-w-[85px] sm:max-w-[120px] truncate hidden sm:inline">
+                            {candidateUser.candidate_name || candidateUser.candidate_email}
+                          </span>
+                        </button>
+
+                        <div className="h-3 w-px bg-paper/20 mx-0.5" />
+
+                        {/* Candidate Onboarding Tour Preview Icon */}
+                        <button
+                          type="button"
+                          onClick={() => setShowOnboardingModal(true)}
+                          className="p-1 sm:p-1.5 text-paper/70 hover:text-white transition rounded-lg hover:bg-paper/10 cursor-pointer flex items-center justify-center"
+                          title="Onboarding Tour Preview"
+                        >
+                          <Sparkles size={13} className="text-white/80 hover:text-white" />
+                        </button>
+
+                        <a
+                          href={`https://t.me/${TELEGRAM_BOT_USERNAME}?start=${candidateUser.id || candidateUser.candidate_email || ''}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="hidden lg:inline-flex p-1 sm:p-1.5 text-paper/70 hover:text-white transition rounded-lg hover:bg-paper/10 cursor-pointer items-center justify-center text-decoration-none"
+                          title="Connect Telegram for instant interview alerts & notifications"
+                        >
+                          <Send size={12} />
+                        </a>
+
+                        <div className="h-3 w-px bg-paper/20 mx-0.5" />
+
+                        {/* Sign Out Icon */}
+                        <button
+                          type="button"
+                          onClick={handleCandidateLogout}
+                          className="p-1 sm:p-1.5 text-paper/60 hover:text-rose-400 hover:bg-rose-500/10 transition rounded-lg cursor-pointer flex items-center justify-center"
+                          title="Sign out"
+                        >
+                          <LogOut size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5 sm:gap-2.5">
+                      {/* Candidate Sign In Trigger */}
+                      <button
+                        type="button"
+                        onClick={() => { setAuthModalTab('login'); setShowAuthModal(true); }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-white/15 bg-white/[0.04] hover:bg-white/[0.08] hover:border-white/30 text-white/90 hover:text-white text-[11px] sm:text-xs font-medium transition backdrop-blur-md active:scale-95 cursor-pointer"
+                      >
+                        <User size={11} className="text-white/70" />
+                        <span>Sign In</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </header>
+
+              {/* Section Title Header */}
+              <div className="mb-2 sm:mb-2.5 pt-0 shrink-0 flex items-baseline sm:items-center justify-between gap-3">
+                <h2 className="font-display text-lg sm:text-2xl font-bold tracking-tight text-white truncate">
+                  Latest Opportunities
+                </h2>
+                <span className="text-xs text-neutral-400 font-medium whitespace-nowrap shrink-0 text-right">
+                  {rolePage?.filtered_total || requisitions.length} active roles available
+                </span>
+              </div>
+
+              {/* Opportunities List / Table Section */}
+              <main id="roles-grid-section" className="w-full flex flex-col flex-[1_0_auto]">
+                <div className="w-full flex-[1_0_auto] min-h-[420px] flex flex-col justify-between rounded-2xl sm:rounded-3xl bg-[#0B0D12] border border-white/[0.08] p-3 sm:px-5 sm:pt-2 sm:pb-2.5 shadow-xl will-change-transform">
+                  {/* MOBILE VIEW (< md): Clean single-row Search + Filters button + Drawer */}
+                  <div className="flex md:hidden flex-col gap-2 w-full pb-2 mb-2 border-b border-white/[0.06]">
+                    <div className="flex items-center gap-2 w-full">
+                      {/* Flexible Search Input */}
+                      <div className="relative flex-1 min-w-0">
+                        <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" />
+                        <input
+                          type="text"
+                          value={searchQuery}
+                          onChange={(e) => {
+                            setSearchQuery(e.target.value);
+                            setCurrentPage(1);
+                          }}
+                          placeholder="Search roles, skills, company..."
+                          className="w-full bg-white/[0.03] hover:bg-white/[0.05] border border-white/10 rounded-lg pl-8 pr-7 py-1.5 text-xs text-white placeholder-white/40 focus:outline-none focus:border-white/30 transition shadow-inner"
+                        />
+                        {searchQuery && (
                           <button
                             type="button"
-                            onClick={() => setShowNotificationDrawer(false)}
-                            className="p-1 rounded-md text-white/40 hover:text-white hover:bg-white/10 transition cursor-pointer"
+                            onClick={() => {
+                              setSearchQuery('');
+                              setCurrentPage(1);
+                            }}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 hover:text-white cursor-pointer"
                           >
                             <X size={12} />
                           </button>
-                        </div>
-
-                        {/* List of Outreach Notifications & Match Alerts */}
-                        {outreachHistory.length === 0 && (allCandidateInterviewRounds || []).length === 0 ? (
-                          <div className="py-7 text-center">
-                            <Sparkles size={20} className="text-white/20 mx-auto mb-2" />
-                            <p className="text-xs font-semibold text-white/70">No notifications yet</p>
-                            <p className="text-[10.5px] text-white/40 mt-1 max-w-[240px] mx-auto">
-                              When you apply for a job or get fast-tracked, interactive Telegram & interview alerts will appear here.
-                            </p>
-                          </div>
-                        ) : (
-                          <div className="space-y-3">
-                            {outreachHistory.map((item, idx) => {
-                              const token = item.token || item._id;
-                              const actionState = outreachActionStatus[token];
-
-                              // Match corresponding interview round to detect completion
-                              const matchingRound = (allCandidateInterviewRounds || []).find(
-                                (r) => (item.round_id && String(r.id) === String(item.round_id)) ||
-                                       (item.requisition_id && String(r.requisition_id) === String(item.requisition_id)) ||
-                                       (item.requisition_title && r.requisition_title && item.requisition_title.toLowerCase() === r.requisition_title.toLowerCase())
-                              );
-                              const matchingApp = (applications || []).find(
-                                (app) => (item.requisition_id && String(app.requisition_id) === String(item.requisition_id)) ||
-                                         (item.requisition_title && app.requisition_title && item.requisition_title.toLowerCase() === app.requisition_title.toLowerCase())
-                              );
-
-                              // Precise check for whether AI interview is completed
-                              const isCompleted = Boolean(
-                                matchingRound?.status === 'Completed' ||
-                                matchingRound?.status === 'Evaluated' ||
-                                matchingRound?.evaluation?.overall_score !== undefined ||
-                                (matchingRound?.evaluation && Object.keys(matchingRound.evaluation).length > 0) ||
-                                matchingApp?.status === 'Completed' ||
-                                matchingApp?.interview_status === 'Completed' ||
-                                item.status === 'completed' ||
-                                item.interview_status === 'Completed'
-                              );
-
-                              const isInterested = (actionState && actionState.action === 'interested') || item.status === 'interested';
-                              const isUnavailable = (actionState && actionState.action === 'unavailable') || item.status === 'unavailable';
-                              const meetingLink = actionState?.meeting_link || item.meeting_link;
-                              const passcode = actionState?.passcode || item.candidate_passcode || 'TJ-FAST-TRACK';
-
-                              return (
-                                <div
-                                  key={token || idx}
-                                  className="p-3.5 rounded-2xl bg-white/[0.03] hover:bg-white/[0.05] border border-white/10 transition-all flex flex-col gap-2.5"
-                                >
-                                  <div className="flex items-start justify-between gap-2">
-                                    <div>
-                                      <div className="text-xs font-bold text-white leading-tight">
-                                        {item.requisition_title || 'Position Match Alert'}
-                                      </div>
-                                      <div className="text-[10.5px] text-white/50 mt-0.5">
-                                        {item.company_name || 'Enterprise Partner'}
-                                      </div>
-                                    </div>
-                                    {item.telegram_chat_id || item.telegram_sent ? (
-                                      <span className="shrink-0 px-2 py-0.5 rounded-full text-[9px] font-semibold bg-white/[0.06] text-white/80 border border-white/15 flex items-center gap-1.5">
-                                        <Send size={9} className="text-white/60" />
-                                        <span>Telegram Synced</span>
-                                      </span>
-                                    ) : null}
-                                  </div>
-
-                                  {/* Render state: Completed vs Interested vs Pending Question */}
-                                  {isCompleted ? (
-                                    <div className="p-3 rounded-xl bg-white/[0.04] border border-white/15 flex flex-col gap-2">
-                                      <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-1.5 text-xs font-bold text-white">
-                                          <CheckCircle2 size={13} className="text-white" />
-                                          <span>AI Interview Completed</span>
-                                        </div>
-                                        <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-white text-black tracking-wide uppercase">
-                                          Completed
-                                        </span>
-                                      </div>
-                                      <p className="text-[11px] text-white/50 leading-relaxed">
-                                        Your voice responses and autonomous screening have been submitted for recruiter review.
-                                      </p>
-                                      <div className="flex items-center gap-2 pt-1 border-t border-white/5">
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setShowNotificationDrawer(false);
-                                            setIsInterviewViewOpen(true);
-                                            setActiveNavTab('interview');
-                                          }}
-                                          className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-[10.5px] font-semibold transition cursor-pointer flex items-center gap-1.5"
-                                        >
-                                          <Eye size={11} className="text-white/70" />
-                                          <span>View in Interviews</span>
-                                          <ArrowRight size={10} className="text-white/50" />
-                                        </button>
-                                      </div>
-                                    </div>
-                                  ) : isInterested ? (
-                                    <div className="p-3 rounded-xl bg-white/[0.04] border border-white/15 flex flex-col gap-2">
-                                      <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-1.5 text-xs font-bold text-white">
-                                          <CheckCircle2 size={12} className="text-white" />
-                                          <span>Status Confirmed: Available & Interested</span>
-                                        </div>
-                                        <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-white/10 text-white border border-white/15">
-                                          Ready
-                                        </span>
-                                      </div>
-                                      <p className="text-[11px] text-white/60 leading-relaxed">
-                                        Your AI Interview is ready. You can attend immediately with your camera & mic.
-                                      </p>
-                                      <div className="flex items-center gap-2 pt-1">
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setShowNotificationDrawer(false);
-                                            if (meetingLink && meetingLink.startsWith('http')) {
-                                              window.open(meetingLink, '_blank');
-                                            } else if (item.round_id) {
-                                              navigate(`/interview/ai/${item.round_id}?role=candidate&name=${encodeURIComponent(candidateUser?.candidate_name || 'Candidate')}&token=${encodeURIComponent(item.token || '')}`);
-                                            } else {
-                                              setIsInterviewViewOpen(true);
-                                              setActiveNavTab('interview');
-                                            }
-                                          }}
-                                          className="px-3 py-1.5 rounded-xl bg-white hover:bg-neutral-200 text-black font-extrabold text-[11px] flex items-center gap-1.5 shadow transition active:scale-95 cursor-pointer"
-                                        >
-                                          <Sparkles size={11} className="text-black" />
-                                          <span>Start AI Interview</span>
-                                        </button>
-                                        <span className="text-[10px] text-white/70 font-mono bg-white/[0.06] px-2.5 py-1 rounded-xl border border-white/15">
-                                          Passcode: {passcode}
-                                        </span>
-                                      </div>
-                                    </div>
-                                  ) : isUnavailable ? (
-                                    <div className="text-[10.5px] text-white/40 italic py-1">
-                                      Marked as unavailable for this requisition.
-                                    </div>
-                                  ) : (
-                                    <>
-                                      <p className="text-[11.5px] text-white/80 leading-relaxed">
-                                        Are you currently available & interested in exploring this role and taking the AI Interview?
-                                      </p>
-                                      <div className="flex items-center gap-2 pt-1">
-                                        <button
-                                          type="button"
-                                          disabled={respondingOutreachToken === token}
-                                          onClick={() => handleOutreachRsvp(token, 'interested')}
-                                          className="flex-1 py-1.5 px-3 rounded-xl bg-white hover:bg-neutral-200 text-black text-[11px] font-extrabold flex items-center justify-center gap-1.5 shadow transition active:scale-95 cursor-pointer disabled:opacity-50"
-                                        >
-                                          {respondingOutreachToken === token ? (
-                                            <span>Fast-Tracking...</span>
-                                          ) : (
-                                            <>
-                                              <Check size={12} className="text-black" />
-                                              <span>Yes, I am Interested</span>
-                                            </>
-                                          )}
-                                        </button>
-                                        <button
-                                          type="button"
-                                          disabled={respondingOutreachToken === token}
-                                          onClick={() => handleOutreachRsvp(token, 'unavailable')}
-                                          className="py-1.5 px-3 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] border border-white/15 text-white/70 hover:text-white text-[11px] font-medium transition cursor-pointer disabled:opacity-50"
-                                        >
-                                          No
-                                        </button>
-                                      </div>
-                                    </>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
                         )}
+                      </div>
+
+                      {/* Filter Drawer Trigger Button */}
+                      <button
+                        type="button"
+                        onClick={() => setShowMobileFilterDrawer(true)}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition shrink-0 cursor-pointer ${
+                          activeFilterCount > 0
+                            ? 'bg-white text-zinc-950 border-white shadow-sm'
+                            : 'bg-white/[0.04] hover:bg-white/[0.08] border-white/10 text-white/80 hover:text-white'
+                        }`}
+                      >
+                        <SlidersHorizontal size={13} className={activeFilterCount > 0 ? 'text-zinc-950' : 'text-white/60'} />
+                        <span>Filters</span>
+                        {activeFilterCount > 0 && (
+                          <span className="w-4 h-4 rounded-full bg-zinc-900 text-white text-[10px] font-bold flex items-center justify-center leading-none">
+                            {activeFilterCount}
+                          </span>
+                        )}
+                      </button>
+                    </div>
+
+                    {/* Active Filter Chips (removable on mobile) */}
+                    {activeFilterCount > 0 && (
+                      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-0.5">
+                        {selectedWorkMode !== 'ALL' && (
+                          <button
+                            type="button"
+                            onClick={() => { setSelectedWorkMode('ALL'); setCurrentPage(1); }}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/10 border border-white/15 text-[11px] text-white shrink-0 hover:bg-white/15 transition cursor-pointer"
+                          >
+                            <span>{selectedWorkMode}</span>
+                            <X size={10} className="text-white/60 hover:text-white" />
+                          </button>
+                        )}
+                        {selectedFamily !== 'ALL' && (
+                          <button
+                            type="button"
+                            onClick={() => { setSelectedFamily('ALL'); setCurrentPage(1); }}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/10 border border-white/15 text-[11px] text-white shrink-0 hover:bg-white/15 transition cursor-pointer"
+                          >
+                            <span className="max-w-[120px] truncate">{selectedFamily}</span>
+                            <X size={10} className="text-white/60 hover:text-white" />
+                          </button>
+                        )}
+                        {selectedLocation !== 'ALL' && (
+                          <button
+                            type="button"
+                            onClick={() => { setSelectedLocation('ALL'); setCurrentPage(1); }}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/10 border border-white/15 text-[11px] text-white shrink-0 hover:bg-white/15 transition cursor-pointer"
+                          >
+                            <span className="max-w-[120px] truncate">{selectedLocation}</span>
+                            <X size={10} className="text-white/60 hover:text-white" />
+                          </button>
+                        )}
+                        {selectedExperience !== 'ALL' && (
+                          <button
+                            type="button"
+                            onClick={() => { setSelectedExperience('ALL'); setCurrentPage(1); }}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/10 border border-white/15 text-[11px] text-white shrink-0 hover:bg-white/15 transition cursor-pointer"
+                          >
+                            <span>
+                              {experienceOptions.find((o) => o.value === selectedExperience)?.label || selectedExperience}
+                            </span>
+                            <X size={10} className="text-white/60 hover:text-white" />
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={resetAllFilters}
+                          className="text-[11px] text-white/50 hover:text-white underline underline-offset-2 shrink-0 ml-1 cursor-pointer"
+                        >
+                          Clear all
+                        </button>
                       </div>
                     )}
                   </div>
 
+<<<<<<< HEAD
                   {/* Candidate Pill */}
                   <div className="flex items-center gap-1.5 sm:gap-2 p-0.5 pl-2 pr-1.5 rounded-full bg-paper/[0.06] border border-paper/15 backdrop-blur-md">
                     <div className="w-5.5 h-5.5 rounded-full bg-white/10 text-white font-bold text-[9.5px] flex items-center justify-center border border-white/20">
@@ -3070,671 +4102,1430 @@ export default function OpenRolesPage({ enabled = true }) {
                         size={14}
                         className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-500 pointer-events-none"
                       />
+=======
+                  {/* DESKTOP VIEW (>= md): Full inline Search & Filter Console */}
+                  <div className="hidden md:flex flex-wrap items-center gap-2 sm:gap-2.5 w-full pb-2 mb-2 border-b border-white/[0.06]">
+                    {/* Keyword Search Input */}
+                    <div className="relative flex-1 min-w-[220px] max-w-sm">
+                      <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" />
+>>>>>>> cecd28a2bd468ddda2d45b5f32774a3cf61146fe
                       <input
                         type="text"
-                        value={interviewSearch}
-                        onChange={(e) => setInterviewSearch(e.target.value)}
-                        placeholder="Search interviews..."
-                        className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-white/[0.04] border border-white/10 text-white placeholder-neutral-500 text-xs focus:outline-none focus:border-white/30 transition"
+                        value={searchQuery}
+                        onChange={(e) => {
+                          setSearchQuery(e.target.value);
+                          setCurrentPage(1);
+                        }}
+                        placeholder="Search roles, skills, company..."
+                        className="w-full bg-white/[0.03] hover:bg-white/[0.05] border border-white/10 rounded-lg pl-8 pr-7 py-1 text-xs text-white placeholder-white/40 focus:outline-none focus:border-white/30 transition shadow-inner"
                       />
+                      {searchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSearchQuery('');
+                            setCurrentPage(1);
+                          }}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 hover:text-white cursor-pointer"
+                        >
+                          <X size={12} />
+                        </button>
+                      )}
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => setInterviewSortAsc(!interviewSortAsc)}
-                      className="px-3.5 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-neutral-300 hover:text-white text-xs font-medium flex items-center gap-2 transition cursor-pointer shrink-0"
-                      title="Toggle sorting order"
-                    >
-                      <Calendar size={13} className="text-neutral-400" />
-                      <span>{interviewSortAsc ? 'Date (Soonest)' : 'Date (Latest)'}</span>
-                      <ChevronDown size={13} className="text-neutral-400" />
-                    </button>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
+                    {/* Compact Work Mode */}
+                    <FilterDropdown
+                      icon={Briefcase}
+                      label="All Modes"
+                      value={selectedWorkMode}
+                      options={workModeOptions}
+                      onChange={(val) => {
+                        setSelectedWorkMode(val);
+                        setCurrentPage(1);
+                      }}
+                      menuWidth="w-44"
+                    />
 
-          {loadingInterviews ? (
-            <div className="flex-1 min-h-0 flex flex-col items-center justify-center p-8 text-center max-w-md mx-auto my-auto">
-              <div className="w-8 h-8 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin mb-4" />
-              <div className="text-xs text-neutral-400 font-medium tracking-wide">
-                Loading your scheduled interviews...
-              </div>
-            </div>
-          ) : !hasInterviewAccess ? (
-            /* Access Restricted State */
-            <div className="flex-1 min-h-0 flex flex-col items-center justify-center p-8 text-center max-w-md mx-auto my-auto">
-              <div className="w-16 h-16 rounded-2xl bg-white/[0.04] border border-white/10 flex items-center justify-center mb-5 text-neutral-400">
-                <Lock size={28} />
-              </div>
-              <h2 className="text-xl font-bold text-white tracking-tight">No Interview History</h2>
-              <p className="mt-2 text-xs text-neutral-400 leading-relaxed">
-                This portal is exclusively accessible to candidates with active or past interview schedules. When an enterprise schedules an interview with you, it will appear here automatically.
-              </p>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsInterviewViewOpen(false);
-                  setActiveNavTab('home');
-                }}
-                className="mt-6 px-6 py-2.5 rounded-xl bg-white text-neutral-950 font-bold text-xs hover:bg-neutral-200 transition cursor-pointer flex items-center gap-2"
-              >
-                <ArrowLeft size={14} />
-                <span>Back to Open Roles</span>
-              </button>
-            </div>
-          ) : (
-            /* Interview Cards List (The Marked Portion - ONLY this section scrolls, scrollbar hidden) */
-            <div className="flex-1 min-h-0 overflow-y-auto space-y-4 pb-16 pt-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-                {filteredInterviews.length === 0 ? (
-                  <div className="py-16 text-center rounded-2xl bg-white/[0.02] border border-white/5">
-                    <Calendar size={32} className="mx-auto text-neutral-600 mb-3" />
-                    <h3 className="text-base font-bold text-white">No interviews found</h3>
-                    <p className="text-xs text-neutral-400 mt-1 max-w-sm mx-auto">
-                      {interviewSearch
-                        ? `No scheduled or past interviews matching "${interviewSearch}".`
-                        : 'You currently have no interviews in this category.'}
-                    </p>
-                  </div>
-                ) : (
-                  filteredInterviews.map((round) => {
-                    const badge = round.date_badge || parseInterviewDateBadge(round.scheduled_date);
-                    const isUpcoming = round.status === 'Upcoming';
-                    const isCompleted = round.status === 'Completed';
-                    const isCancelled = round.status === 'Cancelled';
-                    const isLive = round.is_live_now;
-                    const canEnter = Boolean(round.can_enter);
-                    const typeConfig = getRoundTypeConfig(round.round_name, round.round_number);
-                    const statusInfo = round.status_info || getStatusBadgeInfo(round, null, isLive, isCompleted, isCancelled, false);
-                    const IconComponent = typeConfig.icon;
+                    {/* Compact Department */}
+                    <FilterDropdown
+                      icon={Building2}
+                      label="All Depts"
+                      value={selectedFamily}
+                      options={departmentOptions}
+                      onChange={(val) => {
+                        setSelectedFamily(val);
+                        setCurrentPage(1);
+                      }}
+                      menuWidth="w-56"
+                    />
 
-                    return (
-                      <div
-                        key={round.id}
-                        className={`rounded-2xl transition-all duration-200 relative p-4 sm:p-5 lg:py-5 lg:px-6 ${
-                          canEnter
-                            ? 'bg-[#0b0e14] border border-emerald-500/80 shadow-[0_0_25px_rgba(16,185,129,0.14)]'
-                            : 'bg-[#0b0e14] border border-white/10 hover:border-white/20 shadow-lg'
-                        }`}
+                    {/* Compact Location */}
+                    <FilterDropdown
+                      icon={MapPin}
+                      label="All Locations"
+                      value={selectedLocation}
+                      options={locationOptions}
+                      onChange={(val) => {
+                        setSelectedLocation(val);
+                        setCurrentPage(1);
+                      }}
+                      menuWidth="w-60"
+                    />
+
+                    {/* Compact Experience */}
+                    <FilterDropdown
+                      icon={GraduationCap}
+                      label="All Experience"
+                      value={selectedExperience}
+                      options={experienceOptions}
+                      onChange={(val) => {
+                        setSelectedExperience(val);
+                        setCurrentPage(1);
+                      }}
+                      menuWidth="w-56"
+                      align="right"
+                    />
+                  </div>
+
+                  {error && requisitions.length === 0 ? (
+                    <div className="p-8 rounded-3xl bg-rose-500/10 border border-rose-500/20 text-center max-w-md mx-auto my-12 backdrop-blur-md">
+                      <AlertCircle size={28} className="text-rose-400 mx-auto mb-2" />
+                      <h3 className="text-sm font-bold text-white">Unable to fetch open roles</h3>
+                      <p className="text-xs text-zinc-400 mt-1 mb-4">{error}</p>
+                      <button
+                        type="button"
+                        onClick={() => window.location.reload()}
+                        className="px-4 py-2 rounded-xl bg-rose-500 text-white font-bold text-xs hover:bg-rose-600 transition cursor-pointer"
                       >
-                        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 sm:gap-6">
-                          {/* Left Section: Date Box + Role Info */}
-                          <div className="flex items-center gap-4 sm:gap-6 min-w-0 flex-1">
-                            {/* Date Box */}
-                            <div className="shrink-0 w-12 sm:w-14 flex flex-col items-center justify-center text-center select-none py-0.5 pr-4 border-r border-white/10">
-                              <span className="text-[10.5px] font-bold text-neutral-400 tracking-wider uppercase leading-none">
-                                {badge.month}
-                              </span>
-                              <span className="text-2xl sm:text-3xl font-black text-white leading-tight my-1 tracking-tight">
-                                {badge.day}
-                              </span>
-                              <span className="text-[9.5px] font-bold text-neutral-500 tracking-widest uppercase leading-none">
-                                {badge.dayOfWeek}
-                              </span>
-                            </div>
+                        Retry
+                      </button>
+                    </div>
+                  ) : loading && requisitions.length === 0 ? (
+                    <div className="py-24 text-center space-y-3">
+                      <div className="w-10 h-10 rounded-full border-2 border-white/80 border-t-transparent animate-spin mx-auto" />
+                      <div className="text-xs font-semibold uppercase tracking-[0.16em] text-paper/60">
+                        Loading published requisitions...
+                      </div>
+                    </div>
+                  ) : paginatedJobs.length === 0 ? (
+                    <div className="py-14 px-6 text-center max-w-md mx-auto my-auto">
+                      <div className="w-11 h-11 rounded-2xl bg-white/[0.05] border border-white/10 flex items-center justify-center text-neutral-400 mx-auto mb-3">
+                        <Search size={20} />
+                      </div>
+                      <h3 className="text-sm font-bold text-white">No roles matching this search</h3>
+                      <p className="text-xs text-neutral-400 mt-1 max-w-xs mx-auto">
+                        {searchQuery.trim()
+                          ? `No opportunities match "${searchQuery}". Try different keywords or reset your filters.`
+                          : 'No opportunities match the selected filters.'}
+                      </p>
+                      <div className="mt-4 flex items-center justify-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedOpportunityCategory('ALL');
+                            setSearchQuery('');
+                            setSelectedWorkMode('ALL');
+                            setSelectedFamily('ALL');
+                            setSelectedLocation('ALL');
+                            setSelectedExperience('ALL');
+                            setCurrentPage(1);
+                          }}
+                          className="px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-semibold transition cursor-pointer"
+                        >
+                          Reset All Filters
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowGeneralPoolModal(true)}
+                          className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-neutral-200 text-black text-xs font-bold transition cursor-pointer shadow-md"
+                        >
+                          Join Talent Pool
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Mobile View: Touch-Friendly Requisition Cards (< 640px) */}
+                      <div className="sm:hidden divide-y divide-white/[0.06]">
+                        {paginatedJobs.map((job) => {
+                          const role = job.structured_role || {};
+                          const rawSkills = (role.must_have_skills || []).concat(role.nice_to_have_skills || []);
+                          const skills = rawSkills.filter((s) => s && typeof s === 'string' && s.trim());
+                          const workMode = (role.work_mode || job.work_mode || 'Onsite').trim();
+                          const isRemote = workMode.toLowerCase().includes('remote');
+                          const isHybrid = workMode.toLowerCase().includes('hybrid');
+                          const compName = (job.company_name || job.company || '').trim();
+                          const companyInitial = (compName || job.title || 'R').slice(0, 1).toUpperCase();
+                          const locDisplay = getLocationDisplay(job);
+                          const expDisplay = getExperienceDisplay(job);
+                          const existingApp = getJobApplication(job);
+                          const isApplied = Boolean(
+                            isCandidateAuthenticated && (
+                              existingApp ||
+                              justAppliedJobIds.has(String(job.id)) ||
+                              (job._id && justAppliedJobIds.has(String(job._id)))
+                            )
+                          );
+                          const isSaved = savedJobIds.has(String(job.id)) || (job._id && savedJobIds.has(String(job._id)));
 
-                            {/* Round Name, Company & Badges */}
-                            <div className="min-w-0 flex-1">
-                              {/* Title + Icon */}
-                              <div className="flex items-center gap-2.5">
-                                <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center shrink-0 border ${typeConfig.iconBoxStyle}`}>
-                                  <IconComponent size={16} />
-                                </div>
-                                <h3 className="text-sm sm:text-base font-bold text-white tracking-tight truncate">
-                                  {round.round_name}
-                                </h3>
-                              </div>
-
-                              {/* Company Name & Requisition */}
-                              <div className="mt-1.5 pl-0.5">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="w-4 h-4 rounded bg-neutral-800 border border-white/10 text-[9px] font-bold text-neutral-300 flex items-center justify-center shrink-0">
-                                    {round.company_logo_letter}
-                                  </span>
-                                  <span className="text-xs font-semibold text-neutral-200 truncate">
-                                    {round.company_name}
-                                  </span>
-                                </div>
-                                <div className="text-[11px] text-neutral-400 mt-0.5 truncate">
-                                  {round.requisition_title} · {round.requisition_id}
-                                </div>
-                              </div>
-
-                              {/* Badges: Round X + Category */}
-                              <div className="flex items-center gap-2 mt-2 pl-0.5">
-                                <span className={`px-2.5 py-0.5 rounded-full text-[10.5px] font-semibold border ${typeConfig.pillStyle}`}>
-                                  {typeConfig.roundPill}
-                                </span>
-                                <span className="px-2.5 py-0.5 rounded-full bg-white/[0.04] text-neutral-300 border border-white/10 text-[10.5px] font-medium">
-                                  {typeConfig.category}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Middle Section: Time, Mode, Interviewer */}
-                          <div className="hidden md:flex items-center gap-6 xl:gap-8 shrink-0">
-                            {/* Time */}
-                            <div className="min-w-[145px]">
-                              <div className="flex items-center gap-2 text-xs font-semibold text-white">
-                                <Clock size={15} className="text-neutral-400 shrink-0" />
-                                <span>{round.time_range}</span>
-                              </div>
-                              <div className="text-[11.5px] text-neutral-400 pl-6 mt-0.5 font-normal">
-                                {round.time_duration}
-                              </div>
-                            </div>
-
-                            {/* Mode */}
-                            <div className="min-w-[115px]">
-                              <div className="flex items-center gap-2 text-xs font-semibold text-white">
-                                <Video size={15} className="text-neutral-400 shrink-0" />
-                                <span>Online</span>
-                              </div>
-                              <div className="text-[11.5px] text-neutral-400 pl-6 mt-0.5 font-normal">
-                                (Term Jobs Panel)
-                              </div>
-                            </div>
-
-                            {/* Interviewer */}
-                            <div className="min-w-[155px] flex items-center gap-3">
-                              {round.interviewer_avatar ? (
-                                <img
-                                  src={round.interviewer_avatar}
-                                  alt={round.interviewer_name}
-                                  className="w-8 h-8 rounded-full object-cover border border-white/10 shrink-0"
-                                />
-                              ) : (
-                                <div className="w-8 h-8 rounded-full bg-neutral-800 border border-white/10 flex items-center justify-center text-[11px] font-bold text-neutral-200 shrink-0">
-                                  {(round.interviewer_name || 'I').slice(0, 1).toUpperCase()}
-                                </div>
-                              )}
-                              <div className="min-w-0">
-                                <div className="text-[9.5px] text-neutral-400 font-medium tracking-wide">
-                                  Interviewer
-                                </div>
-                                <div className="text-xs font-bold text-white leading-tight truncate">
-                                  {round.interviewer_name}
-                                </div>
-                                <div className="text-[10.5px] text-neutral-400 leading-tight mt-0.5 truncate">
-                                  {round.interviewer_role}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Responsive Mobile Sub-Row */}
-                          <div className="flex md:hidden items-center justify-between gap-3 pt-2.5 border-t border-white/5 text-xs text-neutral-300">
-                            <div className="flex items-center gap-1.5">
-                              <Clock size={13} className="text-neutral-400" />
-                              <span>{round.time_range}</span>
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                              <Video size={13} className="text-neutral-400" />
-                              <span>Online</span>
-                            </div>
-                            <div className="text-[11px] text-neutral-400 truncate max-w-[110px]">
-                              {round.interviewer_name}
-                            </div>
-                          </div>
-
-                          {/* Right Section: Status Badge + Action Buttons + 3-Dot */}
-                          <div className="shrink-0 flex flex-row xl:flex-col items-center xl:items-end justify-between xl:justify-center gap-3">
-                            {/* Status Badge */}
-                            <div className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10.5px] font-medium border ${statusInfo.style}`}>
-                              <span className="text-[9px]">{statusInfo.icon}</span>
-                              <span>{statusInfo.text}</span>
-                            </div>
-
-                            {/* Action Buttons + 3-Dot */}
-                            <div className="flex items-center gap-2 relative interview-card-menu">
-                              {canEnter ? (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const name = encodeURIComponent(
-                                      candidateUser?.candidate_name || round.candidate_name || 'Candidate'
-                                    );
-                                    const token = encodeURIComponent(round.candidate_token || '');
-                                    const isAi = round.round_type === 'AI' || (round.round_name && round.round_name.toLowerCase().includes('ai'));
-                                    const path = isAi ? 'ai' : 'room';
-                                    navigate(
-                                      `/interview/${path}/${round.id}?role=candidate&name=${name}&token=${token}`
-                                    );
-                                  }}
-                                  className="px-4 py-2 rounded-xl bg-white hover:bg-neutral-100 text-neutral-950 font-bold text-xs transition shadow flex items-center gap-2 cursor-pointer active:scale-95 shrink-0"
-                                >
-                                  {round.round_type === 'AI' || (round.round_name && round.round_name.toLowerCase().includes('ai')) ? (
-                                    <Sparkles size={13} className="text-emerald-600" />
-                                  ) : (
-                                    <Video size={13} className="text-neutral-950" />
-                                  )}
-                                  <span>{round.round_type === 'AI' || (round.round_name && round.round_name.toLowerCase().includes('ai')) ? 'Start AI Interview' : 'Enter Interview'}</span>
-                                  <ArrowRight size={13} className="text-neutral-950" />
-                                </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => setSelectedDetailRound(round)}
-                                  className="px-4 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-white border border-white/10 font-medium text-xs transition flex items-center gap-2 cursor-pointer active:scale-95 shrink-0"
-                                >
-                                  <span>View Details</span>
-                                  <ArrowRight size={13} className="text-neutral-400" />
-                                </button>
-                              )}
-
-                              {/* 3-Dot Dropdown Trigger */}
-                              <div className="relative">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setActiveMenuRoundId(
-                                      activeMenuRoundId === round.id ? null : round.id
-                                    )
-                                  }
-                                  className={`w-8 h-8 rounded-xl border flex items-center justify-center transition cursor-pointer shrink-0 ${
-                                    activeMenuRoundId === round.id
-                                      ? 'bg-white/[0.12] text-white border-white/30'
-                                      : 'bg-white/[0.04] hover:bg-white/[0.08] text-neutral-400 hover:text-white border-white/10'
-                                  }`}
-                                  title="More Options"
-                                >
-                                  <MoreVertical size={14} />
-                                </button>
-
-                                {/* Functional 3-Dot Menu Dropdown */}
-                                {activeMenuRoundId === round.id && (
-                                  <div
-                                    className="absolute right-0 bottom-full mb-2 w-48 rounded-2xl bg-[#0f1218] border border-white/15 shadow-2xl py-1.5 z-50 animate-in fade-in zoom-in-95 duration-150 text-left"
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        handleCopyMeetingLink(round);
-                                        setActiveMenuRoundId(null);
-                                      }}
-                                      className="w-full text-left px-3.5 py-2 text-xs font-medium text-neutral-200 hover:text-white hover:bg-white/[0.06] flex items-center gap-2.5 transition cursor-pointer"
-                                    >
-                                      {copiedRoundId === round.id ? (
-                                        <>
-                                          <Check size={13} className="text-emerald-400" />
-                                          <span className="text-emerald-400 font-semibold">
-                                            Link Copied!
-                                          </span>
-                                        </>
-                                      ) : (
-                                        <>
-                                          <Copy size={13} className="text-neutral-400" />
-                                          <span>Copy Meeting Link</span>
-                                        </>
-                                      )}
-                                    </button>
-
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        handleSendInterviewEmail(round);
-                                        setActiveMenuRoundId(null);
-                                      }}
-                                      className="w-full text-left px-3.5 py-2 text-xs font-medium text-neutral-200 hover:text-white hover:bg-white/[0.06] flex items-center gap-2.5 transition cursor-pointer"
-                                    >
-                                      <Mail size={13} className="text-neutral-400" />
-                                      <span>
-                                        {resendingEmailId === round.id
-                                          ? 'Sending Invite...'
-                                          : emailSentStatus[round.id] === 'sent'
-                                          ? 'Invite Sent!'
-                                          : 'Resend Email Invite'}
-                                      </span>
-                                    </button>
-
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        handleAddToCalendar(round);
-                                        setActiveMenuRoundId(null);
-                                      }}
-                                      className="w-full text-left px-3.5 py-2 text-xs font-medium text-neutral-200 hover:text-white hover:bg-white/[0.06] flex items-center gap-2.5 transition cursor-pointer"
-                                    >
-                                      <Calendar size={13} className="text-neutral-400" />
-                                      <span>Add to Calendar</span>
-                                    </button>
-
-                                    <div className="h-px bg-white/10 my-1" />
-
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setSelectedDetailRound(round);
-                                        setActiveMenuRoundId(null);
-                                      }}
-                                      className="w-full text-left px-3.5 py-2 text-xs font-medium text-neutral-200 hover:text-white hover:bg-white/[0.06] flex items-center gap-2.5 transition cursor-pointer"
-                                    >
-                                      <Eye size={13} className="text-neutral-400" />
-                                      <span>View Details</span>
-                                    </button>
+                          return (
+                            <div
+                              key={job.id || job._id}
+                              onClick={() => handleOpenJob(job)}
+                              className="py-2.5 px-1 hover:bg-white/[0.03] active:bg-white/[0.06] transition-colors rounded-xl cursor-pointer space-y-2"
+                            >
+                              {/* 1. Header: Initial + Title + Company */}
+                              <div className="flex items-start justify-between gap-2.5">
+                                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                  <CompanyAvatar job={job} size="w-8 h-8" />
+                                  <div className="min-w-0 flex-1">
+                                    <h3 className="text-[13px] font-bold text-white tracking-tight leading-snug truncate">
+                                      {job.title}
+                                    </h3>
+                                    <p className="text-[11px] text-neutral-400 truncate mt-0.5 font-medium">
+                                      {compName || 'Direct Requisition'}
+                                    </p>
                                   </div>
+                                </div>
+                              </div>
+
+                              {/* 2. Badges (Work Mode, Experience) + Apply Button (Place and Skills removed) */}
+                              <div className="flex items-center justify-between gap-2 pt-0.5 text-[10.5px]">
+                                <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-[#16181F] border border-white/[0.08] text-neutral-200">
+                                    <span>{isRemote ? 'Remote' : isHybrid ? 'Hybrid' : workMode}</span>
+                                  </span>
+                                  {expDisplay && (
+                                    <span className="px-2.5 py-0.5 rounded-full bg-[#16181F] border border-white/[0.08] text-neutral-300">
+                                      {expDisplay}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {isApplied ? (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenJob(job);
+                                    }}
+                                    className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-semibold text-[10.5px] transition shadow-sm cursor-pointer shrink-0 whitespace-nowrap"
+                                  >
+                                    <Check size={11} className="text-emerald-400" />
+                                    <span>Applied</span>
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenJob(job);
+                                    }}
+                                    className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-white hover:bg-neutral-200 text-black font-semibold text-[10.5px] transition shadow-sm cursor-pointer shrink-0 active:scale-95 whitespace-nowrap"
+                                  >
+                                    <span>Apply Now</span>
+                                    <ArrowRight size={10} />
+                                  </button>
                                 )}
                               </div>
                             </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Tablet and Desktop: Full Table (>= 640px) */}
+                      <div className="hidden sm:block overflow-x-auto no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                        <div className="min-w-[680px] w-full">
+                          {/* Table Header Row */}
+                          <div className="grid grid-cols-[minmax(190px,1.8fr)_80px_95px_120px_150px_105px] items-center px-4 py-1.5 text-[10px] font-semibold text-neutral-400 uppercase tracking-wider border-b border-white/[0.06]">
+                            <div className="flex items-center gap-1.5">
+                              <ArrowLeft size={10} className="text-neutral-500" />
+                              <span>ROLE &amp; COMPANY</span>
+                            </div>
+                            <div>TYPE</div>
+                            <div>EXPERIENCE</div>
+                            <div>LOCATION</div>
+                            <div>SKILLS</div>
+                            <div className="text-right pr-2">APPLY</div>
+                          </div>
+
+                          {/* Table Rows - Smooth 60fps hardware accelerated rows */}
+                          <div className="divide-y divide-white/[0.05]">
+                            {paginatedJobs.map((job) => {
+                              const role = job.structured_role || {};
+                              const rawSkills = (role.must_have_skills || []).concat(role.nice_to_have_skills || []);
+                              const skills = rawSkills.filter((s) => s && typeof s === 'string' && s.trim());
+                              const workMode = (role.work_mode || job.work_mode || 'Onsite').trim();
+                              const isRemote = workMode.toLowerCase().includes('remote');
+                              const isHybrid = workMode.toLowerCase().includes('hybrid');
+                              const compName = (job.company_name || job.company || '').trim();
+                              const companyInitial = (compName || job.title || 'R').slice(0, 1).toUpperCase();
+                              const locDisplay = getLocationDisplay(job);
+                              const expDisplay = getExperienceDisplay(job);
+                              const existingApp = getJobApplication(job);
+                              const isApplied = Boolean(
+                                isCandidateAuthenticated && (
+                                  existingApp ||
+                                  justAppliedJobIds.has(String(job.id)) ||
+                                  (job._id && justAppliedJobIds.has(String(job._id)))
+                                )
+                              );
+                              const isSaved = savedJobIds.has(String(job.id)) || (job._id && savedJobIds.has(String(job._id)));
+
+                              return (
+                                <div
+                                  key={job.id || job._id}
+                                  onClick={() => handleOpenJob(job)}
+                                  className="grid grid-cols-[minmax(190px,1.8fr)_80px_95px_120px_150px_105px] items-center px-4 py-1.5 sm:py-2 hover:bg-white/[0.04] transition-colors duration-100 ease-out rounded-xl group cursor-pointer"
+                                >
+                                  {/* 1. Role & Company */}
+                                  <div className="flex items-center gap-3 min-w-0 pr-3">
+                                    <CompanyAvatar job={job} size="w-8 h-8" />
+                                    <div className="min-w-0 flex-1">
+                                      <h3 className="text-[13px] font-bold text-white tracking-tight truncate group-hover:text-white transition-colors">
+                                        {job.title}
+                                      </h3>
+                                      <p className="text-[11px] text-neutral-400 truncate mt-0.5 font-medium">
+                                        {compName ? compName : (locDisplay ? locDisplay : 'Direct Requisition')}
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  {/* 2. Type */}
+                                  <div>
+                                    <span className="inline-flex items-center -ml-2 px-2.5 py-0.5 rounded-full text-[10.5px] font-medium bg-[#16181F] border border-white/[0.08] text-neutral-200">
+                                      <span>{isRemote ? 'Remote' : isHybrid ? 'Hybrid' : workMode}</span>
+                                    </span>
+                                  </div>
+
+                                  {/* 3. Experience */}
+                                  <div className="text-[11.5px] text-neutral-300 font-medium truncate pr-2">
+                                    {expDisplay ? expDisplay : <span className="text-neutral-500">—</span>}
+                                  </div>
+
+                                  {/* 4. Location */}
+                                  <div className="flex items-center gap-1.5 text-[11.5px] text-neutral-300 min-w-0 pr-2">
+                                    <MapPin size={11} className="text-neutral-400 shrink-0" />
+                                    <span className="truncate">{locDisplay || 'Location flexible'}</span>
+                                  </div>
+
+                                  {/* 5. Skills */}
+                                  <div className="flex items-center gap-1.5 flex-nowrap overflow-hidden pr-2">
+                                    {skills.length > 0 ? (
+                                      <>
+                                        {skills.slice(0, 2).map((skill) => (
+                                          <span
+                                            key={skill}
+                                            className="px-2 py-0.5 rounded-md bg-[#16181F] border border-white/[0.08] text-[10.5px] font-medium text-neutral-300 whitespace-nowrap truncate max-w-[90px]"
+                                          >
+                                            {skill}
+                                          </span>
+                                        ))}
+                                        {skills.length > 2 && (
+                                          <span className="px-1.5 py-0.5 rounded-md bg-[#16181F] border border-white/[0.08] text-[10.5px] font-medium text-neutral-400 whitespace-nowrap shrink-0">
+                                            +{skills.length - 2}
+                                          </span>
+                                        )}
+                                      </>
+                                    ) : (
+                                      <span className="text-[11px] text-neutral-500 italic">Open to all skills</span>
+                                    )}
+                                  </div>
+
+                                  {/* 6. Apply */}
+                                  <div className="flex items-center justify-end pr-1">
+                                    {isApplied ? (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleOpenJob(job);
+                                        }}
+                                        className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-semibold text-[11px] transition shadow-sm cursor-pointer shrink-0 whitespace-nowrap"
+                                      >
+                                        <Check size={11} className="text-emerald-400" />
+                                        <span>Applied</span>
+                                      </button>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleOpenJob(job);
+                                        }}
+                                        className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-white hover:bg-neutral-200 text-black font-semibold text-[11px] transition shadow-sm cursor-pointer shrink-0 active:scale-95 whitespace-nowrap"
+                                      >
+                                        <span>Apply Now</span>
+                                        <ArrowRight size={11} />
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       </div>
-                    );
-                  })
-                )}
-              </div>
-          )}
 
-          {/* Interview Round Details Modal */}
-          {selectedDetailRound && typeof document !== 'undefined' && createPortal(
-            (() => {
-              const isDetailCompleted = selectedDetailRound.status === 'Completed' || selectedDetailRound.status === 'Evaluated';
-              const isDetailCancelled = selectedDetailRound.status === 'Cancelled' || selectedDetailRound.status === 'Rejected';
-              const candidateDisplayName = candidateUser?.candidate_name || selectedDetailRound.candidate_name || 'Mohammed Hashil';
-              const candidateDisplayEmail = candidateUser?.candidate_email || selectedDetailRound.candidate_email || 'mohammedhashil2018@gmail.com';
-
-              return (
-                <div
-                  className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-md animate-in fade-in duration-150"
-                  onClick={() => setSelectedDetailRound(null)}
-                >
-                  <div
-                    className="relative w-full max-w-xl rounded-2xl bg-[#0f1218] border border-white/15 p-6 sm:p-7 shadow-2xl text-white space-y-4 max-h-[90vh] overflow-y-auto"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {/* Modal Header */}
-                    <div className="flex items-start justify-between pb-4 border-b border-white/10">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="w-5 h-5 rounded bg-neutral-800 text-[10px] font-bold text-neutral-300 flex items-center justify-center">
-                            {selectedDetailRound.company_logo_letter}
-                          </span>
-                          <span className="text-xs font-semibold text-neutral-300">
-                            {selectedDetailRound.company_name}
-                          </span>
-                          {isDetailCompleted ? (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/15 text-blue-400 border border-blue-500/30 ml-1">
-                              ✓ Completed
-                            </span>
-                          ) : isDetailCancelled ? (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30 ml-1">
-                              ✕ Cancelled
-                            </span>
-                          ) : (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 ml-1">
-                              Scheduled
-                            </span>
-                          )}
+                      {/* Table Footer: Count & Pagination */}
+                      <div className="mt-auto pt-1.5 border-t border-white/[0.06] flex items-center justify-between px-2 text-xs">
+                        <div className="text-neutral-400 font-medium text-[11.5px]">
+                          Showing {paginatedJobs.length === 0 ? 0 : `${(activePage - 1) * ROLES_PER_PAGE + 1}–${(activePage - 1) * ROLES_PER_PAGE + paginatedJobs.length}`} of {rolePage.filtered_total ?? rolePage.total ?? requisitions.length} roles
                         </div>
-                        <h2 className="text-xl font-bold text-white mt-1">
-                          {selectedDetailRound.round_name}
-                        </h2>
-                        <div className="text-xs text-neutral-400 mt-0.5">
-                          {selectedDetailRound.requisition_title} · {selectedDetailRound.requisition_id}
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                            disabled={activePage <= 1}
+                            className="w-7 h-7 rounded-full bg-[#16181F] border border-white/10 text-neutral-400 hover:text-white flex items-center justify-center transition disabled:opacity-25 disabled:cursor-not-allowed cursor-pointer"
+                            title="Previous page"
+                          >
+                            <ChevronLeft size={13} />
+                          </button>
+                          {visiblePages.map((page) => (
+                            <button
+                              key={page}
+                              type="button"
+                              onClick={() => setCurrentPage(page)}
+                              aria-label={`Page ${page}`}
+                              aria-current={activePage === page ? 'page' : undefined}
+                              className={`w-7 h-7 rounded-full text-xs font-semibold flex items-center justify-center transition cursor-pointer ${activePage === page
+                                  ? 'bg-white text-black font-bold shadow-sm'
+                                  : 'text-neutral-400 hover:text-white hover:bg-white/5'
+                                }`}
+                            >
+                              {page}
+                            </button>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                            disabled={activePage >= totalPages}
+                            className="w-7 h-7 rounded-full bg-[#16181F] border border-white/10 text-neutral-400 hover:text-white flex items-center justify-center transition disabled:opacity-25 disabled:cursor-not-allowed cursor-pointer"
+                            title="Next page"
+                          >
+                            <ChevronRight size={13} />
+                          </button>
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedDetailRound(null)}
-                        className="p-1 rounded-lg hover:bg-white/[0.08] text-neutral-400 hover:text-white transition cursor-pointer"
+                    </>
+                  )}
+                </div>
+                {/* Candidate Navigation (Mobile: Glassmorphic Floating Capsule Dock | Desktop: Minimal Vertical List) */}
+                {enabled && typeof document !== 'undefined' && createPortal(
+                  <>
+                    {/* Mobile View: Floating Glassmorphic Capsule Dock */}
+                    <div className="md:hidden fixed bottom-4 inset-x-0 z-40 flex justify-center pointer-events-none px-3.5 pb-[env(safe-area-inset-bottom,0px)]">
+                      <nav
+                        aria-label="Mobile Candidate Navigation"
+                        className="pointer-events-auto flex items-center gap-1 p-1 rounded-full bg-[#0a0b10]/90 hover:bg-[#0a0b10]/95 backdrop-blur-2xl border border-white/20 shadow-[0_12px_40px_rgba(0,0,0,0.65),inset_0_1px_1px_rgba(255,255,255,0.22)] select-none"
                       >
-                        <X size={18} />
-                      </button>
+                        {[
+                          {
+                            id: 'home',
+                            label: 'HOME',
+                            icon: Home,
+                            onClick: () => {
+                              setActiveNavTab('home');
+                              setIsInterviewViewOpen(false);
+                              setShowInterviewModal(false);
+                              setShowAgreementModal(false);
+                              setShowSetupModal(false);
+                              setShowMyAppsModal(false);
+                              setShowAuthModal(false);
+                              document.getElementById('roles-grid-section')?.scrollIntoView({ behavior: 'smooth' });
+                            },
+                          },
+                          {
+                            id: 'applications',
+                            label: 'APPS',
+                            icon: Briefcase,
+                            badge: displayedApplications?.length > 0 ? displayedApplications.length : null,
+                            onClick: () => {
+                              setActiveNavTab('applications');
+                              setIsInterviewViewOpen(false);
+                              setShowInterviewModal(false);
+                              setShowAgreementModal(false);
+                              setShowSetupModal(false);
+                              setShowAuthModal(false);
+                              setShowMyAppsModal(true);
+                            },
+                          },
+                          {
+                            id: 'interview',
+                            label: 'INTERVIEW',
+                            icon: Video,
+                            badge: candidateUser ? (allCandidateInterviewRounds.filter((r) => r.status === 'Upcoming').length || null) : null,
+                            onClick: () => {
+                              if (!candidateUser) {
+                                setAuthModalTab('login');
+                                setShowAuthModal(true);
+                                return;
+                              }
+                              setActiveNavTab('interview');
+                              setIsInterviewViewOpen(true);
+                              setShowAgreementModal(false);
+                              setShowSetupModal(false);
+                              setShowMyAppsModal(false);
+                              setShowAuthModal(false);
+                            },
+                          },
+                          {
+                            id: 'agreement',
+                            label: 'AGREEMENT',
+                            icon: FileText,
+                            badge: candidateAgreements?.length > 0 ? candidateAgreements.length : null,
+                            onClick: () => {
+                              setActiveNavTab('agreement');
+                              setShowInterviewModal(false);
+                              setShowSetupModal(false);
+                              setShowMyAppsModal(false);
+                              setShowAuthModal(false);
+                              setShowAgreementModal(true);
+                            },
+                          },
+                          {
+                            id: 'profile',
+                            label: '',
+                            icon: User,
+                            hasUser: Boolean(candidateUser),
+                            onClick: () => {
+                              setActiveNavTab('profile');
+                              setShowInterviewModal(false);
+                              setShowAgreementModal(false);
+                              setShowMyAppsModal(false);
+                              if (candidateUser) {
+                                setShowSetupModal(true);
+                              } else {
+                                setAuthModalTab('login');
+                                setShowAuthModal(true);
+                              }
+                            },
+                          },
+                        ].map((item, idx) => {
+                          const isActive = isInterviewViewOpen
+                            ? item.id === 'interview'
+                            : showMyAppsModal
+                              ? item.id === 'applications'
+                              : showAgreementModal
+                                ? item.id === 'agreement'
+                                : showSetupModal
+                                  ? item.id === 'profile'
+                                  : activeNavTab === item.id;
+                          const IconComponent = item.icon;
+                          return (
+                            <div key={item.id} className="flex items-center">
+                              {idx > 0 && <div className="h-3 w-px bg-white/12 mx-0.5" />}
+                              <button
+                                type="button"
+                                onClick={item.onClick}
+                                aria-current={isActive ? 'true' : undefined}
+                                title={item.label || (item.id === 'profile' ? 'Profile' : item.id)}
+                                aria-label={item.label || item.id}
+                                className={`relative flex items-center justify-center gap-1 sm:gap-1.5 ${item.label ? 'px-2 sm:px-3' : 'px-2 sm:px-2.5'
+                                  } py-1.5 rounded-full transition-all duration-200 cursor-pointer active:scale-95 ${isActive
+                                    ? 'bg-neutral-800 text-neutral-100 border border-neutral-700 shadow-sm'
+                                    : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/[0.06] border border-transparent'
+                                  }`}
+                              >
+                                <span className="relative flex items-center justify-center">
+                                  <IconComponent
+                                    size={12}
+                                    className={isActive ? 'text-neutral-100' : 'text-neutral-400'}
+                                  />
+                                  {item.badge && (
+                                    <span className="absolute -top-1 -right-1.5 flex h-2.5 min-w-[10px] items-center justify-center rounded-full bg-emerald-400 px-0.5 text-[8px] font-bold text-black ring-1 ring-black">
+                                      {item.badge}
+                                    </span>
+                                  )}
+                                  {!item.badge && item.hasUser && (
+                                    <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-emerald-400 ring-1 ring-black" />
+                                  )}
+                                </span>
+                                {item.label ? (
+                                  <span className="text-[0.56rem] sm:text-[0.58rem] font-medium tracking-[0.12em] sm:tracking-[0.16em] uppercase">
+                                    {item.label}
+                                  </span>
+                                ) : null}
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </nav>
                     </div>
 
-                    {/* Modal Body */}
-                    <div className="space-y-3.5 text-xs">
-                      {/* If Completed: Prominent Real Status Banner */}
-                      {isDetailCompleted && (
-                        <div className="p-3.5 rounded-xl bg-blue-500/10 border border-blue-500/25 flex items-start gap-3">
-                          <div className="w-8 h-8 rounded-lg bg-blue-500/20 border border-blue-500/30 text-blue-400 flex items-center justify-center shrink-0 mt-0.5">
-                            <Check size={16} className="stroke-[2.5]" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="text-xs font-bold text-white">Interview Completed & Under Review</div>
-                            <p className="text-[11px] text-zinc-300 mt-0.5 leading-relaxed">
-                              Your interview session has concluded. Feedback and responses are actively being reviewed by the hiring team at {selectedDetailRound.company_name}.
-                            </p>
-                          </div>
-                        </div>
-                      )}
 
-                      {/* Schedule Grid */}
-                      <div className="grid grid-cols-2 gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/5">
-                        <div>
-                          <div className="text-[10px] text-neutral-400 uppercase font-medium flex items-center gap-1.5">
-                            <Calendar size={12} className="text-neutral-500" />
-                            <span>Date</span>
-                          </div>
-                          <div className="text-xs font-semibold text-white mt-1">
-                            {selectedDetailRound.scheduled_date_display}
-                          </div>
+                  </>,
+                  document.body
+                )}
+              </main>
+            </div>
+          </div>
+        </div>
+
+        {/* ============================================================ */}
+        {/* VIEW 2: CANDIDATE INTERVIEWS (HORIZONTAL SLIDE PAGE UI)      */}
+        {/* ============================================================ */}
+        <div className="w-[100vw] min-w-[100vw] min-h-screen shrink-0 flex flex-col lg:flex-row bg-[#08090b] relative overflow-x-hidden">
+          {/* Main Left Section: Dark Canvas (~75% on Desktop) */}
+          <main className="flex-1 min-w-0 bg-[#08090b] text-white p-3.5 sm:p-6 lg:p-8 xl:p-10 flex flex-col relative h-screen max-h-screen overflow-hidden">
+            <Backdrop tone="dark" />
+
+            <div className="relative z-10 flex flex-col flex-1 min-h-0 h-full">
+              {/* Pinned Top Header (Non-scrolling) */}
+              <div className="shrink-0">
+                {/* Top Navigation Bar: ← Platform Overview & Candidate Profile Pill */}
+                <div className="flex items-center justify-between gap-4 pb-2">
+                  {/* Back to Platform Overview */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsInterviewViewOpen(false);
+                      setActiveNavTab('home');
+                    }}
+                    className="inline-flex items-center gap-2.5 text-xs text-white/70 hover:text-white transition-colors cursor-pointer group"
+                  >
+                    <ArrowLeft size={15} className="group-hover:-translate-x-1 transition-transform" />
+                    <span className="font-medium tracking-wide">Platform Overview</span>
+                  </button>
+
+                  {/* Candidate Profile Pill / Sign In */}
+                  <div className="relative">
+                    {candidateUser ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowCandidateMenu(!showCandidateMenu)}
+                        className="flex items-center gap-2 sm:gap-2.5 px-3 py-1.5 rounded-full bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 transition cursor-pointer"
+                      >
+                        <div className="w-6 h-6 rounded-full bg-neutral-900 border border-white/20 text-white font-bold text-[10px] flex items-center justify-center">
+                          {(candidateUser.candidate_name || candidateUser.candidate_email || 'C').slice(0, 1).toUpperCase()}
                         </div>
-                        <div>
-                          <div className="text-[10px] text-neutral-400 uppercase font-medium flex items-center gap-1.5">
-                            <Clock size={12} className="text-neutral-500" />
-                            <span>Time & Duration</span>
-                          </div>
-                          <div className="text-xs font-semibold text-white mt-1">
-                            {selectedDetailRound.time_range}
-                          </div>
-                          <div className="text-[11px] text-neutral-400 mt-0.5">
-                            {selectedDetailRound.time_duration}
-                          </div>
-                        </div>
+                        <span className="text-xs font-semibold text-white max-w-[120px] truncate">
+                          {candidateUser.candidate_name || candidateUser.candidate_email}
+                        </span>
+                        <span className="text-xs text-neutral-400 font-medium hidden sm:inline">Candidate</span>
+                        <ChevronDown size={14} className="text-neutral-400" />
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAuthModalTab('login');
+                          setShowAuthModal(true);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-white/15 bg-white/[0.06] hover:bg-white/[0.12] text-white text-xs font-semibold transition active:scale-95 cursor-pointer shadow-sm"
+                      >
+                        <User size={12} className="text-white/70" />
+                        <span>Sign In</span>
+                      </button>
+                    )}
+
+                    {/* Candidate Dropdown Menu */}
+                    {showCandidateMenu && (
+                      <div className="absolute right-0 mt-2 w-48 rounded-2xl bg-[#0f1218] border border-white/10 shadow-2xl py-1.5 z-50 animate-in fade-in zoom-in-95 duration-150">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowCandidateMenu(false);
+                            setShowSetupModal(true);
+                          }}
+                          className="w-full text-left px-4 py-2 text-xs font-medium text-neutral-300 hover:text-white hover:bg-white/[0.06] flex items-center gap-2 cursor-pointer"
+                        >
+                          <User size={13} />
+                          <span>Profile Settings</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowCandidateMenu(false);
+                            setShowMyAppsModal(true);
+                          }}
+                          className="w-full text-left px-4 py-2 text-xs font-medium text-neutral-300 hover:text-white hover:bg-white/[0.06] flex items-center gap-2 cursor-pointer"
+                        >
+                          <FileText size={13} />
+                          <span>My Applications</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowCandidateMenu(false);
+                            setShowOnboardingModal(true);
+                          }}
+                          className="w-full text-left px-4 py-2 text-xs font-medium text-neutral-300 hover:text-white hover:bg-white/[0.06] flex items-center gap-2 cursor-pointer"
+                        >
+                          <Sparkles size={13} className="text-white/80" />
+                          <span>Onboarding Tour</span>
+                        </button>
+                        <div className="h-px bg-white/10 my-1" />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowCandidateMenu(false);
+                            handleCandidateLogout();
+                          }}
+                          className="w-full text-left px-4 py-2 text-xs font-medium text-rose-400 hover:bg-rose-500/10 flex items-center gap-2 cursor-pointer"
+                        >
+                          <LogOut size={13} />
+                          <span>Sign Out</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {hasInterviewAccess && (
+                  <>
+                    {/* Title & Subtitle */}
+                    <div className="mt-4 sm:mt-6 mb-4">
+                      <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+                        Upcoming Interviews
+                      </h1>
+                      <p className="mt-1 text-xs sm:text-sm text-neutral-400">
+                        Your scheduled interviews with companies.
+                      </p>
+                    </div>
+
+                    {/* Filter Tabs, Search & Sort Controls */}
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4 mb-4">
+                      {/* Filter Tabs */}
+                      <div className="flex items-center gap-2 overflow-x-auto scrollbar-none flex-nowrap pb-1">
+                        {[
+                          { id: 'all', label: `All (${allCount})` },
+                          { id: 'upcoming', label: `Upcoming (${upcomingCount})` },
+                          { id: 'completed', label: `Completed (${completedCount})` },
+                          { id: 'cancelled', label: `Cancelled (${cancelledCount})` },
+                        ].map((tab) => {
+                          const isActive = interviewFilterTab === tab.id;
+                          return (
+                            <button
+                              key={tab.id}
+                              type="button"
+                              onClick={() => setInterviewFilterTab(tab.id)}
+                              className={`px-4 py-1.5 rounded-full text-xs font-semibold transition active:scale-95 cursor-pointer ${isActive
+                                  ? 'bg-white text-neutral-950 shadow-md font-bold'
+                                  : 'bg-white/[0.04] hover:bg-white/[0.08] text-neutral-300 hover:text-white border border-white/10 font-medium'
+                                }`}
+                            >
+                              {tab.label}
+                            </button>
+                          );
+                        })}
                       </div>
 
-                      {/* Interviewer & Mode */}
-                      <div className="grid grid-cols-2 gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/5">
-                        <div>
-                          <div className="text-[10px] text-neutral-400 uppercase font-medium">Interviewer</div>
-                          <div className="text-xs font-bold text-white mt-1">{selectedDetailRound.interviewer_name}</div>
-                          <div className="text-[11px] text-neutral-400 mt-0.5">{selectedDetailRound.interviewer_role}</div>
+                      {/* Search & Sort Controls */}
+                      <div className="flex items-center gap-2.5">
+                        <div className="relative flex-1 sm:w-56">
+                          <Search
+                            size={14}
+                            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-500 pointer-events-none"
+                          />
+                          <input
+                            type="text"
+                            value={interviewSearch}
+                            onChange={(e) => setInterviewSearch(e.target.value)}
+                            placeholder="Search interviews..."
+                            className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-white/[0.04] border border-white/10 text-white placeholder-neutral-500 text-xs focus:outline-none focus:border-white/30 transition"
+                          />
                         </div>
-                        <div>
-                          <div className="text-[10px] text-neutral-400 uppercase font-medium">Interview Format</div>
-                          <div className="text-xs font-bold text-white mt-1">
-                            {selectedDetailRound.round_type === 'AI' ? 'AI Assessment Session' : 'Online Hosted Room'}
+
+                        <button
+                          type="button"
+                          onClick={() => setInterviewSortAsc(!interviewSortAsc)}
+                          className="px-3.5 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-neutral-300 hover:text-white text-xs font-medium flex items-center gap-2 transition cursor-pointer shrink-0"
+                          title="Toggle sorting order"
+                        >
+                          <Calendar size={13} className="text-neutral-400" />
+                          <span>{interviewSortAsc ? 'Date (Soonest)' : 'Date (Latest)'}</span>
+                          <ChevronDown size={13} className="text-neutral-400" />
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {loadingInterviews ? (
+                <div className="flex-1 min-h-0 flex flex-col items-center justify-center p-8 text-center max-w-md mx-auto my-auto">
+                  <div className="w-8 h-8 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin mb-4" />
+                  <div className="text-xs text-neutral-400 font-medium tracking-wide">
+                    Loading your scheduled interviews...
+                  </div>
+                </div>
+              ) : !candidateUser ? (
+                /* Not Signed In State */
+                <div className="flex-1 min-h-0 flex flex-col items-center justify-center p-6 sm:p-8 text-center max-w-md mx-auto my-auto">
+                  <div className="w-16 h-16 rounded-2xl bg-white/[0.04] border border-white/10 flex items-center justify-center mb-5 text-neutral-400">
+                    <User size={28} />
+                  </div>
+                  <h2 className="text-xl font-bold text-white tracking-tight">Sign In Required</h2>
+                  <p className="mt-2 text-xs text-neutral-400 leading-relaxed">
+                    Your interviews and AI evaluations are tied to your verified candidate account. Please sign in to view your scheduled rounds.
+                  </p>
+                  <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuthModalTab('login');
+                        setShowAuthModal(true);
+                      }}
+                      className="px-5 py-2.5 rounded-xl bg-white text-neutral-950 font-bold text-xs hover:bg-neutral-200 transition cursor-pointer flex items-center gap-2 shadow"
+                    >
+                      <User size={14} />
+                      <span>Sign In</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsInterviewViewOpen(false);
+                        setActiveNavTab('home');
+                      }}
+                      className="px-5 py-2.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/15 text-white font-bold text-xs transition cursor-pointer flex items-center gap-2"
+                    >
+                      <ArrowLeft size={14} />
+                      <span>Browse Open Roles</span>
+                    </button>
+                  </div>
+                </div>
+              ) : !hasInterviewAccess ? (
+                /* Access Restricted State */
+                <div className="flex-1 min-h-0 flex flex-col items-center justify-center p-6 sm:p-8 text-center max-w-md mx-auto my-auto">
+                  <div className="w-16 h-16 rounded-2xl bg-white/[0.04] border border-white/10 flex items-center justify-center mb-5 text-neutral-400">
+                    <Video size={28} />
+                  </div>
+                  <h2 className="text-xl font-bold text-white tracking-tight">No Active Interviews</h2>
+                  <p className="mt-2 text-xs text-neutral-400 leading-relaxed">
+                    When enterprise hiring partners schedule an interview or AI evaluation with you, your invitations and live meeting links will appear here automatically.
+                  </p>
+                  <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsInterviewViewOpen(false);
+                        setActiveNavTab('home');
+                      }}
+                      className="px-5 py-2.5 rounded-xl bg-white text-neutral-950 font-bold text-xs hover:bg-neutral-200 transition cursor-pointer flex items-center gap-2 shadow"
+                    >
+                      <ArrowLeft size={14} />
+                      <span>Browse Open Roles</span>
+                    </button>
+                    <Link
+                      to="/interview/login"
+                      className="px-5 py-2.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/15 text-white font-bold text-xs transition cursor-pointer flex items-center gap-2"
+                    >
+                      <Video size={14} className="text-emerald-400" />
+                      <span>Passcode Login</span>
+                    </Link>
+                  </div>
+                </div>
+              ) : (
+                /* Interview Cards List (The Marked Portion - ONLY this section scrolls, scrollbar hidden) */
+                <div className="flex-1 min-h-0 overflow-y-auto space-y-4 pb-32 sm:pb-24 pt-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                  {filteredInterviews.length === 0 ? (
+                    <div className="py-16 text-center rounded-2xl bg-white/[0.02] border border-white/5">
+                      <Calendar size={32} className="mx-auto text-neutral-600 mb-3" />
+                      <h3 className="text-base font-bold text-white">No interviews found</h3>
+                      <p className="text-xs text-neutral-400 mt-1 max-w-sm mx-auto">
+                        {interviewSearch
+                          ? `No scheduled or past interviews matching "${interviewSearch}".`
+                          : 'You currently have no interviews in this category.'}
+                      </p>
+                    </div>
+                  ) : (
+                    filteredInterviews.map((round) => {
+                      const badge = round.date_badge || parseInterviewDateBadge(round.scheduled_date);
+                      const isUpcoming = round.status === 'Upcoming';
+                      const isCompleted = round.status === 'Completed';
+                      const isCancelled = round.status === 'Cancelled';
+                      const isLive = round.is_live_now;
+                      const canEnter = Boolean(round.can_enter);
+                      const typeConfig = getRoundTypeConfig(round.round_name, round.round_number);
+                      const statusInfo = round.status_info || getStatusBadgeInfo(round, null, isLive, isCompleted, isCancelled, false);
+                      const IconComponent = typeConfig.icon;
+
+                      return (
+                        <div
+                          key={round.id}
+                          className={`rounded-2xl transition-all duration-200 relative p-4 sm:p-5 lg:py-5 lg:px-6 ${canEnter
+                              ? 'bg-[#0b0e14] border border-emerald-500/80 shadow-[0_0_25px_rgba(16,185,129,0.14)]'
+                              : 'bg-[#0b0e14] border border-white/10 hover:border-white/20 shadow-lg'
+                            }`}
+                        >
+                          <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 sm:gap-6">
+                            {/* Left Section: Date Box + Role Info */}
+                            <div className="flex items-center gap-4 sm:gap-6 min-w-0 flex-1">
+                              {/* Date Box */}
+                              <div className="shrink-0 w-12 sm:w-14 flex flex-col items-center justify-center text-center select-none py-0.5 pr-4 border-r border-white/10">
+                                <span className="text-[10.5px] font-bold text-neutral-400 tracking-wider uppercase leading-none">
+                                  {badge.month}
+                                </span>
+                                <span className="text-2xl sm:text-3xl font-black text-white leading-tight my-1 tracking-tight">
+                                  {badge.day}
+                                </span>
+                                <span className="text-[9.5px] font-bold text-neutral-500 tracking-widest uppercase leading-none">
+                                  {badge.dayOfWeek}
+                                </span>
+                              </div>
+
+                              {/* Round Name, Company & Badges */}
+                              <div className="min-w-0 flex-1">
+                                {/* Title + Icon */}
+                                <div className="flex items-center gap-2.5">
+                                  <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center shrink-0 border ${typeConfig.iconBoxStyle}`}>
+                                    <IconComponent size={16} />
+                                  </div>
+                                  <h3 className="text-sm sm:text-base font-bold text-white tracking-tight truncate">
+                                    {round.round_name}
+                                  </h3>
+                                </div>
+
+                                {/* Company Name & Requisition */}
+                                <div className="mt-1.5 pl-0.5">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="w-4 h-4 rounded bg-neutral-800 border border-white/10 text-[9px] font-bold text-neutral-300 flex items-center justify-center shrink-0">
+                                      {round.company_logo_letter}
+                                    </span>
+                                    <span className="text-xs font-semibold text-neutral-200 truncate">
+                                      {round.company_name}
+                                    </span>
+                                  </div>
+                                  <div className="text-[11px] text-neutral-400 mt-0.5 truncate">
+                                    {round.requisition_title} · {round.requisition_id}
+                                  </div>
+                                </div>
+
+                                {/* Badges: Round X + Category */}
+                                <div className="flex items-center gap-2 mt-2 pl-0.5">
+                                  <span className={`px-2.5 py-0.5 rounded-full text-[10.5px] font-semibold border ${typeConfig.pillStyle}`}>
+                                    {typeConfig.roundPill}
+                                  </span>
+                                  <span className="px-2.5 py-0.5 rounded-full bg-white/[0.04] text-neutral-300 border border-white/10 text-[10.5px] font-medium">
+                                    {typeConfig.category}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Middle Section: Time, Mode, Interviewer */}
+                            <div className="hidden md:flex items-center gap-6 xl:gap-8 shrink-0">
+                              {/* Time */}
+                              <div className="min-w-[145px]">
+                                <div className="flex items-center gap-2 text-xs font-semibold text-white">
+                                  <Clock size={15} className="text-neutral-400 shrink-0" />
+                                  <span>{round.time_range}</span>
+                                </div>
+                                <div className="text-[11.5px] text-neutral-400 pl-6 mt-0.5 font-normal">
+                                  {round.time_duration}
+                                </div>
+                              </div>
+
+                              {/* Mode */}
+                              <div className="min-w-[115px]">
+                                <div className="flex items-center gap-2 text-xs font-semibold text-white">
+                                  <Video size={15} className="text-neutral-400 shrink-0" />
+                                  <span>Online</span>
+                                </div>
+                                <div className="text-[11.5px] text-neutral-400 pl-6 mt-0.5 font-normal">
+                                  (Term Jobs Panel)
+                                </div>
+                              </div>
+
+                              {/* Interviewer */}
+                              <div className="min-w-[155px] flex items-center gap-3">
+                                {round.interviewer_avatar ? (
+                                  <img
+                                    src={round.interviewer_avatar}
+                                    alt={round.interviewer_name}
+                                    className="w-8 h-8 rounded-full object-cover border border-white/10 shrink-0"
+                                  />
+                                ) : (
+                                  <div className="w-8 h-8 rounded-full bg-neutral-800 border border-white/10 flex items-center justify-center text-[11px] font-bold text-neutral-200 shrink-0">
+                                    {(round.interviewer_name || 'I').slice(0, 1).toUpperCase()}
+                                  </div>
+                                )}
+                                <div className="min-w-0">
+                                  <div className="text-[9.5px] text-neutral-400 font-medium tracking-wide">
+                                    Interviewer
+                                  </div>
+                                  <div className="text-xs font-bold text-white leading-tight truncate">
+                                    {round.interviewer_name}
+                                  </div>
+                                  <div className="text-[10.5px] text-neutral-400 leading-tight mt-0.5 truncate">
+                                    {round.interviewer_role}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Responsive Mobile Sub-Row */}
+                            <div className="flex md:hidden items-center justify-between gap-3 pt-2.5 border-t border-white/5 text-xs text-neutral-300">
+                              <div className="flex items-center gap-1.5">
+                                <Clock size={13} className="text-neutral-400" />
+                                <span>{round.time_range}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <Video size={13} className="text-neutral-400" />
+                                <span>Online</span>
+                              </div>
+                              <div className="text-[11px] text-neutral-400 truncate max-w-[110px]">
+                                {round.interviewer_name}
+                              </div>
+                            </div>
+
+                            {/* Right Section: Status Badge + Action Buttons + 3-Dot */}
+                            <div className="shrink-0 flex flex-row xl:flex-col items-center xl:items-end justify-between xl:justify-center gap-3">
+                              {/* Status Badge */}
+                              <div className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10.5px] font-medium border ${statusInfo.style}`}>
+                                <span className="text-[9px]">{statusInfo.icon}</span>
+                                <span>{statusInfo.text}</span>
+                              </div>
+
+                              {/* Action Buttons + 3-Dot */}
+                              <div className="flex items-center gap-2 relative interview-card-menu">
+                                {canEnter ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const name = encodeURIComponent(
+                                        candidateUser?.candidate_name || round.candidate_name || 'Candidate'
+                                      );
+                                      const token = encodeURIComponent(round.candidate_token || '');
+                                      const isAi = round.round_type === 'AI' || (round.round_name && round.round_name.toLowerCase().includes('ai'));
+                                      const path = isAi ? 'ai' : 'room';
+                                      navigate(
+                                        `/interview/${path}/${round.id}?role=candidate&name=${name}&token=${token}`
+                                      );
+                                    }}
+                                    className="px-4 py-2 rounded-xl bg-white hover:bg-neutral-100 text-neutral-950 font-bold text-xs transition shadow flex items-center gap-2 cursor-pointer active:scale-95 shrink-0"
+                                  >
+                                    {round.round_type === 'AI' || (round.round_name && round.round_name.toLowerCase().includes('ai')) ? (
+                                      <Sparkles size={13} className="text-emerald-600" />
+                                    ) : (
+                                      <Video size={13} className="text-neutral-950" />
+                                    )}
+                                    <span>{round.round_type === 'AI' || (round.round_name && round.round_name.toLowerCase().includes('ai')) ? 'Start AI Interview' : 'Enter Interview'}</span>
+                                    <ArrowRight size={13} className="text-neutral-950" />
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedDetailRound(round)}
+                                    className="px-4 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-white border border-white/10 font-medium text-xs transition flex items-center gap-2 cursor-pointer active:scale-95 shrink-0"
+                                  >
+                                    <span>View Details</span>
+                                    <ArrowRight size={13} className="text-neutral-400" />
+                                  </button>
+                                )}
+
+                                {/* 3-Dot Dropdown Trigger */}
+                                <div className="relative">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setActiveMenuRoundId(
+                                        activeMenuRoundId === round.id ? null : round.id
+                                      )
+                                    }
+                                    className={`w-8 h-8 rounded-xl border flex items-center justify-center transition cursor-pointer shrink-0 ${activeMenuRoundId === round.id
+                                        ? 'bg-white/[0.12] text-white border-white/30'
+                                        : 'bg-white/[0.04] hover:bg-white/[0.08] text-neutral-400 hover:text-white border-white/10'
+                                      }`}
+                                    title="More Options"
+                                  >
+                                    <MoreVertical size={14} />
+                                  </button>
+
+                                  {/* Functional 3-Dot Menu Dropdown */}
+                                  {activeMenuRoundId === round.id && (
+                                    <div
+                                      className="absolute right-0 bottom-full mb-2 w-48 rounded-2xl bg-[#0f1218] border border-white/15 shadow-2xl py-1.5 z-50 animate-in fade-in zoom-in-95 duration-150 text-left"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          handleCopyMeetingLink(round);
+                                          setActiveMenuRoundId(null);
+                                        }}
+                                        className="w-full text-left px-3.5 py-2 text-xs font-medium text-neutral-200 hover:text-white hover:bg-white/[0.06] flex items-center gap-2.5 transition cursor-pointer"
+                                      >
+                                        {copiedRoundId === round.id ? (
+                                          <>
+                                            <Check size={13} className="text-emerald-400" />
+                                            <span className="text-emerald-400 font-semibold">
+                                              Link Copied!
+                                            </span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Copy size={13} className="text-neutral-400" />
+                                            <span>Copy Meeting Link</span>
+                                          </>
+                                        )}
+                                      </button>
+
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          handleSendInterviewEmail(round);
+                                          setActiveMenuRoundId(null);
+                                        }}
+                                        className="w-full text-left px-3.5 py-2 text-xs font-medium text-neutral-200 hover:text-white hover:bg-white/[0.06] flex items-center gap-2.5 transition cursor-pointer"
+                                      >
+                                        <Mail size={13} className="text-neutral-400" />
+                                        <span>
+                                          {resendingEmailId === round.id
+                                            ? 'Sending Invite...'
+                                            : emailSentStatus[round.id] === 'sent'
+                                              ? 'Invite Sent!'
+                                              : 'Resend Email Invite'}
+                                        </span>
+                                      </button>
+
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          handleAddToCalendar(round);
+                                          setActiveMenuRoundId(null);
+                                        }}
+                                        className="w-full text-left px-3.5 py-2 text-xs font-medium text-neutral-200 hover:text-white hover:bg-white/[0.06] flex items-center gap-2.5 transition cursor-pointer"
+                                      >
+                                        <Calendar size={13} className="text-neutral-400" />
+                                        <span>Add to Calendar</span>
+                                      </button>
+
+                                      <div className="h-px bg-white/10 my-1" />
+
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setSelectedDetailRound(round);
+                                          setActiveMenuRoundId(null);
+                                        }}
+                                        className="w-full text-left px-3.5 py-2 text-xs font-medium text-neutral-200 hover:text-white hover:bg-white/[0.06] flex items-center gap-2.5 transition cursor-pointer"
+                                      >
+                                        <Eye size={13} className="text-neutral-400" />
+                                        <span>View Details</span>
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
                           </div>
-                          <div className="text-[11px] text-neutral-400 mt-0.5">Term Jobs Dedicated Panel</div>
                         </div>
-                      </div>
+                      );
+                    })
+                  )}
+                </div>
+              )}
 
-                      {/* Candidate Details */}
-                      <div className="grid grid-cols-2 gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/5">
-                        <div>
-                          <div className="text-[10px] text-neutral-400 uppercase font-medium">Candidate Name</div>
-                          <div className="text-xs font-bold text-white mt-1">{candidateDisplayName}</div>
-                        </div>
-                        <div>
-                          <div className="text-[10px] text-neutral-400 uppercase font-medium">Candidate Email</div>
-                          <div className="text-xs font-mono text-zinc-300 mt-1 truncate">{candidateDisplayEmail}</div>
-                        </div>
-                      </div>
+              {/* Interview Round Details Modal */}
+              {selectedDetailRound && typeof document !== 'undefined' && createPortal(
+                (() => {
+                  const isDetailCompleted = selectedDetailRound.status === 'Completed' || selectedDetailRound.status === 'Evaluated';
+                  const isDetailCancelled = selectedDetailRound.status === 'Cancelled' || selectedDetailRound.status === 'Rejected';
+                  const candidateDisplayName = candidateUser?.candidate_name || candidateUser?.name || selectedDetailRound.candidate_name || 'Candidate';
+                  const candidateDisplayEmail = candidateUser?.candidate_email || candidateUser?.email || selectedDetailRound.candidate_email || '';
 
-                      {/* If NOT completed: Show Passcode & Checklist */}
-                      {!isDetailCompleted && selectedDetailRound.candidate_passcode && (
-                        <div className="p-3 rounded-xl bg-white/[0.03] border border-white/5 flex items-center justify-between">
+                  return (
+                    <div
+                      className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-md animate-in fade-in duration-150"
+                      onClick={() => setSelectedDetailRound(null)}
+                    >
+                      <div
+                        className="relative w-full max-w-xl rounded-2xl bg-[#0f1218] border border-white/15 p-6 sm:p-7 shadow-2xl text-white space-y-4 max-h-[90vh] overflow-y-auto"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {/* Modal Header */}
+                        <div className="flex items-start justify-between pb-4 border-b border-white/10">
                           <div>
-                            <div className="text-[10px] text-neutral-400 uppercase font-medium">Candidate Passcode</div>
-                            <div className="text-sm font-mono font-bold text-emerald-400 mt-0.5 tracking-wider">
-                              {selectedDetailRound.candidate_passcode}
+                            <div className="flex items-center gap-2">
+                              <span className="w-5 h-5 rounded bg-neutral-800 text-[10px] font-bold text-neutral-300 flex items-center justify-center">
+                                {selectedDetailRound.company_logo_letter}
+                              </span>
+                              <span className="text-xs font-semibold text-neutral-300">
+                                {selectedDetailRound.company_name}
+                              </span>
+                              {isDetailCompleted ? (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/15 text-blue-400 border border-blue-500/30 ml-1">
+                                  ✓ Completed
+                                </span>
+                              ) : isDetailCancelled ? (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30 ml-1">
+                                  ✕ Cancelled
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 ml-1">
+                                  Scheduled
+                                </span>
+                              )}
+                            </div>
+                            <h2 className="text-xl font-bold text-white mt-1">
+                              {selectedDetailRound.round_name}
+                            </h2>
+                            <div className="text-xs text-neutral-400 mt-0.5">
+                              {selectedDetailRound.requisition_title} · {selectedDetailRound.requisition_id}
                             </div>
                           </div>
                           <button
                             type="button"
-                            onClick={() => handleCopyMeetingLink(selectedDetailRound)}
-                            className="px-3 py-1.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.1] text-xs font-medium text-white flex items-center gap-1.5 transition cursor-pointer"
+                            onClick={() => setSelectedDetailRound(null)}
+                            className="p-1 rounded-lg hover:bg-white/[0.08] text-neutral-400 hover:text-white transition cursor-pointer"
                           >
-                            {copiedRoundId === selectedDetailRound.id ? (
-                              <>
-                                <Check size={12} className="text-emerald-400" />
-                                <span className="text-emerald-400">Copied</span>
-                              </>
-                            ) : (
-                              <>
-                                <Copy size={12} />
-                                <span>Copy Link</span>
-                              </>
-                            )}
+                            <X size={18} />
                           </button>
                         </div>
-                      )}
 
-                      {!isDetailCompleted && (
-                        <div className="p-3 rounded-xl bg-white/[0.02] border border-white/5 space-y-1.5 text-neutral-400 text-[11px]">
-                          <div className="text-neutral-300 font-semibold text-xs mb-1">Preparation Checklist:</div>
-                          <div className="flex items-center gap-2">
-                            <CheckCircle2 size={13} className="text-emerald-400 shrink-0" />
-                            <span>Ensure working webcam & microphone before joining</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <CheckCircle2 size={13} className="text-emerald-400 shrink-0" />
-                            <span>Join from a quiet, well-lit environment</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <CheckCircle2 size={13} className="text-emerald-400 shrink-0" />
-                            <span>Use Google Chrome, Brave or Microsoft Edge</span>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* If Completed: Post-Interview Information Notice */}
-                      {isDetailCompleted && (
-                        <div className="p-3 rounded-xl bg-white/[0.02] border border-white/5 space-y-1 text-neutral-400 text-[11px]">
-                          <div className="text-neutral-300 font-semibold text-xs mb-1">Post-Interview Status:</div>
-                          <div className="flex items-center gap-2">
-                            <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" />
-                            <span>Evaluation feedback and notes are under review by the hiring manager</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-                            <span>You will receive an automated email regarding round progression or decision status</span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Modal Footer */}
-                    <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/10">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedDetailRound(null)}
-                        className="px-5 py-2 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] text-xs font-semibold text-neutral-200 hover:text-white transition cursor-pointer"
-                      >
-                        Close
-                      </button>
-                      {/* ONLY show Join Meeting Room button if round is NOT completed and is ready */}
-                      {!isDetailCompleted && selectedDetailRound.is_ready && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const name = encodeURIComponent(
-                              candidateDisplayName || 'Candidate'
-                            );
-                            const token = encodeURIComponent(selectedDetailRound.candidate_token || '');
-                            const isAi = selectedDetailRound.round_type === 'AI' || (selectedDetailRound.round_name && selectedDetailRound.round_name.toLowerCase().includes('ai'));
-                            const path = isAi ? 'ai' : 'room';
-                            navigate(
-                              `/interview/${path}/${selectedDetailRound.id}?role=candidate&name=${name}&token=${token}`
-                            );
-                          }}
-                          className="px-5 py-2 rounded-xl bg-white hover:bg-neutral-100 text-neutral-950 font-bold text-xs transition shadow flex items-center gap-2 cursor-pointer active:scale-95"
-                        >
-                          {selectedDetailRound.round_type === 'AI' || (selectedDetailRound.round_name && selectedDetailRound.round_name.toLowerCase().includes('ai')) ? (
-                            <Sparkles size={13} className="text-emerald-600" />
-                          ) : (
-                            <Video size={13} />
+                        {/* Modal Body */}
+                        <div className="space-y-3.5 text-xs">
+                          {/* If Completed: Prominent Real Status Banner */}
+                          {isDetailCompleted && (
+                            <div className="p-3.5 rounded-xl bg-blue-500/10 border border-blue-500/25 flex items-start gap-3">
+                              <div className="w-8 h-8 rounded-lg bg-blue-500/20 border border-blue-500/30 text-blue-400 flex items-center justify-center shrink-0 mt-0.5">
+                                <Check size={16} className="stroke-[2.5]" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="text-xs font-bold text-white">Interview Completed & Under Review</div>
+                                <p className="text-[11px] text-zinc-300 mt-0.5 leading-relaxed">
+                                  Your interview session has concluded. Feedback and responses are actively being reviewed by the hiring team at {selectedDetailRound.company_name}.
+                                </p>
+                              </div>
+                            </div>
                           )}
-                          <span>{selectedDetailRound.round_type === 'AI' || (selectedDetailRound.round_name && selectedDetailRound.round_name.toLowerCase().includes('ai')) ? 'Start AI Interview' : 'Join Meeting Room'}</span>
-                        </button>
-                      )}
+
+                          {/* Schedule Grid */}
+                          <div className="grid grid-cols-2 gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/5">
+                            <div>
+                              <div className="text-[10px] text-neutral-400 uppercase font-medium flex items-center gap-1.5">
+                                <Calendar size={12} className="text-neutral-500" />
+                                <span>Date</span>
+                              </div>
+                              <div className="text-xs font-semibold text-white mt-1">
+                                {selectedDetailRound.scheduled_date_display}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-[10px] text-neutral-400 uppercase font-medium flex items-center gap-1.5">
+                                <Clock size={12} className="text-neutral-500" />
+                                <span>Time & Duration</span>
+                              </div>
+                              <div className="text-xs font-semibold text-white mt-1">
+                                {selectedDetailRound.time_range}
+                              </div>
+                              <div className="text-[11px] text-neutral-400 mt-0.5">
+                                {selectedDetailRound.time_duration}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Interviewer & Mode */}
+                          <div className="grid grid-cols-2 gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/5">
+                            <div>
+                              <div className="text-[10px] text-neutral-400 uppercase font-medium">Interviewer</div>
+                              <div className="text-xs font-bold text-white mt-1">{selectedDetailRound.interviewer_name}</div>
+                              <div className="text-[11px] text-neutral-400 mt-0.5">{selectedDetailRound.interviewer_role}</div>
+                            </div>
+                            <div>
+                              <div className="text-[10px] text-neutral-400 uppercase font-medium">Interview Format</div>
+                              <div className="text-xs font-bold text-white mt-1">
+                                {selectedDetailRound.round_type === 'AI' ? 'AI Assessment Session' : 'Online Hosted Room'}
+                              </div>
+                              <div className="text-[11px] text-neutral-400 mt-0.5">Term Jobs Dedicated Panel</div>
+                            </div>
+                          </div>
+
+                          {/* Candidate Details */}
+                          <div className="grid grid-cols-2 gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/5">
+                            <div>
+                              <div className="text-[10px] text-neutral-400 uppercase font-medium">Candidate Name</div>
+                              <div className="text-xs font-bold text-white mt-1">{candidateDisplayName}</div>
+                            </div>
+                            <div>
+                              <div className="text-[10px] text-neutral-400 uppercase font-medium">Candidate Email</div>
+                              <div className="text-xs font-mono text-zinc-300 mt-1 truncate">{candidateDisplayEmail}</div>
+                            </div>
+                          </div>
+
+                          {/* If NOT completed: Show Passcode & Checklist */}
+                          {!isDetailCompleted && selectedDetailRound.candidate_passcode && (
+                            <div className="p-3 rounded-xl bg-white/[0.03] border border-white/5 flex items-center justify-between">
+                              <div>
+                                <div className="text-[10px] text-neutral-400 uppercase font-medium">Candidate Passcode</div>
+                                <div className="text-sm font-mono font-bold text-emerald-400 mt-0.5 tracking-wider">
+                                  {selectedDetailRound.candidate_passcode}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyMeetingLink(selectedDetailRound)}
+                                className="px-3 py-1.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.1] text-xs font-medium text-white flex items-center gap-1.5 transition cursor-pointer"
+                              >
+                                {copiedRoundId === selectedDetailRound.id ? (
+                                  <>
+                                    <Check size={12} className="text-emerald-400" />
+                                    <span className="text-emerald-400">Copied</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Copy size={12} />
+                                    <span>Copy Link</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          )}
+
+                          {!isDetailCompleted && (
+                            <div className="p-3 rounded-xl bg-white/[0.02] border border-white/5 space-y-1.5 text-neutral-400 text-[11px]">
+                              <div className="text-neutral-300 font-semibold text-xs mb-1">Preparation Checklist:</div>
+                              <div className="flex items-center gap-2">
+                                <CheckCircle2 size={13} className="text-emerald-400 shrink-0" />
+                                <span>Ensure working webcam & microphone before joining</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <CheckCircle2 size={13} className="text-emerald-400 shrink-0" />
+                                <span>Join from a quiet, well-lit environment</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <CheckCircle2 size={13} className="text-emerald-400 shrink-0" />
+                                <span>Use Google Chrome, Brave or Microsoft Edge</span>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* If Completed: Post-Interview Information Notice */}
+                          {isDetailCompleted && (
+                            <div className="p-3 rounded-xl bg-white/[0.02] border border-white/5 space-y-1 text-neutral-400 text-[11px]">
+                              <div className="text-neutral-300 font-semibold text-xs mb-1">Post-Interview Status:</div>
+                              <div className="flex items-center gap-2">
+                                <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" />
+                                <span>Evaluation feedback and notes are under review by the hiring manager</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                                <span>You will receive an automated email regarding round progression or decision status</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/10">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedDetailRound(null)}
+                            className="px-5 py-2 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] text-xs font-semibold text-neutral-200 hover:text-white transition cursor-pointer"
+                          >
+                            Close
+                          </button>
+                          {/* ONLY show Join Meeting Room button if round is NOT completed and is ready */}
+                          {!isDetailCompleted && selectedDetailRound.is_ready && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const name = encodeURIComponent(
+                                  candidateDisplayName || 'Candidate'
+                                );
+                                const token = encodeURIComponent(selectedDetailRound.candidate_token || '');
+                                const isAi = selectedDetailRound.round_type === 'AI' || (selectedDetailRound.round_name && selectedDetailRound.round_name.toLowerCase().includes('ai'));
+                                const path = isAi ? 'ai' : 'room';
+                                navigate(
+                                  `/interview/${path}/${selectedDetailRound.id}?role=candidate&name=${name}&token=${token}`
+                                );
+                              }}
+                              className="px-5 py-2 rounded-xl bg-white hover:bg-neutral-100 text-neutral-950 font-bold text-xs transition shadow flex items-center gap-2 cursor-pointer active:scale-95"
+                            >
+                              {selectedDetailRound.round_type === 'AI' || (selectedDetailRound.round_name && selectedDetailRound.round_name.toLowerCase().includes('ai')) ? (
+                                <Sparkles size={13} className="text-emerald-600" />
+                              ) : (
+                                <Video size={13} />
+                              )}
+                              <span>{selectedDetailRound.round_type === 'AI' || (selectedDetailRound.round_name && selectedDetailRound.round_name.toLowerCase().includes('ai')) ? 'Start AI Interview' : 'Join Meeting Room'}</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })(),
+                document.body
+              )}
+            </div>
+          </main>
+
+          {/* Right White Editorial Sidebar (Exact Match to Screenshot) */}
+          <aside className="hidden lg:flex w-[320px] xl:w-[360px] 2xl:w-[400px] shrink-0 bg-paper text-ink border-l border-ink/10 flex-col justify-between relative overflow-hidden h-screen max-h-screen sticky top-0 p-6 sm:p-8">
+            <Backdrop tone="sidebar" />
+            <div className="relative z-10 flex flex-col h-full justify-between">
+              {/* Top: Logo & Platform Identity */}
+              <div>
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-neutral-950 text-white flex items-center justify-center font-black text-sm shadow-sm">
+                    <Briefcase size={16} className="text-white" />
+                  </div>
+                  <div>
+                    <div className="text-[12px] font-extrabold tracking-[0.2em] uppercase text-neutral-900 leading-tight">
+                      TERMJOBS
+                    </div>
+                    <div className="text-[8.5px] font-bold tracking-[0.18em] uppercase text-neutral-400">
+                      CONTRACT WORKFORCE PLATFORM
                     </div>
                   </div>
                 </div>
-              );
-            })(),
-            document.body
-          )}
-        </div>
-      </main>
 
-      {/* Right White Editorial Sidebar (Exact Match to Screenshot) */}
-      <aside className="hidden lg:flex w-[320px] xl:w-[360px] 2xl:w-[400px] shrink-0 bg-paper text-ink border-l border-ink/10 flex-col justify-between relative overflow-hidden h-screen max-h-screen sticky top-0 p-6 sm:p-8">
-        <Backdrop tone="sidebar" />
-        <div className="relative z-10 flex flex-col h-full justify-between">
-          {/* Top: Logo & Platform Identity */}
-          <div>
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-neutral-950 text-white flex items-center justify-center font-black text-sm shadow-sm">
-                <Briefcase size={16} className="text-white" />
-              </div>
-              <div>
-                <div className="text-[12px] font-extrabold tracking-[0.2em] uppercase text-neutral-900 leading-tight">
-                  TERMJOBS
-                </div>
-                <div className="text-[8.5px] font-bold tracking-[0.18em] uppercase text-neutral-400">
+                {/* Vertical decorative accent line */}
+                <div className="w-0.5 h-10 bg-neutral-900/20 my-8 ml-1" />
+
+                {/* Eyebrow */}
+                <div className="text-[9px] font-bold tracking-[0.22em] uppercase text-neutral-400 mb-2">
                   CONTRACT WORKFORCE PLATFORM
                 </div>
-              </div>
-            </div>
 
-            {/* Vertical decorative accent line */}
-            <div className="w-0.5 h-10 bg-neutral-900/20 my-8 ml-1" />
+                {/* Headline Display */}
+                <h2 className="text-4xl xl:text-5xl font-extrabold text-neutral-950 tracking-tight leading-[1.05]">
+                  Your<br />Interviews.
+                </h2>
 
-            {/* Eyebrow */}
-            <div className="text-[9px] font-bold tracking-[0.22em] uppercase text-neutral-400 mb-2">
-              CONTRACT WORKFORCE PLATFORM
-            </div>
+                {/* 3 Metric Cards in a Grid */}
+                <div className="mt-8 grid grid-cols-3 gap-2.5">
+                  {/* Card 1: Upcoming */}
+                  <div className="p-3 rounded-2xl bg-black/[0.02] border border-neutral-900/10 flex flex-col items-center justify-center text-center">
+                    <Calendar size={15} className="text-neutral-500 mb-2" />
+                    <div className="text-2xl font-black text-neutral-900 leading-none mb-1">
+                      {upcomingCount}
+                    </div>
+                    <div className="text-[8.5px] font-bold text-neutral-500 tracking-wider uppercase">
+                      UPCOMING
+                    </div>
+                  </div>
 
-            {/* Headline Display */}
-            <h2 className="text-4xl xl:text-5xl font-extrabold text-neutral-950 tracking-tight leading-[1.05]">
-              Your<br />Interviews.
-            </h2>
+                  {/* Card 2: Completed */}
+                  <div className="p-3 rounded-2xl bg-black/[0.02] border border-neutral-900/10 flex flex-col items-center justify-center text-center">
+                    <CheckCircle2 size={15} className="text-neutral-500 mb-2" />
+                    <div className="text-2xl font-black text-neutral-900 leading-none mb-1">
+                      {completedCount}
+                    </div>
+                    <div className="text-[8.5px] font-bold text-neutral-500 tracking-wider uppercase">
+                      COMPLETED
+                    </div>
+                  </div>
 
-            {/* 3 Metric Cards in a Grid */}
-            <div className="mt-8 grid grid-cols-3 gap-2.5">
-              {/* Card 1: Upcoming */}
-              <div className="p-3 rounded-2xl bg-black/[0.02] border border-neutral-900/10 flex flex-col items-center justify-center text-center">
-                <Calendar size={15} className="text-neutral-500 mb-2" />
-                <div className="text-2xl font-black text-neutral-900 leading-none mb-1">
-                  {upcomingCount}
-                </div>
-                <div className="text-[8.5px] font-bold text-neutral-500 tracking-wider uppercase">
-                  UPCOMING
-                </div>
-              </div>
-
-              {/* Card 2: Completed */}
-              <div className="p-3 rounded-2xl bg-black/[0.02] border border-neutral-900/10 flex flex-col items-center justify-center text-center">
-                <CheckCircle2 size={15} className="text-neutral-500 mb-2" />
-                <div className="text-2xl font-black text-neutral-900 leading-none mb-1">
-                  {completedCount}
-                </div>
-                <div className="text-[8.5px] font-bold text-neutral-500 tracking-wider uppercase">
-                  COMPLETED
-                </div>
-              </div>
-
-              {/* Card 3: Cancelled */}
-              <div className="p-3 rounded-2xl bg-black/[0.02] border border-neutral-900/10 flex flex-col items-center justify-center text-center">
-                <X size={15} className="text-neutral-500 mb-2" />
-                <div className="text-2xl font-black text-neutral-900 leading-none mb-1">
-                  {cancelledCount}
-                </div>
-                <div className="text-[8.5px] font-bold text-neutral-500 tracking-wider uppercase">
-                  CANCELLED
+                  {/* Card 3: Cancelled */}
+                  <div className="p-3 rounded-2xl bg-black/[0.02] border border-neutral-900/10 flex flex-col items-center justify-center text-center">
+                    <X size={15} className="text-neutral-500 mb-2" />
+                    <div className="text-2xl font-black text-neutral-900 leading-none mb-1">
+                      {cancelledCount}
+                    </div>
+                    <div className="text-[8.5px] font-bold text-neutral-500 tracking-wider uppercase">
+                      CANCELLED
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          </aside>
         </div>
-      </aside>
-    </div>
-  </div>
+      </div>
 
       {/* ============================================================ */}
       {/* MODAL 1: VIEW JOB DETAILS & 1-CLICK APPLY                    */}
@@ -3751,9 +5542,7 @@ export default function OpenRolesPage({ enabled = true }) {
             {/* Header: Company & Action Icons */}
             <div className="p-5 pb-3 sm:px-6 sm:pt-5 sm:pb-3 border-b border-neutral-200/80 flex items-center justify-between gap-3 bg-neutral-50/80">
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-7 h-7 rounded-lg bg-neutral-950 text-white font-extrabold flex items-center justify-center text-xs shadow-sm shrink-0">
-                  {(selectedJob.company_name || selectedJob.title || 'E').slice(0, 1).toUpperCase()}
-                </div>
+                <CompanyAvatar job={selectedJob} size="w-7 h-7" inModal={true} />
                 <span className="text-xs sm:text-sm font-bold text-neutral-900 tracking-tight flex items-center gap-1.5 truncate">
                   <span className="truncate">{selectedJob.company_name || 'Hiring Partner'}</span>
                   <CheckCircle2 size={13} className="text-sky-600 fill-sky-100 shrink-0" />
@@ -3764,11 +5553,10 @@ export default function OpenRolesPage({ enabled = true }) {
                 <button
                   type="button"
                   onClick={(e) => toggleSaveJob(selectedJob.id || selectedJob._id, e)}
-                  className={`p-2 rounded-full transition cursor-pointer border ${
-                    savedJobIds.has(String(selectedJob.id)) || (selectedJob._id && savedJobIds.has(String(selectedJob._id)))
+                  className={`p-2 rounded-full transition cursor-pointer border ${savedJobIds.has(String(selectedJob.id)) || (selectedJob._id && savedJobIds.has(String(selectedJob._id)))
                       ? 'bg-neutral-900 text-white border-neutral-900 shadow-sm'
                       : 'bg-white hover:bg-neutral-100 text-neutral-600 hover:text-neutral-900 border-neutral-200'
-                  }`}
+                    }`}
                   title="Save Role"
                 >
                   <Bookmark size={15} className={savedJobIds.has(String(selectedJob.id)) || (selectedJob._id && savedJobIds.has(String(selectedJob._id))) ? 'fill-white' : ''} />
@@ -3816,13 +5604,12 @@ export default function OpenRolesPage({ enabled = true }) {
                 {/* Meta pills row */}
                 <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-700 mt-2 font-medium">
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-neutral-100 border border-neutral-200 text-neutral-800">
-                    <span className={`w-1.5 h-1.5 rounded-full ${
-                      (selectedJob.structured_role?.work_mode || '').toLowerCase().includes('remote')
+                    <span className={`w-1.5 h-1.5 rounded-full ${(selectedJob.structured_role?.work_mode || '').toLowerCase().includes('remote')
                         ? 'bg-emerald-500'
                         : (selectedJob.structured_role?.work_mode || '').toLowerCase().includes('hybrid')
-                        ? 'bg-sky-500'
-                        : 'bg-amber-500'
-                    }`} />
+                          ? 'bg-sky-500'
+                          : 'bg-amber-500'
+                      }`} />
                     <span>{selectedJob.structured_role?.work_mode || 'Onsite'}</span>
                   </span>
 
@@ -3866,37 +5653,64 @@ export default function OpenRolesPage({ enabled = true }) {
             {/* Scrollable Body: 2 Columns */}
             <div className="p-5 sm:p-6 overflow-y-auto space-y-6 flex-1 text-xs sm:text-sm text-neutral-800 leading-relaxed font-sans scrollbar-thin bg-white">
               {submitSuccess ? (
-                <div className="py-10 text-center space-y-3">
+                <div className="py-10 text-center space-y-4">
                   <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto border border-emerald-200">
                     <CheckCircle2 size={32} />
                   </div>
                   <h3 className="text-lg font-bold text-neutral-900">Application Submitted Successfully!</h3>
-                  <p className="text-xs text-neutral-600 max-w-md mx-auto">
-                    Your candidate profile has been sent directly to {selectedJob.company_name || 'the hiring partner'}. You will receive interview updates via email and Telegram.
+                  <p className="text-xs text-neutral-600 max-w-md mx-auto leading-relaxed">
+                    {submitSuccess.round_id
+                      ? 'Your profile has been verified and your AI Interview is ready right now! You can start immediately below or access it anytime from the Interviews tab.'
+                      : `Your candidate profile has been sent directly to ${selectedJob?.company_name || 'the hiring partner'}. You will receive interview updates via email and Telegram.`}
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedJob(null)}
-                    className="mt-4 px-6 py-2 rounded-full bg-neutral-900 text-white font-bold text-xs hover:bg-black transition cursor-pointer shadow-sm"
-                  >
-                    Done
-                  </button>
+                  <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+                    {submitSuccess.round_id ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const roundId = submitSuccess.round_id;
+                          const candName = submitSuccess.candidate_name || candidateUser?.candidate_name || 'Candidate';
+                          const candToken = submitSuccess.candidate_token || submitSuccess.outreach_token || '';
+                          setSelectedJob(null);
+                          navigate(`/interview/ai/${roundId}?role=candidate&name=${encodeURIComponent(candName)}&token=${encodeURIComponent(candToken)}`);
+                        }}
+                        className="w-full sm:w-auto px-6 py-2.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md transition cursor-pointer"
+                      >
+                        <Sparkles size={15} />
+                        <span>Start AI Interview Now</span>
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedJob(null);
+                        setIsInterviewViewOpen(true);
+                        setActiveNavTab('interview');
+                        if (typeof loadCandidateInterviews === 'function') {
+                          loadCandidateInterviews(applicantEmail);
+                        }
+                      }}
+                      className="w-full sm:w-auto px-5 py-2.5 rounded-full bg-neutral-100 hover:bg-neutral-200 text-neutral-800 font-bold text-xs transition cursor-pointer flex items-center justify-center gap-2"
+                    >
+                      <span>View in My Interviews</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedJob(null)}
+                      className="w-full sm:w-auto px-5 py-2.5 rounded-full border border-neutral-300 hover:bg-neutral-50 text-neutral-700 font-medium text-xs transition cursor-pointer"
+                    >
+                      Done
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <>
                   {/* Two Columns Grid */}
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6 items-start">
-                    {/* Left Column: Job Overview & Accordions (7 cols) */}
+                    {/* Left Column: Job Details Accordions (7 cols) */}
                     <div className="lg:col-span-7 space-y-4">
-                      <div>
-                        <h3 className="text-sm sm:text-base font-bold text-neutral-950 mb-2">Job Overview</h3>
-                        <p className="text-xs text-neutral-600 leading-relaxed">
-                          {parsedJobSections.overview}
-                        </p>
-                      </div>
-
                       {/* Accordion Cards */}
-                      <div className="space-y-2 pt-1">
+                      <div className="space-y-2">
                         {/* 1. About the Company */}
                         <div className="rounded-xl bg-neutral-50 border border-neutral-200 overflow-hidden shadow-sm">
                           <button
@@ -4161,13 +5975,244 @@ export default function OpenRolesPage({ enabled = true }) {
 
 
       {/* ============================================================ */}
+      {/* MOBILE FILTER MODAL                                           */}
+      {/* ============================================================ */}
+      {showMobileFilterDrawer && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3.5 sm:p-5 md:hidden">
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/80 backdrop-blur-md animate-in fade-in duration-200"
+            onClick={() => setShowMobileFilterDrawer(false)}
+          />
+
+          {/* Filter Modal Container - elevated, centered, all 4 corners clearly visible with landing page grid */}
+          <div className="relative z-10 w-full max-w-md max-h-[86vh] bg-[#0C0E14] border border-white/12 rounded-[28px] shadow-[0_25px_70px_rgba(0,0,0,0.65)] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            {/* Soft Radial Atmospheric Background (Identical to Landing Page dark backdrop) */}
+            <div
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                background:
+                  "radial-gradient(120% 90% at 50% 0%, oklch(0.24 0.005 260) 0%, oklch(0.14 0.004 260) 55%, oklch(0.09 0.003 260) 100%)",
+              }}
+              aria-hidden="true"
+            />
+            {/* Subtle Grid Layer System (Landing page grid) */}
+            <div
+              className="grid-layer absolute inset-0 pointer-events-none text-white opacity-25"
+              aria-hidden="true"
+            />
+
+            {/* Header */}
+            <div className="relative z-10 px-5 pt-4 pb-3 border-b border-white/[0.08] flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-white/10 border border-white/10 flex items-center justify-center text-white shrink-0">
+                  <SlidersHorizontal size={15} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white tracking-tight">Filter Roles</h3>
+                  <p className="text-[10.5px] text-white/50">
+                    {activeFilterCount > 0
+                      ? `${activeFilterCount} filter${activeFilterCount > 1 ? 's' : ''} applied`
+                      : 'Refine by mode, department, location or experience'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {activeFilterCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={resetAllFilters}
+                    className="text-xs text-white/60 hover:text-white underline underline-offset-2 font-medium cursor-pointer"
+                  >
+                    Reset
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowMobileFilterDrawer(false)}
+                  className="w-8 h-8 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 flex items-center justify-center text-white/70 hover:text-white transition cursor-pointer"
+                >
+                  <X size={15} />
+                </button>
+              </div>
+            </div>
+
+            {/* Scrollable Content */}
+            <div className="relative z-10 px-5 py-4 overflow-y-auto space-y-5 flex-1">
+              {/* Filter 1: Mode of Work */}
+              <div>
+                <label className="flex items-center gap-1.5 text-xs font-semibold text-white/90 mb-2.5">
+                  <Briefcase size={13} className="text-white/60" />
+                  <span>Mode of Work</span>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {workModeOptions.map((opt) => {
+                    const isSelected = selectedWorkMode === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => {
+                          setSelectedWorkMode(opt.value);
+                          setCurrentPage(1);
+                        }}
+                        className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium border transition cursor-pointer ${
+                          isSelected
+                            ? 'bg-white text-zinc-950 border-white font-semibold shadow-sm'
+                            : 'bg-white/[0.04] text-white/80 border-white/10 hover:bg-white/[0.08] hover:text-white'
+                        }`}
+                      >
+                        <span>{opt.label}</span>
+                        {opt.count != null && (
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${isSelected ? 'bg-zinc-900/15 text-zinc-950 font-bold' : 'bg-white/10 text-white/60'}`}>
+                            {opt.count}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Filter 2: Department */}
+              <div>
+                <label className="flex items-center gap-1.5 text-xs font-semibold text-white/90 mb-2">
+                  <Building2 size={13} className="text-white/60" />
+                  <span>Department / Function</span>
+                </label>
+                <div className="relative">
+                  <select
+                    value={selectedFamily}
+                    onChange={(e) => {
+                      setSelectedFamily(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    className="w-full bg-[#141721] text-white text-xs rounded-xl px-3.5 py-2.5 border border-white/15 focus:outline-none focus:border-white/40 appearance-none cursor-pointer"
+                  >
+                    {departmentOptions.map((opt) => (
+                      <option key={opt.value} value={opt.value} className="bg-[#141721] text-white">
+                        {opt.label} {opt.count != null ? `(${opt.count})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-white/50 pointer-events-none" />
+                </div>
+              </div>
+
+              {/* Filter 3: Location */}
+              <div>
+                <label className="flex items-center gap-1.5 text-xs font-semibold text-white/90 mb-2">
+                  <MapPin size={13} className="text-white/60" />
+                  <span>Location</span>
+                </label>
+                <div className="relative">
+                  <select
+                    value={selectedLocation}
+                    onChange={(e) => {
+                      setSelectedLocation(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    className="w-full bg-[#141721] text-white text-xs rounded-xl px-3.5 py-2.5 border border-white/15 focus:outline-none focus:border-white/40 appearance-none cursor-pointer"
+                  >
+                    {locationOptions.map((opt) => (
+                      <option key={opt.value} value={opt.value} className="bg-[#141721] text-white">
+                        {opt.label} {opt.count != null ? `(${opt.count})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-white/50 pointer-events-none" />
+                </div>
+              </div>
+
+              {/* Filter 4: Experience Level */}
+              <div>
+                <label className="flex items-center gap-1.5 text-xs font-semibold text-white/90 mb-2">
+                  <GraduationCap size={13} className="text-white/60" />
+                  <span>Experience Level</span>
+                </label>
+                <div className="flex flex-col gap-1.5">
+                  {experienceOptions.map((opt) => {
+                    const isSelected = selectedExperience === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => {
+                          setSelectedExperience(opt.value);
+                          setCurrentPage(1);
+                        }}
+                        className={`flex items-center justify-between px-3.5 py-2 rounded-xl text-xs font-medium border transition cursor-pointer text-left ${
+                          isSelected
+                            ? 'bg-white text-zinc-950 border-white font-semibold shadow-sm'
+                            : 'bg-white/[0.04] text-white/80 border-white/10 hover:bg-white/[0.08] hover:text-white'
+                        }`}
+                      >
+                        <span>{opt.label}</span>
+                        {opt.count != null && (
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${isSelected ? 'bg-zinc-900/15 text-zinc-950 font-bold' : 'bg-white/10 text-white/60'}`}>
+                            {opt.count}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Sticky Footer Action */}
+            <div className="relative z-10 p-4 border-t border-white/[0.08] bg-[#0C0E14]/80 backdrop-blur-md flex items-center gap-2.5">
+              {activeFilterCount > 0 && (
+                <button
+                  type="button"
+                  onClick={resetAllFilters}
+                  className="flex-1 py-2.5 px-3 rounded-xl border border-white/15 bg-white/[0.04] hover:bg-white/[0.08] text-xs font-semibold text-white/80 transition cursor-pointer text-center"
+                >
+                  Clear all
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setShowMobileFilterDrawer(false)}
+                className="flex-[2] py-2.5 px-4 rounded-xl bg-white text-zinc-950 hover:bg-zinc-100 text-xs font-bold transition shadow-md cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <span>Show Roles</span>
+                {rolePage?.filtered_total != null && (
+                  <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-zinc-900 text-white font-bold">
+                    {rolePage.filtered_total}
+                  </span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+
+      {/* ============================================================ */}
       {/* MODAL 2: MY APPLICATIONS DRAWER                              */}
       {/* ============================================================ */}
       {showMyAppsModal && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xl animate-in fade-in duration-200">
           <div className="bg-white border border-neutral-200 rounded-3xl max-w-lg w-full p-6 shadow-2xl text-neutral-900">
             <div className="flex items-center justify-between pb-4 border-b border-neutral-100">
-              <h3 className="text-base font-bold text-neutral-900">Your Submitted Applications</h3>
+              <div className="flex items-center gap-2.5">
+                <h3 className="text-base font-bold text-neutral-900">Your Submitted Applications</h3>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowMyAppsModal(false);
+                    setShowOnboardingModal(true);
+                  }}
+                  className="px-2 py-0.5 rounded-full bg-neutral-100 text-neutral-900 hover:bg-neutral-200 border border-neutral-300 text-[10.5px] font-bold transition flex items-center gap-1 cursor-pointer"
+                  title="View Candidate Onboarding Tour"
+                >
+                  <Sparkles size={11} className="text-neutral-700" />
+                  <span>Tour</span>
+                </button>
+              </div>
               <button
                 type="button"
                 onClick={() => setShowMyAppsModal(false)}
@@ -4178,12 +6223,12 @@ export default function OpenRolesPage({ enabled = true }) {
             </div>
 
             <div className="mt-4 space-y-3 max-h-80 overflow-y-auto">
-              {applications.length === 0 ? (
+              {displayedApplications.length === 0 ? (
                 <div className="py-8 text-center text-xs text-neutral-500">
                   You haven't submitted any applications yet.
                 </div>
               ) : (
-                applications.map((app, i) => {
+                displayedApplications.map((app, i) => {
                   const matchingRound = (allCandidateInterviewRounds || []).find(
                     (r) => r.requisition_id === app.requisition_id || (r.requisition_title && app.requisition_title && r.requisition_title.toLowerCase() === app.requisition_title.toLowerCase())
                   );
@@ -4196,11 +6241,21 @@ export default function OpenRolesPage({ enabled = true }) {
                   const aiMeetingLink = matchingRound?.meeting_link || matchingOutreach?.meeting_link;
                   const isAi = matchingRound ? (matchingRound.round_type === 'AI' || (matchingRound.round_name && matchingRound.round_name.toLowerCase().includes('ai'))) : true;
 
+                  const matchedReq = requisitions.find(
+                    (r) => String(r.id) === String(app.requisition_id) || String(r._id) === String(app.requisition_id)
+                  );
+                  const roleTitle = (app.requisition_title && app.requisition_title !== 'Open Requisition' && app.requisition_title !== 'Contract Position')
+                    ? app.requisition_title
+                    : (matchedReq?.title || app.requisition_title || 'Role Application');
+                  const compName = (app.company_name && app.company_name !== 'Enterprise Partner' && app.company_name !== 'Enterprise Client')
+                    ? app.company_name
+                    : (matchedReq?.company_name || matchedReq?.company || app.company_name || 'Enterprise Client');
+
                   return (
                     <div key={i} className="p-3.5 rounded-2xl bg-neutral-50 border border-neutral-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                       <div>
-                        <div className="text-xs font-bold text-neutral-900">{app.requisition_title || 'Contract Position'}</div>
-                        <div className="text-[11px] text-neutral-500">{app.company_name || 'Enterprise Client'}</div>
+                        <div className="text-xs font-bold text-neutral-900">{roleTitle}</div>
+                        <div className="text-[11px] text-neutral-500">{compName}</div>
                         {matchingRound?.candidate_passcode && (
                           <div className="text-[10px] text-neutral-500 font-mono mt-0.5">
                             Passcode: {matchingRound.candidate_passcode}
@@ -4208,11 +6263,10 @@ export default function OpenRolesPage({ enabled = true }) {
                         )}
                       </div>
                       <div className="flex items-center gap-2 self-start sm:self-auto">
-                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${
-                          app.status === 'Interested - Fast Track'
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${app.status === 'Interested - Fast Track'
                             ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
                             : 'bg-neutral-200 text-neutral-800 border-neutral-300'
-                        }`}>
+                          }`}>
                           {app.status || 'Submitted'}
                         </span>
                         {hasAiInterview && (
@@ -4260,12 +6314,28 @@ export default function OpenRolesPage({ enabled = true }) {
       )}
 
       {showSetupModal && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xl overflow-y-auto">
-          <div className="bg-white border border-neutral-200 rounded-3xl max-w-lg w-full p-6 shadow-2xl my-auto text-neutral-900">
-            <div className="flex items-center justify-between pb-4 border-b border-neutral-100">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-5 sm:p-7 md:p-8 bg-black/65 backdrop-blur-md overflow-hidden animate-in fade-in duration-200">
+          <div className="w-full max-w-[430px] sm:max-w-md max-h-[85vh] bg-paper text-ink rounded-[28px] sm:rounded-[32px] shadow-[0_25px_70px_rgba(0,0,0,0.35)] border border-ink/12 flex flex-col overflow-hidden relative animate-in zoom-in-95 duration-200 my-auto">
+            {/* Atmospheric Radial Background (Landing page style) */}
+            <div
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                background:
+                  "radial-gradient(120% 90% at 80% 0%, oklch(0.99 0.002 100) 0%, oklch(0.965 0.002 100) 55%, oklch(0.935 0.002 100) 100%)",
+              }}
+              aria-hidden="true"
+            />
+            {/* Subtle Grid Layer System (Landing page grid) */}
+            <div
+              className="grid-layer absolute inset-0 pointer-events-none text-ink opacity-40"
+              aria-hidden="true"
+            />
+
+            {/* Pinned Header */}
+            <div className="relative z-10 px-5 pt-4 pb-3 border-b border-ink/10 flex items-center justify-between shrink-0 bg-transparent">
               <div>
-                <h3 className="text-base font-bold text-neutral-900">Candidate Profile & Resume</h3>
-                <p className="text-xs text-neutral-500">Keep your details up to date for instant 1-click applications.</p>
+                <h3 className="text-sm sm:text-base font-bold text-ink tracking-tight font-display">Candidate Profile & Resume</h3>
+                <p className="text-[11px] text-ink-soft/80">Keep your details up to date for instant 1-click applications.</p>
               </div>
               <button
                 type="button"
@@ -4273,19 +6343,19 @@ export default function OpenRolesPage({ enabled = true }) {
                   setShowSetupModal(false);
                   setActiveNavTab('home');
                 }}
-                className="p-1.5 rounded-full bg-neutral-100 hover:bg-neutral-200 text-neutral-500 hover:text-neutral-900 transition cursor-pointer"
+                className="p-1.5 rounded-full bg-ink/5 hover:bg-ink/10 text-ink-soft hover:text-ink border border-ink/10 transition cursor-pointer"
               >
-                <X size={16} />
+                <X size={15} />
               </button>
             </div>
 
             {setupSuccess ? (
-              <div className="py-8 text-center space-y-2">
+              <div className="relative z-10 py-8 text-center space-y-2">
                 <CheckCircle2 size={32} className="text-emerald-600 mx-auto" />
-                <h4 className="text-sm font-bold text-neutral-900">Profile Updated Successfully</h4>
+                <h4 className="text-sm font-bold text-ink">Profile Updated Successfully</h4>
               </div>
             ) : (
-              <form onSubmit={handleSetupSubmit} className="mt-4 space-y-3.5 text-xs">
+              <form onSubmit={handleSetupSubmit} className="relative z-10 p-5 overflow-y-auto space-y-3.5 text-xs flex-1 no-scrollbar">
                 {setupError && (
                   <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs">
                     {setupError}
@@ -4295,18 +6365,18 @@ export default function OpenRolesPage({ enabled = true }) {
                 <CandidateEmailEditor />
 
                 <div>
-                  <label className="block text-[11px] font-semibold text-neutral-700 uppercase mb-1">Full Name *</label>
+                  <label className="block text-[10.5px] font-bold text-ink-soft/90 uppercase tracking-wider mb-1">Full Name *</label>
                   <input
                     type="text"
                     required
                     value={setupForm.name}
                     onChange={(e) => setSetupForm({ ...setupForm, name: e.target.value })}
-                    className="w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border border-neutral-300 rounded-xl px-3 py-2 text-neutral-900 text-xs focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 transition-all"
+                    className="w-full bg-white/85 hover:bg-white focus:bg-white border border-ink/15 rounded-xl px-3 py-2 text-ink text-xs focus:outline-none focus:border-ink/50 focus:ring-1 focus:ring-ink/20 transition-all shadow-[inset_0_1px_2px_rgba(0,0,0,0.03)]"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-semibold text-neutral-700 uppercase mb-1">Phone Number *</label>
+                  <label className="block text-[10.5px] font-bold text-ink-soft/90 uppercase tracking-wider mb-1">Phone Number *</label>
                   <input
                     type="tel"
                     required
@@ -4316,11 +6386,10 @@ export default function OpenRolesPage({ enabled = true }) {
                       if (setupError) setSetupError(null);
                     }}
                     placeholder="e.g. 9876543210 or +91 9876543210"
-                    className={`w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border ${
-                      setupForm.phone && validatePhone(setupForm.phone)
+                    className={`w-full bg-white/85 hover:bg-white focus:bg-white border ${setupForm.phone && validatePhone(setupForm.phone)
                         ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-500'
-                        : 'border-neutral-300 focus:border-neutral-900 focus:ring-neutral-900'
-                    } rounded-xl px-3 py-2 text-neutral-900 text-xs focus:outline-none focus:ring-1 transition-all`}
+                        : 'border-ink/15 focus:border-ink/50 focus:ring-ink/20'
+                      } rounded-xl px-3 py-2 text-ink text-xs focus:outline-none focus:ring-1 transition-all shadow-[inset_0_1px_2px_rgba(0,0,0,0.03)]`}
                   />
                   {setupForm.phone && validatePhone(setupForm.phone) && (
                     <p className="mt-1 text-[11px] text-rose-600 font-medium">
@@ -4330,19 +6399,19 @@ export default function OpenRolesPage({ enabled = true }) {
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-semibold text-neutral-700 uppercase mb-1">Professional Title</label>
+                  <label className="block text-[10.5px] font-bold text-ink-soft/90 uppercase tracking-wider mb-1">Professional Title</label>
                   <input
                     type="text"
                     value={setupForm.title}
                     onChange={(e) => setSetupForm({ ...setupForm, title: e.target.value })}
                     placeholder="e.g. Senior Frontend Engineer"
-                    className="w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border border-neutral-300 rounded-xl px-3 py-2 text-neutral-900 text-xs focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 transition-all"
+                    className="w-full bg-white/85 hover:bg-white focus:bg-white border border-ink/15 rounded-xl px-3 py-2 text-ink text-xs focus:outline-none focus:border-ink/50 focus:ring-1 focus:ring-ink/20 transition-all shadow-[inset_0_1px_2px_rgba(0,0,0,0.03)]"
                   />
                 </div>
 
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-[11px] font-semibold text-neutral-700 uppercase">Master Resume (On File)</label>
+                    <label className="block text-[10.5px] font-bold text-ink-soft/90 uppercase tracking-wider">Master Resume (On File)</label>
                     {hasResume ? (
                       <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
                         <Check size={11} /> Verified Active
@@ -4356,19 +6425,19 @@ export default function OpenRolesPage({ enabled = true }) {
 
                   {hasResume ? (
                     <div className="space-y-2">
-                      <div className="p-3.5 rounded-2xl bg-neutral-50 border border-neutral-200 flex items-center justify-between gap-3">
+                      <div className="p-3.5 rounded-2xl bg-white/80 border border-ink/12 shadow-[0_2px_8px_rgba(0,0,0,0.02)] flex items-center justify-between gap-3">
                         <div className="flex items-center gap-3 min-w-0">
-                          <div className="w-9 h-9 rounded-xl bg-neutral-200/80 border border-neutral-300 text-neutral-700 flex items-center justify-center shrink-0">
+                          <div className="w-9 h-9 rounded-xl bg-ink/5 border border-ink/10 text-ink flex items-center justify-center shrink-0">
                             <FileText size={18} />
                           </div>
                           <div className="min-w-0 text-left">
-                            <div className="text-xs font-bold text-neutral-900 truncate">{currentResumeName || 'candidate_resume.pdf'}</div>
-                            <div className="text-[10.5px] text-neutral-500">Ready for instant 1-click applications</div>
+                            <div className="text-xs font-bold text-ink truncate">{currentResumeName || 'candidate_resume.pdf'}</div>
+                            <div className="text-[10.5px] text-ink-soft">Ready for instant 1-click applications</div>
                           </div>
                         </div>
                         {candidateAuth?.candidateToken && (
                           <button type="button" onClick={() => setShowResumePreview(true)} aria-haspopup="dialog"
-                            className="px-3 py-1.5 rounded-xl bg-white hover:bg-neutral-100 border border-neutral-300 text-[11px] font-semibold text-neutral-800 transition flex items-center gap-1.5 shrink-0 cursor-pointer shadow-sm"
+                            className="px-3 py-1.5 rounded-xl bg-white hover:bg-neutral-100 border border-ink/15 text-[11px] font-semibold text-ink transition flex items-center gap-1.5 shrink-0 cursor-pointer shadow-sm"
                             title="Preview your master resume">
                             <FileText size={12} />
                             <span>View Uploaded Resume</span>
@@ -4377,14 +6446,14 @@ export default function OpenRolesPage({ enabled = true }) {
                       </div>
 
                       <div className="pt-1">
-                        <label className="block text-[10.5px] font-semibold text-neutral-600 uppercase mb-1">
+                        <label className="block text-[10.5px] font-bold text-ink-soft/90 uppercase tracking-wider mb-1">
                           Update / Replace Resume File (Optional)
                         </label>
                         <input
                           type="file"
                           accept=".pdf,.docx,.doc"
                           onChange={(e) => setSetupResumeFile(e.target.files?.[0] || null)}
-                          className="w-full text-xs text-neutral-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border file:border-neutral-200 file:text-xs file:font-semibold file:bg-neutral-100 file:text-neutral-800 hover:file:bg-neutral-200 transition cursor-pointer"
+                          className="w-full text-xs text-ink-soft file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border file:border-ink/15 file:text-xs file:font-semibold file:bg-white file:text-ink hover:file:bg-neutral-100 transition cursor-pointer"
                         />
                         {setupResumeFile && (
                           <div className="mt-1 text-[11px] text-emerald-600 font-semibold flex items-center gap-1.5">
@@ -4397,7 +6466,7 @@ export default function OpenRolesPage({ enabled = true }) {
                     <div>
                       <div
                         onClick={() => setupFileInputRef.current?.click()}
-                        className="p-5 border-2 border-dashed border-neutral-300 hover:border-neutral-400 bg-neutral-50/60 hover:bg-neutral-50 rounded-2xl text-center cursor-pointer transition"
+                        className="p-5 border-2 border-dashed border-ink/20 hover:border-ink/40 bg-white/60 hover:bg-white/80 rounded-2xl text-center cursor-pointer transition"
                       >
                         <input
                           type="file"
@@ -4406,20 +6475,20 @@ export default function OpenRolesPage({ enabled = true }) {
                           onChange={(e) => setSetupResumeFile(e.target.files?.[0] || null)}
                           className="hidden"
                         />
-                        <Upload size={22} className="text-neutral-400 mx-auto mb-1.5" />
+                        <Upload size={22} className="text-ink-soft mx-auto mb-1.5" />
                         {setupResumeFile ? (
-                          <div className="text-xs font-bold text-neutral-900 flex items-center justify-center gap-1.5">
+                          <div className="text-xs font-bold text-ink flex items-center justify-center gap-1.5">
                             <Check size={14} className="text-emerald-600" />
                             <span>{setupResumeFile.name} ({(setupResumeFile.size / 1024 / 1024).toFixed(2)} MB)</span>
                           </div>
                         ) : (
                           <>
-                            <div className="text-xs font-semibold text-neutral-800">Click or drag resume here to upload</div>
-                            <div className="text-[10px] text-neutral-500 mt-0.5">PDF or DOCX (up to 10MB)</div>
+                            <div className="text-xs font-semibold text-ink">Click or drag resume here to upload</div>
+                            <div className="text-[10px] text-ink-soft mt-0.5">PDF or DOCX (up to 10MB)</div>
                           </>
                         )}
                       </div>
-                      <div className="text-[10.5px] text-neutral-500 mt-1.5">
+                      <div className="text-[10.5px] text-ink-soft mt-1.5">
                         Uploading a resume enables 1-click applications across all enterprise partner roles.
                       </div>
                     </div>
@@ -4427,19 +6496,19 @@ export default function OpenRolesPage({ enabled = true }) {
                 </div>
 
                 {hasResume && !setupResumeFile && (
-                  <div className="rounded-xl border border-neutral-200 p-3">
+                  <div className="rounded-xl border border-ink/12 bg-white/80 p-3 shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-[11px] font-semibold text-neutral-700 uppercase">Skills from resume</span>
-                      <button type="button" onClick={() => { if (editingSkills) setSetupForm((prev) => ({ ...prev, skills: (Array.isArray(candidateUser?.skills) ? candidateUser.skills : []).join(', ') })); setEditingSkills(!editingSkills); }} className="text-xs font-semibold text-neutral-900 underline">
+                      <span className="text-[10.5px] font-bold text-ink-soft/90 uppercase tracking-wider">Skills from resume</span>
+                      <button type="button" onClick={() => { if (editingSkills) setSetupForm((prev) => ({ ...prev, skills: (Array.isArray(candidateUser?.skills) ? candidateUser.skills : []).join(', ') })); setEditingSkills(!editingSkills); }} className="text-xs font-semibold text-ink underline cursor-pointer">
                         {editingSkills ? 'Cancel' : 'Edit Skills'}
                       </button>
                     </div>
                     {editingSkills ? (
                       <input type="text" aria-label="Edit Skills" value={setupForm.skills}
                         onChange={(e) => setSetupForm({ ...setupForm, skills: e.target.value })}
-                        placeholder="Comma-separated skills" className="mt-2 w-full rounded-lg border border-neutral-300 p-2 text-xs" />
+                        placeholder="Comma-separated skills" className="mt-2 w-full rounded-lg border border-ink/20 p-2 text-xs bg-white text-ink" />
                     ) : (
-                      <p className="mt-2 text-xs text-neutral-600">{setupForm.skills || 'No skills found. Choose Edit Skills to add them.'}</p>
+                      <p className="mt-2 text-xs text-ink-soft">{setupForm.skills || 'No skills found. Choose Edit Skills to add them.'}</p>
                     )}
                   </div>
                 )}
@@ -4447,7 +6516,7 @@ export default function OpenRolesPage({ enabled = true }) {
                 <button
                   type="submit"
                   disabled={setupSubmitting}
-                  className="w-full py-2.5 rounded-xl bg-neutral-900 hover:bg-black text-white font-bold text-xs uppercase tracking-[0.14em] transition cursor-pointer mt-2 shadow-sm"
+                  className="w-full py-2.5 rounded-full bg-ink hover:bg-black text-paper font-bold text-xs uppercase tracking-[0.14em] transition cursor-pointer mt-2 shadow-md active:scale-95"
                 >
                   {setupSubmitting ? 'Saving Profile...' : 'Save Profile Details'}
                 </button>
@@ -4594,11 +6663,10 @@ export default function OpenRolesPage({ enabled = true }) {
                         if (poolError) setPoolError(null);
                       }}
                       placeholder="e.g. 9876543210 or +91 9876543210"
-                      className={`w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border ${
-                        poolForm.phone && validatePhone(poolForm.phone)
+                      className={`w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border ${poolForm.phone && validatePhone(poolForm.phone)
                           ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-500'
                           : 'border-neutral-300 focus:border-neutral-900 focus:ring-neutral-900'
-                      } rounded-xl px-3.5 py-2.5 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-1 transition-all`}
+                        } rounded-xl px-3.5 py-2.5 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-1 transition-all`}
                     />
                     {poolForm.phone && validatePhone(poolForm.phone) && (
                       <p className="mt-1 text-[11px] text-rose-600 font-medium">
@@ -4759,9 +6827,11 @@ export default function OpenRolesPage({ enabled = true }) {
                 <span className="text-xs text-white/70 truncate">
                   Candidate:{' '}
                   <strong className="text-white">
-                    {candidateUser?.candidate_name || candidateUser?.name || 'Mohammed Hashil'}
+                    {candidateUser?.candidate_name || candidateUser?.name || 'Candidate'}
                   </strong>{' '}
-                  ({candidateUser?.candidate_email || candidateUser?.email || 'mohammedhashil2018@gmail.com'})
+                  {candidateUser?.candidate_email || candidateUser?.email ? (
+                    <span>({candidateUser.candidate_email || candidateUser.email})</span>
+                  ) : null}
                 </span>
               </div>
               <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1 shrink-0">
@@ -4813,11 +6883,10 @@ export default function OpenRolesPage({ enabled = true }) {
                         </div>
 
                         <span
-                          className={`px-3 py-1 rounded-full text-[11px] font-bold border flex items-center gap-1.5 ${
-                            isLive
+                          className={`px-3 py-1 rounded-full text-[11px] font-bold border flex items-center gap-1.5 ${isLive
                               ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 animate-pulse'
                               : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                          }`}
+                            }`}
                         >
                           <span className={`w-2 h-2 rounded-full ${isLive ? 'bg-rose-400' : 'bg-emerald-400'}`} />
                           {isLive ? 'Live Now · In Session' : 'Scheduled & Confirmed'}
@@ -4901,23 +6970,22 @@ export default function OpenRolesPage({ enabled = true }) {
                             type="button"
                             onClick={() => handleSendInterviewEmail(round)}
                             disabled={isSendingEmail}
-                            className={`flex-1 sm:flex-none px-3.5 py-2.5 rounded-xl border text-xs font-semibold transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 ${
-                              emailStatus === 'sent'
+                            className={`flex-1 sm:flex-none px-3.5 py-2.5 rounded-xl border text-xs font-semibold transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 ${emailStatus === 'sent'
                                 ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
                                 : emailStatus === 'error'
-                                ? 'bg-rose-500/20 border-rose-500/40 text-rose-300'
-                                : 'bg-white/[0.06] hover:bg-white/[0.12] border-white/10 text-white/80 hover:text-white'
-                            }`}
+                                  ? 'bg-rose-500/20 border-rose-500/40 text-rose-300'
+                                  : 'bg-white/[0.06] hover:bg-white/[0.12] border-white/10 text-white/80 hover:text-white'
+                              }`}
                           >
                             <Mail size={13} />
                             <span>
                               {isSendingEmail
                                 ? 'Sending...'
                                 : emailStatus === 'sent'
-                                ? 'Email Dispatched!'
-                                : emailStatus === 'error'
-                                ? 'Send Failed'
-                                : 'Send to My Email'}
+                                  ? 'Email Dispatched!'
+                                  : emailStatus === 'error'
+                                    ? 'Send Failed'
+                                    : 'Send to My Email'}
                             </span>
                           </button>
 
@@ -5081,8 +7149,8 @@ export default function OpenRolesPage({ enabled = true }) {
                               setSignSuccessMessage('');
                             }}
                             className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${isSigned
-                                ? 'bg-white/10 hover:bg-white/20 text-white'
-                                : 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-lg shadow-emerald-500/20 active:scale-98'
+                              ? 'bg-white/10 hover:bg-white/20 text-white'
+                              : 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-lg shadow-emerald-500/20 active:scale-98'
                               }`}
                           >
                             <FileText size={14} />
@@ -5501,45 +7569,45 @@ export default function OpenRolesPage({ enabled = true }) {
             )}
 
             {!googleResumeRequired && (<>
-            {/* Divider */}
-            <div className="relative flex items-center justify-center mb-5">
-              <div className="border-t border-neutral-200 w-full" />
-              <span className="bg-white px-3 text-[10px] font-bold uppercase tracking-wider text-neutral-400 absolute">
-                or use candidate credentials
-              </span>
-            </div>
+              {/* Divider */}
+              <div className="relative flex items-center justify-center mb-5">
+                <div className="border-t border-neutral-200 w-full" />
+                <span className="bg-white px-3 text-[10px] font-bold uppercase tracking-wider text-neutral-400 absolute">
+                  or use candidate credentials
+                </span>
+              </div>
 
-            {/* Tab Switcher */}
-            <div className="flex p-1 bg-neutral-100 border border-neutral-200 rounded-xl mb-4">
-              <button
-                type="button"
-                onClick={() => {
-                  setAuthModalTab('login');
-                  setAuthError(null);
-                }}
-                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer ${authModalTab === 'login'
-                  ? 'bg-white text-neutral-900 shadow-xs'
-                  : 'text-neutral-500 hover:text-neutral-900'
-                  }`}
-              >
-                Sign In
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setAuthModalTab('register');
-                  setAuthError(null);
-                }}
-                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer ${authModalTab === 'register'
-                  ? 'bg-white text-neutral-900 shadow-xs'
-                  : 'text-neutral-500 hover:text-neutral-900'
-                  }`}
-              >
-                Create Profile
-              </button>
-            </div>
+              {/* Tab Switcher */}
+              <div className="flex p-1 bg-neutral-100 border border-neutral-200 rounded-xl mb-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthModalTab('login');
+                    setAuthError(null);
+                  }}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer ${authModalTab === 'login'
+                    ? 'bg-white text-neutral-900 shadow-xs'
+                    : 'text-neutral-500 hover:text-neutral-900'
+                    }`}
+                >
+                  Sign In
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthModalTab('register');
+                    setAuthError(null);
+                  }}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer ${authModalTab === 'register'
+                    ? 'bg-white text-neutral-900 shadow-xs'
+                    : 'text-neutral-500 hover:text-neutral-900'
+                    }`}
+                >
+                  Create Profile
+                </button>
+              </div>
 
-            {/* Alerts */}
+              {/* Alerts */}
             </>)}
 
 
@@ -5637,11 +7705,10 @@ export default function OpenRolesPage({ enabled = true }) {
                         if (authError) setAuthError(null);
                       }}
                       placeholder="alex@gmail.com"
-                      className={`w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border ${
-                        regEmail && validateCandidateEmail(regEmail, { required: false })
+                      className={`w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border ${regEmail && validateCandidateEmail(regEmail, { required: false })
                           ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-500'
                           : 'border-neutral-300 focus:border-neutral-900 focus:ring-neutral-900'
-                      } rounded-xl px-3 py-2 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-1 transition-all`}
+                        } rounded-xl px-3 py-2 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-1 transition-all`}
                     />
                     {regEmail && validateCandidateEmail(regEmail, { required: false }) && (
                       <p className="mt-1 text-[10px] text-rose-600 font-medium">
@@ -5674,11 +7741,10 @@ export default function OpenRolesPage({ enabled = true }) {
                         if (authError) setAuthError(null);
                       }}
                       placeholder="e.g. 9876543210 or +91 9876543210"
-                      className={`w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border ${
-                        regPhone && validatePhone(regPhone, { required: false })
+                      className={`w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border ${regPhone && validatePhone(regPhone, { required: false })
                           ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-500'
                           : 'border-neutral-300 focus:border-neutral-900 focus:ring-neutral-900'
-                      } rounded-xl px-3 py-2 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-1 transition-all`}
+                        } rounded-xl px-3 py-2 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-1 transition-all`}
                     />
                     {regPhone && validatePhone(regPhone, { required: false }) && (
                       <p className="mt-1 text-[10px] text-rose-600 font-medium">
@@ -5731,6 +7797,18 @@ export default function OpenRolesPage({ enabled = true }) {
         </div>,
         document.body
       )}
+
+      {/* Candidate Onboarding Carousel Modal */}
+      <CandidateOnboardingModal
+        isOpen={showOnboardingModal && !isStaffOrAdmin}
+        onClose={() => {
+          setShowOnboardingModal(false);
+          setDismissedSessionOnboarding(true);
+        }}
+        candidateUser={candidateUser}
+        onComplete={handleOnboardingComplete}
+        openProfileSetup={() => setShowSetupModal(true)}
+      />
 
     </div>
   );

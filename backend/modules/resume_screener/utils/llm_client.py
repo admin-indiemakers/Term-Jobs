@@ -30,7 +30,9 @@ async def call_groq(prompt: str, system_prompt: str = "", temperature: float = 0
     if not api_key:
         raise ValueError("GROQ_API_KEY is not set in environment or config.")
 
-    client = AsyncGroq(api_key=api_key)
+    import os
+    raw_base = (os.getenv("GROQ_BASE_URL", "") or "https://api.groq.com").replace("/openai/v1", "").rstrip("/")
+    client = AsyncGroq(api_key=api_key, base_url=raw_base or "https://api.groq.com")
 
     effective_system = system_prompt or "You are an AI assistant that extracts structured data and outputs strictly valid JSON."
     if "json" not in effective_system.lower():

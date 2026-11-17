@@ -55,6 +55,7 @@ def setup_offboarding_test_data():
 
         # Seed onboarding checklist with laptop, badge, software, training
         db["onboarding_checklists"].insert_one({
+            "tenant_id": tenant.id,
             "candidate_id": cand_id,
             "workorder_id": cand_id,
             "candidate_name": "Mohammed Hashil NK",
@@ -76,6 +77,7 @@ def setup_offboarding_test_data():
         # Seed active work order
         db["work_orders"].insert_one({
             "id": f"wo_{uuid.uuid4().hex[:8]}",
+            "tenant_id": tenant.id,
             "work_order_number": f"WO-2026-{uuid.uuid4().hex[:4].upper()}",
             "candidate_id": cand_id,
             "workorder_id": cand_id,
@@ -222,34 +224,57 @@ def test_offboarding_48h_expiration_and_email_reuse(setup_offboarding_test_data)
 
     # 2. Hiring manager / Admin provisions a new candidate using the SAME email
     new_candidate_id = f"BEAR-NEW-{uuid.uuid4().hex[:6]}"
-    with get_session() as session:
-        portal_res = create_or_update_portal_user(
-            body={
-                "email": cand_email,
-                "name": "New Candidate Same Email",
-                "workorder_id": new_candidate_id,
-                "password": "NewPassword123!",
-            },
-            current_user=manager,
-            db=session,
-        )
-        assert portal_res["ok"] is True
+    req_id = f"req_{uuid.uuid4().hex[:8]}"
+    db["requisitions"].insert_one({"id": req_id, "tenant_id": manager.tenant_id, "title": "Platform Engineer"})
+    db["candidate_submissions"].insert_one({
+        "id": new_candidate_id,
+        "candidate_id": new_candidate_id,
+        "requisition_id": req_id,
+        "tenant_id": manager.tenant_id,
+        "candidate_name": "New Candidate Same Email",
+        "candidate_email": cand_email,
+    })
+    db["offer_letters"].insert_one({
+        "candidate_id": new_candidate_id,
+        "requisition_id": req_id,
+        "sent_at": datetime.now(timezone.utc).isoformat(),
+        "sent_by_role": "Super Admin",
+        "status": "sent",
+    })
 
-        # Verify old user email was archived and freed
-        old_user = session.query(User).filter(User.id == cand_user.id).first()
-        assert "offboarded_" in old_user.email
-        assert old_user.is_active is False
+    try:
+        with get_session() as session:
+            portal_res = create_or_update_portal_user(
+                body={
+                    "email": cand_email,
+                    "name": "New Candidate Same Email",
+                    "workorder_id": new_candidate_id,
+                    "password": "NewPassword123!",
+                },
+                current_user=manager,
+                db=session,
+            )
+            assert portal_res["ok"] is True
 
-        # Verify new user owns the original email
-        new_user = session.query(User).filter(User.workorder_id == new_candidate_id).first()
-        assert new_user is not None
-        assert new_user.email == cand_email
+            # Verify old user email was archived and freed
+            old_user = session.query(User).filter(User.id == cand_user.id).first()
+            assert "offboarded_" in old_user.email
+            assert old_user.is_active is False
 
-    # 3. New candidate can successfully log in with their credentials
-    with get_session() as session:
-        new_login_req = UserLogin(email=cand_email, password="NewPassword123!")
-        new_login_res = login_user(new_login_req, db=session)
-        assert new_login_res.access_token is not None
-        assert new_login_res.user.name == "New Candidate Same Email"
+            # Verify new user owns the original email
+            new_user = session.query(User).filter(User.workorder_id == new_candidate_id).first()
+            assert new_user is not None
+            assert new_user.email == cand_email
+
+        # 3. New candidate can successfully log in with their credentials
+        with get_session() as session:
+            new_login_req = UserLogin(email=cand_email, password="NewPassword123!")
+            new_login_res = login_user(new_login_req, db=session)
+            assert new_login_res.access_token is not None
+            assert new_login_res.user.name == "New Candidate Same Email"
+    finally:
+        db["requisitions"].delete_many({"id": req_id})
+        db["candidate_submissions"].delete_many({"id": new_candidate_id})
+        db["offer_letters"].delete_many({"candidate_id": new_candidate_id})
 
 

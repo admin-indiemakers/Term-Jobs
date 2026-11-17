@@ -50,6 +50,7 @@ def setup_candidate_test_data():
 
         # Onboarding checklist
         db["onboarding_checklists"].insert_one({
+            "tenant_id": tenant.id,
             "candidate_id": cand_user.candidate_id,
             "candidate_name": cand_user.name,
             "candidate_email": cand_user.email,
@@ -62,6 +63,7 @@ def setup_candidate_test_data():
         # Seed active work order for candidate
         wo_data = {
             "id": f"wo_{uuid.uuid4().hex[:8]}",
+            "tenant_id": tenant.id,
             "work_order_number": f"WO-2026-{uuid.uuid4().hex[:4].upper()}",
             "candidate_id": cand_user.candidate_id,
             "workorder_id": cand_user.candidate_id,
@@ -70,6 +72,8 @@ def setup_candidate_test_data():
             "company_name": "Bearitt",
             "vendor_name": "bridgeon",
             "requisition_title": "DevOps Engineer",
+            "start_date": "2026-08-25",
+            "end_date": "2027-02-25",
             "weekly_hours": 40.0,
             "status": "ACTIVE",
             "agreement_status": "Approved",
@@ -77,6 +81,15 @@ def setup_candidate_test_data():
             "director_approved": True,
         }
         db["work_orders"].insert_one(wo_data)
+
+        # Clean up any preexisting candidate timesheets
+        db["timesheets"].delete_many({
+            "$or": [
+                {"candidate_id": cand_user.candidate_id},
+                {"candidate_email": cand_user.email},
+                {"worker_name": cand_user.name}
+            ]
+        })
 
         yield {"user": cand_user, "tenant": tenant, "sub": sub, "work_order": wo_data}
 
@@ -86,6 +99,7 @@ def setup_candidate_test_data():
             db["work_orders"].delete_many({"candidate_id": cand_user.candidate_id})
             db["candidate_expenses"].delete_many({"candidate_id": cand_user.candidate_id})
             db["candidate_notifications"].delete_many({"candidate_id": cand_user.candidate_id})
+            db["timesheets"].delete_many({"$or": [{"candidate_id": cand_user.candidate_id}, {"candidate_email": cand_user.email}, {"worker_name": cand_user.name}]})
             db["users"].delete_many({"$or": [{"id": cand_user.id}, {"candidate_id": cand_user.candidate_id}]})
             session.delete(sub)
             session.delete(cand_user)
@@ -217,6 +231,9 @@ def test_candidate_expenses_list_and_create(setup_candidate_test_data):
     from modules.candidate_portal.router import list_candidate_expenses, create_candidate_expense, ExpenseCreateRequest
     from fastapi import HTTPException
 
+    today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    future_str = (datetime.now(timezone.utc) + timedelta(days=5)).strftime("%Y-%m-%d")
+
     # 1. List expenses (initial seed check)
     exp_res = list_candidate_expenses(current_user=user)
     assert exp_res["status"] == "success"
@@ -237,11 +254,11 @@ def test_candidate_expenses_list_and_create(setup_candidate_test_data):
         )
     assert exc_past.value.status_code == 400
 
-    # 3. Reject future expense (e.g. 2026-08-30)
+    # 3. Reject future expense
     with pytest.raises(HTTPException) as exc_future:
         create_candidate_expense(
             payload=ExpenseCreateRequest(
-                date="2026-08-30",
+                date=future_str,
                 category="Broadband & Internet",
                 amount=850.0,
                 receipt_name="broadband_bill_aug.pdf",
@@ -251,9 +268,9 @@ def test_candidate_expenses_list_and_create(setup_candidate_test_data):
         )
     assert exc_future.value.status_code == 400
 
-    # 4. Create valid expense for today (2026-08-25)
+    # 4. Create valid expense for today
     new_req = ExpenseCreateRequest(
-        date="2026-08-25",
+        date=today_str,
         category="Broadband & Internet",
         amount=850.0,
         receipt_name="broadband_bill_aug.pdf",

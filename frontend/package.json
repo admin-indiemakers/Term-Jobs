@@ -14,6 +14,7 @@
     "@ricky0123/vad-react": "^0.0.36",
     "@vercel/analytics": "^2.0.1",
     "bootstrap": "^5.3.8",
+    "exceljs": "^4.4.0",
     "framer-motion": "^13.2.0",
     "livekit-client": "^2.22.3",
     "lucide-react": "^1.33.0",

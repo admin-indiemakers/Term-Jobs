@@ -34,7 +34,7 @@ function capture({ supported = true, muted = false } = {}) {
     setInterval: () => 0, clearInterval: () => {},
   });
   const source = readFileSync(new URL('../src/interview/hooks/useSpeechTranscription.js', import.meta.url), 'utf8')
-    .replace(/^import .*?;\n/gm, '').replace('export function', 'function');
+    .replace(/import\s+[\s\S]*?;\r?\n/g, '').replace('export function', 'function');
   vm.runInContext(`${source}\nglobalThis.hook = useSpeechTranscription;`, context);
   const hook = context.hook({ isMicMuted: muted });
   const cleanups = effects.map(effect => effect()).filter(value => typeof value === 'function');

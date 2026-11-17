@@ -303,6 +303,10 @@ app.include_router(backup_router)
 app.include_router(backup_router, prefix="/api/admin")
 app.include_router(backup_router, prefix="/api/auth")
 
+from modules.reports.router import router as reports_router
+app.include_router(reports_router, prefix="/api", tags=["Reports & Growth"])
+app.include_router(reports_router, tags=["Reports & Growth"])
+
 # Reload trigger for interview module updates
 
 # --- LLM provider selection -------------------------------------------------
@@ -2449,7 +2453,7 @@ async def apply_to_requisition(
 
     outreach_res = {}
     try:
-        from modules.candidate.outreach_service import create_candidate_application_outreach
+        from modules.candidate.outreach_service import create_candidate_application_outreach, handle_candidate_rsvp
         outreach_res = create_candidate_application_outreach(
             requisition_id=requisition_id,
             candidate_data={
@@ -2461,6 +2465,16 @@ async def apply_to_requisition(
                 "matched_skills": matched,
             }
         )
+        # Directly applied candidates are immediately interested; automatically provision the AI interview round
+        if outreach_res.get("token"):
+            rsvp_res = handle_candidate_rsvp(outreach_res["token"], "interested")
+            if rsvp_res.get("round_id"):
+                outreach_res["round_id"] = rsvp_res["round_id"]
+                outreach_res["candidate_token"] = rsvp_res.get("candidate_token")
+                outreach_res["meeting_link"] = rsvp_res.get("meeting_link")
+                outreach_res["candidate_passcode"] = rsvp_res.get("candidate_passcode")
+                outreach_res["candidate_portal_link"] = rsvp_res.get("candidate_portal_link")
+                outreach_res["status"] = "interested"
     except Exception as out_err:
         print(f"[APPLICATION OUTREACH ERROR] {out_err}")
 
@@ -2481,6 +2495,11 @@ async def apply_to_requisition(
         "outreach_token": outreach_res.get("token"),
         "outreach_status": outreach_res.get("status"),
         "telegram_sent": outreach_res.get("telegram_sent", False),
+        "round_id": outreach_res.get("round_id"),
+        "candidate_token": outreach_res.get("candidate_token"),
+        "meeting_link": outreach_res.get("meeting_link"),
+        "candidate_passcode": outreach_res.get("candidate_passcode"),
+        "candidate_portal_link": outreach_res.get("candidate_portal_link"),
     }
 
 

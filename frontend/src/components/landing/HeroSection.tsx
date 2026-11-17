@@ -1,13 +1,23 @@
 import { motion, useReducedMotion } from "framer-motion";
-import { Building2, BriefcaseBusiness } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Building2, Briefcase } from "lucide-react";
 import { Backdrop } from "./Backdrop";
 import { EASE, fadeUp, lineReveal } from "./animations";
 import { HeroVideo } from "./HeroVideo";
 
-export function HeroSection({ active, onJoinWaitlist }: { active: boolean; onJoinWaitlist: () => void; onJoinTalentPool: () => void }) {
+export function HeroSection({
+  active,
+  onJoinWaitlist,
+  onOpenRolesClick,
+  onJoinTalentPool,
+}: {
+  active: boolean;
+  onJoinWaitlist: () => void;
+  onOpenRolesClick?: () => void;
+  onJoinTalentPool?: () => void;
+}) {
   const reduced = useReducedMotion();
   const state = active ? "show" : "hidden";
+  const handleOpenRoles = onOpenRolesClick || onJoinTalentPool;
 
   return (
     <section
@@ -75,16 +85,17 @@ export function HeroSection({ active, onJoinWaitlist }: { active: boolean; onJoi
               <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
             </button>
 
-            {/* Illuminated roles link */}
-            <Link
-              to="/open-roles"
-              className="roles-hero-cta group relative isolate inline-flex items-center gap-2.5 sm:gap-3 overflow-hidden rounded-full border border-ink/20 bg-white/80 px-6 sm:px-7 py-3 sm:py-3.5 text-[0.68rem] sm:text-[0.7rem] font-semibold tracking-[0.16em] sm:tracking-[0.18em] text-ink uppercase backdrop-blur-xl transition-all duration-300 motion-safe:hover:-translate-y-0.5 hover:border-ink/40 hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ink active:scale-95"
+            {/* Light glassmorphic button - Open Roles */}
+            <button
+              type="button"
+              onClick={handleOpenRoles}
+              className="group inline-flex items-center gap-2.5 sm:gap-3 rounded-full border border-ink/20 bg-white/60 px-6 sm:px-7 py-3 sm:py-3.5 text-[0.68rem] sm:text-[0.7rem] font-semibold tracking-[0.16em] sm:tracking-[0.18em] text-ink uppercase backdrop-blur-xl transition-all duration-300 hover:-translate-y-0.5 hover:border-ink/40 hover:bg-white/90 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ink active:scale-95 cursor-pointer"
             >
-              <BriefcaseBusiness className="relative z-10 w-3.5 h-3.5 sm:w-4 sm:h-4 text-ink/85 shrink-0" />
-              <span className="relative z-10 h-3.5 w-px bg-current/25 shrink-0" aria-hidden="true" />
-              <span className="relative z-10">Open Roles</span>
-              <span aria-hidden="true" className="relative z-10 transition-transform duration-300 motion-safe:group-hover:translate-x-1">→</span>
-            </Link>
+              <Briefcase className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-ink/85 shrink-0" />
+              <span className="h-3.5 w-px bg-current/25 shrink-0" aria-hidden="true" />
+              <span>Open Roles</span>
+              <span aria-hidden="true" className="transition-transform duration-300 group-hover:translate-x-1">→</span>
+            </button>
           </motion.div>
         </div>
 

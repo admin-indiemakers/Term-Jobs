@@ -5,7 +5,8 @@ import vm from 'node:vm';
 
 // Execute the dashboard's actual handler with state and API boundaries stubbed.
 const source = readFileSync(new URL('../src/pages/HiringManagerDashboard.jsx', import.meta.url), 'utf8');
-const handler = source.slice(source.indexOf('  const handleSendPrompt ='), source.indexOf('  const userInitials ='));
+const helpers = source.slice(source.indexOf('  const resolvedDraftHiringModel ='), source.indexOf('  // Ctrl+K shortcut listener'));
+const handler = `${helpers}\n${source.slice(source.indexOf('  const handleSendPrompt ='), source.indexOf('  const userInitials ='))}`;
 
 async function send(text, response, initial = [], requisitions = []) {
   let messages = initial;
@@ -18,6 +19,7 @@ async function send(text, response, initial = [], requisitions = []) {
     request: async () => { if (response instanceof Error) throw response; return response; },
     token: 'test', userName: 'Manager', user: { id: 'hm', tenant_id: 'tenant' },
     shortlistedCandidates: [], allCandidates: [], acceptedCandidates: [], requisitions,
+    companyRequiresDirectorApproval: true,
     setTimeout() {}, console: { error() {} },
   });
   vm.runInContext(`${handler}\nglobalThis.send = handleSendPrompt;`, context);

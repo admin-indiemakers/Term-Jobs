@@ -1,6 +1,6 @@
 import { SavedEvaluation } from './SavedEvaluation';
 import { useEffect, useRef, useState } from 'react';
-import { Award, Download, FileText, RefreshCw, Video } from 'lucide-react';
+import { Award, Download, FileText, RefreshCw, Video, Eye, AlertTriangle, ShieldCheck, CheckCircle2, ShieldAlert } from 'lucide-react';
 import { interviewApi } from '../services/interviewApi';
 import { assertReviewRound, isAuditableAssessment } from '../utils/reviewAssessment';
 
@@ -48,6 +48,9 @@ export function InterviewReviewPanel({ round, candidateName = 'Candidate' }) {
   const questions = report?.questions || [];
   const recordingUrl = report?.recording_url || round.recording_url;
   const filteredTurns = turns.filter(turn => String(turn.text || '').toLowerCase().includes(search.toLowerCase()));
+  const focusSummary = report?.focus_monitoring_summary || round.focus_monitoring_summary || {};
+  const focusEvents = report?.focus_monitoring_events || round.focus_monitoring_events || [];
+  const focusConsent = report?.focus_monitoring_consent || round.focus_monitoring_consent || {};
 
   const showEvidence = questionId => {
     setSearch(''); setFocusedQuestion(questionId);
@@ -75,10 +78,206 @@ export function InterviewReviewPanel({ round, candidateName = 'Candidate' }) {
       <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-5 py-3 text-right">
         <div className="text-xs font-medium text-zinc-500">{scored ? 'STAR & competency score' : savedScore !== null ? 'Saved assessment score' : 'Assessment status'}</div>
         <div className="mt-1 text-2xl font-bold text-zinc-950">{loading ? 'Loading…' : error ? 'Unavailable' : savedScore !== null ? <>{savedScore}<span className="text-sm font-normal text-zinc-500"> / 100</span></> : 'Pending review'}</div>
+        {analysis.recommendation && (
+          <div
+            className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider"
+            style={{
+              backgroundColor: analysis.recommendation.includes('strong') || analysis.recommendation === 'hire' ? '#dcfce7' : '#fef3c7',
+              color: analysis.recommendation.includes('strong') || analysis.recommendation === 'hire' ? '#166534' : '#92400e',
+            }}
+          >
+            <span>{analysis.recommendation.replace('_', ' ')}</span>
+          </div>
+        )}
       </div>
     </header>
     <div className="p-5"><SavedEvaluation evaluation={report?.evaluation || round.evaluation} /></div>
-    <section aria-label="Interview remarks" className="border-b border-zinc-200 p-5"><h3 className="text-sm font-semibold">Remarks</h3><p className="mt-2 whitespace-pre-wrap text-sm text-zinc-600">{report?.remarks || report?.evaluation?.notes || round.evaluation?.notes || analysis.summary || 'No remarks have been saved.'}</p></section>
+    <section aria-label="Interview remarks" className="border-b border-zinc-200 p-5">
+      <h3 className="text-sm font-semibold">Remarks & Evaluation Summary</h3>
+      <p className="mt-2 whitespace-pre-wrap text-sm text-zinc-600">{report?.remarks || report?.evaluation?.notes || round.evaluation?.notes || analysis.summary || 'No remarks have been saved.'}</p>
+      {analysis.recommendation_rationale && (
+        <div className="mt-3 p-3 bg-zinc-50 rounded-xl border border-zinc-200 text-xs text-zinc-700">
+          <span className="font-semibold text-zinc-900 block mb-1">Recommendation Rationale:</span>
+          {analysis.recommendation_rationale}
+        </div>
+      )}
+      {(analysis.strengths?.length > 0 || analysis.development_areas?.length > 0) && (
+        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+          {analysis.strengths?.length > 0 && (
+            <div className="p-3 bg-emerald-50/60 rounded-xl border border-emerald-200 text-emerald-900">
+              <span className="font-bold text-emerald-950 block mb-1.5 uppercase text-[10px] tracking-wider">Candidate Strengths</span>
+              <ul className="list-disc list-inside space-y-1">
+                {analysis.strengths.map((s, idx) => <li key={idx}>{s}</li>)}
+              </ul>
+            </div>
+          )}
+          {analysis.development_areas?.length > 0 && (
+            <div className="p-3 bg-amber-50/60 rounded-xl border border-amber-200 text-amber-900">
+              <span className="font-bold text-amber-950 block mb-1.5 uppercase text-[10px] tracking-wider">Development Areas</span>
+              <ul className="list-disc list-inside space-y-1">
+                {analysis.development_areas.map((d, idx) => <li key={idx}>{d}</li>)}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+      {analysis.claims_verified?.length > 0 && (
+        <div className="mt-3 p-3 bg-indigo-50/50 rounded-xl border border-indigo-100 text-xs text-indigo-950">
+          <span className="font-bold text-indigo-900 block mb-1.5 uppercase text-[10px] tracking-wider">Verified Resume Claims</span>
+          <div className="space-y-1.5">
+            {analysis.claims_verified.map((c, idx) => (
+              <div key={idx} className="flex items-start gap-2">
+                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${c.verified ? 'bg-emerald-100 text-emerald-800' : 'bg-zinc-200 text-zinc-700'}`}>
+                  {c.verified ? 'Verified' : 'Unconfirmed'}
+                </span>
+                <div>
+                  <span className="font-semibold">{c.claim}</span>: <span className="text-zinc-600">{c.note}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+
+    {/* Focus Monitoring Events Section for Recruiters */}
+    <section aria-label="Focus monitoring events" className="border-b border-zinc-200 p-5 sm:p-6 bg-white">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center shrink-0">
+            <Eye size={18} />
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-zinc-950 flex items-center gap-2">
+              Focus Monitoring Events
+              {focusSummary.flagged_for_review && (
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                  Flagged for Review
+                </span>
+              )}
+            </h3>
+            <p className="text-xs text-zinc-500">
+              Audit trail of browser focus changes and window state during the interview session.
+            </p>
+          </div>
+        </div>
+
+        {focusConsent?.consent_given && (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <ShieldCheck size={13} className="text-emerald-600" />
+            <span>Candidate Consent Granted ({new Date(focusConsent.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})</span>
+          </span>
+        )}
+      </div>
+
+      {/* Mandatory Recruiter Guidance Disclaimer */}
+      <div className="p-3 bg-amber-50/70 rounded-xl border border-amber-200/80 text-xs text-amber-900 mb-4 flex items-start gap-2.5">
+        <AlertTriangle size={15} className="text-amber-600 shrink-0 mt-0.5" />
+        <p className="leading-relaxed font-normal">
+          <strong>Review Guidance:</strong> These entries reflect browser focus changes (e.g., switching tabs, window blur, or exiting fullscreen). They provide context for recruiter review and <strong>do not constitute automatic proof of cheating</strong>. Evaluate against the session video and response quality.
+        </p>
+      </div>
+
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+        <div className="p-3.5 rounded-2xl bg-zinc-50 border border-zinc-200">
+          <div className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">Total Incidents</div>
+          <div className="text-xl font-bold text-zinc-950 mt-1">
+            {focusSummary.total_incidents || focusEvents.length}
+          </div>
+        </div>
+
+        <div className="p-3.5 rounded-2xl bg-zinc-50 border border-zinc-200">
+          <div className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">Total Duration Away</div>
+          <div className="text-xl font-bold text-zinc-950 mt-1">
+            {focusSummary.total_lost_duration_seconds ? `${focusSummary.total_lost_duration_seconds}s` : '0s'}
+          </div>
+        </div>
+
+        <div className="p-3.5 rounded-2xl bg-zinc-50 border border-zinc-200">
+          <div className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">Focus Integrity</div>
+          <div className={`text-sm font-bold mt-1.5 flex items-center gap-1.5 ${
+            focusSummary.flagged_for_review ? 'text-amber-700' : 'text-emerald-700'
+          }`}>
+            {focusSummary.flagged_for_review ? (
+              <>
+                <AlertTriangle size={14} className="text-amber-600" />
+                <span>Needs Review</span>
+              </>
+            ) : (
+              <>
+                <CheckCircle2 size={14} className="text-emerald-600" />
+                <span>Clean Session</span>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="p-3.5 rounded-2xl bg-zinc-50 border border-zinc-200">
+          <div className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">Interview Status</div>
+          <div className="text-sm font-bold text-zinc-950 mt-1.5 capitalize">
+            {round.status || 'Completed'}
+          </div>
+        </div>
+      </div>
+
+      {/* Incident Audit Table */}
+      {focusEvents.length > 0 ? (
+        <div className="overflow-x-auto rounded-xl border border-zinc-200">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-zinc-50 border-b border-zinc-200 text-zinc-500 font-semibold uppercase text-[10px] tracking-wider">
+              <tr>
+                <th className="py-2.5 px-3">#</th>
+                <th className="py-2.5 px-3">Event Type</th>
+                <th className="py-2.5 px-3">Question</th>
+                <th className="py-2.5 px-3">Timestamp</th>
+                <th className="py-2.5 px-3">Duration</th>
+                <th className="py-2.5 px-3">Policy Warning Level</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-200 text-zinc-800">
+              {focusEvents.map((evt, idx) => (
+                <tr key={evt.id || idx} className="hover:bg-zinc-50/60 transition">
+                  <td className="py-2.5 px-3 font-mono font-bold text-zinc-900">{evt.incident_sequence || idx + 1}</td>
+                  <td className="py-2.5 px-3 font-medium">
+                    <span className="capitalize">
+                      {evt.event_type === 'tab_hidden' ? 'Tab Switched / Hidden' : evt.event_type === 'fullscreen_exit' ? 'Fullscreen Exited' : 'Window Blurred / Left'}
+                    </span>
+                  </td>
+                  <td className="py-2.5 px-3 font-medium">Question {evt.question_number || 1}</td>
+                  <td className="py-2.5 px-3 font-mono text-zinc-500">
+                    {evt.start_time ? new Date(evt.start_time).toLocaleTimeString() : '—'}
+                  </td>
+                  <td className="py-2.5 px-3 font-mono font-semibold text-zinc-900">{evt.duration_seconds}s</td>
+                  <td className="py-2.5 px-3">
+                    <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                      evt.violation_level === 'critical_warning'
+                        ? 'bg-rose-100 text-rose-800'
+                        : evt.violation_level === 'strong_warning'
+                        ? 'bg-amber-100 text-amber-800'
+                        : 'bg-indigo-50 text-indigo-700'
+                    }`}>
+                      {evt.violation_level === 'critical_warning'
+                        ? 'Level 3: Critical (Paused)'
+                        : evt.violation_level === 'strong_warning'
+                        ? 'Level 2: Strong Warning'
+                        : 'Level 1: Warning'}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="p-4 rounded-xl bg-emerald-50/60 border border-emerald-200 text-emerald-900 text-xs flex items-center gap-2.5">
+          <CheckCircle2 size={17} className="text-emerald-600 shrink-0" />
+          <span>
+            <strong>Clean Focus Session:</strong> No browser tab switching, window minimization, or focus loss incidents were recorded during this interview.
+          </span>
+        </div>
+      )}
+    </section>
 
     {error && <div role="alert" className="m-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><p>{error}</p><button type="button" onClick={() => setRetry(value => value + 1)} className="mt-2 inline-flex items-center gap-2 font-semibold underline"><RefreshCw size={14} /> Retry review</button></div>}
     <div className="grid gap-5 p-5 sm:p-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">

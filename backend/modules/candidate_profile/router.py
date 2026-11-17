@@ -62,6 +62,7 @@ class ProfileUpdateRequest(BaseModel):
     linkedin_url: str | None = None
     github_url: str | None = None
     summary: str | None = None
+    onboarding_completed: bool | None = None
 
 
 # -----------------------------------------------------------------------------
@@ -698,6 +699,15 @@ async def get_my_candidate_profile(candidate: dict = Depends(get_current_candida
             except Exception:
                 pass
 
+            if req_title == "Open Requisition":
+                try:
+                    mongo_req = db["requisitions"].find_one({"$or": [{"id": req_id}, {"_id": req_id}]})
+                    if mongo_req:
+                        req_title = mongo_req.get("title") or req_title
+                        company_name = mongo_req.get("company_name") or mongo_req.get("company") or company_name
+                except Exception:
+                    pass
+
         created_str = ""
         created_val = sub.get("created_at")
         if isinstance(created_val, datetime):
@@ -1280,6 +1290,10 @@ async def update_my_candidate_profile(
         updates["skills"] = body.skills
     if body.summary is not None:
         updates["summary"] = body.summary.strip()
+    if body.onboarding_completed is not None:
+        updates["onboarding_completed"] = bool(body.onboarding_completed)
+        if body.onboarding_completed:
+            updates["onboarding_completed_at"] = datetime.now(timezone.utc)
 
     details = candidate.get("details", {}) or {}
     if body.linkedin_url is not None:
@@ -1297,6 +1311,26 @@ async def update_my_candidate_profile(
         "status": "success",
         "candidate": sanitize_candidate_doc(updated_doc),
         "message": "Candidate profile updated successfully.",
+    }
+
+
+@router.post("/onboarding/complete")
+async def complete_candidate_onboarding(
+    candidate: dict = Depends(get_current_candidate),
+) -> dict:
+    """Marks candidate onboarding as completed in database."""
+    email = candidate.get("candidate_email", "").lower()
+    now = datetime.now(timezone.utc)
+    db["candidates"].update_one(
+        {"candidate_email": email},
+        {"$set": {"onboarding_completed": True, "onboarding_completed_at": now}},
+    )
+    updated_doc = db["candidates"].find_one({"candidate_email": email})
+
+    return {
+        "status": "success",
+        "candidate": sanitize_candidate_doc(updated_doc),
+        "message": "Onboarding marked as completed successfully.",
     }
 
 
