@@ -130,8 +130,8 @@ function CompanyAvatar({ job, size = 'w-8 h-8', className = '', inModal = false 
   return (
     <div
       className={`${size} flex items-center justify-center shrink-0 overflow-hidden ${inModal
-        ? 'bg-neutral-100 rounded-lg p-1 border border-neutral-200'
-        : 'bg-transparent p-0.5'
+          ? 'bg-neutral-100 rounded-lg p-1 border border-neutral-200'
+          : 'bg-transparent p-0.5'
         } ${className}`}
     >
       {logoUrl ? (
@@ -369,10 +369,10 @@ function FilterDropdown({
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
         className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition cursor-pointer select-none border ${isFiltered
-          ? 'bg-white/10 border-white/30 text-white shadow-sm'
-          : isOpen
-            ? 'bg-white/[0.08] border-white/25 text-white'
-            : 'bg-white/[0.03] hover:bg-white/[0.06] border-white/10 text-white/90'
+            ? 'bg-white/10 border-white/30 text-white shadow-sm'
+            : isOpen
+              ? 'bg-white/[0.08] border-white/25 text-white'
+              : 'bg-white/[0.03] hover:bg-white/[0.06] border-white/10 text-white/90'
           }`}
       >
         {Icon && (
@@ -405,8 +405,8 @@ function FilterDropdown({
                   setIsOpen(false);
                 }}
                 className={`w-full flex items-center justify-between px-3 py-1.5 text-[11px] text-left transition-colors cursor-pointer ${isSelected
-                  ? 'bg-white/15 text-white font-semibold'
-                  : 'text-neutral-300 hover:text-white hover:bg-white/[0.06]'
+                    ? 'bg-white/15 text-white font-semibold'
+                    : 'text-neutral-300 hover:text-white hover:bg-white/[0.06]'
                   }`}
               >
                 <div className="flex items-center gap-2 truncate pr-2">
@@ -414,8 +414,8 @@ function FilterDropdown({
                   {typeof opt.count === 'number' && (
                     <span
                       className={`text-[9.5px] px-1.5 py-0.2 rounded-md font-mono ${isSelected
-                        ? 'bg-white/20 text-white'
-                        : 'bg-white/[0.06] text-neutral-400'
+                          ? 'bg-white/20 text-white'
+                          : 'bg-white/[0.06] text-neutral-400'
                         }`}
                     >
                       {opt.count}
@@ -2906,8 +2906,8 @@ export default function OpenRolesPage({ enabled = true }) {
                           type="button"
                           onClick={() => setShowNotificationDrawer((prev) => !prev)}
                           className={`relative p-1.5 sm:p-2 rounded-full transition-all cursor-pointer flex items-center justify-center border ${showNotificationDrawer
-                            ? 'bg-white text-black border-white shadow-lg'
-                            : 'bg-white/[0.06] hover:bg-white/[0.12] border-white/15 text-white/90 hover:text-white'
+                              ? 'bg-white text-black border-white shadow-lg'
+                              : 'bg-white/[0.06] hover:bg-white/[0.12] border-white/15 text-white/90 hover:text-white'
                             }`}
                           title="Interview & Match Notifications"
                         >
@@ -3232,10 +3232,11 @@ export default function OpenRolesPage({ enabled = true }) {
                       <button
                         type="button"
                         onClick={() => setShowMobileFilterDrawer(true)}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition shrink-0 cursor-pointer ${activeFilterCount > 0
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition shrink-0 cursor-pointer ${
+                          activeFilterCount > 0
                             ? 'bg-white text-zinc-950 border-white shadow-sm'
                             : 'bg-white/[0.04] hover:bg-white/[0.08] border-white/10 text-white/80 hover:text-white'
-                          }`}
+                        }`}
                       >
                         <SlidersHorizontal size={13} className={activeFilterCount > 0 ? 'text-zinc-950' : 'text-white/60'} />
                         <span>Filters</span>
@@ -3694,8 +3695,8 @@ export default function OpenRolesPage({ enabled = true }) {
                               aria-label={`Page ${page}`}
                               aria-current={activePage === page ? 'page' : undefined}
                               className={`w-7 h-7 rounded-full text-xs font-semibold flex items-center justify-center transition cursor-pointer ${activePage === page
-                                ? 'bg-white text-black font-bold shadow-sm'
-                                : 'text-neutral-400 hover:text-white hover:bg-white/5'
+                                  ? 'bg-white text-black font-bold shadow-sm'
+                                  : 'text-neutral-400 hover:text-white hover:bg-white/5'
                                 }`}
                             >
                               {page}
@@ -3719,10 +3720,10 @@ export default function OpenRolesPage({ enabled = true }) {
                 {enabled && typeof document !== 'undefined' && createPortal(
                   <>
                     {/* Mobile View: Floating Glassmorphic Capsule Dock */}
-                    <div className="md:hidden fixed bottom-4 inset-x-0 z-40 flex justify-center pointer-events-none px-3.5 pb-[env(safe-area-inset-bottom,0px)]">
+                    <div className="md:hidden fixed bottom-3.5 inset-x-0 z-40 flex justify-center pointer-events-none px-3 pb-[env(safe-area-inset-bottom,0px)]">
                       <nav
                         aria-label="Mobile Candidate Navigation"
-                        className="pointer-events-auto flex items-center gap-1 p-1 rounded-full bg-[#0a0b10]/90 hover:bg-[#0a0b10]/95 backdrop-blur-2xl border border-white/20 shadow-[0_12px_40px_rgba(0,0,0,0.65),inset_0_1px_1px_rgba(255,255,255,0.22)] select-none"
+                        className="pointer-events-auto w-full flex items-center justify-between p-1 rounded-2xl bg-[#0a0b10]/95 backdrop-blur-2xl border border-white/15 shadow-[0_12px_40px_rgba(0,0,0,0.65),inset_0_1px_1px_rgba(255,255,255,0.2)] select-none"
                       >
                         {[
                           {
@@ -3788,24 +3789,6 @@ export default function OpenRolesPage({ enabled = true }) {
                               setShowAgreementModal(true);
                             },
                           },
-                          {
-                            id: 'profile',
-                            label: '',
-                            icon: User,
-                            hasUser: Boolean(candidateUser),
-                            onClick: () => {
-                              setActiveNavTab('profile');
-                              setShowInterviewModal(false);
-                              setShowAgreementModal(false);
-                              setShowMyAppsModal(false);
-                              if (candidateUser) {
-                                setShowSetupModal(true);
-                              } else {
-                                setAuthModalTab('login');
-                                setShowAuthModal(true);
-                              }
-                            },
-                          },
                         ].map((item, idx) => {
                           const isActive = isInterviewViewOpen
                             ? item.id === 'interview'
@@ -3813,28 +3796,25 @@ export default function OpenRolesPage({ enabled = true }) {
                               ? item.id === 'applications'
                               : showAgreementModal
                                 ? item.id === 'agreement'
-                                : showSetupModal
-                                  ? item.id === 'profile'
-                                  : activeNavTab === item.id;
+                                : activeNavTab === item.id;
                           const IconComponent = item.icon;
                           return (
-                            <div key={item.id} className="flex items-center">
-                              {idx > 0 && <div className="h-3 w-px bg-white/12 mx-0.5" />}
+                            <div key={item.id} className="flex-1 flex items-center min-w-0">
+                              {idx > 0 && <div className="h-3 w-px bg-white/12 shrink-0" />}
                               <button
                                 type="button"
                                 onClick={item.onClick}
                                 aria-current={isActive ? 'true' : undefined}
-                                title={item.label || (item.id === 'profile' ? 'Profile' : item.id)}
-                                aria-label={item.label || item.id}
-                                className={`relative flex items-center justify-center gap-1 sm:gap-1.5 ${item.label ? 'px-2 sm:px-3' : 'px-2 sm:px-2.5'
-                                  } py-1.5 rounded-full transition-all duration-200 cursor-pointer active:scale-95 ${isActive
+                                title={item.label}
+                                aria-label={item.label}
+                                className={`w-full flex-1 relative flex items-center justify-center gap-1 py-1.5 px-1 rounded-xl transition-all duration-200 cursor-pointer active:scale-95 ${isActive
                                     ? 'bg-neutral-800 text-neutral-100 border border-neutral-700 shadow-sm'
                                     : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/[0.06] border border-transparent'
                                   }`}
                               >
-                                <span className="relative flex items-center justify-center">
+                                <span className="relative flex items-center justify-center shrink-0">
                                   <IconComponent
-                                    size={12}
+                                    size={11}
                                     className={isActive ? 'text-neutral-100' : 'text-neutral-400'}
                                   />
                                   {item.badge && (
@@ -3842,12 +3822,9 @@ export default function OpenRolesPage({ enabled = true }) {
                                       {item.badge}
                                     </span>
                                   )}
-                                  {!item.badge && item.hasUser && (
-                                    <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-emerald-400 ring-1 ring-black" />
-                                  )}
                                 </span>
                                 {item.label ? (
-                                  <span className="text-[0.56rem] sm:text-[0.58rem] font-medium tracking-[0.12em] sm:tracking-[0.16em] uppercase">
+                                  <span className="text-[0.55rem] font-medium tracking-[0.06em] uppercase whitespace-nowrap">
                                     {item.label}
                                   </span>
                                 ) : null}
@@ -4006,8 +3983,8 @@ export default function OpenRolesPage({ enabled = true }) {
                               type="button"
                               onClick={() => setInterviewFilterTab(tab.id)}
                               className={`px-4 py-1.5 rounded-full text-xs font-semibold transition active:scale-95 cursor-pointer ${isActive
-                                ? 'bg-white text-neutral-950 shadow-md font-bold'
-                                : 'bg-white/[0.04] hover:bg-white/[0.08] text-neutral-300 hover:text-white border border-white/10 font-medium'
+                                  ? 'bg-white text-neutral-950 shadow-md font-bold'
+                                  : 'bg-white/[0.04] hover:bg-white/[0.08] text-neutral-300 hover:text-white border border-white/10 font-medium'
                                 }`}
                             >
                               {tab.label}
@@ -4150,8 +4127,8 @@ export default function OpenRolesPage({ enabled = true }) {
                         <div
                           key={round.id}
                           className={`rounded-2xl transition-all duration-200 relative p-4 sm:p-5 lg:py-5 lg:px-6 ${canEnter
-                            ? 'bg-[#0b0e14] border border-emerald-500/80 shadow-[0_0_25px_rgba(16,185,129,0.14)]'
-                            : 'bg-[#0b0e14] border border-white/10 hover:border-white/20 shadow-lg'
+                              ? 'bg-[#0b0e14] border border-emerald-500/80 shadow-[0_0_25px_rgba(16,185,129,0.14)]'
+                              : 'bg-[#0b0e14] border border-white/10 hover:border-white/20 shadow-lg'
                             }`}
                         >
                           <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 sm:gap-6">
@@ -4330,8 +4307,8 @@ export default function OpenRolesPage({ enabled = true }) {
                                       )
                                     }
                                     className={`w-8 h-8 rounded-xl border flex items-center justify-center transition cursor-pointer shrink-0 ${activeMenuRoundId === round.id
-                                      ? 'bg-white/[0.12] text-white border-white/30'
-                                      : 'bg-white/[0.04] hover:bg-white/[0.08] text-neutral-400 hover:text-white border-white/10'
+                                        ? 'bg-white/[0.12] text-white border-white/30'
+                                        : 'bg-white/[0.04] hover:bg-white/[0.08] text-neutral-400 hover:text-white border-white/10'
                                       }`}
                                     title="More Options"
                                   >
@@ -4758,8 +4735,8 @@ export default function OpenRolesPage({ enabled = true }) {
                   type="button"
                   onClick={(e) => toggleSaveJob(selectedJob.id || selectedJob._id, e)}
                   className={`p-2 rounded-full transition cursor-pointer border ${savedJobIds.has(String(selectedJob.id)) || (selectedJob._id && savedJobIds.has(String(selectedJob._id)))
-                    ? 'bg-neutral-900 text-white border-neutral-900 shadow-sm'
-                    : 'bg-white hover:bg-neutral-100 text-neutral-600 hover:text-neutral-900 border-neutral-200'
+                      ? 'bg-neutral-900 text-white border-neutral-900 shadow-sm'
+                      : 'bg-white hover:bg-neutral-100 text-neutral-600 hover:text-neutral-900 border-neutral-200'
                     }`}
                   title="Save Role"
                 >
@@ -4809,10 +4786,10 @@ export default function OpenRolesPage({ enabled = true }) {
                 <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-700 mt-2 font-medium">
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-neutral-100 border border-neutral-200 text-neutral-800">
                     <span className={`w-1.5 h-1.5 rounded-full ${(selectedJob.structured_role?.work_mode || '').toLowerCase().includes('remote')
-                      ? 'bg-emerald-500'
-                      : (selectedJob.structured_role?.work_mode || '').toLowerCase().includes('hybrid')
-                        ? 'bg-sky-500'
-                        : 'bg-amber-500'
+                        ? 'bg-emerald-500'
+                        : (selectedJob.structured_role?.work_mode || '').toLowerCase().includes('hybrid')
+                          ? 'bg-sky-500'
+                          : 'bg-amber-500'
                       }`} />
                     <span>{selectedJob.structured_role?.work_mode || 'Onsite'}</span>
                   </span>
@@ -5261,10 +5238,11 @@ export default function OpenRolesPage({ enabled = true }) {
                           setSelectedWorkMode(opt.value);
                           setCurrentPage(1);
                         }}
-                        className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium border transition cursor-pointer ${isSelected
+                        className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium border transition cursor-pointer ${
+                          isSelected
                             ? 'bg-white text-zinc-950 border-white font-semibold shadow-sm'
                             : 'bg-white/[0.04] text-white/80 border-white/10 hover:bg-white/[0.08] hover:text-white'
-                          }`}
+                        }`}
                       >
                         <span>{opt.label}</span>
                         {opt.count != null && (
@@ -5345,10 +5323,11 @@ export default function OpenRolesPage({ enabled = true }) {
                           setSelectedExperience(opt.value);
                           setCurrentPage(1);
                         }}
-                        className={`flex items-center justify-between px-3.5 py-2 rounded-xl text-xs font-medium border transition cursor-pointer text-left ${isSelected
+                        className={`flex items-center justify-between px-3.5 py-2 rounded-xl text-xs font-medium border transition cursor-pointer text-left ${
+                          isSelected
                             ? 'bg-white text-zinc-950 border-white font-semibold shadow-sm'
                             : 'bg-white/[0.04] text-white/80 border-white/10 hover:bg-white/[0.08] hover:text-white'
-                          }`}
+                        }`}
                       >
                         <span>{opt.label}</span>
                         {opt.count != null && (
@@ -5466,8 +5445,8 @@ export default function OpenRolesPage({ enabled = true }) {
                       </div>
                       <div className="flex items-center gap-2 self-start sm:self-auto">
                         <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${app.status === 'Interested - Fast Track'
-                          ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
-                          : 'bg-neutral-200 text-neutral-800 border-neutral-300'
+                            ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                            : 'bg-neutral-200 text-neutral-800 border-neutral-300'
                           }`}>
                           {app.status || 'Submitted'}
                         </span>
@@ -5589,8 +5568,8 @@ export default function OpenRolesPage({ enabled = true }) {
                     }}
                     placeholder="e.g. 9876543210 or +91 9876543210"
                     className={`w-full bg-white/85 hover:bg-white focus:bg-white border ${setupForm.phone && validatePhone(setupForm.phone)
-                      ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-500'
-                      : 'border-ink/15 focus:border-ink/50 focus:ring-ink/20'
+                        ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-500'
+                        : 'border-ink/15 focus:border-ink/50 focus:ring-ink/20'
                       } rounded-xl px-3 py-2 text-ink text-xs focus:outline-none focus:ring-1 transition-all shadow-[inset_0_1px_2px_rgba(0,0,0,0.03)]`}
                   />
                   {setupForm.phone && validatePhone(setupForm.phone) && (
@@ -5866,8 +5845,8 @@ export default function OpenRolesPage({ enabled = true }) {
                       }}
                       placeholder="e.g. 9876543210 or +91 9876543210"
                       className={`w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border ${poolForm.phone && validatePhone(poolForm.phone)
-                        ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-500'
-                        : 'border-neutral-300 focus:border-neutral-900 focus:ring-neutral-900'
+                          ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-500'
+                          : 'border-neutral-300 focus:border-neutral-900 focus:ring-neutral-900'
                         } rounded-xl px-3.5 py-2.5 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-1 transition-all`}
                     />
                     {poolForm.phone && validatePhone(poolForm.phone) && (
@@ -6086,8 +6065,8 @@ export default function OpenRolesPage({ enabled = true }) {
 
                         <span
                           className={`px-3 py-1 rounded-full text-[11px] font-bold border flex items-center gap-1.5 ${isLive
-                            ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 animate-pulse'
-                            : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                              ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 animate-pulse'
+                              : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
                             }`}
                         >
                           <span className={`w-2 h-2 rounded-full ${isLive ? 'bg-rose-400' : 'bg-emerald-400'}`} />
@@ -6173,10 +6152,10 @@ export default function OpenRolesPage({ enabled = true }) {
                             onClick={() => handleSendInterviewEmail(round)}
                             disabled={isSendingEmail}
                             className={`flex-1 sm:flex-none px-3.5 py-2.5 rounded-xl border text-xs font-semibold transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 ${emailStatus === 'sent'
-                              ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
-                              : emailStatus === 'error'
-                                ? 'bg-rose-500/20 border-rose-500/40 text-rose-300'
-                                : 'bg-white/[0.06] hover:bg-white/[0.12] border-white/10 text-white/80 hover:text-white'
+                                ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
+                                : emailStatus === 'error'
+                                  ? 'bg-rose-500/20 border-rose-500/40 text-rose-300'
+                                  : 'bg-white/[0.06] hover:bg-white/[0.12] border-white/10 text-white/80 hover:text-white'
                               }`}
                           >
                             <Mail size={13} />
@@ -6908,8 +6887,8 @@ export default function OpenRolesPage({ enabled = true }) {
                       }}
                       placeholder="alex@gmail.com"
                       className={`w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border ${regEmail && validateCandidateEmail(regEmail, { required: false })
-                        ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-500'
-                        : 'border-neutral-300 focus:border-neutral-900 focus:ring-neutral-900'
+                          ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-500'
+                          : 'border-neutral-300 focus:border-neutral-900 focus:ring-neutral-900'
                         } rounded-xl px-3 py-2 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-1 transition-all`}
                     />
                     {regEmail && validateCandidateEmail(regEmail, { required: false }) && (
@@ -6944,8 +6923,8 @@ export default function OpenRolesPage({ enabled = true }) {
                       }}
                       placeholder="e.g. 9876543210 or +91 9876543210"
                       className={`w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border ${regPhone && validatePhone(regPhone, { required: false })
-                        ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-500'
-                        : 'border-neutral-300 focus:border-neutral-900 focus:ring-neutral-900'
+                          ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-500'
+                          : 'border-neutral-300 focus:border-neutral-900 focus:ring-neutral-900'
                         } rounded-xl px-3 py-2 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-1 transition-all`}
                     />
                     {regPhone && validatePhone(regPhone, { required: false }) && (
