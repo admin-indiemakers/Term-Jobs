@@ -216,6 +216,20 @@ function HorizontalTransitionLayout() {
     }
   }, [isLanding]);
 
+  // Pre-load OpenRolesPage chunk immediately so entering has zero bundle loading lag
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const preload = () => {
+        import('./pages/OpenRolesPage');
+      };
+      if ('requestIdleCallback' in window) {
+        window.requestIdleCallback(preload);
+      } else {
+        setTimeout(preload, 100);
+      }
+    }
+  }, []);
+
   const targetX = isLogin ? '100vw' : isLanding ? '0vw' : '-100vw';
 
   return (
@@ -225,7 +239,7 @@ function HorizontalTransitionLayout() {
         initial={{ x: targetX }}
         animate={{ x: targetX }}
         transition={{
-          duration: 1.15,
+          duration: 0.35,
           ease: [0.16, 1, 0.3, 1],
         }}
       >

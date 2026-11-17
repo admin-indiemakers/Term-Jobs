@@ -130,8 +130,8 @@ function CompanyAvatar({ job, size = 'w-8 h-8', className = '', inModal = false 
   return (
     <div
       className={`${size} flex items-center justify-center shrink-0 overflow-hidden ${inModal
-          ? 'bg-neutral-100 rounded-lg p-1 border border-neutral-200'
-          : 'bg-transparent p-0.5'
+        ? 'bg-neutral-100 rounded-lg p-1 border border-neutral-200'
+        : 'bg-transparent p-0.5'
         } ${className}`}
     >
       {logoUrl ? (
@@ -369,10 +369,10 @@ function FilterDropdown({
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
         className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition cursor-pointer select-none border ${isFiltered
-            ? 'bg-white/10 border-white/30 text-white shadow-sm'
-            : isOpen
-              ? 'bg-white/[0.08] border-white/25 text-white'
-              : 'bg-white/[0.03] hover:bg-white/[0.06] border-white/10 text-white/90'
+          ? 'bg-white/10 border-white/30 text-white shadow-sm'
+          : isOpen
+            ? 'bg-white/[0.08] border-white/25 text-white'
+            : 'bg-white/[0.03] hover:bg-white/[0.06] border-white/10 text-white/90'
           }`}
       >
         {Icon && (
@@ -405,8 +405,8 @@ function FilterDropdown({
                   setIsOpen(false);
                 }}
                 className={`w-full flex items-center justify-between px-3 py-1.5 text-[11px] text-left transition-colors cursor-pointer ${isSelected
-                    ? 'bg-white/15 text-white font-semibold'
-                    : 'text-neutral-300 hover:text-white hover:bg-white/[0.06]'
+                  ? 'bg-white/15 text-white font-semibold'
+                  : 'text-neutral-300 hover:text-white hover:bg-white/[0.06]'
                   }`}
               >
                 <div className="flex items-center gap-2 truncate pr-2">
@@ -414,8 +414,8 @@ function FilterDropdown({
                   {typeof opt.count === 'number' && (
                     <span
                       className={`text-[9.5px] px-1.5 py-0.2 rounded-md font-mono ${isSelected
-                          ? 'bg-white/20 text-white'
-                          : 'bg-white/[0.06] text-neutral-400'
+                        ? 'bg-white/20 text-white'
+                        : 'bg-white/[0.06] text-neutral-400'
                         }`}
                     >
                       {opt.count}
@@ -555,20 +555,22 @@ export default function OpenRolesPage({ enabled = true }) {
   const [currentPage, setCurrentPage] = useState(1);
 
   const getDynamicPageSize = useCallback(() => {
-    if (typeof window === 'undefined') return 10;
+    if (typeof window === 'undefined') return 9;
     if (window.innerWidth < 640) return 8;
-    // Available height for table rows inside the right panel
-    // (window height minus top navigation, title, search/filters, table header, and pagination footer)
-    const availableHeight = Math.max(window.innerHeight, 750) - 240;
-    const count = Math.floor(availableHeight / 50);
-    return Math.max(8, Math.min(25, count));
+    // Total vertical overhead for page margins, header, filters, and footer (~255px)
+    // Row height is ~46px (Avatar 32px + text + py-1.5 padding)
+    const overhead = 255;
+    const availableHeight = window.innerHeight - overhead;
+    const count = Math.floor(availableHeight / 46);
+    return Math.max(8, Math.min(15, count));
   }, []);
 
   const [pageSize, setPageSize] = useState(() => {
-    if (typeof window === 'undefined') return 10;
+    if (typeof window === 'undefined') return 9;
     if (window.innerWidth < 640) return 8;
-    const availableHeight = Math.max(window.innerHeight, 750) - 240;
-    return Math.max(8, Math.min(25, Math.floor(availableHeight / 50)));
+    const overhead = 255;
+    const availableHeight = window.innerHeight - overhead;
+    return Math.max(8, Math.min(15, Math.floor(availableHeight / 46)));
   });
 
   useEffect(() => {
@@ -2904,8 +2906,8 @@ export default function OpenRolesPage({ enabled = true }) {
                           type="button"
                           onClick={() => setShowNotificationDrawer((prev) => !prev)}
                           className={`relative p-1.5 sm:p-2 rounded-full transition-all cursor-pointer flex items-center justify-center border ${showNotificationDrawer
-                              ? 'bg-white text-black border-white shadow-lg'
-                              : 'bg-white/[0.06] hover:bg-white/[0.12] border-white/15 text-white/90 hover:text-white'
+                            ? 'bg-white text-black border-white shadow-lg'
+                            : 'bg-white/[0.06] hover:bg-white/[0.12] border-white/15 text-white/90 hover:text-white'
                             }`}
                           title="Interview & Match Notifications"
                         >
@@ -3184,18 +3186,18 @@ export default function OpenRolesPage({ enabled = true }) {
               </header>
 
               {/* Section Title Header */}
-              <div className="mb-2 sm:mb-2.5 pt-0 shrink-0 flex items-baseline sm:items-center justify-between gap-3">
-                <h2 className="font-display text-lg sm:text-2xl font-bold tracking-tight text-white truncate">
+              <div className="mb-2 sm:mb-2.5 pt-0 shrink-0 flex items-center justify-between gap-2">
+                <h2 className="font-display text-base sm:text-2xl font-bold tracking-tight text-white truncate">
                   Latest Opportunities
                 </h2>
-                <span className="text-xs text-neutral-400 font-medium whitespace-nowrap shrink-0 text-right">
-                  {rolePage?.filtered_total || requisitions.length} active roles available
+                <span className="text-[11px] sm:text-xs text-neutral-400 font-medium whitespace-nowrap shrink-0 text-right">
+                  {rolePage?.filtered_total || requisitions.length} active roles
                 </span>
               </div>
 
               {/* Opportunities List / Table Section */}
               <main id="roles-grid-section" className="w-full flex flex-col flex-[1_0_auto]">
-                <div className="w-full flex-[1_0_auto] min-h-[420px] flex flex-col justify-between rounded-2xl sm:rounded-3xl bg-[#0B0D12] border border-white/[0.08] p-3 sm:px-5 sm:pt-2 sm:pb-2.5 shadow-xl will-change-transform">
+                <div className="w-full flex-[1_0_auto] min-h-[420px] flex flex-col justify-between rounded-2xl sm:rounded-3xl bg-[#0B0D12] border border-white/[0.08] p-3 sm:px-5 sm:pt-2 pb-20 sm:pb-2.5 shadow-xl will-change-transform">
                   {/* MOBILE VIEW (< md): Clean single-row Search + Filters button + Drawer */}
                   <div className="flex md:hidden flex-col gap-2 w-full pb-2 mb-2 border-b border-white/[0.06]">
                     <div className="flex items-center gap-2 w-full">
@@ -3230,11 +3232,10 @@ export default function OpenRolesPage({ enabled = true }) {
                       <button
                         type="button"
                         onClick={() => setShowMobileFilterDrawer(true)}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition shrink-0 cursor-pointer ${
-                          activeFilterCount > 0
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition shrink-0 cursor-pointer ${activeFilterCount > 0
                             ? 'bg-white text-zinc-950 border-white shadow-sm'
                             : 'bg-white/[0.04] hover:bg-white/[0.08] border-white/10 text-white/80 hover:text-white'
-                        }`}
+                          }`}
                       >
                         <SlidersHorizontal size={13} className={activeFilterCount > 0 ? 'text-zinc-950' : 'text-white/60'} />
                         <span>Filters</span>
@@ -3470,10 +3471,10 @@ export default function OpenRolesPage({ enabled = true }) {
                             <div
                               key={job.id || job._id}
                               onClick={() => handleOpenJob(job)}
-                              className="py-2.5 px-1 hover:bg-white/[0.03] active:bg-white/[0.06] transition-colors rounded-xl cursor-pointer space-y-2"
+                              className="py-2.5 px-1 hover:bg-white/[0.03] active:bg-white/[0.06] transition-colors rounded-xl cursor-pointer space-y-1.5"
                             >
-                              {/* 1. Header: Initial + Title + Company */}
-                              <div className="flex items-start justify-between gap-2.5">
+                              {/* 1. Header: Avatar + Title & Company on left | Apply Button on right */}
+                              <div className="flex items-center justify-between gap-2">
                                 <div className="flex items-center gap-2.5 min-w-0 flex-1">
                                   <CompanyAvatar job={job} size="w-8 h-8" />
                                   <div className="min-w-0 flex-1">
@@ -3485,45 +3486,50 @@ export default function OpenRolesPage({ enabled = true }) {
                                     </p>
                                   </div>
                                 </div>
-                              </div>
 
-                              {/* 2. Badges (Work Mode, Experience) + Apply Button (Place and Skills removed) */}
-                              <div className="flex items-center justify-between gap-2 pt-0.5 text-[10.5px]">
-                                <div className="flex flex-wrap items-center gap-1.5 min-w-0">
-                                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-[#16181F] border border-white/[0.08] text-neutral-200">
-                                    <span>{isRemote ? 'Remote' : isHybrid ? 'Hybrid' : workMode}</span>
-                                  </span>
-                                  {expDisplay && (
-                                    <span className="px-2.5 py-0.5 rounded-full bg-[#16181F] border border-white/[0.08] text-neutral-300">
-                                      {expDisplay}
-                                    </span>
+                                <div className="shrink-0 pl-1">
+                                  {isApplied ? (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleOpenJob(job);
+                                      }}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-semibold text-[10px] transition shadow-sm cursor-pointer whitespace-nowrap"
+                                    >
+                                      <Check size={10} className="text-emerald-400" />
+                                      <span>Applied</span>
+                                    </button>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleOpenJob(job);
+                                      }}
+                                      className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-white hover:bg-neutral-200 text-black font-semibold text-[10.5px] transition shadow-sm cursor-pointer active:scale-95 whitespace-nowrap"
+                                    >
+                                      <span>Apply Now</span>
+                                      <ArrowRight size={10} />
+                                    </button>
                                   )}
                                 </div>
+                              </div>
 
-                                {isApplied ? (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleOpenJob(job);
-                                    }}
-                                    className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-semibold text-[10.5px] transition shadow-sm cursor-pointer shrink-0 whitespace-nowrap"
-                                  >
-                                    <Check size={11} className="text-emerald-400" />
-                                    <span>Applied</span>
-                                  </button>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleOpenJob(job);
-                                    }}
-                                    className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-white hover:bg-neutral-200 text-black font-semibold text-[10.5px] transition shadow-sm cursor-pointer shrink-0 active:scale-95 whitespace-nowrap"
-                                  >
-                                    <span>Apply Now</span>
-                                    <ArrowRight size={10} />
-                                  </button>
+                              {/* 2. Badges (Work Mode, Experience, Location) aligned under text */}
+                              <div className="flex flex-wrap items-center gap-1.5 pl-[42px] text-[10px]">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#16181F] border border-white/[0.08] text-neutral-200 font-medium">
+                                  <span>{isRemote ? 'Remote' : isHybrid ? 'Hybrid' : workMode}</span>
+                                </span>
+                                {expDisplay && (
+                                  <span className="px-2 py-0.5 rounded-full bg-[#16181F] border border-white/[0.08] text-neutral-300 font-medium">
+                                    {expDisplay}
+                                  </span>
+                                )}
+                                {locDisplay && (
+                                  <span className="px-2 py-0.5 rounded-full bg-[#16181F] border border-white/[0.08] text-neutral-400 truncate max-w-[130px]">
+                                    {locDisplay}
+                                  </span>
                                 )}
                               </div>
                             </div>
@@ -3574,7 +3580,7 @@ export default function OpenRolesPage({ enabled = true }) {
                                 <div
                                   key={job.id || job._id}
                                   onClick={() => handleOpenJob(job)}
-                                  className="grid grid-cols-[minmax(190px,1.8fr)_80px_95px_120px_150px_105px] items-center px-4 py-1.5 sm:py-2 hover:bg-white/[0.04] transition-colors duration-100 ease-out rounded-xl group cursor-pointer"
+                                  className="grid grid-cols-[minmax(190px,1.8fr)_80px_95px_120px_150px_105px] items-center px-4 py-1.5 sm:py-1.5 hover:bg-white/[0.04] transition-colors duration-100 ease-out rounded-xl group cursor-pointer"
                                 >
                                   {/* 1. Role & Company */}
                                   <div className="flex items-center gap-3 min-w-0 pr-3">
@@ -3688,8 +3694,8 @@ export default function OpenRolesPage({ enabled = true }) {
                               aria-label={`Page ${page}`}
                               aria-current={activePage === page ? 'page' : undefined}
                               className={`w-7 h-7 rounded-full text-xs font-semibold flex items-center justify-center transition cursor-pointer ${activePage === page
-                                  ? 'bg-white text-black font-bold shadow-sm'
-                                  : 'text-neutral-400 hover:text-white hover:bg-white/5'
+                                ? 'bg-white text-black font-bold shadow-sm'
+                                : 'text-neutral-400 hover:text-white hover:bg-white/5'
                                 }`}
                             >
                               {page}
@@ -4000,8 +4006,8 @@ export default function OpenRolesPage({ enabled = true }) {
                               type="button"
                               onClick={() => setInterviewFilterTab(tab.id)}
                               className={`px-4 py-1.5 rounded-full text-xs font-semibold transition active:scale-95 cursor-pointer ${isActive
-                                  ? 'bg-white text-neutral-950 shadow-md font-bold'
-                                  : 'bg-white/[0.04] hover:bg-white/[0.08] text-neutral-300 hover:text-white border border-white/10 font-medium'
+                                ? 'bg-white text-neutral-950 shadow-md font-bold'
+                                : 'bg-white/[0.04] hover:bg-white/[0.08] text-neutral-300 hover:text-white border border-white/10 font-medium'
                                 }`}
                             >
                               {tab.label}
@@ -4144,8 +4150,8 @@ export default function OpenRolesPage({ enabled = true }) {
                         <div
                           key={round.id}
                           className={`rounded-2xl transition-all duration-200 relative p-4 sm:p-5 lg:py-5 lg:px-6 ${canEnter
-                              ? 'bg-[#0b0e14] border border-emerald-500/80 shadow-[0_0_25px_rgba(16,185,129,0.14)]'
-                              : 'bg-[#0b0e14] border border-white/10 hover:border-white/20 shadow-lg'
+                            ? 'bg-[#0b0e14] border border-emerald-500/80 shadow-[0_0_25px_rgba(16,185,129,0.14)]'
+                            : 'bg-[#0b0e14] border border-white/10 hover:border-white/20 shadow-lg'
                             }`}
                         >
                           <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 sm:gap-6">
@@ -4324,8 +4330,8 @@ export default function OpenRolesPage({ enabled = true }) {
                                       )
                                     }
                                     className={`w-8 h-8 rounded-xl border flex items-center justify-center transition cursor-pointer shrink-0 ${activeMenuRoundId === round.id
-                                        ? 'bg-white/[0.12] text-white border-white/30'
-                                        : 'bg-white/[0.04] hover:bg-white/[0.08] text-neutral-400 hover:text-white border-white/10'
+                                      ? 'bg-white/[0.12] text-white border-white/30'
+                                      : 'bg-white/[0.04] hover:bg-white/[0.08] text-neutral-400 hover:text-white border-white/10'
                                       }`}
                                     title="More Options"
                                   >
@@ -4752,8 +4758,8 @@ export default function OpenRolesPage({ enabled = true }) {
                   type="button"
                   onClick={(e) => toggleSaveJob(selectedJob.id || selectedJob._id, e)}
                   className={`p-2 rounded-full transition cursor-pointer border ${savedJobIds.has(String(selectedJob.id)) || (selectedJob._id && savedJobIds.has(String(selectedJob._id)))
-                      ? 'bg-neutral-900 text-white border-neutral-900 shadow-sm'
-                      : 'bg-white hover:bg-neutral-100 text-neutral-600 hover:text-neutral-900 border-neutral-200'
+                    ? 'bg-neutral-900 text-white border-neutral-900 shadow-sm'
+                    : 'bg-white hover:bg-neutral-100 text-neutral-600 hover:text-neutral-900 border-neutral-200'
                     }`}
                   title="Save Role"
                 >
@@ -4803,10 +4809,10 @@ export default function OpenRolesPage({ enabled = true }) {
                 <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-700 mt-2 font-medium">
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-neutral-100 border border-neutral-200 text-neutral-800">
                     <span className={`w-1.5 h-1.5 rounded-full ${(selectedJob.structured_role?.work_mode || '').toLowerCase().includes('remote')
-                        ? 'bg-emerald-500'
-                        : (selectedJob.structured_role?.work_mode || '').toLowerCase().includes('hybrid')
-                          ? 'bg-sky-500'
-                          : 'bg-amber-500'
+                      ? 'bg-emerald-500'
+                      : (selectedJob.structured_role?.work_mode || '').toLowerCase().includes('hybrid')
+                        ? 'bg-sky-500'
+                        : 'bg-amber-500'
                       }`} />
                     <span>{selectedJob.structured_role?.work_mode || 'Onsite'}</span>
                   </span>
@@ -5255,11 +5261,10 @@ export default function OpenRolesPage({ enabled = true }) {
                           setSelectedWorkMode(opt.value);
                           setCurrentPage(1);
                         }}
-                        className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium border transition cursor-pointer ${
-                          isSelected
+                        className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium border transition cursor-pointer ${isSelected
                             ? 'bg-white text-zinc-950 border-white font-semibold shadow-sm'
                             : 'bg-white/[0.04] text-white/80 border-white/10 hover:bg-white/[0.08] hover:text-white'
-                        }`}
+                          }`}
                       >
                         <span>{opt.label}</span>
                         {opt.count != null && (
@@ -5340,11 +5345,10 @@ export default function OpenRolesPage({ enabled = true }) {
                           setSelectedExperience(opt.value);
                           setCurrentPage(1);
                         }}
-                        className={`flex items-center justify-between px-3.5 py-2 rounded-xl text-xs font-medium border transition cursor-pointer text-left ${
-                          isSelected
+                        className={`flex items-center justify-between px-3.5 py-2 rounded-xl text-xs font-medium border transition cursor-pointer text-left ${isSelected
                             ? 'bg-white text-zinc-950 border-white font-semibold shadow-sm'
                             : 'bg-white/[0.04] text-white/80 border-white/10 hover:bg-white/[0.08] hover:text-white'
-                        }`}
+                          }`}
                       >
                         <span>{opt.label}</span>
                         {opt.count != null && (
@@ -5462,8 +5466,8 @@ export default function OpenRolesPage({ enabled = true }) {
                       </div>
                       <div className="flex items-center gap-2 self-start sm:self-auto">
                         <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${app.status === 'Interested - Fast Track'
-                            ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
-                            : 'bg-neutral-200 text-neutral-800 border-neutral-300'
+                          ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                          : 'bg-neutral-200 text-neutral-800 border-neutral-300'
                           }`}>
                           {app.status || 'Submitted'}
                         </span>
@@ -5585,8 +5589,8 @@ export default function OpenRolesPage({ enabled = true }) {
                     }}
                     placeholder="e.g. 9876543210 or +91 9876543210"
                     className={`w-full bg-white/85 hover:bg-white focus:bg-white border ${setupForm.phone && validatePhone(setupForm.phone)
-                        ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-500'
-                        : 'border-ink/15 focus:border-ink/50 focus:ring-ink/20'
+                      ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-500'
+                      : 'border-ink/15 focus:border-ink/50 focus:ring-ink/20'
                       } rounded-xl px-3 py-2 text-ink text-xs focus:outline-none focus:ring-1 transition-all shadow-[inset_0_1px_2px_rgba(0,0,0,0.03)]`}
                   />
                   {setupForm.phone && validatePhone(setupForm.phone) && (
@@ -5862,8 +5866,8 @@ export default function OpenRolesPage({ enabled = true }) {
                       }}
                       placeholder="e.g. 9876543210 or +91 9876543210"
                       className={`w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border ${poolForm.phone && validatePhone(poolForm.phone)
-                          ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-500'
-                          : 'border-neutral-300 focus:border-neutral-900 focus:ring-neutral-900'
+                        ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-500'
+                        : 'border-neutral-300 focus:border-neutral-900 focus:ring-neutral-900'
                         } rounded-xl px-3.5 py-2.5 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-1 transition-all`}
                     />
                     {poolForm.phone && validatePhone(poolForm.phone) && (
@@ -6082,8 +6086,8 @@ export default function OpenRolesPage({ enabled = true }) {
 
                         <span
                           className={`px-3 py-1 rounded-full text-[11px] font-bold border flex items-center gap-1.5 ${isLive
-                              ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 animate-pulse'
-                              : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                            ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 animate-pulse'
+                            : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
                             }`}
                         >
                           <span className={`w-2 h-2 rounded-full ${isLive ? 'bg-rose-400' : 'bg-emerald-400'}`} />
@@ -6169,10 +6173,10 @@ export default function OpenRolesPage({ enabled = true }) {
                             onClick={() => handleSendInterviewEmail(round)}
                             disabled={isSendingEmail}
                             className={`flex-1 sm:flex-none px-3.5 py-2.5 rounded-xl border text-xs font-semibold transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 ${emailStatus === 'sent'
-                                ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
-                                : emailStatus === 'error'
-                                  ? 'bg-rose-500/20 border-rose-500/40 text-rose-300'
-                                  : 'bg-white/[0.06] hover:bg-white/[0.12] border-white/10 text-white/80 hover:text-white'
+                              ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
+                              : emailStatus === 'error'
+                                ? 'bg-rose-500/20 border-rose-500/40 text-rose-300'
+                                : 'bg-white/[0.06] hover:bg-white/[0.12] border-white/10 text-white/80 hover:text-white'
                               }`}
                           >
                             <Mail size={13} />
@@ -6904,8 +6908,8 @@ export default function OpenRolesPage({ enabled = true }) {
                       }}
                       placeholder="alex@gmail.com"
                       className={`w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border ${regEmail && validateCandidateEmail(regEmail, { required: false })
-                          ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-500'
-                          : 'border-neutral-300 focus:border-neutral-900 focus:ring-neutral-900'
+                        ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-500'
+                        : 'border-neutral-300 focus:border-neutral-900 focus:ring-neutral-900'
                         } rounded-xl px-3 py-2 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-1 transition-all`}
                     />
                     {regEmail && validateCandidateEmail(regEmail, { required: false }) && (
@@ -6940,8 +6944,8 @@ export default function OpenRolesPage({ enabled = true }) {
                       }}
                       placeholder="e.g. 9876543210 or +91 9876543210"
                       className={`w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border ${regPhone && validatePhone(regPhone, { required: false })
-                          ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-500'
-                          : 'border-neutral-300 focus:border-neutral-900 focus:ring-neutral-900'
+                        ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-500'
+                        : 'border-neutral-300 focus:border-neutral-900 focus:ring-neutral-900'
                         } rounded-xl px-3 py-2 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-1 transition-all`}
                     />
                     {regPhone && validatePhone(regPhone, { required: false }) && (
