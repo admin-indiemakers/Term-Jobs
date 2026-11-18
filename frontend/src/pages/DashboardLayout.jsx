@@ -497,8 +497,7 @@ export default function DashboardLayout() {
       ]
       : userRole === 'Hiring Manager'
       ? [
-        { to: '/dashboard/hiring-manager', label: 'AI Chat', end: true, section: 'WORKSPACE', icon: Icons.Chat },
-        { to: '/dashboard/hiring-manager/legacy', label: 'Legacy Assistant', end: true, section: 'WORKSPACE', icon: Icons.Chat },
+        { to: '/dashboard/hiring-manager/legacy', label: 'AI Assistant', end: true, section: 'WORKSPACE', icon: Icons.Chat },
         { to: '/dashboard/hiring-manager/chat', label: 'Dashboard', end: true, section: 'WORKSPACE', icon: Icons.Dashboard },
         { to: '/dashboard/requisitions', label: 'Requisitions', end: false, section: 'HIRING', icon: Icons.Requisitions, count: hmCounts.requisitions },
         { to: '/dashboard/requisitions/new', label: 'New Requisition', end: true, section: 'HIRING', icon: Icons.Plus },
