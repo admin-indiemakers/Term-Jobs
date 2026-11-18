@@ -340,8 +340,8 @@ export default function App() {
           >
             <Route index element={<DashboardIndex />} />
             <Route path="interviews" element={<HiringManagerInterviews />} />
-            <Route path="hiring-manager" element={<HiringManagerAuraChat />} />
-              <Route path="hiring-manager/legacy" element={<HiringManagerDashboard />} />
+            <Route path="hiring-manager" element={<Navigate to="/dashboard/hiring-manager/legacy" replace />} />
+            <Route path="hiring-manager/legacy" element={<HiringManagerDashboard />} />
             <Route path="hiring-manager/chat" element={<HiringManagerChat />} />
             <Route path="requisitions" element={<RequisitionRouteGuard><RequisitionOverview /></RequisitionRouteGuard>} />
             <Route path="requisitions/published" element={<RequisitionRouteGuard><RequisitionOverview section="published" /></RequisitionRouteGuard>} />
