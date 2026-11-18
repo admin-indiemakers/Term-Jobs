@@ -1,5 +1,5 @@
 ﻿import './OpenRolesPage.css';
-import { OPEN_ROLES_PAGE_SIZE, loadOpenRolesPage } from '../utils/loadOpenRoles';
+import { loadOpenRolesPage } from '../utils/loadOpenRoles';
 import { trackRoleView } from '../utils/trackRoleView';
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -554,6 +554,48 @@ export default function OpenRolesPage({ enabled = true }) {
     setCurrentPage(1);
   }, []);
   const [currentPage, setCurrentPage] = useState(1);
+
+  const getDynamicPageSize = useCallback(() => {
+    if (typeof window === 'undefined') return 9;
+    if (window.innerWidth < 640) return 8;
+    // Total vertical overhead for page margins, header, filters, and footer (~255px)
+    // Row height is ~46px (Avatar 32px + text + py-1.5 padding)
+    const overhead = 255;
+    const availableHeight = window.innerHeight - overhead;
+    const count = Math.floor(availableHeight / 46);
+    return Math.max(8, Math.min(15, count));
+  }, []);
+
+  const [pageSize, setPageSize] = useState(() => {
+    if (typeof window === 'undefined') return 9;
+    if (window.innerWidth < 640) return 8;
+    const overhead = 255;
+    const availableHeight = window.innerHeight - overhead;
+    return Math.max(8, Math.min(15, Math.floor(availableHeight / 46)));
+  });
+
+  useEffect(() => {
+    let timeoutId;
+    const handleResize = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        const next = getDynamicPageSize();
+        setPageSize((prev) => {
+          if (prev !== next) {
+            setCurrentPage(1);
+            return next;
+          }
+          return prev;
+        });
+      }, 250);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      clearTimeout(timeoutId);
+    };
+  }, [getDynamicPageSize]);
+
   const [rolePage, setRolePage] = useState({ total: 0, total_pages: 1, filtered_total: 0, categories: [], filters: { families: [], locations: [] }, stats: { roles: 0, companies: 0 } });
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const rolesPrefetch = useRef(undefined);
@@ -2032,7 +2074,7 @@ export default function OpenRolesPage({ enabled = true }) {
       window.__PREFETCHED_REQUISITIONS__ = null;
     }
     const prefetched = rolesPrefetch.current;
-    loadOpenRolesPage(request, { page: currentPage, pageSize: 7, q: debouncedSearch, workMode: selectedWorkMode, family: selectedFamily, location: selectedLocation, category: selectedOpportunityCategory }, prefetched)
+    loadOpenRolesPage(request, { page: currentPage, pageSize, q: debouncedSearch, workMode: selectedWorkMode, family: selectedFamily, location: selectedLocation, category: selectedOpportunityCategory }, prefetched)
       .then((data) => {
         if (cancelled) return;
         setRolePage(data);
@@ -2052,7 +2094,7 @@ export default function OpenRolesPage({ enabled = true }) {
       })
       .finally(() => { rolesPrefetch.current = null; if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [enabled, currentPage, debouncedSearch, selectedWorkMode, selectedFamily, selectedLocation, selectedOpportunityCategory]);
+  }, [enabled, currentPage, pageSize, debouncedSearch, selectedWorkMode, selectedFamily, selectedLocation, selectedOpportunityCategory]);
 
   // Options and counts describe the full result set, not just the current page.
   const availableFamilies = rolePage.filters.families;
@@ -2220,7 +2262,7 @@ export default function OpenRolesPage({ enabled = true }) {
   }, []);
 
   const categoryTabs = [{ id: 'ALL', label: 'All Roles', count: rolePage.filtered_total }, ...rolePage.categories];
-  const ROLES_PER_PAGE = OPEN_ROLES_PAGE_SIZE;
+  const ROLES_PER_PAGE = pageSize;
   const totalPages = rolePage.total_pages;
   const activePage = currentPage;
   const paginatedJobs = useMemo(() => {
@@ -2256,8 +2298,8 @@ export default function OpenRolesPage({ enabled = true }) {
     if (selectedExperience && selectedExperience !== 'ALL') {
       items = items.filter((j) => matchesExperience(j, selectedExperience));
     }
-    return items.slice(0, 7);
-  }, [requisitions, searchQuery, selectedExperience]);
+    return items.slice(0, ROLES_PER_PAGE);
+  }, [requisitions, searchQuery, selectedExperience, ROLES_PER_PAGE]);
   const pageStart = Math.max(1, Math.min(activePage - 2, totalPages - 4));
   const visiblePages = Array.from({ length: Math.min(5, totalPages) }, (_, index) => pageStart + index);
 
@@ -3145,18 +3187,18 @@ export default function OpenRolesPage({ enabled = true }) {
               </header>
 
               {/* Section Title Header */}
-              <div className="mb-2 sm:mb-2.5 pt-0 shrink-0 flex items-baseline sm:items-center justify-between gap-3">
-                <h2 className="font-display text-lg sm:text-2xl font-bold tracking-tight text-white truncate">
+              <div className="mb-2 sm:mb-2.5 pt-0 shrink-0 flex items-center justify-between gap-2">
+                <h2 className="font-display text-base sm:text-2xl font-bold tracking-tight text-white truncate">
                   Latest Opportunities
                 </h2>
-                <span className="text-xs text-neutral-400 font-medium whitespace-nowrap shrink-0 text-right">
-                  {rolePage?.filtered_total || requisitions.length} active roles available
+                <span className="text-[11px] sm:text-xs text-neutral-400 font-medium whitespace-nowrap shrink-0 text-right">
+                  {rolePage?.filtered_total || requisitions.length} active roles
                 </span>
               </div>
 
               {/* Opportunities List / Table Section */}
               <main id="roles-grid-section" className="w-full flex flex-col flex-[1_0_auto]">
-                <div className="w-full flex-[1_0_auto] min-h-[420px] flex flex-col justify-between rounded-2xl sm:rounded-3xl bg-[#0B0D12] border border-white/[0.08] p-3 sm:px-5 sm:pt-2 sm:pb-2.5 shadow-xl will-change-transform">
+                <div className="w-full flex-[1_0_auto] min-h-[420px] flex flex-col justify-between rounded-2xl sm:rounded-3xl bg-[#0B0D12] border border-white/[0.08] p-3 sm:px-5 sm:pt-2 pb-20 sm:pb-2.5 shadow-xl will-change-transform">
                   {/* MOBILE VIEW (< md): Clean single-row Search + Filters button + Drawer */}
                   <div className="flex md:hidden flex-col gap-2 w-full pb-2 mb-2 border-b border-white/[0.06]">
                     <div className="flex items-center gap-2 w-full">
@@ -3431,10 +3473,10 @@ export default function OpenRolesPage({ enabled = true }) {
                             <div
                               key={job.id || job._id}
                               onClick={() => handleOpenJob(job)}
-                              className="py-2.5 px-1 hover:bg-white/[0.03] active:bg-white/[0.06] transition-colors rounded-xl cursor-pointer space-y-2"
+                              className="py-2.5 px-1 hover:bg-white/[0.03] active:bg-white/[0.06] transition-colors rounded-xl cursor-pointer space-y-1.5"
                             >
-                              {/* 1. Header: Initial + Title + Company */}
-                              <div className="flex items-start justify-between gap-2.5">
+                              {/* 1. Header: Avatar + Title & Company on left | Apply Button on right */}
+                              <div className="flex items-center justify-between gap-2">
                                 <div className="flex items-center gap-2.5 min-w-0 flex-1">
                                   <CompanyAvatar job={job} size="w-8 h-8" />
                                   <div className="min-w-0 flex-1">
@@ -3446,45 +3488,50 @@ export default function OpenRolesPage({ enabled = true }) {
                                     </p>
                                   </div>
                                 </div>
-                              </div>
 
-                              {/* 2. Badges (Work Mode, Experience) + Apply Button (Place and Skills removed) */}
-                              <div className="flex items-center justify-between gap-2 pt-0.5 text-[10.5px]">
-                                <div className="flex flex-wrap items-center gap-1.5 min-w-0">
-                                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-[#16181F] border border-white/[0.08] text-neutral-200">
-                                    <span>{isRemote ? 'Remote' : isHybrid ? 'Hybrid' : workMode}</span>
-                                  </span>
-                                  {expDisplay && (
-                                    <span className="px-2.5 py-0.5 rounded-full bg-[#16181F] border border-white/[0.08] text-neutral-300">
-                                      {expDisplay}
-                                    </span>
+                                <div className="shrink-0 pl-1">
+                                  {isApplied ? (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleOpenJob(job);
+                                      }}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-semibold text-[10px] transition shadow-sm cursor-pointer whitespace-nowrap"
+                                    >
+                                      <Check size={10} className="text-emerald-400" />
+                                      <span>Applied</span>
+                                    </button>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleOpenJob(job);
+                                      }}
+                                      className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-white hover:bg-neutral-200 text-black font-semibold text-[10.5px] transition shadow-sm cursor-pointer active:scale-95 whitespace-nowrap"
+                                    >
+                                      <span>Apply Now</span>
+                                      <ArrowRight size={10} />
+                                    </button>
                                   )}
                                 </div>
+                              </div>
 
-                                {isApplied ? (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleOpenJob(job);
-                                    }}
-                                    className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-semibold text-[10.5px] transition shadow-sm cursor-pointer shrink-0 whitespace-nowrap"
-                                  >
-                                    <Check size={11} className="text-emerald-400" />
-                                    <span>Applied</span>
-                                  </button>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleOpenJob(job);
-                                    }}
-                                    className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-white hover:bg-neutral-200 text-black font-semibold text-[10.5px] transition shadow-sm cursor-pointer shrink-0 active:scale-95 whitespace-nowrap"
-                                  >
-                                    <span>Apply Now</span>
-                                    <ArrowRight size={10} />
-                                  </button>
+                              {/* 2. Badges (Work Mode, Experience, Location) aligned under text */}
+                              <div className="flex flex-wrap items-center gap-1.5 pl-[42px] text-[10px]">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#16181F] border border-white/[0.08] text-neutral-200 font-medium">
+                                  <span>{isRemote ? 'Remote' : isHybrid ? 'Hybrid' : workMode}</span>
+                                </span>
+                                {expDisplay && (
+                                  <span className="px-2 py-0.5 rounded-full bg-[#16181F] border border-white/[0.08] text-neutral-300 font-medium">
+                                    {expDisplay}
+                                  </span>
+                                )}
+                                {locDisplay && (
+                                  <span className="px-2 py-0.5 rounded-full bg-[#16181F] border border-white/[0.08] text-neutral-400 truncate max-w-[130px]">
+                                    {locDisplay}
+                                  </span>
                                 )}
                               </div>
                             </div>
@@ -3535,7 +3582,7 @@ export default function OpenRolesPage({ enabled = true }) {
                                 <div
                                   key={job.id || job._id}
                                   onClick={() => handleOpenJob(job)}
-                                  className="grid grid-cols-[minmax(190px,1.8fr)_80px_95px_120px_150px_105px] items-center px-4 py-1.5 sm:py-2 hover:bg-white/[0.04] transition-colors duration-100 ease-out rounded-xl group cursor-pointer"
+                                  className="grid grid-cols-[minmax(190px,1.8fr)_80px_95px_120px_150px_105px] items-center px-4 py-1.5 sm:py-1.5 hover:bg-white/[0.04] transition-colors duration-100 ease-out rounded-xl group cursor-pointer"
                                 >
                                   {/* 1. Role & Company */}
                                   <div className="flex items-center gap-3 min-w-0 pr-3">
@@ -3674,10 +3721,10 @@ export default function OpenRolesPage({ enabled = true }) {
                 {enabled && typeof document !== 'undefined' && createPortal(
                   <>
                     {/* Mobile View: Floating Glassmorphic Capsule Dock */}
-                    <div className="md:hidden fixed bottom-4 inset-x-0 z-40 flex justify-center pointer-events-none px-3.5 pb-[env(safe-area-inset-bottom,0px)]">
+                    <div className="md:hidden fixed bottom-3.5 inset-x-0 z-40 flex justify-center pointer-events-none px-3 pb-[env(safe-area-inset-bottom,0px)]">
                       <nav
                         aria-label="Mobile Candidate Navigation"
-                        className="pointer-events-auto flex items-center gap-1 p-1 rounded-full bg-[#0a0b10]/90 hover:bg-[#0a0b10]/95 backdrop-blur-2xl border border-white/20 shadow-[0_12px_40px_rgba(0,0,0,0.65),inset_0_1px_1px_rgba(255,255,255,0.22)] select-none"
+                        className="pointer-events-auto w-full flex items-center justify-between p-1 rounded-2xl bg-[#0a0b10]/95 backdrop-blur-2xl border border-white/15 shadow-[0_12px_40px_rgba(0,0,0,0.65),inset_0_1px_1px_rgba(255,255,255,0.2)] select-none"
                       >
                         {[
                           {
@@ -3743,24 +3790,6 @@ export default function OpenRolesPage({ enabled = true }) {
                               setShowAgreementModal(true);
                             },
                           },
-                          {
-                            id: 'profile',
-                            label: '',
-                            icon: User,
-                            hasUser: Boolean(candidateUser),
-                            onClick: () => {
-                              setActiveNavTab('profile');
-                              setShowInterviewModal(false);
-                              setShowAgreementModal(false);
-                              setShowMyAppsModal(false);
-                              if (candidateUser) {
-                                setShowSetupModal(true);
-                              } else {
-                                setAuthModalTab('login');
-                                setShowAuthModal(true);
-                              }
-                            },
-                          },
                         ].map((item, idx) => {
                           const isActive = isInterviewViewOpen
                             ? item.id === 'interview'
@@ -3768,28 +3797,25 @@ export default function OpenRolesPage({ enabled = true }) {
                               ? item.id === 'applications'
                               : showAgreementModal
                                 ? item.id === 'agreement'
-                                : showSetupModal
-                                  ? item.id === 'profile'
-                                  : activeNavTab === item.id;
+                                : activeNavTab === item.id;
                           const IconComponent = item.icon;
                           return (
-                            <div key={item.id} className="flex items-center">
-                              {idx > 0 && <div className="h-3 w-px bg-white/12 mx-0.5" />}
+                            <div key={item.id} className="flex-1 flex items-center min-w-0">
+                              {idx > 0 && <div className="h-3 w-px bg-white/12 shrink-0" />}
                               <button
                                 type="button"
                                 onClick={item.onClick}
                                 aria-current={isActive ? 'true' : undefined}
-                                title={item.label || (item.id === 'profile' ? 'Profile' : item.id)}
-                                aria-label={item.label || item.id}
-                                className={`relative flex items-center justify-center gap-1 sm:gap-1.5 ${item.label ? 'px-2 sm:px-3' : 'px-2 sm:px-2.5'
-                                  } py-1.5 rounded-full transition-all duration-200 cursor-pointer active:scale-95 ${isActive
+                                title={item.label}
+                                aria-label={item.label}
+                                className={`w-full flex-1 relative flex items-center justify-center gap-1 py-1.5 px-1 rounded-xl transition-all duration-200 cursor-pointer active:scale-95 ${isActive
                                     ? 'bg-neutral-800 text-neutral-100 border border-neutral-700 shadow-sm'
                                     : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/[0.06] border border-transparent'
                                   }`}
                               >
-                                <span className="relative flex items-center justify-center">
+                                <span className="relative flex items-center justify-center shrink-0">
                                   <IconComponent
-                                    size={12}
+                                    size={11}
                                     className={isActive ? 'text-neutral-100' : 'text-neutral-400'}
                                   />
                                   {item.badge && (
@@ -3797,12 +3823,9 @@ export default function OpenRolesPage({ enabled = true }) {
                                       {item.badge}
                                     </span>
                                   )}
-                                  {!item.badge && item.hasUser && (
-                                    <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-emerald-400 ring-1 ring-black" />
-                                  )}
                                 </span>
                                 {item.label ? (
-                                  <span className="text-[0.56rem] sm:text-[0.58rem] font-medium tracking-[0.12em] sm:tracking-[0.16em] uppercase">
+                                  <span className="text-[0.55rem] font-medium tracking-[0.06em] uppercase whitespace-nowrap">
                                     {item.label}
                                   </span>
                                 ) : null}
@@ -4709,17 +4732,6 @@ export default function OpenRolesPage({ enabled = true }) {
               </div>
 
               <div className="flex items-center gap-1.5 shrink-0">
-                <button
-                  type="button"
-                  onClick={(e) => toggleSaveJob(selectedJob.id || selectedJob._id, e)}
-                  className={`p-2 rounded-full transition cursor-pointer border ${savedJobIds.has(String(selectedJob.id)) || (selectedJob._id && savedJobIds.has(String(selectedJob._id)))
-                      ? 'bg-neutral-900 text-white border-neutral-900 shadow-sm'
-                      : 'bg-white hover:bg-neutral-100 text-neutral-600 hover:text-neutral-900 border-neutral-200'
-                    }`}
-                  title="Save Role"
-                >
-                  <Bookmark size={15} className={savedJobIds.has(String(selectedJob.id)) || (selectedJob._id && savedJobIds.has(String(selectedJob._id))) ? 'fill-white' : ''} />
-                </button>
                 <button
                   type="button"
                   onClick={() => {
