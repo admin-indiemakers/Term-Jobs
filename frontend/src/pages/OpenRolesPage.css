@@ -1,0 +1,64 @@
+.open-roles-table-header,
+.open-role-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 2fr) minmax(78px, .7fr) minmax(80px, .7fr) minmax(95px, .85fr) minmax(100px, 1fr) 124px;
+  column-gap: 8px;
+}
+
+.open-role-row { min-height: 60px; }
+.open-role-row > * { min-width: 0; }
+.open-role-skills > span { max-width: 76px; }
+.open-role-skills > span:last-child { flex-shrink: 0; }
+.open-role-actions button:focus-visible,
+.open-role-identity button:focus-visible {
+  outline: 2px solid white;
+  outline-offset: 3px;
+}
+.open-roles-search { max-width: none; }
+
+/* Stack filters before they can squeeze the search field off screen. */
+@media (max-width: 1399px) {
+  .open-roles-search { flex-wrap: wrap; }
+  .open-roles-search > div:first-child { flex-basis: 100%; }
+  .open-roles-filters { width: 100%; }
+  .open-roles-filters > div { flex: 1; min-width: 0; }
+  .open-roles-filters select { width: 100%; max-width: none; }
+}
+
+/* Cards keep every field and action accessible without horizontal scrolling. */
+@media (max-width: 1199px) {
+  .open-roles-table-header { display: none; }
+  .open-role-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "identity identity" "mode experience" "location location" "skills actions";
+    gap: 10px 12px;
+    padding: 14px 8px;
+    border-radius: 0;
+  }
+  .open-role-identity { grid-area: identity; padding-right: 0; }
+  .open-role-identity h3 { white-space: normal; font-size: 14px; line-height: 1.45; }
+  .open-role-identity p { font-size: 12px; }
+  .open-role-mode { grid-area: mode; }
+  .open-role-experience { grid-area: experience; text-align: right; }
+  .open-role-location { grid-area: location; }
+  .open-role-location span { white-space: normal; }
+  .open-role-skills { grid-area: skills; flex-wrap: wrap; gap: 4px; }
+  .open-role-actions { grid-area: actions; }
+  .open-role-actions button { min-height: 44px; }
+  .open-role-actions button:first-child { min-width: 44px; }
+  .open-roles-pagination { justify-content: center; padding-bottom: 8px; }
+  .open-roles-pagination > div:first-child { width: 100%; text-align: center; }
+  .open-roles-pagination button { min-width: 40px; min-height: 44px; }
+}
+
+@media (max-width: 639px) {
+  .open-roles-content > div > header { flex-wrap: wrap; }
+  .open-roles-content > div > header > div { flex-wrap: wrap; max-width: 100%; }
+  .open-roles-search input { min-height: 44px; font-size: 16px; }
+  .open-roles-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .open-roles-filters select { min-height: 44px; font-size: 12px; }
+  .open-roles-filters > button { width: 100%; min-height: 44px; }
+  .open-roles-results { padding: 0 8px; }
+  .open-role-row { padding: 14px 4px; }
+  .open-role-skills > span { max-width: 95px; }
+}

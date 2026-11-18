@@ -3,11 +3,11 @@ import { test } from 'node:test';
 import { loadOpenRolesPage, openRolesPagePath } from '../src/utils/loadOpenRoles.js';
 const page = { items: [{ id: 'qa-role' }], page: 2, total: 19, total_pages: 3 };
 
-test('page requests fetch eight roles with encoded server-side filters', async () => {
+test('page requests fetch sixteen roles with encoded server-side filters', async () => {
   await loadOpenRolesPage(async (path, options) => {
     const url = new URL(path, 'https://qa.example.test');
     assert.equal(url.pathname, '/api/public/requisitions/page');
-    for (const [key, expected] of Object.entries({ page: '2', page_size: '8', q: 'Python & React', location: 'Kochi', category: 'Development' })) assert.equal(url.searchParams.get(key), expected);
+    for (const [key, expected] of Object.entries({ page: '2', page_size: '16', q: 'Python & React', location: 'Kochi', category: 'Development' })) assert.equal(url.searchParams.get(key), expected);
     assert.equal(url.searchParams.has('family'), false);
     assert.deepEqual(options, { forceRefresh: true, noCache: true });
     return page;
@@ -36,5 +36,5 @@ test('page failures preserve environment isolation and accept an empty testing d
   await assert.rejects(loadOpenRolesPage(async () => [{ id: 'old-production-row' }], {}), /invalid page response/);
   const empty = { items: [], total: 0, total_pages: 1 };
   assert.equal(await loadOpenRolesPage(() => assert.fail('empty data is valid'), {}, Promise.resolve(empty)), empty);
-  assert.equal(openRolesPagePath(), '/api/public/requisitions/page?page=1&page_size=8');
+  assert.equal(openRolesPagePath(), '/api/public/requisitions/page?page=1&page_size=16');
 });
