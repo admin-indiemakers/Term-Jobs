@@ -1,18 +1,8 @@
-import React, { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React from 'react';
 import SEOHead from '../components/SEOHead';
-import { LandingPage as LaunchpadLanding } from '../components/landing/LandingPage';
+import NewLandingPage from '../components/landing/NewLandingPage';
 
-export default function LandingPage({ defaultRoute = '', enabled = true }) {
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    // If incoming with #jobs or defaultRoute #jobs, seamlessly navigate to the dedicated Open Roles page
-    if (defaultRoute === '#jobs' || window.location.hash === '#jobs') {
-      navigate('/open-roles', { replace: true });
-    }
-  }, [defaultRoute, navigate]);
-
+export default function LandingPage({ enabled = true }) {
   return (
     <>
       {enabled && (
@@ -22,7 +12,7 @@ export default function LandingPage({ defaultRoute = '', enabled = true }) {
           canonicalUrl="https://www.termjobs.in/"
         />
       )}
-      <LaunchpadLanding enabled={enabled} />
+      <NewLandingPage enabled={enabled} />
     </>
   );
 }
