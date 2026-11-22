@@ -122,8 +122,144 @@ export function mountOpenRolesEngine(container, options = {}) {
 
   // 1. Script 3: Job data & detailed route
   (function () {
-    var JOBS = [{ "slug": "business-development-executive", "title": "Business Development Executive", "company": "TermJobs", "mode": "On-site", "exp": "Fresher", "loc": "Kozhikode", "skills": ["Fluent English", "Communication"], "more": 7, "tone": "#e8e8ea", "ink": "#111", "initial": "T" }, { "slug": "partner-enterprise", "title": "Partner Enterprise Opening", "company": "Partner Enterprise", "mode": "On-site", "exp": "3+ years", "loc": "India", "skills": [], "more": 0, "tone": "#2a2f3a", "ink": "#fff", "initial": "P" }, { "slug": "partner-enterprise-2", "title": "Partner Enterprise Opening", "company": "Partner Enterprise", "mode": "On-site", "exp": "3+ years", "loc": "India", "skills": [], "more": 0, "tone": "#2a2f3a", "ink": "#fff", "initial": "P" }, { "slug": "travel-research-associate-intern", "title": "Travel Research Associate Intern", "company": "Little Known Planet", "mode": "Remote", "exp": "Fresher / No experience", "loc": "India", "skills": [], "more": 12, "tone": "#1f6f5a", "ink": "#fff", "initial": "L" }, { "slug": "key-account-manager-corporate-accounts", "title": "Key Account Manager – Corporate Accounts", "company": "Sign Mart", "mode": "On-site", "exp": "Mid-level (2–3 years)", "loc": "Kozhikode", "skills": ["Key Account Management"], "more": 13, "tone": "#e8742a", "ink": "#fff", "initial": "S" }, { "slug": "marketing-growth-specialist", "title": "Marketing & Growth Specialist", "company": "Little Known Planet", "mode": "Hybrid", "exp": "Mid-level (4+ years)", "loc": "Ernakulam", "skills": ["Digital Marketing"], "more": 14, "tone": "#1f6f5a", "ink": "#fff", "initial": "L" }, { "slug": "flutter-developer", "title": "Flutter Developer", "company": "Aethanalytica", "mode": "On-site", "exp": "1+ year", "loc": "Calicut, Kerala", "skills": ["Flutter", "Dart"], "more": 20, "tone": "#3b4cca", "ink": "#fff", "initial": "A" }, { "slug": "ui-developer", "title": "UI Developer", "company": "Zensbee Technologies Pvt Ltd", "mode": "Hybrid", "exp": "1+ year", "loc": "Calicut, Kerala", "skills": ["React"], "more": 15, "tone": "#16181d", "ink": "#fff", "initial": "Z" }, { "slug": "ui-ux-designer", "title": "UI/UX Designer", "company": "HiveNestHQ", "mode": "On-site", "exp": "1+ year", "loc": "HiLITE Business Park", "skills": ["UI/UX Design", "Figma"], "more": 15, "tone": "#d9531e", "ink": "#fff", "initial": "H" }, { "slug": "front-end-developer-senior-junior", "title": "Front End Developer (Senior & Junior)", "company": "Easy Entrance Pvt. Ltd.", "mode": "On-site", "exp": "Junior: 0–2 years", "loc": "Calicut, Kerala, India", "skills": ["HTML5", "CSS3"], "more": 14, "tone": "#7a3fb0", "ink": "#fff", "initial": "E" }, { "slug": "full-stack-developer-ai-first-development", "title": "Full Stack Developer – AI-First Development", "company": "NIFAMA Technologies Private Limited", "mode": "On-site", "exp": "Fresher (0–1 year)", "loc": "Calicut, Kerala", "skills": ["Java"], "more": 21, "tone": "#0f7c9a", "ink": "#fff", "initial": "N" }, { "slug": "human-resource-executive", "title": "Human Resource Executive", "company": "Smart Moves", "mode": "On-site", "exp": "Entry to Mid-level", "loc": "Kozhikode", "skills": ["Human Resources"], "more": 20, "tone": "#c0392b", "ink": "#fff", "initial": "S" }, { "slug": "python-backend-developer", "title": "Python Backend Developer", "company": "Nimbus Labs", "mode": "Hybrid", "exp": "2+ years", "loc": "Kozhikode", "skills": ["Python", "FastAPI"], "more": 12, "tone": "#2f6fed", "ink": "#fff", "initial": "N" }, { "slug": "content-writer", "title": "Content Writer", "company": "Brightline Media", "mode": "Remote", "exp": "Fresher", "loc": "India", "skills": ["Copywriting", "SEO"], "more": 8, "tone": "#b8860b", "ink": "#fff", "initial": "B" }, { "slug": "customer-support-associate", "title": "Customer Support Associate", "company": "Kerala Cart", "mode": "On-site", "exp": "Fresher", "loc": "Ernakulam", "skills": ["Communication", "Malayalam"], "more": 6, "tone": "#2e8b57", "ink": "#fff", "initial": "K" }, { "slug": "data-analyst", "title": "Data Analyst", "company": "Insightloop", "mode": "Hybrid", "exp": "1+ year", "loc": "Kozhikode", "skills": ["SQL", "Excel"], "more": 10, "tone": "#6d28d9", "ink": "#fff", "initial": "I" }, { "slug": "digital-marketing-executive", "title": "Digital Marketing Executive", "company": "Spice Route Digital", "mode": "On-site", "exp": "Mid-level (2–3 years)", "loc": "Ernakulam", "skills": ["SEO", "Google Ads"], "more": 11, "tone": "#c2410c", "ink": "#fff", "initial": "S" }, { "slug": "devops-engineer", "title": "DevOps Engineer", "company": "Cloudmango", "mode": "Remote", "exp": "3+ years", "loc": "India", "skills": ["AWS", "Docker"], "more": 16, "tone": "#0e7490", "ink": "#fff", "initial": "C" }], APPLY_URL = "", PIN = "<svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z\"/><circle cx=\"12\" cy=\"9.5\" r=\"2.5\"/></svg>", CAP = "<svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M2 9l10-5 10 5-10 5z\"/><path d=\"M6 11.5V16c0 1.5 3 3 6 3s6-1.5 6-3v-4.5\"/></svg>", ARROW = "<svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M5 12h14M13 6l6 6-6 6\"/></svg>", BACK = "<svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M19 12H5M11 6l-6 6 6 6\"/></svg>", LOGO = "<img src=\"/logo.png\" alt=\"TermJobs Logo\" class=\"brand-logo-img\" style=\"width:34px;height:34px;object-fit:contain;border-radius:8px;flex-shrink:0;\" />";
-    window.TJ_JOBS = JOBS; var TJ_DESC = window.TJ_DESC = { "business-development-executive": "Drive TermJobs' growth by reaching out to staffing firms and employers, explaining the platform and booking demos. You'll own the pipeline from first call to signed client. Great first role for a confident communicator.", "partner-enterprise": "A partner enterprise on TermJobs is hiring experienced professionals for an on-site position. Apply with your resume and the hiring team will match you to the best-fit opening across India.", "partner-enterprise-2": "A partner enterprise on TermJobs is hiring experienced professionals for an on-site position. Apply with your resume and the hiring team will match you to the best-fit opening across India.", "travel-research-associate-intern": "Research destinations, stays and local experiences, and turn them into clear, accurate trip notes for the team. Fully remote and beginner-friendly, so no prior experience is needed. Ideal if you love travel and detail.", "key-account-manager-corporate-accounts": "Manage and grow relationships with corporate clients, from onboarding and order follow-ups to renewals. You'll be the main point of contact for key accounts and keep them happy. Suits someone with 2\u20133 years in client-facing sales.", "marketing-growth-specialist": "Plan and run growth campaigns across digital channels, track what's working and double down on it. You'll work closely with the team on brand, content and lead generation. Hybrid role for an experienced marketer.", "flutter-developer": "Build and maintain cross-platform mobile apps with Flutter and Dart, from clean UI to API integration. You'll ship features, fix bugs and work with designers and backend developers. On-site in Calicut.", "ui-developer": "Turn designs into fast, responsive interfaces using React. You'll build reusable components and polish details until they match the design. Hybrid role based in Calicut.", "ui-ux-designer": "Design intuitive web and mobile experiences in Figma, from user flows and wireframes to final screens. You'll work with developers to see designs through to launch. On-site at HiLITE Business Park.", "front-end-developer-senior-junior": "Build clean, responsive websites and web apps with HTML5, CSS3 and JavaScript. Openings for both senior and junior developers, so you can join at your level. On-site in Calicut.", "full-stack-developer-ai-first-development": "Build full-stack products using an AI-first workflow, working across Java backends and modern front ends. Freshers are welcome and you'll learn quickly on real projects. On-site in Calicut.", "human-resource-executive": "Handle recruitment, onboarding, attendance and employee queries for a growing team. You'll coordinate interviews and keep HR records in order. Open to entry and mid-level candidates.", "python-backend-developer": "Design and build backend services and APIs with Python and FastAPI, focusing on performance and clean code. You'll work with a small team on a hybrid schedule in Kozhikode.", "content-writer": "Write blogs, web copy and social posts that are clear, engaging and SEO-friendly. You'll research topics and work with the marketing team on deadlines. Remote and open to freshers.", "customer-support-associate": "Help customers by phone, chat and email, resolving orders and delivery questions quickly and politely. Malayalam and English communication is key. Freshers are welcome, with training provided.", "data-analyst": "Turn raw data into clear reports and dashboards using SQL and Excel. You'll find trends, answer business questions and present insights to the team. Hybrid role in Kozhikode.", "digital-marketing-executive": "Run SEO, Google Ads and social campaigns, and report on traffic and leads. You'll test ideas, optimise spend and keep campaigns on target. On-site in Ernakulam for someone with 2\u20133 years of experience.", "devops-engineer": "Own cloud infrastructure and deployments on AWS, using Docker and CI/CD to keep releases smooth and systems reliable. Fully remote for engineers with 3+ years of experience." };
+    var JOBS = [
+  {
+    "slug": "software-engineer-inntot-technologies-pv-e5e8b62a",
+    "id": "e5e8b62a-e5a6-5e98-a808-0c86e8cb210d",
+    "title": "Software Engineer",
+    "company": "Inntot Technologies Pvt. Ltd.",
+    "mode": "On-site",
+    "exp": "Entry-Level (0–2 years)",
+    "loc": "Kochi, Kerala, India",
+    "skills": [
+      "C",
+      "C++"
+    ],
+    "more": 10,
+    "tone": "#059669",
+    "ink": "#fff",
+    "initial": "I"
+  },
+  {
+    "slug": "odoo-developer-nurture-spark-digital-951f75b9",
+    "id": "951f75b9-7dfc-5770-9c15-1822f79ded29",
+    "title": "Odoo Developer",
+    "company": "Nurture Spark Digital",
+    "mode": "On-site",
+    "exp": "FRESHER",
+    "loc": "Payyannur, Kerala, India",
+    "skills": [
+      "Python",
+      "Odoo ERP"
+    ],
+    "more": 17,
+    "tone": "#2563eb",
+    "ink": "#fff",
+    "initial": "N"
+  },
+  {
+    "slug": "python-developer-vivantify-technology-so-4ea1af55",
+    "id": "4ea1af55-a2df-5ce1-a9ec-306e07349a2b",
+    "title": "Python Developer",
+    "company": "Vivantify Technology Solutions India Pvt. Ltd.",
+    "mode": "On-site",
+    "exp": "Mid-Level (3–5 years)",
+    "loc": "CHENNAI",
+    "skills": [
+      "Python",
+      "SQL"
+    ],
+    "more": 10,
+    "tone": "#7c3aed",
+    "ink": "#fff",
+    "initial": "V"
+  },
+  {
+    "slug": "python-developer-bot-development-vbots-35155b56",
+    "id": "35155b56-7130-5891-b553-040a78a24bb1",
+    "title": "Python Developer – Bot Development",
+    "company": "vBots",
+    "mode": "On-site",
+    "exp": "Mid-Level (2–4 years)",
+    "loc": "Coimbatore, Tamil Nadu",
+    "skills": [
+      "Python",
+      "Selenium"
+    ],
+    "more": 12,
+    "tone": "#d97706",
+    "ink": "#fff",
+    "initial": "V"
+  },
+  {
+    "slug": "flutter-developer-intern-hancod-98802267",
+    "id": "98802267-2805-56be-b910-b38da07f7a18",
+    "title": "Flutter Developer Intern",
+    "company": "Hancod",
+    "mode": "On-site",
+    "exp": "Fresher (Basic Flutter knowledge)",
+    "loc": "Perintalmanna, Kerala",
+    "skills": [
+      "Flutter",
+      "Dart"
+    ],
+    "more": 10,
+    "tone": "#0891b2",
+    "ink": "#fff",
+    "initial": "H"
+  },
+  {
+    "slug": "devops-engineer-acura-solutions-ltd-bb711af2",
+    "id": "bb711af2-b94c-5d00-87ce-050b785961ef",
+    "title": "DevOps Engineer",
+    "company": "ACURA SOLUTIONS LTD",
+    "mode": "On-site",
+    "exp": "FRESHER",
+    "loc": "Malappuram, Kerala",
+    "skills": [
+      "Kubernetes",
+      "Docker"
+    ],
+    "more": 8,
+    "tone": "#dc2626",
+    "ink": "#fff",
+    "initial": "A"
+  },
+  {
+    "slug": "software-engineer-mailercloud-87b3c036",
+    "id": "87b3c036-09ca-5b60-afbc-2bf72a661532",
+    "title": "Software Engineer",
+    "company": "mailercloud",
+    "mode": "On-site",
+    "exp": "3 – 6 years",
+    "loc": "KOZHIKODE",
+    "skills": [
+      "Go",
+      "PHP"
+    ],
+    "more": 25,
+    "tone": "#4f46e5",
+    "ink": "#fff",
+    "initial": "M"
+  }
+];
+    window.TJ_JOBS = JOBS;
+    var TJ_DESC = window.TJ_DESC = {
+  "software-engineer-inntot-technologies-pv-e5e8b62a": "**Job Title: Software Engineer**\n\n**Company:** Inntot Technologies Pvt. Ltd.  \n**Location:** Kochi, Kerala, India  \n**Work Mode:** On-site  \n**Employment Type:** Full-time  \n**Experience:** 0–2 Years\n\n### Role Overview\n\nWe are looking for talented and motivated Software Engineers with strong programming skills in C/C++ to join our development team. Candidates should have a good understanding of Data Structures, Algorithms, and RTOS concepts, along with strong debugging and problem-solving abilities.\n\nFreshers with excellent academic records and very good programming skills in C are also encouraged to apply.\n\n### Key Responsibilities\n\n- Develop and implement software programs based on project requirements.\n- Perform unit testing to ensure software quality and reliability.\n- Debug software applications and identify and fix defects.\n- Prepare technical documentation covering development techniques and software designs.\n- Experiment with new technologies and ideas to improve existing solutions.\n- Contribute to software development and continuous improvement activities.\n\n### Required Skills & Qualifications\n\n- 0–2 years of experience in software development.\n- Excellent programming skills in C and C++.\n- Understanding of Real-Time Operating System (RTOS) concepts.\n- Strong knowledge of Data Structures and Algorithms.\n- Good software debugging and troubleshooting skills.\n- Strong analytical and problem-solving abilities.\n- Ability to learn quickly and adapt to new technologies.\n- Proactive attitude and ability to multitask.\n\n### Educational Qualifications\n\nCandidates with any of the following qualifications are eligible:\n\n- ME / M.Tech\n- BE / B.Tech\n- MCA\n\nFreshers with excellent academic records and strong C programming skills are encouraged to apply.\n\n### Employment Details\n\n- Employment Type: Full-time\n- Work Arrangement: On-site\n- Experience Level: 0–2 Years",
+  "e5e8b62a-e5a6-5e98-a808-0c86e8cb210d": "**Job Title: Software Engineer**\n\n**Company:** Inntot Technologies Pvt. Ltd.  \n**Location:** Kochi, Kerala, India  \n**Work Mode:** On-site  \n**Employment Type:** Full-time  \n**Experience:** 0–2 Years\n\n### Role Overview\n\nWe are looking for talented and motivated Software Engineers with strong programming skills in C/C++ to join our development team. Candidates should have a good understanding of Data Structures, Algorithms, and RTOS concepts, along with strong debugging and problem-solving abilities.\n\nFreshers with excellent academic records and very good programming skills in C are also encouraged to apply.\n\n### Key Responsibilities\n\n- Develop and implement software programs based on project requirements.\n- Perform unit testing to ensure software quality and reliability.\n- Debug software applications and identify and fix defects.\n- Prepare technical documentation covering development techniques and software designs.\n- Experiment with new technologies and ideas to improve existing solutions.\n- Contribute to software development and continuous improvement activities.\n\n### Required Skills & Qualifications\n\n- 0–2 years of experience in software development.\n- Excellent programming skills in C and C++.\n- Understanding of Real-Time Operating System (RTOS) concepts.\n- Strong knowledge of Data Structures and Algorithms.\n- Good software debugging and troubleshooting skills.\n- Strong analytical and problem-solving abilities.\n- Ability to learn quickly and adapt to new technologies.\n- Proactive attitude and ability to multitask.\n\n### Educational Qualifications\n\nCandidates with any of the following qualifications are eligible:\n\n- ME / M.Tech\n- BE / B.Tech\n- MCA\n\nFreshers with excellent academic records and strong C programming skills are encouraged to apply.\n\n### Employment Details\n\n- Employment Type: Full-time\n- Work Arrangement: On-site\n- Experience Level: 0–2 Years",
+  "odoo-developer-nurture-spark-digital-951f75b9": "**Job Title: Odoo Developer**\n\n**Company:** Nurture Spark Digital  \n**Location:** Payyannur, Kerala, India  \n**Work Mode:** On-site  \n**Employment Type:** Full-time\n\n### Role Overview\n\nWe are looking for a skilled and motivated Odoo Developer to join our team. The ideal candidate should have hands-on experience in Odoo development, customization, module implementation, and integration. You will be responsible for developing, customizing, maintaining, and supporting Odoo ERP solutions based on business requirements.\n\n### Key Responsibilities\n\n- Design, develop, and customize Odoo modules (Community and Enterprise editions) based on client requirements.\n- Extend models, views, wizards, and QWeb reports.\n- Configure applications using Odoo Studio, including custom fields, views, automated actions, and reports.\n- Convert Studio customizations into maintainable custom modules where required.\n- Develop frontend components using OWL and JavaScript.\n- Build and maintain third-party integrations using REST APIs, XML-RPC, and JSON-RPC.\n- Handle data migration, version upgrades, and deployments on Odoo.sh and on-premise environments.\n- Troubleshoot issues, optimize performance, and provide technical support for live implementations.\n- Collaborate with functional consultants to translate business requirements into technical solutions.\n\n### Required Skills & Qualifications\n\n- Bachelor's degree in Computer Science, Information Technology, or a related field.\n- Strong proficiency in Python and the Odoo ORM framework.\n- Hands-on experience with Odoo versions 16, 17, and 18.\n- Practical experience with Odoo Studio and custom module development.\n- Knowledge of PostgreSQL, XML, QWeb, and JavaScript (OWL).\n- Working knowledge of Git and Odoo.sh.\n- Understanding of core business modules, including Accounting, Sales, Purchase, Inventory, CRM, and HR/Payroll.\n- Strong analytical, problem-solving, and communication skills.\n\n### Preferred Qualifications\n\n- Experience with UAE/GCC localization, including VAT and WPS payroll.\n- Familiarity with Linux server administration and Docker.\n- Odoo certification.\n\n### Benefits\n\n- Opportunity to work on implementation projects for clients across the UAE and GCC.\n- Exposure to industries including trading, contracting, fleet, and manufacturing.\n- Collaborative work environment with opportunities for professional growth.\n- Competitive compensation package.",
+  "951f75b9-7dfc-5770-9c15-1822f79ded29": "**Job Title: Odoo Developer**\n\n**Company:** Nurture Spark Digital  \n**Location:** Payyannur, Kerala, India  \n**Work Mode:** On-site  \n**Employment Type:** Full-time\n\n### Role Overview\n\nWe are looking for a skilled and motivated Odoo Developer to join our team. The ideal candidate should have hands-on experience in Odoo development, customization, module implementation, and integration. You will be responsible for developing, customizing, maintaining, and supporting Odoo ERP solutions based on business requirements.\n\n### Key Responsibilities\n\n- Design, develop, and customize Odoo modules (Community and Enterprise editions) based on client requirements.\n- Extend models, views, wizards, and QWeb reports.\n- Configure applications using Odoo Studio, including custom fields, views, automated actions, and reports.\n- Convert Studio customizations into maintainable custom modules where required.\n- Develop frontend components using OWL and JavaScript.\n- Build and maintain third-party integrations using REST APIs, XML-RPC, and JSON-RPC.\n- Handle data migration, version upgrades, and deployments on Odoo.sh and on-premise environments.\n- Troubleshoot issues, optimize performance, and provide technical support for live implementations.\n- Collaborate with functional consultants to translate business requirements into technical solutions.\n\n### Required Skills & Qualifications\n\n- Bachelor's degree in Computer Science, Information Technology, or a related field.\n- Strong proficiency in Python and the Odoo ORM framework.\n- Hands-on experience with Odoo versions 16, 17, and 18.\n- Practical experience with Odoo Studio and custom module development.\n- Knowledge of PostgreSQL, XML, QWeb, and JavaScript (OWL).\n- Working knowledge of Git and Odoo.sh.\n- Understanding of core business modules, including Accounting, Sales, Purchase, Inventory, CRM, and HR/Payroll.\n- Strong analytical, problem-solving, and communication skills.\n\n### Preferred Qualifications\n\n- Experience with UAE/GCC localization, including VAT and WPS payroll.\n- Familiarity with Linux server administration and Docker.\n- Odoo certification.\n\n### Benefits\n\n- Opportunity to work on implementation projects for clients across the UAE and GCC.\n- Exposure to industries including trading, contracting, fleet, and manufacturing.\n- Collaborative work environment with opportunities for professional growth.\n- Competitive compensation package.",
+  "python-developer-vivantify-technology-so-4ea1af55": "**Job Title: Python Developer**\n\n**Company:** Vivantify Technology Solutions India Pvt. Ltd.  \n**Location:** PAN India  \n**Experience:** 3–5 Years  \n**Employment Type:** Full-time / Contractor\n\n**Role Overview**\n\nWe are looking for an experienced Python Developer to enhance and optimize enterprise applications. The role focuses on Python development, SQL optimization, backend services, API development, debugging, and application performance. The ideal candidate will work with existing codebases to implement enhancements and deliver scalable, maintainable, and high-performance solutions.\n\n**Key Responsibilities**\n\n- Develop and implement application features based on business and technical requirements.\n- Enhance existing codebases to improve scalability, maintainability, and code quality.\n- Optimize application, backend, and database performance.\n- Develop and maintain backend services, APIs, and database integrations.\n- Write and optimize SQL queries, stored procedures, joins, and indexing.\n- Troubleshoot defects and perform root cause analysis.\n- Participate in code reviews and maintain engineering standards.\n- Contribute to technical documentation, knowledge sharing, and process improvements.\n\n**Required Skills & Qualifications**\n\n- Strong hands-on experience in Python development.\n- Strong proficiency in SQL, including query optimization, joins, stored procedures, indexing, and performance tuning.\n- Experience developing and maintaining APIs and backend systems.\n- Strong debugging, troubleshooting, and root cause analysis skills.\n- Experience working with existing applications and implementing enhancements.\n- Knowledge of Git and version control systems.\n- Strong analytical and problem-solving abilities.\n\n**Preferred Skills**\n\n- Exposure to React.js.\n- Knowledge of Power BI.\n- Understanding of Large Language Models (LLMs) and AI integrations.\n\n**Mandatory Skills**\n\n- Python\n- React.js\n\n**What We Offer**\n\n- Competitive salary and benefits package.\n- Opportunities for professional growth and development.\n- Collaborative and inclusive work environment.\n- Opportunities to work on challenging projects with leading clients.",
+  "4ea1af55-a2df-5ce1-a9ec-306e07349a2b": "**Job Title: Python Developer**\n\n**Company:** Vivantify Technology Solutions India Pvt. Ltd.  \n**Location:** PAN India  \n**Experience:** 3–5 Years  \n**Employment Type:** Full-time / Contractor\n\n**Role Overview**\n\nWe are looking for an experienced Python Developer to enhance and optimize enterprise applications. The role focuses on Python development, SQL optimization, backend services, API development, debugging, and application performance. The ideal candidate will work with existing codebases to implement enhancements and deliver scalable, maintainable, and high-performance solutions.\n\n**Key Responsibilities**\n\n- Develop and implement application features based on business and technical requirements.\n- Enhance existing codebases to improve scalability, maintainability, and code quality.\n- Optimize application, backend, and database performance.\n- Develop and maintain backend services, APIs, and database integrations.\n- Write and optimize SQL queries, stored procedures, joins, and indexing.\n- Troubleshoot defects and perform root cause analysis.\n- Participate in code reviews and maintain engineering standards.\n- Contribute to technical documentation, knowledge sharing, and process improvements.\n\n**Required Skills & Qualifications**\n\n- Strong hands-on experience in Python development.\n- Strong proficiency in SQL, including query optimization, joins, stored procedures, indexing, and performance tuning.\n- Experience developing and maintaining APIs and backend systems.\n- Strong debugging, troubleshooting, and root cause analysis skills.\n- Experience working with existing applications and implementing enhancements.\n- Knowledge of Git and version control systems.\n- Strong analytical and problem-solving abilities.\n\n**Preferred Skills**\n\n- Exposure to React.js.\n- Knowledge of Power BI.\n- Understanding of Large Language Models (LLMs) and AI integrations.\n\n**Mandatory Skills**\n\n- Python\n- React.js\n\n**What We Offer**\n\n- Competitive salary and benefits package.\n- Opportunities for professional growth and development.\n- Collaborative and inclusive work environment.\n- Opportunities to work on challenging projects with leading clients.",
+  "python-developer-bot-development-vbots-35155b56": "**Job Title: Python Developer – Bot Development**\n\n**Company:** vBots  \n**Location:** Coimbatore, Tamil Nadu, India  \n**Work Mode:** On-site  \n**Employment Type:** Full-time  \n**Experience:** 2–4 Years\n\n**Role Overview**\n\nWe are looking for a skilled Python Developer to design, develop, and deploy intelligent bots that automate business processes and improve operational efficiency. The ideal candidate will have experience with Python development, automation frameworks, APIs, and AI/ML libraries to build scalable solutions that integrate with enterprise applications.\n\n**Key Responsibilities**\n\n- Design, develop, and maintain bots using Python and automation frameworks.\n- Write clean, efficient, reusable code for automation requirements.\n- Integrate bots with third-party applications.\n- Collaborate with project coordinators and business analysts to understand business requirements.\n- Develop custom automation logic, including OCR, NLP, and AI-based components.\n- Conduct unit testing and support QA/UAT teams during validation.\n- Monitor and troubleshoot production bots, implementing timely fixes and enhancements.\n- Maintain technical documentation, coding standards, and development best practices.\n\n**Required Skills & Qualifications**\n\n- BE (CSE) or B.Tech (IT, CSE, AIML, CSBS, AI & DS).\n- 2–4 years of experience in Python development.\n- Familiarity with automation libraries such as Selenium, Pandas, and OpenPyXL.\n- Knowledge of OCR/NLP libraries such as Tesseract, spaCy, and OpenCV is an advantage.\n- Strong debugging, problem-solving, and analytical skills.\n\n**Good to Have**\n\n- Exposure to RPA platforms such as UiPath, Automation Anywhere, or Microsoft Power Automate.\n\n**Employment Type:** Full-time  \n**Work Arrangement:** On-site",
+  "35155b56-7130-5891-b553-040a78a24bb1": "**Job Title: Python Developer – Bot Development**\n\n**Company:** vBots  \n**Location:** Coimbatore, Tamil Nadu, India  \n**Work Mode:** On-site  \n**Employment Type:** Full-time  \n**Experience:** 2–4 Years\n\n**Role Overview**\n\nWe are looking for a skilled Python Developer to design, develop, and deploy intelligent bots that automate business processes and improve operational efficiency. The ideal candidate will have experience with Python development, automation frameworks, APIs, and AI/ML libraries to build scalable solutions that integrate with enterprise applications.\n\n**Key Responsibilities**\n\n- Design, develop, and maintain bots using Python and automation frameworks.\n- Write clean, efficient, reusable code for automation requirements.\n- Integrate bots with third-party applications.\n- Collaborate with project coordinators and business analysts to understand business requirements.\n- Develop custom automation logic, including OCR, NLP, and AI-based components.\n- Conduct unit testing and support QA/UAT teams during validation.\n- Monitor and troubleshoot production bots, implementing timely fixes and enhancements.\n- Maintain technical documentation, coding standards, and development best practices.\n\n**Required Skills & Qualifications**\n\n- BE (CSE) or B.Tech (IT, CSE, AIML, CSBS, AI & DS).\n- 2–4 years of experience in Python development.\n- Familiarity with automation libraries such as Selenium, Pandas, and OpenPyXL.\n- Knowledge of OCR/NLP libraries such as Tesseract, spaCy, and OpenCV is an advantage.\n- Strong debugging, problem-solving, and analytical skills.\n\n**Good to Have**\n\n- Exposure to RPA platforms such as UiPath, Automation Anywhere, or Microsoft Power Automate.\n\n**Employment Type:** Full-time  \n**Work Arrangement:** On-site",
+  "flutter-developer-intern-hancod-98802267": "**Flutter Developer Intern**\n\n**Company:** Hancod  \n**Product:** Duxbe – AI-powered ERP & POS System  \n**Location:** Perintalmanna, Kerala, India  \n**Work Mode:** On-site  \n**Employment Type:** Internship (Unpaid)\n\n**About Hancod**\n\nAt Hancod, we're building Duxbe, an AI-powered ERP and POS system designed for small businesses across India and beyond. We focus on clean user interfaces, fast development, and building practical features that solve real-world business problems.\n\n**Role Overview**\n\nWe are looking for motivated Flutter Developer Interns, including freshers with a basic understanding of Flutter development, to join our development team. You will contribute to building and maintaining ERP modules for web and mobile platforms.\n\n**Key Responsibilities**\n\n- Build and maintain ERP modules, including inventory, accounting, GST, sales, and reports.\n- Develop responsive Flutter applications for web and mobile.\n- Implement Clean Architecture and Riverpod for state management.\n- Create reusable widgets and efficient offline/local data logic.\n- Integrate Supabase, Firebase, and REST APIs.\n- Work closely with backend, QA, and product teams in development sprints.\n\n**Required Skills & Qualifications**\n\n- Basic knowledge of Flutter and Dart.\n- Understanding of Riverpod and state management.\n- Basic understanding of Clean Architecture.\n- Familiarity with Supabase or similar backend platforms.\n- Knowledge of API integration and database concepts.\n- Interest in ERP and accounting features such as invoicing, ledgers, and taxation.\n- Good problem-solving skills and an interest in writing clean code.\n\n**Good to Have**\n\n- FlutterFlow experience.\n- Supabase SQL and Edge Functions.\n- Published applications on Play Store or App Store.\n\n**Internship Details**\n\n- Internship Type: Unpaid.\n- Work Arrangement: On-site.\n- Experience Level: Freshers welcome.\n- Duration: Not specified in the original posting.",
+  "98802267-2805-56be-b910-b38da07f7a18": "**Flutter Developer Intern**\n\n**Company:** Hancod  \n**Product:** Duxbe – AI-powered ERP & POS System  \n**Location:** Perintalmanna, Kerala, India  \n**Work Mode:** On-site  \n**Employment Type:** Internship (Unpaid)\n\n**About Hancod**\n\nAt Hancod, we're building Duxbe, an AI-powered ERP and POS system designed for small businesses across India and beyond. We focus on clean user interfaces, fast development, and building practical features that solve real-world business problems.\n\n**Role Overview**\n\nWe are looking for motivated Flutter Developer Interns, including freshers with a basic understanding of Flutter development, to join our development team. You will contribute to building and maintaining ERP modules for web and mobile platforms.\n\n**Key Responsibilities**\n\n- Build and maintain ERP modules, including inventory, accounting, GST, sales, and reports.\n- Develop responsive Flutter applications for web and mobile.\n- Implement Clean Architecture and Riverpod for state management.\n- Create reusable widgets and efficient offline/local data logic.\n- Integrate Supabase, Firebase, and REST APIs.\n- Work closely with backend, QA, and product teams in development sprints.\n\n**Required Skills & Qualifications**\n\n- Basic knowledge of Flutter and Dart.\n- Understanding of Riverpod and state management.\n- Basic understanding of Clean Architecture.\n- Familiarity with Supabase or similar backend platforms.\n- Knowledge of API integration and database concepts.\n- Interest in ERP and accounting features such as invoicing, ledgers, and taxation.\n- Good problem-solving skills and an interest in writing clean code.\n\n**Good to Have**\n\n- FlutterFlow experience.\n- Supabase SQL and Edge Functions.\n- Published applications on Play Store or App Store.\n\n**Internship Details**\n\n- Internship Type: Unpaid.\n- Work Arrangement: On-site.\n- Experience Level: Freshers welcome.\n- Duration: Not specified in the original posting.",
+  "devops-engineer-acura-solutions-ltd-bb711af2": "**Job Title: DevOps Engineer**\n\n**Company:** ACURA SOLUTIONS LTD  \n**Location:** Malappuram, Kerala, India  \n**Work Mode:** On-site  \n**Employment Type:** Full-time\n\n**Role Overview**\n\nWe are seeking a skilled DevOps Engineer to join our dynamic team in Kerala. The ideal candidate should have a strong understanding of DevOps practices, particularly within the banking domain, and experience implementing and managing CI/CD pipelines and Kubernetes environments.\n\n**Key Responsibilities**\n\n- Design, implement, and manage CI/CD pipelines to automate software delivery.\n- Deploy and manage containerized applications using Kubernetes.\n- Collaborate with development and operations teams to establish DevOps best practices.\n- Monitor system performance and troubleshoot infrastructure issues.\n- Improve deployment processes, infrastructure reliability, and automation.\n- Stay updated with emerging DevOps technologies and cloud computing trends.\n\n**Required Skills & Qualifications**\n\n- Strong experience with Kubernetes and container orchestration.\n- Proficiency in CI/CD tools and practices.\n- Familiarity with cloud platforms and Infrastructure as Code (IaC).\n- Understanding of banking domain requirements.\n- Excellent problem-solving and troubleshooting abilities.\n- Ability to work effectively in a fast-paced environment.\n\n**Employment Type:** Full-time  \n**Work Arrangement:** On-site",
+  "bb711af2-b94c-5d00-87ce-050b785961ef": "**Job Title: DevOps Engineer**\n\n**Company:** ACURA SOLUTIONS LTD  \n**Location:** Malappuram, Kerala, India  \n**Work Mode:** On-site  \n**Employment Type:** Full-time\n\n**Role Overview**\n\nWe are seeking a skilled DevOps Engineer to join our dynamic team in Kerala. The ideal candidate should have a strong understanding of DevOps practices, particularly within the banking domain, and experience implementing and managing CI/CD pipelines and Kubernetes environments.\n\n**Key Responsibilities**\n\n- Design, implement, and manage CI/CD pipelines to automate software delivery.\n- Deploy and manage containerized applications using Kubernetes.\n- Collaborate with development and operations teams to establish DevOps best practices.\n- Monitor system performance and troubleshoot infrastructure issues.\n- Improve deployment processes, infrastructure reliability, and automation.\n- Stay updated with emerging DevOps technologies and cloud computing trends.\n\n**Required Skills & Qualifications**\n\n- Strong experience with Kubernetes and container orchestration.\n- Proficiency in CI/CD tools and practices.\n- Familiarity with cloud platforms and Infrastructure as Code (IaC).\n- Understanding of banking domain requirements.\n- Excellent problem-solving and troubleshooting abilities.\n- Ability to work effectively in a fast-paced environment.\n\n**Employment Type:** Full-time  \n**Work Arrangement:** On-site",
+  "software-engineer-mailercloud-87b3c036": "**About Mailercloud**\n\nMailercloud is a product-based company offering an email marketing platform used by businesses across 100+ countries, delivering billions of emails annually.\n\nWe are looking for an experienced Full Stack Engineer with 3–6 years of professional experience to join our engineering team at our Kozhikode office.\n\n**Key Responsibilities**\n\n**1. Product Development**\n- Design, develop, and maintain backend APIs and microservices using Go and PHP.\n- Build and maintain frontend applications using Vue.js 2/3 or React.\n- Develop responsive, high-performance interfaces based on Figma designs.\n- Own features throughout the development lifecycle, from requirements and implementation to testing, deployment, and monitoring.\n- Develop integrations with e-commerce, CRM, and third-party platforms using REST APIs, GraphQL, and webhooks.\n\n**2. Infrastructure & DevOps**\n- Work with Linux-based bare-metal server infrastructure, particularly Rocky Linux 9.\n- Manage and improve CI/CD pipelines, automated testing, linting, and deployment processes.\n- Optimize ClickHouse database schemas and queries for large-scale analytics.\n- Support MySQL operations, including schema migrations, indexing, query optimization, and partition management.\n- Assist with RabbitMQ infrastructure and HAProxy configuration.\n\n**3. AI Agents & Developer Tooling**\n- Build and maintain AI-powered agents for QA, code reviews, and SRE operations.\n- Work with MCP-first architecture and Claude through the Anthropic API.\n- Develop and maintain CLAUDE.md configurations, sprint SOPs, and developer tooling.\n- Contribute to the Mailercloud MCP connector and technical documentation.\n\n**4. Code Quality & Collaboration**\n- Participate in code reviews, sprint planning, and retrospectives.\n- Write clean, scalable, maintainable, and well-tested code.\n- Follow established coding standards and branching strategies.\n- Identify technical debt and recommend practical improvements.\n- Collaborate with engineering teams to improve product performance and reliability.\n\n**Required Qualifications & Skills**\n- 3–6 years of professional software development experience, preferably in a product-based company.\n- Strong proficiency in Go (preferred) or PHP.\n- Frontend development experience with Vue.js 2/3 or React.\n- Good understanding of MySQL, database design, indexing, and query optimization.\n- Experience working with Linux environments such as CentOS, RHEL, or Rocky Linux.\n- Familiarity with CI/CD tools such as GitHub Actions or GitLab CI.\n- Strong understanding of data structures, algorithms, and system design.\n- Ability to understand infrastructure-as-code and deployment scripts.\n- Knowledge of REST APIs, GraphQL, microservices, and webhooks.\n- Good written English and technical documentation skills.\n\n**Preferred Skills**\n- Experience with ClickHouse, RabbitMQ, and HAProxy.\n- Knowledge of AI agents, MCP architecture, and Anthropic API.\n- Experience building and maintaining large-scale SaaS products.\n\n**Employment Details**\n- Employment Type: Full-time\n- Work Location: Kozhikode, Kerala\n- Work Mode: On-site\n- Experience: 3–6 years\n\nWe are looking for an engineer who enjoys building production-grade software, solving complex technical challenges, and contributing to scalable product development.",
+  "87b3c036-09ca-5b60-afbc-2bf72a661532": "**About Mailercloud**\n\nMailercloud is a product-based company offering an email marketing platform used by businesses across 100+ countries, delivering billions of emails annually.\n\nWe are looking for an experienced Full Stack Engineer with 3–6 years of professional experience to join our engineering team at our Kozhikode office.\n\n**Key Responsibilities**\n\n**1. Product Development**\n- Design, develop, and maintain backend APIs and microservices using Go and PHP.\n- Build and maintain frontend applications using Vue.js 2/3 or React.\n- Develop responsive, high-performance interfaces based on Figma designs.\n- Own features throughout the development lifecycle, from requirements and implementation to testing, deployment, and monitoring.\n- Develop integrations with e-commerce, CRM, and third-party platforms using REST APIs, GraphQL, and webhooks.\n\n**2. Infrastructure & DevOps**\n- Work with Linux-based bare-metal server infrastructure, particularly Rocky Linux 9.\n- Manage and improve CI/CD pipelines, automated testing, linting, and deployment processes.\n- Optimize ClickHouse database schemas and queries for large-scale analytics.\n- Support MySQL operations, including schema migrations, indexing, query optimization, and partition management.\n- Assist with RabbitMQ infrastructure and HAProxy configuration.\n\n**3. AI Agents & Developer Tooling**\n- Build and maintain AI-powered agents for QA, code reviews, and SRE operations.\n- Work with MCP-first architecture and Claude through the Anthropic API.\n- Develop and maintain CLAUDE.md configurations, sprint SOPs, and developer tooling.\n- Contribute to the Mailercloud MCP connector and technical documentation.\n\n**4. Code Quality & Collaboration**\n- Participate in code reviews, sprint planning, and retrospectives.\n- Write clean, scalable, maintainable, and well-tested code.\n- Follow established coding standards and branching strategies.\n- Identify technical debt and recommend practical improvements.\n- Collaborate with engineering teams to improve product performance and reliability.\n\n**Required Qualifications & Skills**\n- 3–6 years of professional software development experience, preferably in a product-based company.\n- Strong proficiency in Go (preferred) or PHP.\n- Frontend development experience with Vue.js 2/3 or React.\n- Good understanding of MySQL, database design, indexing, and query optimization.\n- Experience working with Linux environments such as CentOS, RHEL, or Rocky Linux.\n- Familiarity with CI/CD tools such as GitHub Actions or GitLab CI.\n- Strong understanding of data structures, algorithms, and system design.\n- Ability to understand infrastructure-as-code and deployment scripts.\n- Knowledge of REST APIs, GraphQL, microservices, and webhooks.\n- Good written English and technical documentation skills.\n\n**Preferred Skills**\n- Experience with ClickHouse, RabbitMQ, and HAProxy.\n- Knowledge of AI agents, MCP architecture, and Anthropic API.\n- Experience building and maintaining large-scale SaaS products.\n\n**Employment Details**\n- Employment Type: Full-time\n- Work Location: Kozhikode, Kerala\n- Work Mode: On-site\n- Experience: 3–6 years\n\nWe are looking for an engineer who enjoys building production-grade software, solving complex technical challenges, and contributing to scalable product development."
+};
     var tt;
     function getList() { return container.querySelector('#list') || document.getElementById('list'); }
     function getDet() { return container.querySelector('#detail') || document.getElementById('detail'); }
@@ -974,26 +1110,61 @@ export function mountOpenRolesEngine(container, options = {}) {
         setScrollPos(window.__tjY || 0);
       }
 
+      function findJob(slug) {
+        if (!slug) return null;
+        var all = (window.TJ_JOBS && window.TJ_JOBS.length) ? window.TJ_JOBS : JOBS;
+        var target = String(slug).toLowerCase().trim();
+
+        // 1. Direct match on slug or id
+        var match = all.filter(function (x) {
+          return (x.slug && x.slug.toLowerCase() === target) ||
+                 (x.id && x.id.toLowerCase() === target);
+        })[0];
+        if (match) return match;
+
+        // 2. Match by 8-hex prefix anywhere in target (e.g. e5e8b62a)
+        var hexMatch = target.match(/([a-f0-9]{8})/);
+        var hex = hexMatch ? hexMatch[1] : '';
+        if (hex) {
+          match = all.filter(function (x) {
+            return (x.id && x.id.toLowerCase().indexOf(hex) === 0) ||
+                   (x.slug && x.slug.toLowerCase().indexOf(hex) > -1);
+          })[0];
+          if (match) return match;
+        }
+
+        // 3. Substring match
+        match = all.filter(function (x) {
+          return (x.slug && target.indexOf(x.slug.toLowerCase()) > -1) ||
+                 (x.slug && x.slug.toLowerCase().indexOf(target) > -1);
+        })[0];
+        return match || null;
+      }
+
       function openDetail(slug) {
         closeProfilePage();
         var list = getList(), det = getDet();
         if (!list || !det) return;
-        var j = JOBS.filter(function (x) { return x.slug === slug || x.id === slug; })[0]; if (!j) return;
-        if (!det.hidden && det.dataset.curSlug === slug) return;
+        var j = findJob(slug);
+        if (!j) {
+          console.warn('[openDetail] Job not found for slug:', slug);
+          return;
+        }
+        if (!det.hidden && det.dataset.curSlug === j.slug) return;
         window.__tjY = getScrollPos();
         list.hidden = true;
         list.style.display = 'none';
         det.hidden = false;
         det.style.display = 'block';
-        det.dataset.curSlug = slug;
+        det.dataset.curSlug = j.slug;
         document.body.classList.add('detail');
         render(j, det);
         document.title = j.title + ' at ' + j.company + ' – TermJobs';
-        if (window.location.hash !== '#job-' + slug) {
+        if (window.location.hash !== '#job-' + j.slug) {
           try {
-            history.pushState({ tjSlug: slug }, '', window.location.pathname + window.location.search + '#job-' + slug);
+            history.pushState({ tjSlug: j.slug }, '', window.location.pathname + window.location.search + '#job-' + j.slug);
           } catch (e) {
-            history.replaceState(null, '', window.location.pathname + window.location.search + '#job-' + slug);
+            history.replaceState(null, '', window.location.pathname + window.location.search + '#job-' + j.slug);
           }
         }
         setScrollPos(0);
@@ -1026,12 +1197,16 @@ export function mountOpenRolesEngine(container, options = {}) {
           openProfilePage();
           return;
         }
-        var m = location.hash.match(/^#job-([a-z0-9-]+)$/), j = m && JOBS.filter(function (x) { return x.slug === m[1] || x.id === m[1]; })[0];
-        if (j) { openDetail(j.slug); }
-        else {
-          closeDetail();
-          closeProfilePage();
+        var m = location.hash.match(/^#job-([a-z0-9-]+)$/i);
+        if (m) {
+          var j = findJob(m[1]);
+          if (j) {
+            openDetail(j.slug);
+            return;
+          }
         }
+        closeDetail();
+        closeProfilePage();
       }
 
       // Container-level click delegator for card clicks, crumb, and detail actions
@@ -1048,7 +1223,7 @@ export function mountOpenRolesEngine(container, options = {}) {
         }
         var c = e.target.closest('a.card, [data-slug]');
         if (c && !e.target.closest('button.bm, button.un, button.dsk, button.dsv, button.dap, button.iv-attend-ai, .iv-attend-ai')) {
-          var slug = c.dataset.slug;
+          var slug = c.dataset.slug || c.dataset.id;
           if (!slug) {
             var h = c.getAttribute('href') || '';
             var m = h.match(/#job-([a-z0-9-]+)/i);
@@ -1137,7 +1312,7 @@ export function mountOpenRolesEngine(container, options = {}) {
 
     // 2. Script 1: Search & pagination
     (function () {
-      var PER = (function (w) { return w >= 1200 ? 8 : w >= 900 ? 9 : 6; })(window.innerWidth), page = 1, cards = [].slice.call(document.querySelectorAll('.card')), q = document.getElementById('q'),
+      var PER = (function (w) { return w >= 1200 ? 8 : w >= 900 ? 9 : 6; })(window.innerWidth), page = 1, cards = [].slice.call(document.querySelectorAll('#grid .card')), q = document.getElementById('q'),
         fm = document.getElementById('f-mode'), fc = document.getElementById('f-city'), fl = document.getElementById('f-level'),
         count = document.getElementById('count'), empty = document.getElementById('empty'), r2 = document.getElementById('reset2'),
         pager = document.getElementById('pager'), grid = document.getElementById('grid'), toolbar = document.querySelector('.toolbar');
@@ -2252,8 +2427,13 @@ export function mountOpenRolesEngine(container, options = {}) {
               if (Array.isArray(loc)) loc = loc[0] || 'India';
               var skills = sr.must_have_skills || r.skills || [];
               var color = BRAND_COLORS[i % BRAND_COLORS.length];
-              var slug = r.id;
-              var desc = r.generated_jd_markdown || sr.job_description || '';
+
+              var existing = JOBS.filter(function (x) {
+                return x.id === r.id || (r.id && x.id && x.id.indexOf(r.id.slice(0, 8)) > -1);
+              })[0];
+
+              var slug = existing ? existing.slug : (r.slug || r.id);
+              var desc = r.generated_jd_markdown || sr.job_description || (existing ? TJ_DESC[existing.slug] : '');
 
               newJobs.push({
                 slug: slug,
@@ -2267,11 +2447,13 @@ export function mountOpenRolesEngine(container, options = {}) {
                 more: Math.max(0, skills.length - 2),
                 tone: color[0],
                 ink: color[1],
-                initial: (company.charAt(0) || 'T').toUpperCase()
+                initial: (company.trim().charAt(0) || 'T').toUpperCase()
               });
               newDesc[slug] = desc;
+              newDesc[r.id] = desc;
             });
 
+            JOBS = newJobs;
             window.TJ_JOBS = newJobs;
             window.TJ_DESC = newDesc;
 
