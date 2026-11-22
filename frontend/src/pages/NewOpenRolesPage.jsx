@@ -69,12 +69,13 @@ export default function NewOpenRolesPage({ enabled = true }) {
         level: details.experience_level || candidate.experience_level || existing.level || 'Junior (1–2 years)',
       };
       localStorage.setItem('tj-profile', JSON.stringify(updated));
-    } catch (e) {}
+    } catch (e) { }
   }, []);
 
   const updateHeaderAuthDOM = useCallback((user) => {
     const signinEl = containerRef.current ? containerRef.current.querySelector('#signin') : document.getElementById('signin');
     const meEl = containerRef.current ? containerRef.current.querySelector('#me') : document.getElementById('me');
+    const tabsEl = containerRef.current ? containerRef.current.querySelector('#tabs') : document.getElementById('tabs');
     const meNameEl = containerRef.current ? containerRef.current.querySelector('#me-name') : document.getElementById('me-name');
     const meAvEl = containerRef.current ? containerRef.current.querySelector('#me-av') : document.getElementById('me-av');
     const drawerAvEl = containerRef.current ? containerRef.current.querySelector('#drawer-av') : document.getElementById('drawer-av');
@@ -85,6 +86,7 @@ export default function NewOpenRolesPage({ enabled = true }) {
     if (user) {
       if (signinEl) { signinEl.hidden = true; signinEl.style.display = 'none'; }
       if (meEl) { meEl.hidden = false; meEl.style.display = 'inline-flex'; }
+      if (tabsEl) { tabsEl.hidden = false; tabsEl.style.display = ''; }
       const displayName = user.candidate_name || user.name || (user.candidate_email ? user.candidate_email.split('@')[0] : 'Candidate');
       const email = user.candidate_email || user.email || '';
       const initial = (displayName.charAt(0) || 'C').toUpperCase();
@@ -98,11 +100,14 @@ export default function NewOpenRolesPage({ enabled = true }) {
     } else {
       if (signinEl) { signinEl.hidden = false; signinEl.style.display = ''; }
       if (meEl) { meEl.hidden = true; meEl.style.display = 'none'; }
+      if (tabsEl) { tabsEl.hidden = true; tabsEl.style.display = 'none'; }
       if (secEl) { secEl.hidden = true; secEl.style.display = 'none'; }
       if (drawerAvEl) drawerAvEl.textContent = 'C';
       if (drawerNameEl) drawerNameEl.textContent = 'Candidate';
       if (drawerEmailEl) drawerEmailEl.textContent = '';
       document.body.classList.remove('has-sug');
+      document.body.classList.add('show-roles');
+      document.body.classList.remove('show-saved', 'show-interview');
     }
   }, []);
 
@@ -115,7 +120,7 @@ export default function NewOpenRolesPage({ enabled = true }) {
         window.TJ.setAuth(stored);
       }
       updateHeaderAuthDOM(candidate);
-    } catch (e) {}
+    } catch (e) { }
   }, [syncCandidateProfileToLocal, updateHeaderAuthDOM]);
 
   // Mount engine once
@@ -168,12 +173,12 @@ export default function NewOpenRolesPage({ enabled = true }) {
       onLogout: () => {
         try {
           if (candidateAuthRef.current?.logout) candidateAuthRef.current.logout();
-        } catch (e) {}
+        } catch (e) { }
         try {
           localStorage.removeItem('tj-profile');
           localStorage.removeItem('candidate_profile_user');
           localStorage.removeItem('candidate_profile_token');
-        } catch (e) {}
+        } catch (e) { }
         if (window.TJ && window.TJ.setAuth) {
           window.TJ.setAuth(null);
         }
@@ -230,12 +235,12 @@ export default function NewOpenRolesPage({ enabled = true }) {
         if (window.TJ && window.TJ.closeProfile) window.TJ.closeProfile();
         try {
           if (candidateAuthRef.current?.logout) candidateAuthRef.current.logout();
-        } catch (e) {}
+        } catch (e) { }
         try {
           localStorage.removeItem('tj-profile');
           localStorage.removeItem('candidate_profile_user');
           localStorage.removeItem('candidate_profile_token');
-        } catch (e) {}
+        } catch (e) { }
         if (window.TJ && window.TJ.setAuth) {
           window.TJ.setAuth(null);
         }
@@ -317,7 +322,7 @@ export default function NewOpenRolesPage({ enabled = true }) {
         if (window.TJ && window.TJ.drawInterviews) {
           window.TJ.drawInterviews();
         }
-      } catch (e) {}
+      } catch (e) { }
       updateHeaderAuthDOM(candidateUser);
     } else {
       const hasToken = Boolean(localStorage.getItem('candidate_profile_token'));
@@ -325,7 +330,7 @@ export default function NewOpenRolesPage({ enabled = true }) {
         try {
           localStorage.removeItem('tj-profile');
           localStorage.removeItem('candidate_profile_user');
-        } catch (e) {}
+        } catch (e) { }
         if (window.TJ && window.TJ.setAuth) {
           window.TJ.setAuth(null);
         }
