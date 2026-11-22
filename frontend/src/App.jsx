@@ -12,6 +12,7 @@ import { CandidateAuthProvider } from './context/CandidateAuthContext';
 import LandingPage from './pages/LandingPage';
 const AuthPage = lazyWithRetry(() => import('./pages/AuthPage'));
 const OpenRolesPage = lazyWithRetry(() => import('./pages/OpenRolesPage'));
+const NewOpenRolesPage = lazyWithRetry(() => import('./pages/NewOpenRolesPage'));
 import DashboardLayout from './pages/DashboardLayout';
 import { directorRedirect } from './utils/directorAccess';
 import FieldRequirementIndicators from './components/FieldRequirementIndicators';
@@ -216,20 +217,6 @@ function HorizontalTransitionLayout() {
     }
   }, [isLanding]);
 
-  // Pre-load OpenRolesPage chunk immediately so entering has zero bundle loading lag
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const preload = () => {
-        import('./pages/OpenRolesPage');
-      };
-      if ('requestIdleCallback' in window) {
-        window.requestIdleCallback(preload);
-      } else {
-        setTimeout(preload, 100);
-      }
-    }
-  }, []);
-
   const targetX = isLogin ? '100vw' : isLanding ? '0vw' : '-100vw';
 
   return (
@@ -239,7 +226,7 @@ function HorizontalTransitionLayout() {
         initial={{ x: targetX }}
         animate={{ x: targetX }}
         transition={{
-          duration: 0.35,
+          duration: 1.15,
           ease: [0.16, 1, 0.3, 1],
         }}
       >
@@ -272,7 +259,7 @@ function HorizontalTransitionLayout() {
         >
           {hasVisitedRoles && (
             <Suspense fallback={<FullScreenLoader />}>
-              <OpenRolesPage enabled={isRoles} />
+              <NewOpenRolesPage enabled={isRoles} />
             </Suspense>
           )}
         </div>
@@ -288,23 +275,10 @@ export default function App() {
         <FieldRequirementIndicators />
         <Suspense fallback={<FullScreenLoader />}>
           <Routes>
-          <Route path="/candidate-pool/added" element={<CandidatePoolAdded />} />
-          <Route path="/privacy-policy" element={<LegalPage type="privacy" />} />
-          <Route path="/terms-and-conditions" element={<LegalPage type="terms" />} />
-          <Route path="/platform-rules" element={<LegalPage type="rules" />} />
-          
-          {/* Public SEO & Content Routes */}
-          <Route path="/find-jobs" element={<FindJobsPage />} />
-          <Route path="/resources" element={<ResourcesTrustPage />} />
-          <Route path="/resources-trust" element={<ResourcesTrustPage />} />
-          <Route path="/jobs/contract" element={<JobCategoryLandingPage forcedCategory="contract" />} />
-          <Route path="/jobs/temporary" element={<JobCategoryLandingPage forcedCategory="temporary" />} />
-          <Route path="/jobs/remote-contract" element={<JobCategoryLandingPage forcedCategory="remote-contract" />} />
-          <Route path="/jobs/:slugOrId" element={<JobDetailPage />} />
-          <Route path="/job/:slugOrId" element={<JobDetailPage />} />
-          <Route path="/employers" element={<EmployerLandingPage />} />
-          <Route path="/solutions/contract-staffing" element={<EmployerLandingPage />} />
-          <Route path="/career-guides/temporary-vs-contract-jobs" element={<TemporaryVsContractGuidePage />} />
+            <Route path="/candidate-pool/added" element={<CandidatePoolAdded />} />
+            <Route path="/privacy-policy" element={<LegalPage type="privacy" />} />
+            <Route path="/terms-and-conditions" element={<LegalPage type="terms" />} />
+            <Route path="/platform-rules" element={<LegalPage type="rules" />} />
 
           <Route path="/join/hiring-manager" element={<JoinHiringManager />} />
           <Route path="/invite/hiring-manager" element={<JoinHiringManager />} />
@@ -314,6 +288,10 @@ export default function App() {
           <Route path="/invite/procurement" element={<JoinProcurement />} />
           <Route path="/join/finance" element={<JoinFinance />} />
           <Route path="/invite/finance" element={<JoinFinance />} />
+          <Route path="/open-roles/classic" element={<Suspense fallback={<FullScreenLoader />}><OpenRolesPage enabled={true} /></Suspense>} />
+          <Route path="/openroles/classic" element={<Suspense fallback={<FullScreenLoader />}><OpenRolesPage enabled={true} /></Suspense>} />
+          <Route path="/jobs/classic" element={<Suspense fallback={<FullScreenLoader />}><OpenRolesPage enabled={true} /></Suspense>} />
+          <Route path="/careers/classic" element={<Suspense fallback={<FullScreenLoader />}><OpenRolesPage enabled={true} /></Suspense>} />
           <Route element={<HorizontalTransitionLayout />}>
             <Route path="/" element={null} />
             <Route path="/open-roles" element={null} />
@@ -354,7 +332,7 @@ export default function App() {
           >
             <Route index element={<DashboardIndex />} />
             <Route path="interviews" element={<HiringManagerInterviews />} />
-            <Route path="hiring-manager" element={<Navigate to="/dashboard/hiring-manager/legacy" replace />} />
+            <Route path="hiring-manager" element={<HiringManagerAuraChat />} />
             <Route path="hiring-manager/legacy" element={<HiringManagerDashboard />} />
             <Route path="hiring-manager/chat" element={<HiringManagerChat />} />
             <Route path="requisitions" element={<RequisitionRouteGuard><RequisitionOverview /></RequisitionRouteGuard>} />

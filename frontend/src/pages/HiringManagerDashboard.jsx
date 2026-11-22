@@ -428,7 +428,7 @@ function HiringManagerDashboardContent() {
             setUnreadChatCount(res.unread_count);
           }
         })
-        .catch(() => {});
+        .catch(() => { });
     };
     fetchUnread();
     const interval = setInterval(fetchUnread, 30000);
@@ -472,7 +472,7 @@ function HiringManagerDashboardContent() {
           setCompanyRequiresDirectorApproval(flowSettings.require_director_approval);
         }
       })
-      .catch(() => {});
+      .catch(() => { });
     return () => { cancelled = true; };
   }, [token]);
 
@@ -588,8 +588,8 @@ function HiringManagerDashboardContent() {
     const path = activePanel.type === 'draft_requisition'
       ? '/api/templates'
       : activePanel.type === 'candidates' ? '/api/candidates'
-      : activePanel.type === 'requisitions' ? '/api/requisitions'
-      : activePanel.type === 'onboarding_issues' ? '/api/onboarding/issues' : null;
+        : activePanel.type === 'requisitions' ? '/api/requisitions'
+          : activePanel.type === 'onboarding_issues' ? '/api/onboarding/issues' : null;
     if (!path) return;
     let cancelled = false;
     request(path, { token }).then((data) => {
@@ -604,7 +604,7 @@ function HiringManagerDashboardContent() {
         const issues = Array.isArray(data) ? data : data?.issues || [];
         setOpenIssues(issues.filter(issue => String(issue.status).toLowerCase() === 'open'));
       }
-    }).catch(() => {});
+    }).catch(() => { });
     return () => { cancelled = true; };
   }, [token, activePanel.type]);
 
@@ -779,7 +779,7 @@ function HiringManagerDashboardContent() {
           if (Array.isArray(profList) && profList.length > 0) {
             profileId = profList[0].id;
           }
-        } catch (e) {}
+        } catch (e) { }
       }
 
       const payload = {
@@ -876,7 +876,7 @@ function HiringManagerDashboardContent() {
             if (Array.isArray(profList) && profList.length > 0) {
               profileId = profList[0].id;
             }
-          } catch (e) {}
+          } catch (e) { }
         }
 
         const payload = {
@@ -929,15 +929,15 @@ function HiringManagerDashboardContent() {
           prev.map((m) =>
             m.id === messageId
               ? {
-                  ...m,
-                  requisitionDraft: {
-                    ...m.requisitionDraft,
-                    id: newReqId || m.requisitionDraft.id,
-                    require_director_approval: finalApprovalRequired,
-                    isSubmittedForApproval: finalApprovalRequired && !isPublished,
-                    status: workflowResult?.status || (finalApprovalRequired ? 'PendingApproval' : 'Published'),
-                  },
-                }
+                ...m,
+                requisitionDraft: {
+                  ...m.requisitionDraft,
+                  id: newReqId || m.requisitionDraft.id,
+                  require_director_approval: finalApprovalRequired,
+                  isSubmittedForApproval: finalApprovalRequired && !isPublished,
+                  status: workflowResult?.status || (finalApprovalRequired ? 'PendingApproval' : 'Published'),
+                },
+              }
               : m
           )
         );
@@ -971,8 +971,8 @@ function HiringManagerDashboardContent() {
     const rawSkills = Array.isArray(draft.skills)
       ? draft.skills
       : typeof draft.skills === 'string'
-      ? draft.skills.split(',').map((s) => s.trim()).filter(Boolean)
-      : [];
+        ? draft.skills.split(',').map((s) => s.trim()).filter(Boolean)
+        : [];
     const initialSummary = draft.summary || draft.job_description || draft.role_summary || draft.description || '';
 
     setEditingDraftData({
@@ -991,8 +991,8 @@ function HiringManagerDashboardContent() {
     const parsedSkills = typeof updatedDraft.skillsText === 'string'
       ? updatedDraft.skillsText.split(',').map((s) => s.trim()).filter(Boolean)
       : Array.isArray(updatedDraft.skills)
-      ? updatedDraft.skills
-      : [];
+        ? updatedDraft.skills
+        : [];
 
     const finalSummary = updatedDraft.summary || updatedDraft.job_description || '';
 
@@ -1008,14 +1008,14 @@ function HiringManagerDashboardContent() {
       prev.map((m) =>
         m.id === updatedDraft.messageId || m.requisitionDraft
           ? {
-              ...m,
-              requisitionDraft: m.requisitionDraft
-                ? {
-                    ...m.requisitionDraft,
-                    ...mergedDraft,
-                  }
-                : m.requisitionDraft,
-            }
+            ...m,
+            requisitionDraft: m.requisitionDraft
+              ? {
+                ...m.requisitionDraft,
+                ...mergedDraft,
+              }
+              : m.requisitionDraft,
+          }
           : m
       )
     );
@@ -1044,7 +1044,7 @@ function HiringManagerDashboardContent() {
           must_have_skills: parsedSkills,
           job_description: finalSummary,
         },
-      }).catch(() => {});
+      }).catch(() => { });
     }
 
     const updateNote = {
@@ -1088,12 +1088,12 @@ function HiringManagerDashboardContent() {
           prev.map((m) =>
             m.id === messageId
               ? {
-                  ...m,
-                  requisitionDraft: {
-                    ...m.requisitionDraft,
-                    summary: enhancedSummary,
-                  },
-                }
+                ...m,
+                requisitionDraft: {
+                  ...m.requisitionDraft,
+                  summary: enhancedSummary,
+                },
+              }
               : m
           )
         );
@@ -1276,8 +1276,8 @@ function HiringManagerDashboardContent() {
     const skillsList = Array.isArray(rawSkills)
       ? rawSkills
       : typeof rawSkills === 'string'
-      ? rawSkills.split(',').map((s) => s.trim()).filter(Boolean)
-      : [];
+        ? rawSkills.split(',').map((s) => s.trim()).filter(Boolean)
+        : [];
 
     let matchStr = '85% Match';
     if (c.match_score !== undefined && c.match_score !== null) {
@@ -1315,8 +1315,8 @@ function HiringManagerDashboardContent() {
     const skillsList = Array.isArray(rawSkills)
       ? rawSkills
       : typeof rawSkills === 'string'
-      ? rawSkills.split(',').map((s) => s.trim()).filter(Boolean)
-      : ['Python', 'FastAPI', 'PostgreSQL', 'Redis', 'Docker'];
+        ? rawSkills.split(',').map((s) => s.trim()).filter(Boolean)
+        : ['Python', 'FastAPI', 'PostgreSQL', 'Redis', 'Docker'];
 
     return {
       id: req.id,
@@ -1412,10 +1412,10 @@ function HiringManagerDashboardContent() {
         const rawList = Array.isArray(candidateAction.result)
           ? candidateAction.result
           : Array.isArray(candidateAction.result.candidates)
-          ? candidateAction.result.candidates
-          : Array.isArray(candidateAction.result.screened_candidates)
-          ? candidateAction.result.screened_candidates
-          : [];
+            ? candidateAction.result.candidates
+            : Array.isArray(candidateAction.result.screened_candidates)
+              ? candidateAction.result.screened_candidates
+              : [];
         if (rawList.length > 0) {
           candCards = rawList.slice(0, 5).map((c, idx) => formatCandidateCard(c, idx));
         }
@@ -1558,10 +1558,10 @@ function HiringManagerDashboardContent() {
           categoryIcon: rawText.toLowerCase().includes('candidate')
             ? 'candidates'
             : rawText.toLowerCase().includes('interview')
-            ? 'interview'
-            : rawText.toLowerCase().includes('requisition')
-            ? 'requisition'
-            : 'chat',
+              ? 'interview'
+              : rawText.toLowerCase().includes('requisition')
+                ? 'requisition'
+                : 'chat',
           createdAt: Date.now(),
           updatedAt: Date.now(),
           messages,
@@ -2059,13 +2059,12 @@ function HiringManagerDashboardContent() {
       {botFeedback.text && (
         <div className="max-w-4xl mx-auto px-4 pt-3 shrink-0 w-full">
           <div
-            className={`p-3.5 rounded-xl text-xs flex items-center justify-between gap-2.5 transition-all shadow-xs ${
-              botFeedback.type === 'success'
-                ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                : botFeedback.type === 'info'
+            className={`p-3.5 rounded-xl text-xs flex items-center justify-between gap-2.5 transition-all shadow-xs ${botFeedback.type === 'success'
+              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+              : botFeedback.type === 'info'
                 ? 'bg-sky-50 text-sky-800 border border-sky-200'
                 : 'bg-red-50 text-red-800 border border-red-200'
-            }`}
+              }`}
           >
             <div className="flex items-center gap-2">
               {botFeedback.type === 'success' ? (
@@ -2115,11 +2114,10 @@ function HiringManagerDashboardContent() {
               setConversationsSearchQuery('');
               setIsConversationsDrawerOpen((prev) => !prev);
             }}
-            className={`w-7.5 h-7.5 rounded-xl transition-all cursor-pointer active:scale-95 flex items-center justify-center ${
-              isConversationsDrawerOpen
-                ? 'bg-black text-white shadow-3xs'
-                : 'bg-white hover:bg-gray-100 text-gray-800 border border-gray-200/70 shadow-3xs hover:shadow-2xs'
-            }`}
+            className={`w-7.5 h-7.5 rounded-xl transition-all cursor-pointer active:scale-95 flex items-center justify-center ${isConversationsDrawerOpen
+              ? 'bg-black text-white shadow-3xs'
+              : 'bg-white hover:bg-gray-100 text-gray-800 border border-gray-200/70 shadow-3xs hover:shadow-2xs'
+              }`}
             title="Previous Chat History / Conversations"
           >
             <History size={13} strokeWidth={2} />
@@ -2145,11 +2143,10 @@ function HiringManagerDashboardContent() {
           <button
             type="button"
             onClick={() => setIsTeamChatDrawerOpen((prev) => !prev)}
-            className={`relative w-7.5 h-7.5 rounded-xl transition-all cursor-pointer active:scale-95 flex items-center justify-center ${
-              isTeamChatDrawerOpen
-                ? 'bg-black text-white shadow-3xs'
-                : 'bg-white hover:bg-gray-100 text-gray-800 border border-gray-200/70 shadow-3xs hover:shadow-2xs'
-            }`}
+            className={`relative w-7.5 h-7.5 rounded-xl transition-all cursor-pointer active:scale-95 flex items-center justify-center ${isTeamChatDrawerOpen
+              ? 'bg-black text-white shadow-3xs'
+              : 'bg-white hover:bg-gray-100 text-gray-800 border border-gray-200/70 shadow-3xs hover:shadow-2xs'
+              }`}
             title="Team Messages (Chat with Company Admin & Hiring Managers)"
           >
             <MessageSquare size={13} strokeWidth={2} />
@@ -2164,11 +2161,10 @@ function HiringManagerDashboardContent() {
           <button
             type="button"
             onClick={() => setIsCalendarModalOpen(true)}
-            className={`w-7.5 h-7.5 rounded-xl transition-all cursor-pointer active:scale-95 flex items-center justify-center ${
-              isCalendarModalOpen
-                ? 'bg-black text-white shadow-3xs'
-                : 'bg-white hover:bg-gray-100 text-gray-800 border border-gray-200/70 shadow-3xs hover:shadow-2xs'
-            }`}
+            className={`w-7.5 h-7.5 rounded-xl transition-all cursor-pointer active:scale-95 flex items-center justify-center ${isCalendarModalOpen
+              ? 'bg-black text-white shadow-3xs'
+              : 'bg-white hover:bg-gray-100 text-gray-800 border border-gray-200/70 shadow-3xs hover:shadow-2xs'
+              }`}
             title="Interviews & Calendar"
           >
             <Calendar size={13} strokeWidth={2} />
@@ -2181,11 +2177,10 @@ function HiringManagerDashboardContent() {
               setToolsSearchQuery('');
               setIsToolsDrawerOpen((prev) => !prev);
             }}
-            className={`w-7.5 h-7.5 rounded-xl transition-all cursor-pointer active:scale-95 flex items-center justify-center ${
-              isToolsDrawerOpen
-                ? 'bg-black text-white shadow-3xs'
-                : 'bg-white hover:bg-gray-100 text-gray-800 border border-gray-200/70 shadow-3xs hover:shadow-2xs'
-            }`}
+            className={`w-7.5 h-7.5 rounded-xl transition-all cursor-pointer active:scale-95 flex items-center justify-center ${isToolsDrawerOpen
+              ? 'bg-black text-white shadow-3xs'
+              : 'bg-white hover:bg-gray-100 text-gray-800 border border-gray-200/70 shadow-3xs hover:shadow-2xs'
+              }`}
             title="Tools & Actions"
           >
             <MoreHorizontal size={13} strokeWidth={2} />
@@ -2272,9 +2267,8 @@ function HiringManagerDashboardContent() {
                 <button
                   type="button"
                   onClick={handleToggleVoice}
-                  className={`cursor-pointer p-1.5 rounded-xl hover:bg-gray-100 transition-colors ${
-                    isListening ? 'text-red-500 animate-pulse bg-red-50' : 'text-gray-400 hover:text-gray-700'
-                  }`}
+                  className={`cursor-pointer p-1.5 rounded-xl hover:bg-gray-100 transition-colors ${isListening ? 'text-red-500 animate-pulse bg-red-50' : 'text-gray-400 hover:text-gray-700'
+                    }`}
                   title={isListening ? 'Listening... click to stop' : 'Voice input (Speech to Text)'}
                 >
                   {isListening ? <MicOff size={16} /> : <Mic size={16} />}
@@ -2341,25 +2335,25 @@ function HiringManagerDashboardContent() {
         /* Conversation Mode */
         <div className="hm-conversation flex-1 w-full min-h-0 flex flex-col max-w-5xl mx-auto px-2 sm:px-6 pt-1 sm:pt-2 overflow-hidden relative z-10">
           <div className="w-full flex-1 min-h-0 flex flex-col overflow-hidden">
-              {/* TOP HEADER (Desktop only - mobile already has top bar) */}
-              <div className="hidden lg:flex items-center justify-between pb-2 mb-1 border-b border-gray-100 shrink-0">
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 flex items-center justify-center shrink-0">
-                    <img src={termjobsLogo} alt="TermJobs" className="w-5.5 h-5.5 object-contain" />
-                  </div>
-                  <div>
-                    <h2 className="text-xs font-bold text-gray-900 leading-tight">Hiring Assistant</h2>
-                    <p className="text-[10px] text-gray-400">Ask anything or select actions</p>
-                  </div>
+            {/* TOP HEADER (Desktop only - mobile already has top bar) */}
+            <div className="hidden lg:flex items-center justify-between pb-2 mb-1 border-b border-gray-100 shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 flex items-center justify-center shrink-0">
+                  <img src={termjobsLogo} alt="TermJobs" className="w-5.5 h-5.5 object-contain" />
+                </div>
+                <div>
+                  <h2 className="text-xs font-bold text-gray-900 leading-tight">Hiring Assistant</h2>
+                  <p className="text-[10px] text-gray-400">Ask anything or select actions</p>
                 </div>
               </div>
+            </div>
 
-              {/* CHAT MESSAGES STREAM CONTAINER */}
-              <div
-                ref={chatContainerRef}
-                className="hm-message-stream flex-1 min-h-0 overflow-y-auto pr-1.5 overscroll-contain flex flex-col gap-4 pt-1 pb-3"
-                style={{ scrollBehavior: 'auto' }}
-              >
+            {/* CHAT MESSAGES STREAM CONTAINER */}
+            <div
+              ref={chatContainerRef}
+              className="hm-message-stream flex-1 min-h-0 overflow-y-auto pr-1.5 overscroll-contain flex flex-col gap-4 pt-1 pb-3"
+              style={{ scrollBehavior: 'auto' }}
+            >
 
               {messages.map((msg, messageIndex) => {
                 const isUser = msg.sender === 'user';
@@ -2492,13 +2486,12 @@ function HiringManagerDashboardContent() {
                                     {msg.requisitionDraft.title}
                                   </h3>
                                   {msg.requisitionDraft.status && (
-                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                                      msg.requisitionDraft.status === 'Published'
-                                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                        : msg.requisitionDraft.status === 'Pending Approval' || msg.requisitionDraft.isSubmittedForApproval
+                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${msg.requisitionDraft.status === 'Published'
+                                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                      : msg.requisitionDraft.status === 'Pending Approval' || msg.requisitionDraft.isSubmittedForApproval
                                         ? 'bg-amber-50 text-amber-700 border border-amber-200'
                                         : 'bg-blue-50 text-blue-700 border border-blue-200'
-                                    }`}>
+                                      }`}>
                                       {msg.requisitionDraft.isSubmittedForApproval ? 'Pending Approval' : msg.requisitionDraft.status}
                                     </span>
                                   )}
@@ -2642,8 +2635,8 @@ function HiringManagerDashboardContent() {
                                       {(Array.isArray(msg.requisitionDraft.skills)
                                         ? msg.requisitionDraft.skills
                                         : typeof msg.requisitionDraft.skills === 'string'
-                                        ? msg.requisitionDraft.skills.split(',').map((s) => s.trim()).filter(Boolean)
-                                        : []
+                                          ? msg.requisitionDraft.skills.split(',').map((s) => s.trim()).filter(Boolean)
+                                          : []
                                       ).map((skill, si) => (
                                         <span
                                           key={si}
@@ -2917,10 +2910,10 @@ function HiringManagerDashboardContent() {
                                   const badgeColor = isLive
                                     ? 'bg-zinc-100 text-zinc-700 border-zinc-200'
                                     : isPending
-                                    ? 'bg-amber-50 text-amber-700 border-amber-200'
-                                    : isDraft
-                                    ? 'bg-blue-50 text-blue-700 border-blue-200'
-                                    : 'bg-gray-100 text-gray-700 border-gray-200';
+                                      ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                      : isDraft
+                                        ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                        : 'bg-gray-100 text-gray-700 border-gray-200';
 
                                   return (
                                     <div
@@ -3008,34 +3001,30 @@ function HiringManagerDashboardContent() {
                                       <div
                                         key={act.id}
                                         onClick={() => handleSwitchTab(act.type, act.tabTitle, act.data)}
-                                        className={`p-2.5 sm:px-3 sm:py-2.5 flex items-center justify-between gap-2.5 transition-colors cursor-pointer group ${
-                                          act.isAlert
-                                            ? 'bg-[#FEF9EE] hover:bg-[#FDF3DA] border-l-4 border-amber-400'
-                                            : 'hover:bg-gray-50/80'
-                                        }`}
+                                        className={`p-2.5 sm:px-3 sm:py-2.5 flex items-center justify-between gap-2.5 transition-colors cursor-pointer group ${act.isAlert
+                                          ? 'bg-[#FEF9EE] hover:bg-[#FDF3DA] border-l-4 border-amber-400'
+                                          : 'hover:bg-gray-50/80'
+                                          }`}
                                       >
                                         <div className="flex items-center gap-2.5 min-w-0">
                                           <div
-                                            className={`w-7 h-7 rounded-lg border flex items-center justify-center shrink-0 ${
-                                              act.isAlert
-                                                ? 'bg-amber-100 border-amber-200 text-amber-700'
-                                                : 'bg-gray-50 border-gray-200/60 text-gray-700'
-                                            }`}
+                                            className={`w-7 h-7 rounded-lg border flex items-center justify-center shrink-0 ${act.isAlert
+                                              ? 'bg-amber-100 border-amber-200 text-amber-700'
+                                              : 'bg-gray-50 border-gray-200/60 text-gray-700'
+                                              }`}
                                           >
                                             <IconComp size={13} />
                                           </div>
                                           <div className="min-w-0">
                                             <div
-                                              className={`text-[11.5px] font-bold truncate ${
-                                                act.isAlert ? 'text-amber-950' : 'text-gray-900'
-                                              }`}
+                                              className={`text-[11.5px] font-bold truncate ${act.isAlert ? 'text-amber-950' : 'text-gray-900'
+                                                }`}
                                             >
                                               {act.title}
                                             </div>
                                             <div
-                                              className={`text-[10px] font-normal truncate mt-0.5 ${
-                                                act.isAlert ? 'text-amber-800/80' : 'text-gray-400'
-                                              }`}
+                                              className={`text-[10px] font-normal truncate mt-0.5 ${act.isAlert ? 'text-amber-800/80' : 'text-gray-400'
+                                                }`}
                                             >
                                               {act.subtitle}
                                             </div>
@@ -3043,19 +3032,17 @@ function HiringManagerDashboardContent() {
                                         </div>
                                         <div className="flex items-center gap-2 shrink-0">
                                           <span
-                                            className={`text-[10px] font-medium ${
-                                              act.isAlert ? 'text-amber-700' : 'text-gray-400'
-                                            }`}
+                                            className={`text-[10px] font-medium ${act.isAlert ? 'text-amber-700' : 'text-gray-400'
+                                              }`}
                                           >
                                             {act.time}
                                           </span>
                                           <ChevronRight
                                             size={13}
-                                            className={`group-hover:translate-x-0.5 transition-all ${
-                                              act.isAlert
-                                                ? 'text-amber-500 group-hover:text-amber-900'
-                                                : 'text-gray-300 group-hover:text-gray-700'
-                                            }`}
+                                            className={`group-hover:translate-x-0.5 transition-all ${act.isAlert
+                                              ? 'text-amber-500 group-hover:text-amber-900'
+                                              : 'text-gray-300 group-hover:text-gray-700'
+                                              }`}
                                           />
                                         </div>
                                       </div>
@@ -3732,7 +3719,7 @@ function HiringManagerDashboardContent() {
               <div className="flex items-center gap-2.5 text-indigo-700 font-bold text-sm sm:text-base">
                 <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M19.5 7.5a2.5 2.5 0 1 0-2.45-3h-1.55a3.5 3.5 0 0 1 3.5 3.5v.5h.5zm-3.5 1h-8A2.5 2.5 0 0 0 5.5 11v6a2.5 2.5 0 0 0 2.5 2.5h8a2.5 2.5 0 0 0 2.5-2.5v-6a2.5 2.5 0 0 0-2.5-2.5zm-5 5.5a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0z"/>
+                    <path d="M19.5 7.5a2.5 2.5 0 1 0-2.45-3h-1.55a3.5 3.5 0 0 1 3.5 3.5v.5h.5zm-3.5 1h-8A2.5 2.5 0 0 0 5.5 11v6a2.5 2.5 0 0 0 2.5 2.5h8a2.5 2.5 0 0 0 2.5-2.5v-6a2.5 2.5 0 0 0-2.5-2.5zm-5 5.5a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0z" />
                   </svg>
                 </div>
                 <span>Microsoft Teams AI Assistant</span>
@@ -3748,11 +3735,10 @@ function HiringManagerDashboardContent() {
 
             <div className="space-y-4 text-xs text-gray-600">
               {/* Connection Status Card */}
-              <div className={`p-4 rounded-2xl border space-y-3 ${
-                botStatus?.ms_teams?.is_linked
-                  ? 'bg-emerald-50/90 border-emerald-200 text-emerald-950'
-                  : 'bg-indigo-50/90 border-indigo-200 text-indigo-950'
-              }`}>
+              <div className={`p-4 rounded-2xl border space-y-3 ${botStatus?.ms_teams?.is_linked
+                ? 'bg-emerald-50/90 border-emerald-200 text-emerald-950'
+                : 'bg-indigo-50/90 border-indigo-200 text-indigo-950'
+                }`}>
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5">
                     <span className={`w-2 h-2 rounded-full ${botStatus?.ms_teams?.is_linked ? 'bg-emerald-500' : 'bg-indigo-500 animate-pulse'}`}></span>
@@ -3947,11 +3933,10 @@ function HiringManagerDashboardContent() {
 
               {pwdMessage.text && (
                 <div
-                  className={`p-2 rounded-lg text-xs font-medium ${
-                    pwdMessage.type === 'success'
-                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                      : 'bg-red-50 text-red-800 border border-red-200'
-                  }`}
+                  className={`p-2 rounded-lg text-xs font-medium ${pwdMessage.type === 'success'
+                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                    : 'bg-red-50 text-red-800 border border-red-200'
+                    }`}
                 >
                   {pwdMessage.text}
                 </div>
@@ -4186,11 +4171,10 @@ function HiringManagerDashboardContent() {
                           setShowClearConfirm(false);
                           setShowDeleteSelectedConfirm(false);
                         }}
-                        className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
-                          isSelectionMode
-                            ? 'bg-black text-white'
-                            : 'text-gray-600 hover:text-black hover:bg-gray-100'
-                        }`}
+                        className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${isSelectionMode
+                          ? 'bg-black text-white'
+                          : 'text-gray-600 hover:text-black hover:bg-gray-100'
+                          }`}
                         title={isSelectionMode ? 'Cancel Selection' : 'Select Multiple'}
                       >
                         {isSelectionMode ? 'Done' : 'Select'}
@@ -4241,13 +4225,12 @@ function HiringManagerDashboardContent() {
                       className="text-xs font-semibold text-gray-700 hover:text-black cursor-pointer flex items-center gap-1.5"
                     >
                       <span
-                        className={`w-4 h-4 rounded border flex items-center justify-center ${
-                          selectedConvIds.length > 0 && selectedConvIds.length === filteredConversations.length
-                            ? 'bg-black border-black text-white'
-                            : selectedConvIds.length > 0
+                        className={`w-4 h-4 rounded border flex items-center justify-center ${selectedConvIds.length > 0 && selectedConvIds.length === filteredConversations.length
+                          ? 'bg-black border-black text-white'
+                          : selectedConvIds.length > 0
                             ? 'bg-gray-300 border-gray-400'
                             : 'border-gray-300 bg-white'
-                        }`}
+                          }`}
                       >
                         {selectedConvIds.length > 0 && selectedConvIds.length === filteredConversations.length && (
                           <Check size={11} strokeWidth={3} />
@@ -4415,22 +4398,20 @@ function HiringManagerDashboardContent() {
                               <div
                                 key={conv.id}
                                 onClick={() => handleSelectConversation(conv)}
-                                className={`w-full p-2.5 rounded-xl text-left transition-all cursor-pointer flex items-center gap-3 group active:scale-[0.99] border relative ${
-                                  isSelected
-                                    ? 'bg-blue-50/80 border-blue-200 shadow-2xs'
-                                    : isActive
+                                className={`w-full p-2.5 rounded-xl text-left transition-all cursor-pointer flex items-center gap-3 group active:scale-[0.99] border relative ${isSelected
+                                  ? 'bg-blue-50/80 border-blue-200 shadow-2xs'
+                                  : isActive
                                     ? 'bg-gray-100/90 border-gray-200 shadow-2xs'
                                     : 'bg-white hover:bg-[#F7F7F5] border-transparent hover:border-[#E5E5E5]'
-                                }`}
+                                  }`}
                               >
                                 {isSelectionMode ? (
                                   <div
                                     onClick={(e) => handleToggleSelectConversation(conv.id, e)}
-                                    className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors cursor-pointer ${
-                                      isSelected
-                                        ? 'bg-black border-black text-white'
-                                        : 'border-gray-300 bg-white group-hover:border-gray-400'
-                                    }`}
+                                    className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors cursor-pointer ${isSelected
+                                      ? 'bg-black border-black text-white'
+                                      : 'border-gray-300 bg-white group-hover:border-gray-400'
+                                      }`}
                                   >
                                     {isSelected && <Check size={11} strokeWidth={3} />}
                                   </div>
@@ -4506,6 +4487,6 @@ function HiringManagerDashboardContent() {
         onClose={() => setIsCalendarModalOpen(false)}
       />
 
-</div>
-);
+    </div>
+  );
 }

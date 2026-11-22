@@ -1146,6 +1146,24 @@ export function AiInterviewStage({
         sessionStorage.removeItem(cacheKey);
       } catch (_) {}
     }
+    try {
+      const rId = round?.id || '';
+      if (rId) {
+        const compIds = JSON.parse(localStorage.getItem('tj_completed_round_ids') || '[]');
+        if (!compIds.includes(rId)) {
+          compIds.push(rId);
+          localStorage.setItem('tj_completed_round_ids', JSON.stringify(compIds));
+        }
+      }
+      const rTitle = round?.requisition_title || round?.round_name || requisitionTitle || '';
+      if (rTitle) {
+        const compTitles = JSON.parse(localStorage.getItem('tj_completed_titles') || '[]');
+        if (!compTitles.includes(rTitle.toLowerCase())) {
+          compTitles.push(rTitle.toLowerCase());
+          localStorage.setItem('tj_completed_titles', JSON.stringify(compTitles));
+        }
+      }
+    } catch (_) {}
     stopListening();
     if (synthRef.current) synthRef.current.cancel();
 

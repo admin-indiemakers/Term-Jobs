@@ -43,6 +43,7 @@ def parse_inline_tool_calls(text: str) -> Dict[int, Dict[str, Any]]:
 
 """Multi-step agent orchestrator coordinating LLM streaming, tool execution, and SSE events."""
 import json
+import re
 from typing import Any, AsyncIterator, Dict, List, Optional
 from .context import AgentContext
 from .llm_client import BaseLLMClient, TextDeltaChunk, ToolCallDeltaChunk
@@ -58,6 +59,47 @@ except (ImportError, ValueError):
     except (ImportError, ValueError):
         from tools.context import ToolExecutionContext
         from tools.registry import ToolRegistry, ToolResult
+
+
+OUT_OF_SCOPE_PATTERNS = [
+    # Recipes & cooking
+    r"\b(recipe|recipes|bake|baking|cook|cooking|ingredient|ingredients|apple pie|pizza|cake|pancake|dessert|soup|pasta|burger)\b",
+    # Military, weapons, fighter aircraft, defense vehicles
+    r"\b(f[- ]?22|f[- ]?35|f[- ]?16|f[- ]?15|fighter jet|stealth jet|fighter aircraft|warplane|bomber|missile|torpedo|tank|warship|submarine|artillery|weapon|firearm|ak[- ]?47)\b",
+    # Trivia, geography, history, astronomy, weather
+    r"\b(weather|temperature outside|capital of|population of|speed of light|distance (to|between)|how far is the|photosynthesis|who was the (first )?president|who won the|when was .* (born|invented|discovered))\b",
+    # Entertainment, creative writing, jokes, games, sports
+    r"\b(tell me a joke|make me laugh|write a poem|write a song|write a story|bedtime story|movie recommendations?|netflix|horoscope|messi|ronaldo|ipl|fifa|world cup)\b",
+    # General non-workplace definitions / questions
+    r"^(what is|what are|tell me about|explain|who is) (an?|the)? ?(f[- ]?22|jet|aircraft|airplane|plane|car|vehicle|tank|planet|dinosaur|animal|mammal|black hole|universe|solar system|messi|ronaldo)\b",
+    # General consumer coding / homework
+    r"\b(snake game|tic tac toe|flappy bird|calculator code|solve this math|calculus|homework)\b",
+]
+
+HIRING_WHITELIST = [
+    "job", "jobs", "requisition", "requisitions", "req", "role", "roles", "opening", "openings",
+    "position", "positions", "hire", "hiring", "recruit", "recruiter", "recruiting", "staffing",
+    "candidate", "candidates", "applicant", "applicants", "resume", "resumes", "cv", "profile", "profiles",
+    "interview", "interviews", "interviewer", "shortlist", "shortlisted", "shortlisting",
+    "timesheet", "timesheets", "billable", "overtime", "expense", "expenses", "contractor", "contractors",
+    "vendor", "vendors", "workforce", "worker", "workers", "headcount", "salary", "budget", "rate",
+    "developer", "engineer", "designer", "architect", "manager", "qa", "devops", "frontend", "backend",
+    "fullstack", "full stack", "skill", "skills", "experience", "jd", "job description"
+]
+
+
+def is_out_of_scope_query(msg: str) -> bool:
+    """Detect whether a query falls strictly outside enterprise hiring operations."""
+    text = (msg or "").strip().lower()
+    if not text:
+        return False
+    has_hiring_term = any(term in text for term in HIRING_WHITELIST)
+    for pattern in OUT_OF_SCOPE_PATTERNS:
+        if re.search(pattern, text, re.IGNORECASE):
+            if has_hiring_term and any(verb in text for verb in ["hire", "hiring", "requisition", "draft", "role", "candidate", "applicant", "job"]):
+                return False
+            return True
+    return False
 
 
 def json_serial(obj):
@@ -91,6 +133,36 @@ class HiringAgentOrchestrator:
             memory.set_system_prompt(build_system_prompt(agent_ctx))
 
         memory.add_user_message(user_message)
+
+        if is_out_of_scope_query(user_message):
+            refusal_text = (
+                "I am specialized exclusively in enterprise hiring, talent workflows, and workforce management on TermJobs. "
+                "I cannot answer questions outside recruitment, requisitions, and workforce operations.\n\n"
+                "How can I assist you with your open requisitions, candidate pipeline, interviews, or timesheets today?"
+            )
+            memory.add_assistant_message(content=refusal_text)
+            yield {
+                "event": "message_start",
+                "data": {"request_id": agent_ctx.request_id, "user_id": agent_ctx.user_id}
+            }
+            yield {
+                "event": "assistant_delta",
+                "data": {"content": refusal_text}
+            }
+            yield {
+                "event": "message_complete",
+                "data": {"content": refusal_text}
+            }
+            yield {
+                "event": "turn_complete",
+                "data": {
+                    "total_steps": 1,
+                    "final_response": refusal_text,
+                    "active_proposals_count": 0
+                }
+            }
+            return
+
         step = 0
 
         yield {

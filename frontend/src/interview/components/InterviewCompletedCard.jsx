@@ -19,7 +19,25 @@ export function InterviewCompletedCard({
 
   useEffect(() => {
     document.title = 'Interview Completed · TermJobs';
-  }, []);
+    try {
+      const rId = round?.id || round?.round_id || '';
+      if (rId) {
+        const compIds = JSON.parse(localStorage.getItem('tj_completed_round_ids') || '[]');
+        if (!compIds.includes(rId)) {
+          compIds.push(rId);
+          localStorage.setItem('tj_completed_round_ids', JSON.stringify(compIds));
+        }
+      }
+      const rTitle = round?.requisition_title || round?.round_name || '';
+      if (rTitle) {
+        const compTitles = JSON.parse(localStorage.getItem('tj_completed_titles') || '[]');
+        if (!compTitles.includes(rTitle.toLowerCase())) {
+          compTitles.push(rTitle.toLowerCase());
+          localStorage.setItem('tj_completed_titles', JSON.stringify(compTitles));
+        }
+      }
+    } catch (_) {}
+  }, [round]);
 
   const displayCandidateName =
     round?.candidate_name ||
@@ -48,8 +66,24 @@ export function InterviewCompletedCard({
     const cName = displayCandidateName;
     const token = invitationToken || round?.candidate_token || '';
 
-    // Auto-authenticate candidate session so OpenRoles interview view opens seamlessly
+    // Auto-authenticate candidate session and ensure completed state is stored so OpenRoles interview view opens seamlessly
     try {
+      const rId = round?.id || round?.round_id || '';
+      if (rId) {
+        const compIds = JSON.parse(localStorage.getItem('tj_completed_round_ids') || '[]');
+        if (!compIds.includes(rId)) {
+          compIds.push(rId);
+          localStorage.setItem('tj_completed_round_ids', JSON.stringify(compIds));
+        }
+      }
+      const rTitle = positionTitle || round?.requisition_title || round?.round_name || '';
+      if (rTitle) {
+        const compTitles = JSON.parse(localStorage.getItem('tj_completed_titles') || '[]');
+        if (!compTitles.includes(rTitle.toLowerCase())) {
+          compTitles.push(rTitle.toLowerCase());
+          localStorage.setItem('tj_completed_titles', JSON.stringify(compTitles));
+        }
+      }
       if (email) {
         localStorage.setItem('candidate_email', email);
         const existing = JSON.parse(localStorage.getItem('candidate_profile_user') || '{}');

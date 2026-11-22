@@ -63,6 +63,13 @@ class ProfileUpdateRequest(BaseModel):
     github_url: str | None = None
     summary: str | None = None
     onboarding_completed: bool | None = None
+    picture: str | None = None
+    preferred_mode: str | None = None
+    experience_level: str | None = None
+    city: str | None = None
+    experience: list[dict[str, Any]] | None = None
+    education: list[dict[str, Any]] | None = None
+    projects: list[dict[str, Any]] | None = None
 
 
 # -----------------------------------------------------------------------------
@@ -109,9 +116,18 @@ async def get_current_candidate(
         )
 
     email = payload.get("sub", "").strip().lower()
-    candidate = db["candidates"].find_one({"candidate_email": email})
+    candidate = db["candidates"].find_one({
+        "$or": [
+            {"candidate_email": email},
+            {"google_login_email": email},
+            {"email": email},
+        ]
+    })
     if not candidate:
-        raise HTTPException(status_code=404, detail="Candidate profile not found.")
+        raise HTTPException(
+            status_code=401,
+            detail="Candidate profile no longer exists. Please sign in again.",
+        )
 
     return candidate
 
@@ -282,6 +298,8 @@ async def google_candidate_auth(payload: GoogleAuthRequest) -> dict:
             uploaded_resume = {"resume_pdf": base64.b64encode(contents).decode("ascii"), "filename": filename}
         except (ValueError, TypeError):
             raise HTTPException(status_code=400, detail="Upload a non-empty PDF or DOCX resume up to 10 MB.") from None
+
+    # If new candidate and no resume uploaded, require resume
     if not (candidate or {}).get("resume_pdf") and not uploaded_resume:
         return {"status": "resume_required", "message": "Upload your resume to finish Google signup."}
 
@@ -331,6 +349,81 @@ async def google_candidate_auth(payload: GoogleAuthRequest) -> dict:
         }
         candidate.update(uploaded_resume or {})
         db["candidates"].insert_one(candidate)
+
+    # Automatic Resume Extraction: Parse skills, title, location, GitHub & LinkedIn from resume
+    needs_parsing = bool(uploaded_resume) or (candidate and candidate.get("resume_pdf") and not candidate.get("skills"))
+    if needs_parsing and candidate:
+        raw_b64 = (uploaded_resume or {}).get("resume_pdf") or candidate.get("resume_pdf")
+        r_fname = (uploaded_resume or {}).get("filename") or candidate.get("filename") or "resume.pdf"
+        if raw_b64:
+            try:
+                pdf_bytes = base64.b64decode(raw_b64)
+                file_type = "pdf" if r_fname.lower().endswith(".pdf") else "docx"
+                with tempfile.NamedTemporaryFile(suffix=f".{file_type}", delete=False) as tmp:
+                    tmp.write(pdf_bytes)
+                    tmp_path = tmp.name
+                extracted_text = ""
+                try:
+                    from modules.resume_screener.pipeline.extractor import extract_text as _extract_text_new
+                    extracted_text = _extract_text_new(tmp_path, file_type)
+                except Exception as ex:
+                    print(f"[GOOGLE AUTH RESUME EXTRACT ERR] {ex}")
+                finally:
+                    try:
+                        os.remove(tmp_path)
+                    except Exception:
+                        pass
+                if extracted_text:
+                    try:
+                        from modules.candidate.extractor import extract_candidate_profile
+                        parsed_prof = await extract_candidate_profile(extracted_text, r_fname)
+                        if parsed_prof:
+                            p_skills = parsed_prof.get("skills") or []
+                            p_title = parsed_prof.get("candidate_title")
+                            p_phone = parsed_prof.get("candidate_phone")
+                            p_name = parsed_prof.get("candidate_name")
+
+                            gh_m = re.search(r'github\.com/([a-zA-Z0-9_-]+)', extracted_text, re.I)
+                            gh_user = gh_m.group(1) if gh_m else ""
+                            gh_url = f"https://github.com/{gh_user}" if gh_user else ""
+
+                            li_m = re.search(r'linkedin\.com/in/([a-zA-Z0-9_-]+)', extracted_text, re.I)
+                            li_url = f"https://linkedin.com/in/{li_m.group(1)}" if li_m else ""
+
+                            loc_m = re.search(r'\b(Kozhikode|Calicut|Ernakulam|Cochin|Kochi|Bengaluru|Bangalore|Hyderabad|Chennai|Mumbai|Delhi|Pune)\b', extracted_text, re.I)
+                            city = loc_m.group(1).title() if loc_m else ""
+
+                            extracted_updates = {}
+                            if p_skills:
+                                extracted_updates["skills"] = p_skills
+                            if p_title and p_title != "Professional Candidate":
+                                extracted_updates["candidate_title"] = p_title
+                            if p_phone and not candidate.get("candidate_phone"):
+                                extracted_updates["candidate_phone"] = p_phone
+                            if p_name and (not candidate.get("candidate_name") or candidate.get("candidate_name") in ("Candidate", "null")):
+                                extracted_updates["candidate_name"] = p_name
+
+                            cur_details = candidate.get("details") or {}
+                            new_details = {
+                                **cur_details,
+                                "skills": p_skills or cur_details.get("skills", []),
+                                "github_url": gh_url or cur_details.get("github_url", ""),
+                                "linkedin_url": li_url or cur_details.get("linkedin_url", ""),
+                                "city": city or cur_details.get("city", ""),
+                            }
+                            if gh_user:
+                                new_details["github_evidence"] = {
+                                    "username": gh_user,
+                                    "top_repos": [{"name": gh_user, "languages": p_skills[:4]}]
+                                }
+                            extracted_updates["details"] = new_details
+
+                            db["candidates"].update_one({"id": candidate["id"]}, {"$set": extracted_updates})
+                            candidate = db["candidates"].find_one({"id": candidate["id"]})
+                    except Exception as ex:
+                        print(f"[GOOGLE AUTH PROFILE EXTRACT ERR] {ex}")
+            except Exception as ex:
+                print(f"[GOOGLE AUTH RESUME PROCESS ERR] {ex}")
 
     # Generate candidate JWT token
     token = create_access_token(
@@ -1302,6 +1395,23 @@ async def update_my_candidate_profile(
         details["github_url"] = body.github_url.strip()
     if body.skills is not None:
         details["skills"] = body.skills
+    if body.preferred_mode is not None:
+        details["preferred_mode"] = body.preferred_mode.strip()
+    if body.experience_level is not None:
+        details["experience_level"] = body.experience_level.strip()
+    if body.city is not None:
+        details["city"] = body.city.strip()
+    if body.experience is not None:
+        details["experience"] = body.experience
+    if body.education is not None:
+        details["education"] = body.education
+    if body.projects is not None:
+        details["projects"] = body.projects
+    if body.summary is not None:
+        details["summary"] = body.summary.strip()
+    if body.picture is not None:
+        updates["picture"] = body.picture
+
     updates["details"] = details
 
     db["candidates"].update_one({"candidate_email": email}, {"$set": updates})

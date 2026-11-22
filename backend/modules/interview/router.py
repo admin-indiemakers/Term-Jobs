@@ -612,6 +612,106 @@ def candidate_portal_endpoint(
     return {"rounds": rounds}
 
 
+class AttendAiInterviewRequest(BaseModel):
+    email: Optional[str] = None
+    name: Optional[str] = None
+    slug: Optional[str] = None
+    title: Optional[str] = None
+    company: Optional[str] = None
+    requisition_id: Optional[str] = None
+
+
+@router.post("/candidate/attend-ai")
+def candidate_attend_ai_endpoint(body: AttendAiInterviewRequest):
+    """
+    On-demand AI interview provisioner: returns existing active AI round or provisions a new one immediately.
+    """
+    import urllib.parse
+    from modules.requisition.domain.models import Requisition
+    from modules.interview.services.interview_service import _generate_candidate_passcode, _resolve_interview_domain
+
+    cand_email = (body.email or "").strip().lower() or "candidate@termjobs.in"
+    cand_name = (body.name or "").strip() or "Candidate"
+    req_title = (body.title or "").strip() or "Technical Role"
+    comp_name = (body.company or "").strip() or "Hiring Partner"
+
+    with get_session() as session:
+        candidate_rounds = session.query(InterviewRound).filter(
+            InterviewRound.candidate_email == cand_email.lower(),
+            InterviewRound.status != "Cancelled"
+        ).all()
+
+        existing = next((
+            r for r in candidate_rounds
+            if (r.round_type == "AI" or "ai" in (r.round_name or "").lower())
+            and (req_title.lower() in (r.requisition_title or "").lower() or (r.requisition_title or "").lower() in req_title.lower())
+            and str(r.status).lower() not in ("cancelled", "rejected")
+        ), None)
+
+        if existing:
+            token = existing.candidate_token or str(uuid.uuid4())
+            name_enc = urllib.parse.quote(existing.candidate_name or cand_name)
+            token_enc = urllib.parse.quote(token)
+            return {
+                "success": True,
+                "round_id": existing.id,
+                "candidate_token": token,
+                "candidate_name": existing.candidate_name or cand_name,
+                "meeting_link": f"/interview/ai/{existing.id}?role=candidate&name={name_enc}&token={token_enc}"
+            }
+
+        req = session.query(Requisition).filter(
+            Requisition.title.ilike(f"%{req_title}%")
+        ).first()
+
+        req_id = req.id if req else (body.requisition_id or f"req_{uuid.uuid4().hex[:8]}")
+        tenant_id = req.tenant_id if (req and req.tenant_id) else "default"
+        now_utc = datetime.now(timezone.utc)
+        round_id = f"ai_round_{uuid.uuid4().hex[:10]}"
+        cand_token = str(uuid.uuid4())
+        passcode = _generate_candidate_passcode()
+
+        round_obj = InterviewRound(
+            id=round_id,
+            tenant_id=tenant_id,
+            requisition_id=req_id,
+            requisition_title=req_title,
+            candidate_submission_id=f"CND-{uuid.uuid4().hex[:8]}",
+            candidate_name=cand_name,
+            candidate_email=cand_email.lower(),
+            round_number=1,
+            round_name=f"AI Technical Interview - {req_title}",
+            round_type="AI",
+            scheduled_date=now_utc.strftime("%Y-%m-%d"),
+            scheduled_time="Immediate / On-Demand",
+            duration_minutes=45,
+            interviewer_name="TermJobs AI Bot",
+            interviewer_email="ai-interviews@termjobs.com",
+            interviewer_role="AI Autonomous Interviewer",
+            instructions=f"AI Interview for {req_title} at {comp_name}. Please join with audio and video enabled.",
+            candidate_passcode=passcode,
+            candidate_token=cand_token,
+            interviewer_token=str(uuid.uuid4()),
+            room_id=round_id,
+            status="Scheduled",
+            created_by="TermJobs Candidate Self-Service",
+            created_at=now_utc,
+            updated_at=now_utc,
+        )
+        session.add(round_obj)
+        session.commit()
+
+        name_enc = urllib.parse.quote(cand_name)
+        token_enc = urllib.parse.quote(cand_token)
+        return {
+            "success": True,
+            "round_id": round_obj.id,
+            "candidate_token": cand_token,
+            "candidate_name": cand_name,
+            "meeting_link": f"/interview/ai/{round_obj.id}?role=candidate&name={name_enc}&token={token_enc}"
+        }
+
+
 @router.post("/rounds/{round_id}/send-invitation")
 def send_round_invitation_endpoint(round_id: str, body: Optional[Dict[str, Any]] = None):
     """Dispatch or re-send official interview invitation email to candidate and interviewer with date, time, and room link."""

@@ -223,7 +223,7 @@ export default function DashboardLayout() {
       const next = !prev;
       try {
         localStorage.setItem('hm_sidebar_minimized', String(next));
-      } catch (e) {}
+      } catch (e) { }
       return next;
     });
   };
@@ -246,7 +246,7 @@ export default function DashboardLayout() {
     if (user?.role !== 'Hiring Manager' || !token) return;
     request('/api/hiring-manager/counts', { token, forceRefresh: force })
       .then((counts) => setHmCounts({ ...counts, candidates: counts.accepted }))
-      .catch(() => {});
+      .catch(() => { });
   }, [user?.role, token]);
 
   useEffect(() => {
@@ -496,61 +496,62 @@ export default function DashboardLayout() {
         { to: '/dashboard/admin/profile', label: 'Profile', end: false, section: 'ACCOUNT', icon: User },
       ]
       : userRole === 'Hiring Manager'
-      ? [
-        { to: '/dashboard/hiring-manager/legacy', label: 'AI Assistant', end: true, section: 'WORKSPACE', icon: Icons.Chat },
-        { to: '/dashboard/hiring-manager/chat', label: 'Dashboard', end: true, section: 'WORKSPACE', icon: Icons.Dashboard },
-        { to: '/dashboard/requisitions', label: 'Requisitions', end: false, section: 'HIRING', icon: Icons.Requisitions, count: hmCounts.requisitions },
-        { to: '/dashboard/requisitions/new', label: 'New Requisition', end: true, section: 'HIRING', icon: Icons.Plus },
-        { to: '/dashboard/candidates', label: 'Candidates', end: false, section: 'CANDIDATES', icon: Icons.Diamond, count: hmCounts.candidates },
-        { to: '/dashboard/candidates/issues', label: 'Reported Issues', end: true, section: 'CANDIDATES', icon: Icons.Flag, badge: hmCounts.openIssues },
-        { to: '/dashboard/candidates/portal-access', label: 'Portal Access', end: true, section: 'CANDIDATES', icon: Icons.PortalAccess },
-        { to: '/dashboard/workforce/team', label: 'Team Overview', end: false, section: 'WORKFORCE', icon: Icons.Team },
-        { to: '/dashboard/workforce/timesheets', label: 'Timesheets', end: false, section: 'WORKFORCE', icon: Icons.Timesheet, badge: hmCounts.pendingTimesheets },
-        { to: '/dashboard/workforce/expenses', label: 'Expenses', end: false, section: 'WORKFORCE', icon: Icons.Receipt, badge: hmCounts.pendingExpenses },
-      ]
-      : userRole === 'Recruiter'
         ? [
-          { to: '/dashboard/recruiter', label: 'Dashboard', end: true, section: 'WORKSPACE', icon: Icons.Dashboard },
-          { to: '/dashboard/interviews', label: 'Interviews & AI Scores', end: false, section: 'WORKSPACE', icon: Icons.Interviews },
-          { to: '/dashboard/recruiter/requisitions', label: 'Requisitions', end: true, section: 'WORKSPACE', icon: Icons.Requisitions },
-          { to: '/dashboard/recruiter/candidates', label: 'Candidates Bank', end: true, section: 'WORKSPACE', icon: Icons.CandidatesBank },
-          { to: '/dashboard/recruiter/shortlisted', label: 'Shortlisted Candidates', end: true, section: 'WORKSPACE', icon: Icons.Shortlisted },
-          { to: '/dashboard/recruiter/interviews', label: 'Interview Requests', end: true, section: 'WORKSPACE', icon: Icons.Interviews },
-          { to: '/dashboard/recruiter/agreements', label: 'Agreements', end: true, section: 'WORKSPACE', icon: Icons.Agreements },
-          { to: '/dashboard/recruiter/accepted', label: 'Accepted Candidates', end: true, section: 'CANDIDATE MANAGEMENT', icon: Icons.Accepted },
-          { to: '/dashboard/recruiter/portal-access', label: 'Portal Access', end: true, section: 'CANDIDATE MANAGEMENT', icon: Icons.PortalAccess },
-          { to: '/dashboard/recruiter/workers', label: 'Workers', end: true, section: 'CANDIDATE MANAGEMENT', icon: Icons.Team },
+          { to: '/dashboard/hiring-manager', label: 'AI Chat', end: true, section: 'WORKSPACE', icon: Icons.Chat },
+          { to: '/dashboard/hiring-manager/legacy', label: 'AI Assistant', end: true, section: 'WORKSPACE', icon: Icons.Chat },
+          { to: '/dashboard/hiring-manager/chat', label: 'Dashboard', end: true, section: 'WORKSPACE', icon: Icons.Dashboard },
+          { to: '/dashboard/requisitions', label: 'Requisitions', end: false, section: 'HIRING', icon: Icons.Requisitions, count: hmCounts.requisitions },
+          { to: '/dashboard/requisitions/new', label: 'New Requisition', end: true, section: 'HIRING', icon: Icons.Plus },
+          { to: '/dashboard/candidates', label: 'Candidates', end: false, section: 'CANDIDATES', icon: Icons.Diamond, count: hmCounts.candidates },
+          { to: '/dashboard/candidates/issues', label: 'Reported Issues', end: true, section: 'CANDIDATES', icon: Icons.Flag, badge: hmCounts.openIssues },
+          { to: '/dashboard/candidates/portal-access', label: 'Portal Access', end: true, section: 'CANDIDATES', icon: Icons.PortalAccess },
+          { to: '/dashboard/workforce/team', label: 'Team Overview', end: false, section: 'WORKFORCE', icon: Icons.Team },
+          { to: '/dashboard/workforce/timesheets', label: 'Timesheets', end: false, section: 'WORKFORCE', icon: Icons.Timesheet, badge: hmCounts.pendingTimesheets },
+          { to: '/dashboard/workforce/expenses', label: 'Expenses', end: false, section: 'WORKFORCE', icon: Icons.Receipt, badge: hmCounts.pendingExpenses },
         ]
-        : isDirector
+        : userRole === 'Recruiter'
           ? [
-            { to: '/dashboard/director', label: 'Executive Overview', end: true, section: 'WORKSPACE', icon: Icons.Dashboard },
-            { to: '/dashboard/director/finance-approvals', label: 'Payment Tracking', end: false, section: 'WORKSPACE', icon: Icons.Receipt },
-            { to: '/dashboard/director/work-orders', label: 'Billing Approvals', end: false, section: 'WORKSPACE', icon: Icons.Agreements },
-            { to: '/dashboard/director/templates', label: 'Role Templates', end: false, section: 'WORKSPACE', icon: Icons.Agreements },
-            { to: '/dashboard/director/profile', label: 'Profile', end: false, section: 'ACCOUNT', icon: User },
+            { to: '/dashboard/recruiter', label: 'Dashboard', end: true, section: 'WORKSPACE', icon: Icons.Dashboard },
+            { to: '/dashboard/interviews', label: 'Interviews & AI Scores', end: false, section: 'WORKSPACE', icon: Icons.Interviews },
+            { to: '/dashboard/recruiter/requisitions', label: 'Requisitions', end: true, section: 'WORKSPACE', icon: Icons.Requisitions },
+            { to: '/dashboard/recruiter/candidates', label: 'Candidates Bank', end: true, section: 'WORKSPACE', icon: Icons.CandidatesBank },
+            { to: '/dashboard/recruiter/shortlisted', label: 'Shortlisted Candidates', end: true, section: 'WORKSPACE', icon: Icons.Shortlisted },
+            { to: '/dashboard/recruiter/interviews', label: 'Interview Requests', end: true, section: 'WORKSPACE', icon: Icons.Interviews },
+            { to: '/dashboard/recruiter/agreements', label: 'Agreements', end: true, section: 'WORKSPACE', icon: Icons.Agreements },
+            { to: '/dashboard/recruiter/accepted', label: 'Accepted Candidates', end: true, section: 'CANDIDATE MANAGEMENT', icon: Icons.Accepted },
+            { to: '/dashboard/recruiter/portal-access', label: 'Portal Access', end: true, section: 'CANDIDATE MANAGEMENT', icon: Icons.PortalAccess },
+            { to: '/dashboard/recruiter/workers', label: 'Workers', end: true, section: 'CANDIDATE MANAGEMENT', icon: Icons.Team },
           ]
-          : (userRole === 'Procurement' || userRole === 'Procurement Team')
+          : isDirector
             ? [
-              { to: '/dashboard/procurement/finance-approvals', label: 'Payment Tracking', end: false, section: 'WORKSPACE', icon: Icons.Receipt },
-              { to: '/dashboard/procurement', label: 'Work Orders', end: true, section: 'WORKSPACE', icon: Icons.Agreements, badge: procurementPendingSows },
-              { to: '/dashboard/procurement/profile', label: 'Profile', end: false, section: 'ACCOUNT', icon: User },
+              { to: '/dashboard/director', label: 'Executive Overview', end: true, section: 'WORKSPACE', icon: Icons.Dashboard },
+              { to: '/dashboard/director/finance-approvals', label: 'Payment Tracking', end: false, section: 'WORKSPACE', icon: Icons.Receipt },
+              { to: '/dashboard/director/work-orders', label: 'Billing Approvals', end: false, section: 'WORKSPACE', icon: Icons.Agreements },
+              { to: '/dashboard/director/templates', label: 'Role Templates', end: false, section: 'WORKSPACE', icon: Icons.Agreements },
+              { to: '/dashboard/director/profile', label: 'Profile', end: false, section: 'ACCOUNT', icon: User },
             ]
-            : isFinance
+            : (userRole === 'Procurement' || userRole === 'Procurement Team')
               ? [
-                { to: '/dashboard/finance', label: 'Work Orders & Payments', end: true, section: 'WORKSPACE', icon: Icons.Receipt, badge: financePendingPayments },
-                { to: '/dashboard/finance/approvals', label: 'Approval & Payment History', end: false, section: 'WORKSPACE', icon: Icons.Receipt },
-                { to: '/dashboard/finance/profile', label: 'Profile', end: false, section: 'ACCOUNT', icon: User },
+                { to: '/dashboard/procurement/finance-approvals', label: 'Payment Tracking', end: false, section: 'WORKSPACE', icon: Icons.Receipt },
+                { to: '/dashboard/procurement', label: 'Work Orders', end: true, section: 'WORKSPACE', icon: Icons.Agreements, badge: procurementPendingSows },
+                { to: '/dashboard/procurement/profile', label: 'Profile', end: false, section: 'ACCOUNT', icon: User },
               ]
-              : (userRole === 'Super Admin' || userRole.toLowerCase() === 'super admin')
-                ? superAdminNavigation({
-                  icons: Icons, selectedCount: superAdminSelectedCount, candidateCount: superAdminCandidateCount,
-                  onboardCompany: () => setIsOnboardCompanyModalOpen(true),
-                  onboardVendor: () => setIsOnboardVendorModalOpen(true),
-                })
-                : [
-                  { to: '/dashboard/hr', label: 'Dashboard', end: true, icon: Icons.Dashboard },
-                  { to: '/dashboard/interviews', label: 'Interviews & AI Scores', end: false, icon: Icons.Interviews },
-                ];
+              : isFinance
+                ? [
+                  { to: '/dashboard/finance', label: 'Work Orders & Payments', end: true, section: 'WORKSPACE', icon: Icons.Receipt, badge: financePendingPayments },
+                  { to: '/dashboard/finance/approvals', label: 'Approval & Payment History', end: false, section: 'WORKSPACE', icon: Icons.Receipt },
+                  { to: '/dashboard/finance/profile', label: 'Profile', end: false, section: 'ACCOUNT', icon: User },
+                ]
+                : (userRole === 'Super Admin' || userRole.toLowerCase() === 'super admin')
+                  ? superAdminNavigation({
+                    icons: Icons, selectedCount: superAdminSelectedCount, candidateCount: superAdminCandidateCount,
+                    onboardCompany: () => setIsOnboardCompanyModalOpen(true),
+                    onboardVendor: () => setIsOnboardVendorModalOpen(true),
+                  })
+                  : [
+                    { to: '/dashboard/hr', label: 'Dashboard', end: true, icon: Icons.Dashboard },
+                    { to: '/dashboard/interviews', label: 'Interviews & AI Scores', end: false, icon: Icons.Interviews },
+                  ];
 
   const renderSidebarContent = (onLinkClick) => {
     const isMinimized = (userRole === 'Hiring Manager' || isCompanyAdmin || isDirector || isFinance || isSuperAdmin) && isSidebarMinimized;
@@ -605,9 +606,9 @@ export default function DashboardLayout() {
                           ? isCandidateMgmtPath && isBillingTab
                           : item.to === '/dashboard/superadmin/candidate-management'
                             ? isCandidateMgmtPath && !isBillingTab
-                  : item.end
-                    ? location.pathname === item.to
-                    : item.to ? location.pathname.startsWith(item.to) : false;
+                            : item.end
+                              ? location.pathname === item.to
+                              : item.to ? location.pathname.startsWith(item.to) : false;
 
                 return (
                   <div key={item.label} className="relative group/item flex items-center justify-center w-full">
@@ -629,11 +630,10 @@ export default function DashboardLayout() {
                         aria-current={isItemActive ? 'page' : undefined}
                         onClick={onLinkClick}
                         title={item.label}
-                        className={`w-8.5 h-8.5 rounded-xl flex items-center justify-center transition-all relative ${
-                          isItemActive
-                            ? 'bg-white text-black shadow-xs'
-                            : 'text-[#94A3B8] hover:text-white hover:bg-white/10'
-                        }`}
+                        className={`w-8.5 h-8.5 rounded-xl flex items-center justify-center transition-all relative ${isItemActive
+                          ? 'bg-white text-black shadow-xs'
+                          : 'text-[#94A3B8] hover:text-white hover:bg-white/10'
+                          }`}
                       >
                         {IconComp && <IconComp size={15} className={isItemActive ? 'text-black' : ''} />}
                         {item.badge > 0 && (
@@ -780,146 +780,145 @@ export default function DashboardLayout() {
           )}
         </div>
 
-      {/* Navigation list */}
-      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden pr-1 custom-scrollbar">
-        <nav className="flex flex-col gap-1 pb-2">
-          {(() => {
-            let lastSection = null;
-            return navItems.map((item) => {
-              const showSection = item.section && item.section !== lastSection;
-              if (item.section) lastSection = item.section;
-              const IconComp = item.icon;
+        {/* Navigation list */}
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden pr-1 custom-scrollbar">
+          <nav className="flex flex-col gap-1 pb-2">
+            {(() => {
+              let lastSection = null;
+              return navItems.map((item) => {
+                const showSection = item.section && item.section !== lastSection;
+                if (item.section) lastSection = item.section;
+                const IconComp = item.icon;
 
-              const isCandidateMgmtPath = location.pathname.startsWith('/dashboard/superadmin/candidate-management') || location.pathname.startsWith('/dashboard/candidate-management');
-              const isBillingTab = new URLSearchParams(location.search).get('tab') === 'billing';
+                const isCandidateMgmtPath = location.pathname.startsWith('/dashboard/superadmin/candidate-management') || location.pathname.startsWith('/dashboard/candidate-management');
+                const isBillingTab = new URLSearchParams(location.search).get('tab') === 'billing';
 
-              const isItemActive = isSuperAdmin ? isSuperAdminNavActive(item, location.pathname, location.search) : item.to === '/dashboard/requisitions'
-                ? location.pathname.startsWith('/dashboard/requisitions') && location.pathname !== '/dashboard/requisitions/new'
-                : item.to === '/dashboard/superadmin/candidate-management?tab=billing'
-                  ? isCandidateMgmtPath && isBillingTab
-                  : item.to === '/dashboard/superadmin/candidate-management'
-                    ? isCandidateMgmtPath && !isBillingTab
-                    : (item.to === '/dashboard/candidates' || item.to === '/dashboard/superadmin/candidates')
-                      ? ((location.pathname.startsWith('/dashboard/candidates') || location.pathname.startsWith('/dashboard/superadmin/candidates') || location.pathname.includes('candidate-pool') || location.pathname.includes('candidatepool')) && !isCandidateMgmtPath)
-                      : item.to === '/dashboard/director'
-                        ? location.pathname === '/dashboard/director' || location.pathname === '/dashboard/director/'
-                        : item.to === '/dashboard/director/approvals'
-                          ? location.pathname.startsWith('/dashboard/director/approvals')
-                          : item.to === '/dashboard/director/requisitions'
-                            ? location.pathname.startsWith('/dashboard/director/requisitions')
-                        : item.end
-                          ? location.pathname === item.to
-                          : item.to ? location.pathname.startsWith(item.to) : false;
+                const isItemActive = isSuperAdmin ? isSuperAdminNavActive(item, location.pathname, location.search) : item.to === '/dashboard/requisitions'
+                  ? location.pathname.startsWith('/dashboard/requisitions') && location.pathname !== '/dashboard/requisitions/new'
+                  : item.to === '/dashboard/superadmin/candidate-management?tab=billing'
+                    ? isCandidateMgmtPath && isBillingTab
+                    : item.to === '/dashboard/superadmin/candidate-management'
+                      ? isCandidateMgmtPath && !isBillingTab
+                      : (item.to === '/dashboard/candidates' || item.to === '/dashboard/superadmin/candidates')
+                        ? ((location.pathname.startsWith('/dashboard/candidates') || location.pathname.startsWith('/dashboard/superadmin/candidates') || location.pathname.includes('candidate-pool') || location.pathname.includes('candidatepool')) && !isCandidateMgmtPath)
+                        : item.to === '/dashboard/director'
+                          ? location.pathname === '/dashboard/director' || location.pathname === '/dashboard/director/'
+                          : item.to === '/dashboard/director/approvals'
+                            ? location.pathname.startsWith('/dashboard/director/approvals')
+                            : item.to === '/dashboard/director/requisitions'
+                              ? location.pathname.startsWith('/dashboard/director/requisitions')
+                              : item.end
+                                ? location.pathname === item.to
+                                : item.to ? location.pathname.startsWith(item.to) : false;
 
-              return (
-                <React.Fragment key={item.label}>
-                  {showSection && (
-                    <div className="text-[10px] font-extrabold tracking-wider text-[#8A8A85] uppercase px-3 pt-3 pb-1">
-                      {item.section}
-                    </div>
-                  )}
-                  {item.action ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        item.action();
-                        if (onLinkClick) onLinkClick();
-                      }}
-                      className="nav-link sidebar-nav-btn text-left w-full flex items-center justify-between"
-                      style={{ background: 'none', border: 'none', cursor: 'pointer' }}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        {IconComp && <IconComp className="shrink-0" size={15} />}
-                        <span className="font-semibold text-[13px]">{item.label}</span>
+                return (
+                  <React.Fragment key={item.label}>
+                    {showSection && (
+                      <div className="text-[10px] font-extrabold tracking-wider text-[#8A8A85] uppercase px-3 pt-3 pb-1">
+                        {item.section}
                       </div>
-                    </button>
-                  ) : item.to ? (
-                    <Link
-                      to={item.to}
-                      aria-current={isItemActive ? 'page' : undefined}
-                      onClick={onLinkClick}
-                      className={`nav-link ${isItemActive ? 'active-nav-tab' : 'sidebar-nav-btn'}`}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        {IconComp && <IconComp className="shrink-0" size={15} />}
-                        <span className="font-semibold text-[13px]">{item.label}</span>
-                        {item.badge > 0 && (
-                          <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-[#DC2626] text-white text-[9.5px] font-black leading-none">
-                            {item.badge}
+                    )}
+                    {item.action ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          item.action();
+                          if (onLinkClick) onLinkClick();
+                        }}
+                        className="nav-link sidebar-nav-btn text-left w-full flex items-center justify-between"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          {IconComp && <IconComp className="shrink-0" size={15} />}
+                          <span className="font-semibold text-[13px]">{item.label}</span>
+                        </div>
+                      </button>
+                    ) : item.to ? (
+                      <Link
+                        to={item.to}
+                        aria-current={isItemActive ? 'page' : undefined}
+                        onClick={onLinkClick}
+                        className={`nav-link ${isItemActive ? 'active-nav-tab' : 'sidebar-nav-btn'}`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          {IconComp && <IconComp className="shrink-0" size={15} />}
+                          <span className="font-semibold text-[13px]">{item.label}</span>
+                          {item.badge > 0 && (
+                            <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-[#DC2626] text-white text-[9.5px] font-black leading-none">
+                              {item.badge}
+                            </span>
+                          )}
+                        </div>
+                        {item.count !== undefined && (
+                          <span
+                            className={`text-[11px] font-bold ${isItemActive ? 'text-white' : 'text-[#8A8A85]'} ml-auto pr-1`}
+                          >
+                            {item.count}
                           </span>
                         )}
-                      </div>
-                      {item.count !== undefined && (
-                        <span
-                          className={`text-[11px] font-bold ${isItemActive ? 'text-white' : 'text-[#8A8A85]'} ml-auto pr-1`}
-                        >
-                          {item.count}
-                        </span>
-                      )}
-                    </Link>
-                  ) : (
-                    <span className="nav-link sidebar-nav-btn">
-                      <div className="flex items-center gap-2.5">
-                        {IconComp && <IconComp className="shrink-0" size={15} />}
-                        <span className="font-semibold text-[13px]">{item.label}</span>
-                      </div>
-                    </span>
-                  )}
-                </React.Fragment>
-              );
-            });
-          })()}
-        </nav>
-      </div>
+                      </Link>
+                    ) : (
+                      <span className="nav-link sidebar-nav-btn">
+                        <div className="flex items-center gap-2.5">
+                          {IconComp && <IconComp className="shrink-0" size={15} />}
+                          <span className="font-semibold text-[13px]">{item.label}</span>
+                        </div>
+                      </span>
+                    )}
+                  </React.Fragment>
+                );
+              });
+            })()}
+          </nav>
+        </div>
 
-      {/* Sidebar Footer */}
-      <div className="sidebar-footer shrink-0 pt-3.5 border-t border-[#EAEAE6] mt-auto">
-        <div className="flex items-center justify-between px-0.5">
-          <div className="flex items-center gap-3 min-w-0">
-            <div
-              style={{
-                width: 38,
-                height: 38,
-                borderRadius: '50%',
-                backgroundColor: '#000000',
-                color: '#FFFFFF',
-                border: (userRole === 'Hiring Manager' || isCompanyAdmin || isDirector || isFinance || isSuperAdmin) ? '1px solid rgba(255, 255, 255, 0.12)' : 'none',
-              }}
-              className="flex items-center justify-center font-bold text-[14px] shrink-0 shadow-2xs overflow-hidden p-1 uppercase"
-            >
-              {user?.logo_url ? (
-                <img src={user.logo_url} alt="Logo" className="w-full h-full object-contain" />
-              ) : (
-                initials(user?.name)
-              )}
-            </div>
-            <div className="leading-tight min-w-0 text-left">
-              <div className={`text-[13.5px] font-extrabold tracking-tight truncate ${(userRole === 'Hiring Manager' || isCompanyAdmin || isDirector || isFinance || isSuperAdmin) ? 'text-white' : 'text-[#0A0A0A]'}`}>
-                {user?.name || (isDirector ? 'Company Director' : isFinance ? 'Finance Officer' : isSuperAdmin ? 'Super Administrator' : userRole)}
+        {/* Sidebar Footer */}
+        <div className="sidebar-footer shrink-0 pt-3.5 border-t border-[#EAEAE6] mt-auto">
+          <div className="flex items-center justify-between px-0.5">
+            <div className="flex items-center gap-3 min-w-0">
+              <div
+                style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: '50%',
+                  backgroundColor: '#000000',
+                  color: '#FFFFFF',
+                  border: (userRole === 'Hiring Manager' || isCompanyAdmin || isDirector || isFinance || isSuperAdmin) ? '1px solid rgba(255, 255, 255, 0.12)' : 'none',
+                }}
+                className="flex items-center justify-center font-bold text-[14px] shrink-0 shadow-2xs overflow-hidden p-1 uppercase"
+              >
+                {user?.logo_url ? (
+                  <img src={user.logo_url} alt="Logo" className="w-full h-full object-contain" />
+                ) : (
+                  initials(user?.name)
+                )}
               </div>
-              <div className={`text-[11px] font-medium mt-0.5 truncate ${(userRole === 'Hiring Manager' || isCompanyAdmin || isDirector || isFinance || isSuperAdmin) ? 'text-[#94A3B8]' : 'text-[#8A8A85]'}`}>
-                {isCompanyAdmin ? 'Admin' : isDirector ? 'Director' : isFinance ? 'Finance Officer' : isSuperAdmin ? 'Super Admin' : userRole}
+              <div className="leading-tight min-w-0 text-left">
+                <div className={`text-[13.5px] font-extrabold tracking-tight truncate ${(userRole === 'Hiring Manager' || isCompanyAdmin || isDirector || isFinance || isSuperAdmin) ? 'text-white' : 'text-[#0A0A0A]'}`}>
+                  {user?.name || (isDirector ? 'Company Director' : isFinance ? 'Finance Officer' : isSuperAdmin ? 'Super Administrator' : userRole)}
+                </div>
+                <div className={`text-[11px] font-medium mt-0.5 truncate ${(userRole === 'Hiring Manager' || isCompanyAdmin || isDirector || isFinance || isSuperAdmin) ? 'text-[#94A3B8]' : 'text-[#8A8A85]'}`}>
+                  {isCompanyAdmin ? 'Admin' : isDirector ? 'Director' : isFinance ? 'Finance Officer' : isSuperAdmin ? 'Super Admin' : userRole}
+                </div>
               </div>
             </div>
-          </div>
 
-          <button
-            onClick={handleLogout}
-            type="button"
-            title="Sign out"
-            className={`p-1.5 rounded-lg transition-colors cursor-pointer shrink-0 ${
-              (userRole === 'Hiring Manager' || isCompanyAdmin || isDirector || isFinance || isSuperAdmin)
+            <button
+              onClick={handleLogout}
+              type="button"
+              title="Sign out"
+              className={`p-1.5 rounded-lg transition-colors cursor-pointer shrink-0 ${(userRole === 'Hiring Manager' || isCompanyAdmin || isDirector || isFinance || isSuperAdmin)
                 ? 'text-[#94A3B8] hover:text-[#DC2626] hover:bg-white/5'
                 : 'text-[#8A8A85] hover:text-[#DC2626] hover:bg-[#FEE2E2]'
-            }`}
-          >
-            <Icons.Logout />
-          </button>
+                }`}
+            >
+              <Icons.Logout />
+            </button>
+          </div>
         </div>
       </div>
-    </div>
-  );
-};
+    );
+  };
   // Helper to render the NEXUS-styled Hiring Manager Sidebar
   const renderNexusSidebar = (onLinkClick = null) => {
     if (isSidebarMinimized) {
@@ -973,11 +972,10 @@ export default function DashboardLayout() {
                     to={item.to}
                     onClick={onLinkClick}
                     title={item.label}
-                    className={`size-9 rounded-lg flex items-center justify-center transition-all relative ${
-                      isItemActive
-                        ? 'bg-[#EAE5D9] text-[#111111] font-semibold border border-[#DDD5C7] shadow-2xs'
-                        : 'text-[#666666] hover:bg-[#F2EFE9] hover:text-[#111111] border border-transparent hover:border-[#E8E3D8]'
-                    }`}
+                    className={`size-9 rounded-lg flex items-center justify-center transition-all relative ${isItemActive
+                      ? 'bg-[#EAE5D9] text-[#111111] font-semibold border border-[#DDD5C7] shadow-2xs'
+                      : 'text-[#666666] hover:bg-[#F2EFE9] hover:text-[#111111] border border-transparent hover:border-[#E8E3D8]'
+                      }`}
                   >
                     {IconComp && (
                       <IconComp size={16} className={isItemActive ? 'text-[#111111]' : 'text-[#777777]'} />
@@ -1088,11 +1086,10 @@ export default function DashboardLayout() {
                   <Link
                     to={item.to}
                     onClick={onLinkClick}
-                    className={`flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-xs transition-colors select-none ${
-                      isItemActive
-                        ? 'bg-[#EAE5D9] font-semibold text-[#111111] border border-[#DDD5C7] shadow-2xs'
-                        : 'text-[#666666] hover:bg-[#F2EFE9] hover:text-[#111111] border border-transparent hover:border-[#E8E3D8]'
-                    }`}
+                    className={`flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-xs transition-colors select-none ${isItemActive
+                      ? 'bg-[#EAE5D9] font-semibold text-[#111111] border border-[#DDD5C7] shadow-2xs'
+                      : 'text-[#666666] hover:bg-[#F2EFE9] hover:text-[#111111] border border-transparent hover:border-[#E8E3D8]'
+                      }`}
                   >
                     {IconComp && (
                       <IconComp
@@ -1159,9 +1156,8 @@ export default function DashboardLayout() {
         <div className="flex h-full w-full overflow-hidden rounded-[20px] sm:rounded-[28px] md:rounded-[32px] border border-[#DDD7CB] bg-[#FAF8F5] text-[#111111] shadow-[0_14px_45px_-10px_rgba(0,0,0,0.13),0_6px_18px_-2px_rgba(0,0,0,0.06),0_1px_3px_rgba(0,0,0,0.05)] relative">
           {/* Desktop Persistent Sidebar */}
           <aside
-            className={`hidden lg:flex flex-col h-full border-r border-[#E8E3D8] bg-[#FAF8F5] transition-[width,margin] duration-200 z-20 shrink-0 ${
-              isSidebarMinimized ? 'w-[68px]' : 'w-[265px]'
-            }`}
+            className={`hidden lg:flex flex-col h-full border-r border-[#E8E3D8] bg-[#FAF8F5] transition-[width,margin] duration-200 z-20 shrink-0 ${isSidebarMinimized ? 'w-[68px]' : 'w-[265px]'
+              }`}
           >
             {renderNexusSidebar()}
           </aside>
@@ -1195,63 +1191,63 @@ export default function DashboardLayout() {
           <div className="flex-1 flex flex-col h-full min-w-0 bg-white relative overflow-hidden select-text">
             {/* Top Compact Header hidden per user request to make page clean & premium */}
             {false && (
-            <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-[#E8E3D8] bg-[#FAF8F5] px-3 md:px-5 z-20 select-none">
-              <div className="flex items-center gap-2 flex-1 max-w-lg min-w-0">
-                <button
-                  type="button"
-                  onClick={() => setIsMobileMenuOpen(true)}
-                  className="lg:hidden p-1.5 text-[#777777] hover:text-[#111111] hover:bg-[#EFECE5] rounded-lg cursor-pointer"
-                  aria-label="Open Navigation"
-                >
-                  <Menu size={18} />
-                </button>
-                <button
-                  type="button"
-                  onClick={toggleSidebar}
-                  className="hidden lg:inline-flex size-8 items-center justify-center rounded-lg text-[#777777] hover:text-[#111111] hover:bg-[#EFECE5] transition cursor-pointer"
-                  title={isSidebarMinimized ? "Expand sidebar" : "Collapse sidebar"}
-                >
-                  {isSidebarMinimized ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {}}
-                  className="flex h-8 w-full max-w-xs sm:max-w-sm md:max-w-md items-center gap-2 rounded-full border border-[#E8E3D8] bg-[#FAF8F5] hover:bg-[#EFECE5] px-3.5 text-xs text-[#7A7369] transition-colors cursor-pointer"
-                >
-                  <Search size={14} className="text-[#888888] shrink-0" />
-                  <span className="flex-1 text-left truncate">Search operations, candidates, jobs…</span>
-                  <kbd className="hidden sm:inline rounded border border-[#E8E3D8] bg-white px-1.5 text-[10px] font-medium text-[#888888]">⌘K</kbd>
-                </button>
-              </div>
-
-              {/* Right Controls */}
-              <div className="flex items-center gap-2 shrink-0">
-                <NotificationBell />
-                {!isHiringManagerDashboard && (
-                  <Link
-                    to="/dashboard/hiring-manager"
-                    className="hidden sm:inline-flex items-center gap-1.5 h-7.5 px-3 rounded-full text-xs font-semibold border border-[#E8E3D8] bg-white hover:bg-[#F4F1EA] text-[#111111] transition shadow-2xs"
-                    title="Open Aura AI Copilot"
+              <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-[#E8E3D8] bg-[#FAF8F5] px-3 md:px-5 z-20 select-none">
+                <div className="flex items-center gap-2 flex-1 max-w-lg min-w-0">
+                  <button
+                    type="button"
+                    onClick={() => setIsMobileMenuOpen(true)}
+                    className="lg:hidden p-1.5 text-[#777777] hover:text-[#111111] hover:bg-[#EFECE5] rounded-lg cursor-pointer"
+                    aria-label="Open Navigation"
                   >
-                    <Sparkles size={13} className="text-[#111111]" />
-                    <span>Aura AI</span>
-                  </Link>
-                )}
-                <span className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-1 text-[10.5px] font-bold text-[#48433C] bg-white border border-[#E8E3D8] rounded-full shadow-2xs">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  SECURE
-                </span>
-                <button
-                  onClick={handleLogout}
-                  type="button"
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl border border-[#E8E3D8] bg-white hover:bg-rose-50 hover:text-rose-600 text-[#48433C] text-xs font-semibold transition-all shadow-2xs cursor-pointer"
-                  title="Sign out of TermJobs"
-                >
-                  <Icons.Logout width={13} height={13} />
-                  <span className="hidden sm:inline">Sign out</span>
-                </button>
-              </div>
-            </header>
+                    <Menu size={18} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={toggleSidebar}
+                    className="hidden lg:inline-flex size-8 items-center justify-center rounded-lg text-[#777777] hover:text-[#111111] hover:bg-[#EFECE5] transition cursor-pointer"
+                    title={isSidebarMinimized ? "Expand sidebar" : "Collapse sidebar"}
+                  >
+                    {isSidebarMinimized ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { }}
+                    className="flex h-8 w-full max-w-xs sm:max-w-sm md:max-w-md items-center gap-2 rounded-full border border-[#E8E3D8] bg-[#FAF8F5] hover:bg-[#EFECE5] px-3.5 text-xs text-[#7A7369] transition-colors cursor-pointer"
+                  >
+                    <Search size={14} className="text-[#888888] shrink-0" />
+                    <span className="flex-1 text-left truncate">Search operations, candidates, jobs…</span>
+                    <kbd className="hidden sm:inline rounded border border-[#E8E3D8] bg-white px-1.5 text-[10px] font-medium text-[#888888]">⌘K</kbd>
+                  </button>
+                </div>
+
+                {/* Right Controls */}
+                <div className="flex items-center gap-2 shrink-0">
+                  <NotificationBell />
+                  {!isHiringManagerDashboard && (
+                    <Link
+                      to="/dashboard/hiring-manager"
+                      className="hidden sm:inline-flex items-center gap-1.5 h-7.5 px-3 rounded-full text-xs font-semibold border border-[#E8E3D8] bg-white hover:bg-[#F4F1EA] text-[#111111] transition shadow-2xs"
+                      title="Open Aura AI Copilot"
+                    >
+                      <Sparkles size={13} className="text-[#111111]" />
+                      <span>Aura AI</span>
+                    </Link>
+                  )}
+                  <span className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-1 text-[10.5px] font-bold text-[#48433C] bg-white border border-[#E8E3D8] rounded-full shadow-2xs">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    SECURE
+                  </span>
+                  <button
+                    onClick={handleLogout}
+                    type="button"
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl border border-[#E8E3D8] bg-white hover:bg-rose-50 hover:text-rose-600 text-[#48433C] text-xs font-semibold transition-all shadow-2xs cursor-pointer"
+                    title="Sign out of TermJobs"
+                  >
+                    <Icons.Logout width={13} height={13} />
+                    <span className="hidden sm:inline">Sign out</span>
+                  </button>
+                </div>
+              </header>
             )}
 
             {/* Main Content Area */}

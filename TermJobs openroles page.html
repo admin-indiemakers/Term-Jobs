@@ -1,0 +1,1217 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>TermJobs</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
+<style>
+:root{
+  --bg:#ffffff; --surface:#ffffff; --surface2:#f3f3f4; --line:#e4e4e7; --fg:#0a0a0a; --muted:#6b6b73;
+  --accent:#0a0a0a; --accent-soft:#f0f0f1; --inv-bg:#0a0a0a; --inv-fg:#ffffff; --ok:#14804f;
+  --display:'Plus Jakarta Sans',system-ui,-apple-system,'Segoe UI',sans-serif; --body:'Plus Jakarta Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:16px;line-height:1.55;
+  padding-block:0 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  -webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}
+h1,h2,h3{font-family:var(--display);letter-spacing:-.02em;text-wrap:balance;margin:0}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:8px}
+.wrap{max-width:1120px;margin-inline:auto;width:100%}
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-block:18px}
+.brand{display:flex;align-items:center;gap:12px;min-width:0}
+.brand svg{flex:none}
+.brand b{display:block;font-family:var(--display);font-size:15px;letter-spacing:.22em;font-weight:700}
+.brand span{display:block;font-size:11px;letter-spacing:.14em;color:var(--muted);text-transform:uppercase}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 20px;border-radius:999px;
+  font:600 15px var(--body);border:1px solid var(--line);background:transparent;color:var(--fg);cursor:pointer}
+.btn:hover{background:var(--surface2)}
+.btn.primary{background:var(--inv-bg);color:var(--inv-fg);border-color:transparent}
+.btn.primary:hover{opacity:.9;background:var(--inv-bg)}
+.btn.block{width:100%;min-height:52px;font-size:16px}
+.hero{padding-block:4px 18px;display:grid;gap:8px}
+.eyebrow{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.hero h1{font-size:clamp(1.75rem,4.6vw,2.6rem);line-height:1.1;max-width:24ch}
+.hero h1 em{font-style:normal;color:var(--muted)}
+.hero p{color:var(--muted);max-width:52ch;margin:0;font-size:1.05rem}
+.stats{display:flex;flex-wrap:wrap;gap:10px 28px;margin-top:6px;font-size:14px;color:var(--muted)}
+.stats b{color:var(--fg);font-family:var(--display);font-size:20px;margin-right:6px}
+.toolbar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:12px;margin-bottom:8px;border-bottom:1px solid var(--line)}
+.toolbar-in{display:grid;grid-template-columns:1.6fr repeat(3,1fr) auto;gap:10px}
+.field{position:relative;min-width:0}
+.field input,.field select{width:100%;min-height:48px;border-radius:14px;border:1px solid var(--line);background:var(--surface);color:var(--fg);
+  font:500 15px var(--body);padding:0 14px;appearance:none;-webkit-appearance:none}
+.field input{padding-left:42px}
+.field svg{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none}
+.field select{padding-right:34px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none' stroke='%239aa2b0' stroke-width='2'%3E%3Cpath d='M1 1l5 5 5-5'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center}
+.count{display:flex;align-items:center;justify-content:space-between;padding-block:16px 6px;color:var(--muted);font-size:14px}
+.count button{background:none;border:0;color:var(--accent);font:600 14px var(--body);cursor:pointer;padding:8px 0}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;padding-block:8px 8px}
+.card{display:flex;flex-direction:column;gap:16px;background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:22px;min-width:0;transition:border-color .15s,transform .15s}
+.card:hover{border-color:var(--fg);transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.07)}
+.card-head{display:flex;gap:14px;align-items:flex-start;min-width:0}
+.logo{flex:none;width:52px;height:52px;border-radius:14px;display:grid;place-items:center;font:700 20px var(--display)}
+.card h3{font-size:1.2rem;line-height:1.25;overflow-wrap:anywhere}
+.co{color:var(--muted);font-size:14px;margin-top:2px;overflow-wrap:anywhere}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{display:inline-flex;align-items:center;gap:6px;min-height:30px;padding:0 12px;border-radius:999px;background:var(--surface2);font-size:13px;font-weight:500;max-width:100%}
+.chip.mode{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.chip svg{flex:none;color:var(--muted)}
+.skills{display:flex;flex-wrap:wrap;gap:6px}
+.skill{font-size:13px;padding:4px 10px;border:1px solid var(--line);border-radius:8px;color:var(--muted)}
+.card-foot{margin-top:auto;display:flex;align-items:center;justify-content:space-between;padding-top:14px;border-top:1px solid var(--line);font-weight:600;font-size:15px}
+.card-foot span:last-child{color:var(--fg)}
+.empty{grid-column:1/-1;text-align:center;padding:56px 16px;color:var(--muted);border:1px dashed var(--line);border-radius:20px}
+.cta{margin-top:40px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:18px;padding:28px;border-radius:24px;background:var(--surface);border:1px solid var(--line)}
+.cta h2{font-size:1.5rem}
+.cta p{margin:6px 0 0;color:var(--muted)}
+.foot{margin-top:40px;color:var(--muted);font-size:13px}
+/* detail */
+.crumb{display:inline-flex;align-items:center;gap:8px;min-height:44px;color:var(--muted);font-weight:500}
+.crumb:hover{color:var(--fg)}
+.d-head{display:grid;gap:18px;padding-block:20px 26px}
+.d-top{display:flex;gap:16px;align-items:center}
+.d-top .logo{width:64px;height:64px;font-size:26px;border-radius:18px}
+.d-head h1{font-size:clamp(1.8rem,5vw,2.8rem);line-height:1.08}
+.d-layout{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:28px;align-items:start}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:24px;display:grid;gap:18px;min-width:0}
+.panel h2{font-size:1.1rem}
+.facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 24px;margin:0}
+.facts dt{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.facts dd{margin:4px 0 0;font-weight:600;font-size:1.05rem;overflow-wrap:anywhere}
+.stack{display:grid;gap:18px}
+.apply{position:sticky;top:calc(16px + env(safe-area-inset-top,0px));display:grid;gap:14px}
+.apply small{color:var(--muted);display:flex;gap:8px;align-items:center}
+.apply small i{width:8px;height:8px;border-radius:50%;background:var(--ok);display:inline-block}
+.bar{display:none}
+.toast{position:fixed;left:50%;bottom:calc(88px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--inv-bg);color:var(--inv-fg);
+  padding:12px 18px;border-radius:12px;font-weight:600;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:20;max-width:90vw;text-align:center}
+.toast.on{opacity:1}
+@media (max-width:900px){
+  .toolbar-in{grid-template-columns:1fr 1fr}
+  .toolbar-in .field:first-child{grid-column:1/-1}
+  .toolbar-in .reset{display:none}
+}
+@media (max-width:760px){
+  .grid{grid-template-columns:minmax(0,1fr)}
+  .d-layout{grid-template-columns:minmax(0,1fr)}
+  .apply.side{display:none}
+  .bar{display:flex;gap:10px;position:fixed;left:0;right:0;bottom:0;z-index:10;background:var(--bg);border-top:1px solid var(--line);
+    padding:12px max(16px,env(safe-area-inset-right,0px)) calc(12px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+  .bar .btn.primary{flex:1;min-height:52px}
+  .bar .btn.share{min-height:52px}
+  body.detail{padding-bottom:96px}
+  .facts{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+  .cta{padding:22px}
+}
+
+/* account + suggested */
+.me{display:flex;align-items:center;gap:10px;font-weight:600;font-size:14px;min-width:0}
+.me #me-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:14ch}
+.av{width:36px;height:36px;border-radius:50%;background:var(--inv-bg);color:var(--inv-fg);display:grid;place-items:center;font-weight:700;flex:none}
+.link{background:none;border:0;padding:8px 0;color:var(--muted);font:600 14px var(--body);cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.link:hover{color:var(--fg)}
+.ov{position:fixed;inset:0;z-index:40;background:rgba(10,10,10,.5);display:grid;place-items:center;padding:16px;animation:fade .2s ease}
+.modal{width:100%;max-width:460px;max-height:92svh;overflow:auto;background:var(--surface);border-radius:24px;padding:26px;display:grid;gap:16px;animation:rise .35s cubic-bezier(.2,.7,.2,1)}
+.modal h2{font-size:1.5rem}
+.modal p{margin:0;color:var(--muted);font-size:14px}
+.modal label{display:grid;gap:6px;font-size:13px;font-weight:600}
+.modal input,.modal select{min-height:48px;border-radius:14px;border:1px solid var(--line);background:var(--surface);color:var(--fg);font:500 15px var(--body);padding:0 14px;width:100%}
+.modal input:focus,.modal select:focus{outline:none;border-color:var(--fg);box-shadow:0 0 0 4px rgba(10,10,10,.08)}
+.modal .two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.modal .btns{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;padding-top:4px}
+@media (max-width:560px){.ov{place-items:end center;padding:0}.modal{border-radius:24px 24px 0 0;padding-bottom:calc(26px + env(safe-area-inset-bottom,0px))}.modal .two{grid-template-columns:1fr}}
+.sheet-list{display:grid;gap:10px}
+.srow{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--line);border-radius:16px}
+.srow>div{flex:1;min-width:0}
+.srow b{display:block;overflow-wrap:anywhere}
+.srow span{color:var(--muted);font-size:13px}
+.srow .x{width:36px;height:36px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--fg);font-size:18px;cursor:pointer}
+.snack{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));z-index:50;background:var(--inv-bg);color:var(--inv-fg);border-radius:14px;padding:10px 12px 10px 18px;display:flex;align-items:center;gap:14px;font-weight:600;font-size:14px;max-width:92vw;animation:rise .25s ease}
+.snack button{background:none;border:0;color:inherit;font:700 14px var(--body);text-decoration:underline;cursor:pointer;padding:8px}
+.sec-h{font-size:1.5rem;margin:40px 0 4px}
+.sug{padding-block:8px 8px}
+.sug-head{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:20px}
+.sug-head h2{font-size:clamp(1.9rem,4.4vw,2.9rem);line-height:1.05;margin-top:6px}
+.sug-sub{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:6px;color:var(--muted);font-size:14px}
+.pills{display:flex;gap:8px;flex-wrap:wrap}
+.pill{height:38px;padding:0 16px;border-radius:999px;border:0;background:var(--surface2);color:var(--fg);font:600 14px var(--body);cursor:pointer;transition:background .2s,color .2s,transform .2s;white-space:nowrap}
+.pill:hover:not(.on){background:var(--line)}
+.pill.on{background:var(--inv-bg);color:var(--inv-fg)}
+.pill:active{transform:scale(.95)}
+.sug-track{display:grid;grid-template-columns:1.55fr 1fr 1fr;gap:16px}
+.sug-track[data-n="1"]{grid-template-columns:1fr}
+.sug-track[data-n="2"]{grid-template-columns:1.55fr 1fr}
+.sc{position:relative;display:flex;flex-direction:column;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:24px;padding:20px;min-width:0;min-height:264px;animation:rise .55s cubic-bezier(.2,.7,.2,1) backwards;animation-delay:calc(var(--i,0)*70ms);transition:border-color .2s,box-shadow .25s,transform .25s cubic-bezier(.2,.7,.2,1)}
+.sc:hover{border-color:var(--fg);box-shadow:0 10px 28px rgba(0,0,0,.08);transform:translateY(-3px)}
+.sc.big{background:linear-gradient(155deg,#ffffff 0%,#efefea 100%);padding:28px}
+.sc .row{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.sc .lt{width:52px;height:52px;border-radius:14px;background:var(--surface2);display:grid;place-items:center;font:800 20px var(--display)}
+.sc .co2{color:var(--muted);font-size:14px;overflow-wrap:anywhere}
+.sc h3{font-size:1.25rem;line-height:1.22;overflow-wrap:anywhere}
+.sc.big h3{font-size:clamp(1.6rem,2.7vw,2.25rem);line-height:1.1}
+.sc .acts{margin-top:auto;display:flex;gap:10px;align-items:center;padding-top:8px}
+.sc .acts .btn{min-height:48px}
+.sc:not(.big) .acts .btn.primary{flex:1}
+.badge{background:var(--inv-bg);color:var(--inv-fg);border-radius:999px;padding:6px 14px;font:700 13px var(--body);align-items:center}
+.big-only,.mob-only{display:none}
+.sc.big .big-only{display:inline-flex}
+.sc.big .small-only{display:none}
+.mob-skills{display:none}
+.mob-skills .lbl{font-size:12px;letter-spacing:.14em;color:var(--muted);font-weight:600;margin-bottom:8px}
+.mob-skills .sk{display:flex;flex-wrap:wrap;gap:6px}
+.stamp{position:absolute;top:26px;padding:6px 14px;border:3px solid;border-radius:10px;font:800 22px var(--body);letter-spacing:.08em;opacity:0;pointer-events:none;z-index:4;display:none}
+.stamp.apply{left:22px;color:var(--fg);transform:rotate(-12deg);background:var(--surface)}
+.stamp.skip{right:22px;color:#c0392b;transform:rotate(12deg);background:var(--surface)}
+.ring{position:relative;width:48px;height:48px;flex:none}
+.ring span{position:absolute;inset:0;display:grid;place-items:center;font:700 12px var(--body)}
+.ring .arc{stroke-dashoffset:var(--off,119.4);animation:ring 1.1s cubic-bezier(.2,.7,.2,1) .3s backwards}
+@keyframes ring{from{stroke-dashoffset:119.4}}
+.bm{width:48px;height:48px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--fg);display:inline-grid;place-items:center;cursor:pointer;flex:none;transition:background .2s,transform .2s}
+.bm:hover{background:var(--surface2)}
+.bm:active{transform:scale(.9)}
+.bm.saved svg{fill:currentColor}
+.sug-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:18px;color:var(--muted);font-size:14px}
+.arrows{display:flex;gap:8px}
+.arrows button{width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--fg);display:grid;place-items:center;cursor:pointer;transition:border-color .2s,transform .2s}
+.arrows button:hover:not(:disabled){border-color:var(--fg)}
+.arrows button:active:not(:disabled){transform:scale(.92)}
+.arrows button:disabled{opacity:.35;cursor:default}
+.dc,.deck-hint,.deck-empty,.review{display:none}
+@media (max-width:1000px){
+  .sug-track,.sug-track[data-n]{grid-template-columns:1fr 1fr}
+  .sc.big{grid-column:1/-1}
+}
+@media (max-width:760px){
+  .sug-head{align-items:flex-start;flex-direction:column}
+  .pills{flex-wrap:nowrap;overflow-x:auto;max-width:100%;scrollbar-width:none}
+  .pills::-webkit-scrollbar{display:none}
+  .sug-foot{display:none}
+  .sug-track,.sug-track[data-n]{display:block;position:relative;height:min(520px,calc(100svh - 270px));min-height:430px;margin-bottom:34px}
+  .sc{position:absolute;inset:0;min-height:0;padding:22px;gap:14px;animation:none;transition:transform .35s cubic-bezier(.2,.7,.2,1),opacity .35s;touch-action:pan-y;-webkit-user-select:none;user-select:none;will-change:transform;box-shadow:0 6px 20px rgba(0,0,0,.06);background:linear-gradient(170deg,#fff 0%,#f2f2ee 100%)}
+  .sc:hover{transform:none;border-color:var(--line);box-shadow:0 6px 20px rgba(0,0,0,.06)}
+  .sc.d0{z-index:3}
+  .sc.d1{z-index:2;transform:translateY(14px) scale(.95)}
+  .sc.d2{z-index:1;transform:translateY(28px) scale(.9);opacity:.75}
+  .sc.dragging{transition:none}
+  .sc h3{font-size:1.7rem;line-height:1.1}
+  .stamp{display:block}
+  .chips .small-only{display:none}
+  .chips .mob-only{display:inline-flex}
+  .mob-skills{display:block}
+  .mob-foot{display:flex;align-items:center;justify-content:space-between;margin-top:auto;font-size:14px;color:var(--muted)}
+  .mob-foot .cnt{border:1px solid var(--line);border-radius:999px;padding:6px 14px;background:var(--surface);font-weight:600;color:var(--fg)}
+  .sc .acts{display:none}
+  .dc{display:flex;justify-content:center;align-items:center;gap:20px}
+  .dc button{border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--fg);display:grid;place-items:center;cursor:pointer;transition:transform .2s}
+  .dc button:active{transform:scale(.9)}
+  .dc .sk{width:62px;height:62px}
+  .dc .sv{width:52px;height:52px}
+  .dc .ap{width:76px;height:76px;background:var(--inv-bg);color:var(--inv-fg);border-color:transparent}
+  .deck-hint{display:block;text-align:center;color:var(--muted);font-size:13px;margin-top:14px}
+  .deck-empty{display:grid;gap:12px;justify-items:center;text-align:center;padding:36px 16px;border:1px dashed var(--line);border-radius:24px;margin-bottom:12px}
+  .deck-empty h3{font-size:1.3rem}
+  .deck-empty p{margin:0;color:var(--muted)}
+  .review{display:flex;justify-content:center;margin-top:14px}
+}
+.deck-empty[hidden],.dc[hidden],.review[hidden]{display:none!important}
+.jump-link,.jump-roles{display:none}
+.sec-h{scroll-margin-top:12px}
+@media (max-width:760px){
+  /* keep the swipe deck compact so "All open roles" is reachable */
+  .sug-head{gap:10px;margin-bottom:12px}
+  .sug-head h2{font-size:1.6rem}
+  .sug-sub{margin-top:2px;gap:6px 16px}
+  .jump-link{display:inline-block}
+  .sug-track,.sug-track[data-n]{height:clamp(370px,calc(100svh - 380px),430px);min-height:370px;margin-bottom:28px}
+  .sc{padding:18px;gap:10px}
+  .sc h3{font-size:1.45rem}
+  .dc{gap:16px}
+  .dc .sk{width:54px;height:54px}
+  .dc .sv{width:46px;height:46px}
+  .dc .ap{width:64px;height:64px}
+  .deck-hint{margin-top:10px}
+  .jump-roles{display:inline-flex;margin-top:16px;min-height:48px}
+  .sec-h{margin-top:28px;font-size:1.35rem}
+  /* filters: search on top, three compact selects in one row, not sticky */
+  .toolbar{position:static;padding-block:10px}
+  .toolbar-in{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+  .toolbar-in .field:first-child{grid-column:1/-1}
+  .field select{font-size:13px;padding-left:10px;padding-right:26px;min-height:44px;background-position:right 10px center;text-overflow:ellipsis}
+  .field input{min-height:46px}
+  .count{padding-block:10px 4px}
+}
+@keyframes swipeDemo{0%,100%{transform:translateX(0) rotate(0)}18%{transform:translateX(70px) rotate(7deg)}38%,50%{transform:translateX(0) rotate(0)}68%{transform:translateX(-70px) rotate(-7deg)}88%{transform:translateX(0) rotate(0)}}
+@keyframes stampApply{0%,8%,36%,100%{opacity:0}18%,28%{opacity:1}}
+@keyframes stampSkip{0%,50%,86%,100%{opacity:0}68%,78%{opacity:1}}
+@keyframes touchDot{0%{opacity:0;scale:1}6%{opacity:1;scale:.85}88%{opacity:1;scale:.85}100%{opacity:0;scale:1}}
+@keyframes nudgeL{0%,100%{transform:translateX(0)}50%{transform:translateX(-5px)}}
+@keyframes nudgeR{0%,100%{transform:translateX(0)}50%{transform:translateX(5px)}}
+@media (max-width:760px){
+  .sc.demo{animation:swipeDemo 3.2s cubic-bezier(.45,.05,.3,1) 1!important;transition:none}
+  .sc.demo .stamp.apply{animation:stampApply 3.2s ease-in-out 1!important}
+  .sc.demo .stamp.skip{animation:stampSkip 3.2s ease-in-out 1!important}
+  .sc.demo::after{content:"";position:absolute;left:calc(50% - 20px);bottom:84px;width:40px;height:40px;border-radius:50%;background:rgba(10,10,10,.14);border:2px solid rgba(10,10,10,.4);pointer-events:none;z-index:5;animation:touchDot 3.2s ease-in-out 1!important}
+  .deck-hint .ar{display:inline-block;font-weight:700;color:var(--fg)}
+  .deck-hint .ar.l{animation:nudgeL 1.4s ease-in-out infinite}
+  .deck-hint .ar.r{animation:nudgeR 1.4s ease-in-out infinite}
+}
+/* compact copy on mobile */
+@media (max-width:760px){
+  body{font-size:15px}
+  .top{padding-block:12px}
+  .brand b{font-size:13px}
+  .brand span{display:none}
+  .brand svg{width:28px;height:28px}
+  .me #me-name{display:none}
+  .link{font-size:13px}
+  .hero{padding-block:0 6px}
+  .hero .eyebrow{display:none}
+  .hero h1{font-size:1.3rem;max-width:none}
+  .sug-head .eyebrow{display:none}
+  #sug-sum{display:none}
+  .sug-head h2{font-size:1.3rem;margin-top:0}
+  .pill{height:34px;padding:0 13px;font-size:13px}
+  .sug-track,.sug-track[data-n]{height:clamp(320px,calc(100svh - 400px),380px);min-height:320px;margin-bottom:24px}
+  .sc{padding:16px;gap:8px}
+  .sc .lt{width:42px;height:42px;font-size:17px}
+  .ring{width:42px;height:42px}
+  .ring svg{width:42px;height:42px}
+  .ring span{font-size:11px}
+  .sc .co2{font-size:12.5px}
+  .sc h3{font-size:1.25rem}
+  .chip{font-size:12px;min-height:26px;padding:0 10px}
+  .mob-skills .lbl{display:none}
+  .skill{font-size:12px;padding:3px 8px}
+  .mob-foot{font-size:12.5px}
+  .mob-foot .cnt{padding:4px 12px;font-size:12.5px}
+  .deck-hint{font-size:12px;margin-top:8px}
+  .jump-roles{font-size:14px;min-height:44px}
+  .sec-h{font-size:1.2rem}
+  .count{font-size:13px}
+  /* open roles list */
+  .grid{gap:12px}
+  .card{padding:16px;gap:12px;border-radius:16px}
+  .card-head{gap:12px}
+  .card .logo{width:42px;height:42px;font-size:17px;border-radius:12px}
+  .card h3{font-size:1.05rem}
+  .co{font-size:13px}
+  .card .skills{display:none}
+  .card-foot{justify-content:flex-end;border-top:0;padding-top:0;margin-top:-6px}
+  .card-foot span:first-child{display:none}
+  .cta{padding:18px;margin-top:28px}
+  .cta h2{font-size:1.2rem}
+  .cta p{font-size:14px}
+  .foot{font-size:12px;margin-top:24px}
+}
+/* pager */
+.pager{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px;padding-block:24px 4px}
+.pager button{min-width:44px;height:44px;padding:0 14px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--fg);font:600 15px var(--body);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;transition:background .2s,color .2s,border-color .2s,transform .2s}
+.pager button:hover:not(:disabled):not(.on){border-color:var(--fg)}
+.pager button:active:not(:disabled){transform:scale(.94)}
+.pager button.on{background:var(--inv-bg);color:var(--inv-fg);border-color:transparent}
+.pager button:disabled{opacity:.35;cursor:default}
+.pager .dots{min-width:24px;text-align:center;color:var(--muted)}
+.pager .nav{padding:0 16px}
+@media (max-width:480px){.pager .nav span{display:none}.pager .nav{padding:0}}
+.ready .card{animation-delay:calc(var(--i,0)*55ms)}
+/* motion */
+@keyframes rise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+@keyframes slidein{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:none}}
+@keyframes pop{0%{transform:scale(.6);opacity:0}70%{transform:scale(1.08)}100%{transform:scale(1);opacity:1}}
+.top{animation:fade .5s ease backwards}
+.hero .eyebrow{animation:slidein .5s cubic-bezier(.2,.7,.2,1) .05s backwards}
+.hero h1{animation:rise .7s cubic-bezier(.2,.7,.2,1) .12s backwards}
+.toolbar-in{animation:rise .6s cubic-bezier(.2,.7,.2,1) .25s backwards}
+.card{animation:rise .6s cubic-bezier(.2,.7,.2,1) backwards;animation-delay:calc(var(--i,0)*60ms + .35s);transition:border-color .2s,transform .25s cubic-bezier(.2,.7,.2,1),box-shadow .25s}
+.card.again{animation:rise .45s cubic-bezier(.2,.7,.2,1) backwards;animation-delay:calc(var(--i,0)*45ms)}
+.card .logo{transition:transform .35s cubic-bezier(.2,.7,.2,1)}
+.card:hover .logo{transform:scale(1.08) rotate(-4deg)}
+.card-foot span:last-child svg{transition:transform .25s cubic-bezier(.2,.7,.2,1)}
+.card:hover .card-foot span:last-child svg{transform:translateX(6px)}
+.card-foot span:first-child{transition:letter-spacing .25s}
+.card:hover .card-foot span:first-child{letter-spacing:.02em}
+.card:active{transform:scale(.985)}
+.btn{transition:background .2s,opacity .2s,transform .2s,box-shadow .2s}
+.btn:active{transform:scale(.97)}
+.btn.primary:hover{box-shadow:0 8px 20px rgba(0,0,0,.2);transform:translateY(-1px)}
+.btn svg{transition:transform .25s cubic-bezier(.2,.7,.2,1)}
+.btn:hover svg{transform:translateX(4px)}
+.field input,.field select{transition:border-color .2s,box-shadow .2s}
+.field input:focus,.field select:focus{outline:none;border-color:var(--fg);box-shadow:0 0 0 4px rgba(10,10,10,.08)}
+.chip{transition:background .2s}
+.cta{animation:rise .6s cubic-bezier(.2,.7,.2,1) .2s backwards}
+.empty{animation:fade .3s ease}
+.crumb svg{transition:transform .25s}
+.crumb:hover svg{transform:translateX(-5px)}
+.d-top{animation:slidein .5s cubic-bezier(.2,.7,.2,1) backwards}
+.d-head h1{animation:rise .7s cubic-bezier(.2,.7,.2,1) .1s backwards}
+.d-head .chips .chip{animation:pop .5s cubic-bezier(.2,.7,.2,1) backwards}
+.d-head .chips .chip:nth-child(1){animation-delay:.25s}.d-head .chips .chip:nth-child(2){animation-delay:.32s}.d-head .chips .chip:nth-child(3){animation-delay:.39s}
+.d-layout .panel{animation:rise .6s cubic-bezier(.2,.7,.2,1) backwards}
+.d-layout .stack .panel:nth-child(1){animation-delay:.3s}.d-layout .stack .panel:nth-child(2){animation-delay:.4s}.d-layout .stack .panel:nth-child(3){animation-delay:.5s}
+.d-layout .apply{animation-delay:.35s}
+.skill{transition:background .2s,color .2s,border-color .2s}
+.skill:hover{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.apply small i{animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(20,128,79,.5)}50%{box-shadow:0 0 0 6px rgba(20,128,79,0)}}
+.bar{animation:rise .5s cubic-bezier(.2,.7,.2,1) .4s backwards}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+/* mobile: touch-friendly suggestion header */
+@media (max-width:760px){
+  body.has-sug .hero{display:none}
+  .sug-head{align-items:stretch;gap:12px;margin-bottom:14px}
+  .sug-head>div:first-child{width:100%}
+  .sug-head h2{font-size:1.55rem;line-height:1.1}
+  .sug-sub{display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%;margin-top:10px}
+  .sug-sub .link{display:flex;align-items:center;justify-content:center;min-height:44px;padding:0 12px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--fg);font:600 14px var(--body);text-decoration:none;white-space:nowrap}
+  .sug-sub .link:active{transform:scale(.97)}
+  .sug-sub .jump-link{background:var(--inv-bg);color:var(--inv-fg);border-color:transparent}
+  .pills{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;width:100%;max-width:none;overflow:visible;padding:4px;background:var(--surface2);border-radius:999px}
+  .pill{height:42px;padding:0;font-size:14px;background:transparent}
+  .pill:hover:not(.on){background:transparent}
+  .pill.on{background:var(--inv-bg);color:var(--inv-fg)}
+  .sug-track,.sug-track[data-n]{height:clamp(320px,calc(100svh - 450px),380px)}
+  .sc .co2{font-size:13px}
+  .sc h3{font-size:1.3rem}
+  .chip{font-size:13px;min-height:28px}
+  .skill{font-size:13px}
+  .mob-foot,.mob-foot .cnt{font-size:13px}
+  .deck-hint{font-size:13px}
+}
+
+/* ===== round 5: calmer mobile header, richer cards, in-page details sheet ===== */
+.ic{display:none}
+.why{display:none}
+.why .lbl{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:8px}
+.whyl{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.whyl li{display:flex;gap:10px;align-items:flex-start;font-size:13.5px;line-height:1.35}
+.whyl li::before{content:"\2713";flex:none;width:18px;height:18px;border-radius:50%;background:var(--inv-bg);color:var(--inv-fg);font-size:11px;font-weight:700;display:grid;place-items:center;margin-top:1px}
+.sc{cursor:pointer}
+.mob-foot .tap::after{content:" \203A"}
+.toast{z-index:60}
+.dov{z-index:45}
+.dm{position:relative;width:100%;max-width:580px;max-height:90svh;background:var(--surface);border-radius:24px;display:flex;flex-direction:column;overflow:hidden;animation:rise .35s cubic-bezier(.2,.7,.2,1)}
+.dgrab{display:none;touch-action:none;padding:10px 0 2px;cursor:grab}
+.dgrab span{display:block;width:40px;height:5px;border-radius:3px;background:var(--line);margin:0 auto}
+.dclose{position:absolute;top:14px;right:14px;z-index:3;width:40px;height:40px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--fg);font-size:22px;line-height:1;cursor:pointer;display:grid;place-items:center}
+.dbody{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:26px 24px 12px;display:grid;gap:22px;align-content:start}
+.dh{display:flex;align-items:center;gap:12px;padding-right:48px}
+.dh .logo{width:48px;height:48px;font-size:19px;border-radius:14px}
+.dh .dco{font-size:15px;font-weight:600}
+.dmatch{display:inline-block;margin-top:4px;padding:3px 10px;border-radius:999px;background:var(--inv-bg);color:var(--inv-fg);font:700 12px var(--body)}
+.dm h2{font-size:1.65rem;line-height:1.1}
+.dm .sh{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600;margin:0 0 10px;font-family:var(--body)}
+.dm .facts dd{font-size:1rem}
+.dm p{margin:0;color:var(--muted);font-size:14.5px}
+.dm .rev{display:flex;gap:8px;align-items:center;margin-top:10px;font-size:13px}
+.dm .rev i{width:8px;height:8px;border-radius:50%;background:var(--ok);display:inline-block}
+.dbar{display:flex;gap:10px;padding:12px 20px calc(12px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--line);background:var(--surface)}
+.dbar .btn{flex:1;min-height:50px;white-space:nowrap}
+@media (max-width:760px){
+  .dov{place-items:end center;padding:0}
+  .dm{max-width:none;height:92svh;max-height:92svh;border-radius:24px 24px 0 0}
+  .dgrab{display:block}
+  .dclose{top:20px;right:14px}
+  .dbody{padding:12px 20px 12px}
+  .dm h2{font-size:1.5rem}
+
+  .top{padding-block:10px}
+  .sug-head{gap:10px;margin-bottom:12px}
+  .sug-head>div:first-child{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .sug-head h2{font-size:1.45rem}
+  .sug-sub{display:flex;gap:8px;width:auto;margin:0;flex:none}
+  .sug-sub .link{width:42px;height:42px;min-height:0;padding:0;border-radius:50%}
+  .sug-sub .link span{display:none}
+  .sug-sub .link .ic{display:block}
+  .pills{padding:3px}
+  .pill{height:38px;font-size:13.5px}
+  .sug-track,.sug-track[data-n]{height:clamp(380px,calc(100svh - 370px),460px);min-height:380px}
+  .sc .why{display:block;margin-top:2px}
+  .mob-foot .tap{font-weight:600;color:var(--fg)}
+}
+
+/* ===== round 6: separate mobile pages, full-screen expanding details ===== */
+.tabs,.dnew,.dhero,.dact{display:none}
+.dclose .chev{display:none}
+.dact{position:absolute;left:0;right:0;bottom:0;justify-content:center;align-items:center;gap:18px;padding:34px 0 calc(16px + env(safe-area-inset-bottom,0px));background:linear-gradient(to top,var(--surface) 55%,rgba(255,255,255,0));pointer-events:none}
+.dact button{pointer-events:auto;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--fg);display:grid;place-items:center;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.12);transition:transform .2s}
+.dact button:active{transform:scale(.9)}
+.dact .dsk{width:60px;height:60px}.dact .dsv{width:50px;height:50px}
+.dact .dap{width:72px;height:72px;background:var(--inv-bg);color:var(--inv-fg);border-color:transparent}
+.tn{font-size:12px;opacity:.7;font-weight:600}
+@media (max-width:760px){
+  body.has-sug .tabs{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;background:var(--surface2);border-radius:999px;margin:0 0 14px;position:sticky;top:calc(8px + env(safe-area-inset-top,0px));z-index:6;box-shadow:0 0 0 8px var(--bg)}
+  .tab{height:42px;border:0;border-radius:999px;background:transparent;color:var(--fg);font:600 14px var(--body);display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer}
+  body:not(.show-roles) .tab[data-v="for"],body.show-roles .tab[data-v="roles"]{background:var(--inv-bg);color:var(--inv-fg)}
+  body.has-sug.show-roles #sug{display:none}
+  body.has-sug:not(.show-roles) :is(.toolbar,.count,.grid,.pager,.cta,.foot){display:none}
+  body.has-sug .sec-h{display:none}
+  body.has-sug.show-roles .toolbar{margin-top:6px}
+
+  .dov{place-items:stretch;padding:0;background:transparent;animation:none}
+  .dm{max-width:none;width:100%;height:100%;max-height:none;border-radius:0;animation:none}
+  .dgrab{display:none!important}
+  .dm .dh,.dm .dtd{display:none}
+  .dhero{display:flex;position:relative;flex-direction:column;justify-content:flex-end;gap:8px;min-height:270px;padding:calc(70px + env(safe-area-inset-top,0px)) 20px 22px;overflow:hidden}
+  .dhero .big{position:absolute;right:-6px;top:calc(40px + env(safe-area-inset-top,0px));font:800 170px/1 var(--display);opacity:.12;pointer-events:none}
+  .dhero .hc{font-size:15px;font-weight:600;opacity:.85}
+  .dhero h2{font-size:1.8rem;line-height:1.08;padding-right:0;position:relative}
+  .dhero .dmatch{align-self:flex-start;background:rgba(0,0,0,.78);color:#fff;margin-top:2px}
+  .dnew{display:inline-flex;align-items:center;gap:6px;position:absolute;z-index:3;top:calc(14px + env(safe-area-inset-top,0px));left:14px;min-height:40px;padding:0 14px;border-radius:999px;background:var(--surface);color:var(--fg);border:1px solid var(--line);font:600 13.5px var(--body);box-shadow:0 2px 10px rgba(0,0,0,.18)}
+  .dclose{top:calc(14px + env(safe-area-inset-top,0px));right:14px;box-shadow:0 2px 10px rgba(0,0,0,.18)}
+  .dclose .x{display:none}
+  .dclose .chev{display:block}
+  .dbody{padding:0 0 140px;gap:20px}
+  .dbody>.chips,.dbody>section{margin-inline:20px}
+  .dm.deckmode .dact{display:flex}
+  .dm.deckmode .dbar{display:none}
+  .dm:not(.deckmode) #d-new{display:none}
+  .dm:not(.deckmode) .dbody{padding-bottom:20px}
+}
+
+@media (max-width:760px){
+  .top{padding-block:14px 18px}
+  body.has-sug .tabs{margin:0 0 18px}
+}
+.blurb{margin:0;color:var(--muted);font-size:14px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+@media (max-width:760px){.blurb{font-size:13.5px}}
+
+/* mobile fit fixes: no sideways overflow, controls always reachable */
+html,body{max-width:100%;overflow-x:clip}
+@media (max-width:760px){
+  .sug,.sug-track,#sec-sug{overflow-x:clip}
+  .sc.demo{animation-name:swipeDemoSm!important}
+  .dc{position:sticky;bottom:calc(8px + env(safe-area-inset-bottom,0px));z-index:12;padding:10px 0 6px;margin-top:0;background:linear-gradient(to bottom,rgba(255,255,255,0),var(--bg) 35%)}
+  .dc .sk{width:52px;height:52px}.dc .sv{width:44px;height:44px}.dc .ap{width:62px;height:62px}
+  .deck-hint{padding-bottom:calc(8px + env(safe-area-inset-bottom,0px))}
+  .sug-track,.sug-track[data-n]{height:clamp(350px,calc(100svh - 390px),450px);min-height:350px;margin-bottom:16px}
+  .sc{overflow:hidden}
+  .sc .why{margin-bottom:0}
+  .pills{overflow-x:clip}
+}
+@keyframes swipeDemoSm{0%,100%{transform:translateX(0) rotate(0)}18%{transform:translateX(34px) rotate(4deg)}38%,50%{transform:translateX(0) rotate(0)}68%{transform:translateX(-34px) rotate(-4deg)}88%{transform:translateX(0) rotate(0)}}
+
+/* saved roles */
+.svs{display:none;margin-top:28px}
+.sv-h{font-size:1.5rem}.sv-h span{font-size:.9rem;color:var(--muted);font-weight:600;margin-left:4px}
+.sgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;padding-block:14px 8px}
+.sw{position:relative;min-width:0}
+.sw .card{height:100%}
+.sw .card-head{padding-right:46px}
+.sw .un{position:absolute;top:14px;right:14px;z-index:2;width:40px;height:40px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--fg);display:grid;place-items:center;cursor:pointer}
+.sw .un svg{fill:currentColor}
+.sw .un:active{transform:scale(.9)}
+.sv-empty{display:none;text-align:center;padding:40px 16px;border:1px dashed var(--line);border-radius:20px;color:var(--muted);margin-top:14px}
+.sv-empty b{display:block;color:var(--fg);font-size:1.1rem;margin-bottom:4px}.sv-empty p{margin:0}
+body.has-sug.has-saved .svs{display:block}
+body.sv-none .sv-empty{display:block}body.sv-none .sgrid{display:none}
+@media (max-width:760px){
+  .sgrid{grid-template-columns:minmax(0,1fr);gap:12px}
+  .svs{margin-top:6px}.sv-h{display:none}
+  .svs,body.has-sug:not(.show-saved) .svs{display:none}
+  body.has-sug.show-saved .svs{display:block}
+  body.has-sug .tabs{grid-template-columns:1fr 1fr 1fr}
+  .tab{font-size:13px;padding:0 4px}
+  body.show-saved .tab[data-v="for"]{background:transparent;color:var(--fg)}
+  body.show-saved .tab[data-v="saved"]{background:var(--inv-bg);color:var(--inv-fg)}
+  body.has-sug.show-saved #sug{display:none}
+  .sw .card{padding:16px;gap:12px;border-radius:16px}
+}
+
+/* distinct nav: underline tabs on top, outlined filter chips below */
+@media (max-width:760px){
+  body.has-sug .tabs{background:transparent;border-radius:0;padding:0;gap:0;margin:0 0 16px;border-bottom:1px solid var(--line);box-shadow:0 0 0 8px var(--bg),0 1px 0 8px var(--bg)}
+  body.has-sug .tab,body.has-sug:not(.show-roles):not(.show-saved) .tab[data-v="for"],body.has-sug.show-roles .tab[data-v="roles"],body.has-sug.show-saved .tab[data-v="saved"],body.has-sug.show-saved .tab[data-v="for"]{background:transparent;border-radius:0;height:46px;color:var(--muted);font-weight:600;font-size:15px;position:relative}
+  body.has-sug:not(.show-roles):not(.show-saved) .tab[data-v="for"],body.has-sug.show-roles .tab[data-v="roles"],body.has-sug.show-saved .tab[data-v="saved"]{color:var(--fg)}
+  body.has-sug:not(.show-roles):not(.show-saved) .tab[data-v="for"]::after,body.has-sug.show-roles .tab[data-v="roles"]::after,body.has-sug.show-saved .tab[data-v="saved"]::after{content:"";position:absolute;left:12%;right:12%;bottom:-1px;height:3px;border-radius:3px 3px 0 0;background:var(--fg)}
+  .pills{display:flex;grid-template-columns:none;gap:8px;padding:0 0 2px;background:transparent;border-radius:0;overflow-x:auto;scrollbar-width:none}
+  .pills::-webkit-scrollbar{display:none}
+  .pill,.pill:hover:not(.on){flex:none;height:34px;padding:0 16px;font-size:13px;background:var(--surface);border:1px solid var(--line);color:var(--fg)}
+  .pill.on{background:var(--inv-bg);color:var(--inv-fg);border-color:var(--inv-bg)}
+}
+
+/* desktop layout */
+html{overflow-x:hidden}
+.hero-l{display:grid;gap:8px}
+.hero-r{display:none}
+@media (min-width:761px){
+  .wrap{max-width:1320px}
+  body{padding-left:max(28px,env(safe-area-inset-left,0px));padding-right:max(28px,env(safe-area-inset-right,0px))}
+  .hero{grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);align-items:center;gap:40px;padding-block:12px 26px}
+  .hero h1{max-width:none;font-size:clamp(1.6rem,2.2vw,2.05rem);line-height:1.2}
+  .hero-r{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+  .st{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px 18px;display:grid;gap:4px;align-content:center}
+  .st b{font:800 clamp(1.4rem,2vw,1.8rem)/1 var(--display);letter-spacing:-.02em}
+  .st span{color:var(--muted);font-size:14px}
+  .grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .sgrid{grid-template-columns:repeat(3,minmax(0,1fr))}
+  /* suggestions: scrollable row */
+  .sug-track:not(.deck),.sug-track[data-n]:not(.deck){display:flex;gap:16px;overflow-x:auto;scroll-snap-type:x mandatory;scroll-behavior:smooth;padding:6px 2px 16px;margin-inline:-2px;scrollbar-width:thin}
+  .sug-track:not(.deck) .sc{flex:0 0 calc((100% - 32px)/3);scroll-snap-align:start;min-height:300px}
+  .sug-track:not(.deck) .sc.big{background:var(--surface);padding:20px}
+}
+@media (min-width:1200px){
+  .grid,.sgrid{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .sug-track:not(.deck) .sc{flex-basis:calc((100% - 48px)/4)}
+  .card{padding:20px;gap:14px}
+  .card h3{font-size:1.1rem}
+}
+@media (min-width:761px) and (max-width:899px){.grid,.sgrid{grid-template-columns:repeat(2,minmax(0,1fr))}.sug-track:not(.deck) .sc{flex-basis:calc((100% - 16px)/2)}.hero{grid-template-columns:1fr}}
+@media (max-width:760px) and (max-height:780px){.mob-skills{display:none}}
+</style><style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style></head>
+<body>
+<div class="wrap" id="list">
+<header class="top"><a class="brand" href="./" aria-label="TermJobs home"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="7" width="18" height="13" rx="3"/><path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7"/><path d="M3 13h18"/></svg><div><b>TERMJOBS</b><span>Contract workforce platform</span></div></a><button class="btn" id="signin" type="button">Sign in</button><div class="me" id="me" hidden><span class="av" id="me-av" aria-hidden="true"></span><span id="me-name"></span><button class="link" id="signout" type="button">Sign out</button></div></header>
+<nav class="tabs" id="tabs" aria-label="Views"><button type="button" class="tab" data-v="for">For you</button><button type="button" class="tab" data-v="roles">All roles <span class="tn" id="tab-n"></span></button><button type="button" class="tab" data-v="saved">Saved <span class="tn" id="tab-s"></span></button></nav>
+<section class="hero">
+<div class="hero-l"><div class="eyebrow">Latest opportunities</div>
+<h1>Open roles, <em>direct with hiring partners.</em></h1></div>
+<div class="hero-r" aria-label="Quick facts"><div class="st"><b>18</b><span>Open roles</span></div><div class="st"><b>16</b><span>Hiring partners</span></div><div class="st"><b>48h</b><span>Review time</span></div></div>
+</section>
+<section class="sug" id="sug" aria-labelledby="sug-h" hidden>
+<div class="sug-head"><div><div class="eyebrow">Matched to your profile</div><h2 id="sug-h">Suggested for you</h2><div class="sug-sub"><span id="sug-sum"></span><button class="link" id="edit-pref" type="button" aria-label="Edit preferences" title="Edit preferences"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg><span>Edit preferences</span></button></div></div>
+<div class="pills" role="group" aria-label="Filter suggestions"><button class="pill on" type="button" data-m="">All</button><button class="pill" type="button" data-m="Remote">Remote</button><button class="pill" type="button" data-m="Hybrid">Hybrid</button><button class="pill" type="button" data-m="On-site">On-site</button></div></div>
+<div class="sug-track" id="sug-track"><article class="sc" hidden data-mode="On-site" data-city="Kozhikode" data-level="Fresher" data-kw="business development executive termjobs on-site kozhikode fluent english communication" data-slug="business-development-executive">
+<span class="stamp apply" aria-hidden="true">APPLY</span><span class="stamp skip" aria-hidden="true">SKIP</span>
+<div class="row"><div class="lt small-only" style="color:#111" aria-hidden="true">T</div><span class="badge big-only"></span><div class="ring small-only" role="img" aria-label="match"><svg width="48" height="48" viewBox="0 0 48 48"><circle cx="24" cy="24" r="19" fill="none" stroke="var(--surface2)" stroke-width="4"/><circle class="arc" cx="24" cy="24" r="19" fill="none" stroke="var(--fg)" stroke-width="4" stroke-linecap="round" stroke-dasharray="119.4" transform="rotate(-90 24 24)"/></svg><span></span></div></div>
+<div class="co2">TermJobs · Kozhikode</div>
+<h3>Business Development Executive</h3>
+<div class="chips"><span class="chip small-only">On-site · Fresher</span><span class="chip big-only">On-site</span><span class="chip big-only">Fresher</span><span class="chip big-only">Fluent English</span><span class="chip mob-only">On-site</span><span class="chip mob-only">Kozhikode</span><span class="chip mob-only">Fresher</span></div>
+<div class="mob-skills"><div class="lbl">SKILLS</div><div class="sk"><span class="skill">Fluent English</span><span class="skill">Communication</span><span class="skill">+7 more</span></div></div>
+<div class="mob-foot mob-only"><a class="tap" href="#job-business-development-executive" target="_blank" rel="noopener">Tap for details</a><span class="cnt"></span></div>
+<div class="acts"><a class="btn primary" href="#job-business-development-executive" target="_blank" rel="noopener">Apply now</a><a class="btn big-only" href="#job-business-development-executive" target="_blank" rel="noopener">View details</a><button class="bm small-only" type="button" aria-label="Save Business Development Executive" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M6 4h12v17l-6-4-6 4z"/></svg></button></div>
+</article><article class="sc" hidden data-mode="Remote" data-city="Across India" data-level="Fresher" data-kw="travel research associate intern little known planet remote india" data-slug="travel-research-associate-intern">
+<span class="stamp apply" aria-hidden="true">APPLY</span><span class="stamp skip" aria-hidden="true">SKIP</span>
+<div class="row"><div class="lt small-only" style="color:#1f6f5a" aria-hidden="true">L</div><span class="badge big-only"></span><div class="ring small-only" role="img" aria-label="match"><svg width="48" height="48" viewBox="0 0 48 48"><circle cx="24" cy="24" r="19" fill="none" stroke="var(--surface2)" stroke-width="4"/><circle class="arc" cx="24" cy="24" r="19" fill="none" stroke="var(--fg)" stroke-width="4" stroke-linecap="round" stroke-dasharray="119.4" transform="rotate(-90 24 24)"/></svg><span></span></div></div>
+<div class="co2">Little Known Planet · India</div>
+<h3>Travel Research Associate Intern</h3>
+<div class="chips"><span class="chip small-only">Remote · Fresher / No experience</span><span class="chip big-only">Remote</span><span class="chip big-only">Fresher / No experience</span><span class="chip mob-only">Remote</span><span class="chip mob-only">India</span><span class="chip mob-only">Fresher / No experience</span></div>
+<div class="mob-skills"><div class="lbl">SKILLS</div><div class="sk"><span class="skill">+12 more</span></div></div>
+<div class="mob-foot mob-only"><a class="tap" href="#job-travel-research-associate-intern" target="_blank" rel="noopener">Tap for details</a><span class="cnt"></span></div>
+<div class="acts"><a class="btn primary" href="#job-travel-research-associate-intern" target="_blank" rel="noopener">Apply now</a><a class="btn big-only" href="#job-travel-research-associate-intern" target="_blank" rel="noopener">View details</a><button class="bm small-only" type="button" aria-label="Save Travel Research Associate Intern" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M6 4h12v17l-6-4-6 4z"/></svg></button></div>
+</article><article class="sc" hidden data-mode="On-site" data-city="Kozhikode" data-level="Mid-level" data-kw="key account manager – corporate accounts sign mart on-site kozhikode key account management" data-slug="key-account-manager-corporate-accounts">
+<span class="stamp apply" aria-hidden="true">APPLY</span><span class="stamp skip" aria-hidden="true">SKIP</span>
+<div class="row"><div class="lt small-only" style="color:#e8742a" aria-hidden="true">S</div><span class="badge big-only"></span><div class="ring small-only" role="img" aria-label="match"><svg width="48" height="48" viewBox="0 0 48 48"><circle cx="24" cy="24" r="19" fill="none" stroke="var(--surface2)" stroke-width="4"/><circle class="arc" cx="24" cy="24" r="19" fill="none" stroke="var(--fg)" stroke-width="4" stroke-linecap="round" stroke-dasharray="119.4" transform="rotate(-90 24 24)"/></svg><span></span></div></div>
+<div class="co2">Sign Mart · Kozhikode</div>
+<h3>Key Account Manager – Corporate Accounts</h3>
+<div class="chips"><span class="chip small-only">On-site · Mid-level · 2–3 yrs</span><span class="chip big-only">On-site</span><span class="chip big-only">Mid-level · 2–3 yrs</span><span class="chip big-only">Key Account Management</span><span class="chip mob-only">On-site</span><span class="chip mob-only">Kozhikode</span><span class="chip mob-only">Mid-level · 2–3 yrs</span></div>
+<div class="mob-skills"><div class="lbl">SKILLS</div><div class="sk"><span class="skill">Key Account Management</span><span class="skill">+13 more</span></div></div>
+<div class="mob-foot mob-only"><a class="tap" href="#job-key-account-manager-corporate-accounts" target="_blank" rel="noopener">Tap for details</a><span class="cnt"></span></div>
+<div class="acts"><a class="btn primary" href="#job-key-account-manager-corporate-accounts" target="_blank" rel="noopener">Apply now</a><a class="btn big-only" href="#job-key-account-manager-corporate-accounts" target="_blank" rel="noopener">View details</a><button class="bm small-only" type="button" aria-label="Save Key Account Manager – Corporate Accounts" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M6 4h12v17l-6-4-6 4z"/></svg></button></div>
+</article><article class="sc" hidden data-mode="Hybrid" data-city="Ernakulam" data-level="Mid-level" data-kw="marketing &amp; growth specialist little known planet hybrid ernakulam digital marketing" data-slug="marketing-growth-specialist">
+<span class="stamp apply" aria-hidden="true">APPLY</span><span class="stamp skip" aria-hidden="true">SKIP</span>
+<div class="row"><div class="lt small-only" style="color:#1f6f5a" aria-hidden="true">L</div><span class="badge big-only"></span><div class="ring small-only" role="img" aria-label="match"><svg width="48" height="48" viewBox="0 0 48 48"><circle cx="24" cy="24" r="19" fill="none" stroke="var(--surface2)" stroke-width="4"/><circle class="arc" cx="24" cy="24" r="19" fill="none" stroke="var(--fg)" stroke-width="4" stroke-linecap="round" stroke-dasharray="119.4" transform="rotate(-90 24 24)"/></svg><span></span></div></div>
+<div class="co2">Little Known Planet · Ernakulam</div>
+<h3>Marketing &amp; Growth Specialist</h3>
+<div class="chips"><span class="chip small-only">Hybrid · Mid-level · 4+ yrs</span><span class="chip big-only">Hybrid</span><span class="chip big-only">Mid-level · 4+ yrs</span><span class="chip big-only">Digital Marketing</span><span class="chip mob-only">Hybrid</span><span class="chip mob-only">Ernakulam</span><span class="chip mob-only">Mid-level · 4+ yrs</span></div>
+<div class="mob-skills"><div class="lbl">SKILLS</div><div class="sk"><span class="skill">Digital Marketing</span><span class="skill">+14 more</span></div></div>
+<div class="mob-foot mob-only"><a class="tap" href="#job-marketing-growth-specialist" target="_blank" rel="noopener">Tap for details</a><span class="cnt"></span></div>
+<div class="acts"><a class="btn primary" href="#job-marketing-growth-specialist" target="_blank" rel="noopener">Apply now</a><a class="btn big-only" href="#job-marketing-growth-specialist" target="_blank" rel="noopener">View details</a><button class="bm small-only" type="button" aria-label="Save Marketing &amp; Growth Specialist" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M6 4h12v17l-6-4-6 4z"/></svg></button></div>
+</article><article class="sc" hidden data-mode="On-site" data-city="Kozhikode" data-level="Junior" data-kw="flutter developer aethanalytica on-site calicut, kerala flutter dart" data-slug="flutter-developer">
+<span class="stamp apply" aria-hidden="true">APPLY</span><span class="stamp skip" aria-hidden="true">SKIP</span>
+<div class="row"><div class="lt small-only" style="color:#3b4cca" aria-hidden="true">A</div><span class="badge big-only"></span><div class="ring small-only" role="img" aria-label="match"><svg width="48" height="48" viewBox="0 0 48 48"><circle cx="24" cy="24" r="19" fill="none" stroke="var(--surface2)" stroke-width="4"/><circle class="arc" cx="24" cy="24" r="19" fill="none" stroke="var(--fg)" stroke-width="4" stroke-linecap="round" stroke-dasharray="119.4" transform="rotate(-90 24 24)"/></svg><span></span></div></div>
+<div class="co2">Aethanalytica · Calicut, Kerala</div>
+<h3>Flutter Developer</h3>
+<div class="chips"><span class="chip small-only">On-site · 1+ yr</span><span class="chip big-only">On-site</span><span class="chip big-only">1+ yr</span><span class="chip big-only">Flutter</span><span class="chip mob-only">On-site</span><span class="chip mob-only">Calicut, Kerala</span><span class="chip mob-only">1+ yr</span></div>
+<div class="mob-skills"><div class="lbl">SKILLS</div><div class="sk"><span class="skill">Flutter</span><span class="skill">Dart</span><span class="skill">+20 more</span></div></div>
+<div class="mob-foot mob-only"><a class="tap" href="#job-flutter-developer" target="_blank" rel="noopener">Tap for details</a><span class="cnt"></span></div>
+<div class="acts"><a class="btn primary" href="#job-flutter-developer" target="_blank" rel="noopener">Apply now</a><a class="btn big-only" href="#job-flutter-developer" target="_blank" rel="noopener">View details</a><button class="bm small-only" type="button" aria-label="Save Flutter Developer" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M6 4h12v17l-6-4-6 4z"/></svg></button></div>
+</article><article class="sc" hidden data-mode="Hybrid" data-city="Kozhikode" data-level="Junior" data-kw="ui developer zensbee technologies pvt ltd hybrid calicut, kerala react" data-slug="ui-developer">
+<span class="stamp apply" aria-hidden="true">APPLY</span><span class="stamp skip" aria-hidden="true">SKIP</span>
+<div class="row"><div class="lt small-only" style="color:#16181d" aria-hidden="true">Z</div><span class="badge big-only"></span><div class="ring small-only" role="img" aria-label="match"><svg width="48" height="48" viewBox="0 0 48 48"><circle cx="24" cy="24" r="19" fill="none" stroke="var(--surface2)" stroke-width="4"/><circle class="arc" cx="24" cy="24" r="19" fill="none" stroke="var(--fg)" stroke-width="4" stroke-linecap="round" stroke-dasharray="119.4" transform="rotate(-90 24 24)"/></svg><span></span></div></div>
+<div class="co2">Zensbee Technologies Pvt Ltd · Calicut, Kerala</div>
+<h3>UI Developer</h3>
+<div class="chips"><span class="chip small-only">Hybrid · 1+ yr</span><span class="chip big-only">Hybrid</span><span class="chip big-only">1+ yr</span><span class="chip big-only">React</span><span class="chip mob-only">Hybrid</span><span class="chip mob-only">Calicut, Kerala</span><span class="chip mob-only">1+ yr</span></div>
+<div class="mob-skills"><div class="lbl">SKILLS</div><div class="sk"><span class="skill">React</span><span class="skill">+15 more</span></div></div>
+<div class="mob-foot mob-only"><a class="tap" href="#job-ui-developer" target="_blank" rel="noopener">Tap for details</a><span class="cnt"></span></div>
+<div class="acts"><a class="btn primary" href="#job-ui-developer" target="_blank" rel="noopener">Apply now</a><a class="btn big-only" href="#job-ui-developer" target="_blank" rel="noopener">View details</a><button class="bm small-only" type="button" aria-label="Save UI Developer" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M6 4h12v17l-6-4-6 4z"/></svg></button></div>
+</article><article class="sc" hidden data-mode="On-site" data-city="Kozhikode" data-level="Junior" data-kw="ui/ux designer hivenesthq on-site hilite business park ui/ux design figma" data-slug="ui-ux-designer">
+<span class="stamp apply" aria-hidden="true">APPLY</span><span class="stamp skip" aria-hidden="true">SKIP</span>
+<div class="row"><div class="lt small-only" style="color:#d9531e" aria-hidden="true">H</div><span class="badge big-only"></span><div class="ring small-only" role="img" aria-label="match"><svg width="48" height="48" viewBox="0 0 48 48"><circle cx="24" cy="24" r="19" fill="none" stroke="var(--surface2)" stroke-width="4"/><circle class="arc" cx="24" cy="24" r="19" fill="none" stroke="var(--fg)" stroke-width="4" stroke-linecap="round" stroke-dasharray="119.4" transform="rotate(-90 24 24)"/></svg><span></span></div></div>
+<div class="co2">HiveNestHQ · HiLITE Business Park</div>
+<h3>UI/UX Designer</h3>
+<div class="chips"><span class="chip small-only">On-site · 1+ yr</span><span class="chip big-only">On-site</span><span class="chip big-only">1+ yr</span><span class="chip big-only">UI/UX Design</span><span class="chip mob-only">On-site</span><span class="chip mob-only">HiLITE Business Park</span><span class="chip mob-only">1+ yr</span></div>
+<div class="mob-skills"><div class="lbl">SKILLS</div><div class="sk"><span class="skill">UI/UX Design</span><span class="skill">Figma</span><span class="skill">+15 more</span></div></div>
+<div class="mob-foot mob-only"><a class="tap" href="#job-ui-ux-designer" target="_blank" rel="noopener">Tap for details</a><span class="cnt"></span></div>
+<div class="acts"><a class="btn primary" href="#job-ui-ux-designer" target="_blank" rel="noopener">Apply now</a><a class="btn big-only" href="#job-ui-ux-designer" target="_blank" rel="noopener">View details</a><button class="bm small-only" type="button" aria-label="Save UI/UX Designer" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M6 4h12v17l-6-4-6 4z"/></svg></button></div>
+</article><article class="sc" hidden data-mode="On-site" data-city="Kozhikode" data-level="Junior" data-kw="front end developer (senior &amp; junior) easy entrance pvt. ltd. on-site calicut, kerala, india html5 css3" data-slug="front-end-developer-senior-junior">
+<span class="stamp apply" aria-hidden="true">APPLY</span><span class="stamp skip" aria-hidden="true">SKIP</span>
+<div class="row"><div class="lt small-only" style="color:#7a3fb0" aria-hidden="true">E</div><span class="badge big-only"></span><div class="ring small-only" role="img" aria-label="match"><svg width="48" height="48" viewBox="0 0 48 48"><circle cx="24" cy="24" r="19" fill="none" stroke="var(--surface2)" stroke-width="4"/><circle class="arc" cx="24" cy="24" r="19" fill="none" stroke="var(--fg)" stroke-width="4" stroke-linecap="round" stroke-dasharray="119.4" transform="rotate(-90 24 24)"/></svg><span></span></div></div>
+<div class="co2">Easy Entrance Pvt. Ltd. · Calicut, Kerala, India</div>
+<h3>Front End Developer (Senior &amp; Junior)</h3>
+<div class="chips"><span class="chip small-only">On-site · Junior: 0–2 yrs</span><span class="chip big-only">On-site</span><span class="chip big-only">Junior: 0–2 yrs</span><span class="chip big-only">HTML5</span><span class="chip mob-only">On-site</span><span class="chip mob-only">Calicut, Kerala, India</span><span class="chip mob-only">Junior: 0–2 yrs</span></div>
+<div class="mob-skills"><div class="lbl">SKILLS</div><div class="sk"><span class="skill">HTML5</span><span class="skill">CSS3</span><span class="skill">+14 more</span></div></div>
+<div class="mob-foot mob-only"><a class="tap" href="#job-front-end-developer-senior-junior" target="_blank" rel="noopener">Tap for details</a><span class="cnt"></span></div>
+<div class="acts"><a class="btn primary" href="#job-front-end-developer-senior-junior" target="_blank" rel="noopener">Apply now</a><a class="btn big-only" href="#job-front-end-developer-senior-junior" target="_blank" rel="noopener">View details</a><button class="bm small-only" type="button" aria-label="Save Front End Developer (Senior &amp; Junior)" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M6 4h12v17l-6-4-6 4z"/></svg></button></div>
+</article><article class="sc" hidden data-mode="On-site" data-city="Kozhikode" data-level="Fresher" data-kw="full stack developer – ai-first development nifama technologies private limited on-site calicut, kerala java" data-slug="full-stack-developer-ai-first-development">
+<span class="stamp apply" aria-hidden="true">APPLY</span><span class="stamp skip" aria-hidden="true">SKIP</span>
+<div class="row"><div class="lt small-only" style="color:#0f7c9a" aria-hidden="true">N</div><span class="badge big-only"></span><div class="ring small-only" role="img" aria-label="match"><svg width="48" height="48" viewBox="0 0 48 48"><circle cx="24" cy="24" r="19" fill="none" stroke="var(--surface2)" stroke-width="4"/><circle class="arc" cx="24" cy="24" r="19" fill="none" stroke="var(--fg)" stroke-width="4" stroke-linecap="round" stroke-dasharray="119.4" transform="rotate(-90 24 24)"/></svg><span></span></div></div>
+<div class="co2">NIFAMA Technologies Private Limited · Calicut, Kerala</div>
+<h3>Full Stack Developer – AI-First Development</h3>
+<div class="chips"><span class="chip small-only">On-site · Fresher · 0–1 yr</span><span class="chip big-only">On-site</span><span class="chip big-only">Fresher · 0–1 yr</span><span class="chip big-only">Java</span><span class="chip mob-only">On-site</span><span class="chip mob-only">Calicut, Kerala</span><span class="chip mob-only">Fresher · 0–1 yr</span></div>
+<div class="mob-skills"><div class="lbl">SKILLS</div><div class="sk"><span class="skill">Java</span><span class="skill">+21 more</span></div></div>
+<div class="mob-foot mob-only"><a class="tap" href="#job-full-stack-developer-ai-first-development" target="_blank" rel="noopener">Tap for details</a><span class="cnt"></span></div>
+<div class="acts"><a class="btn primary" href="#job-full-stack-developer-ai-first-development" target="_blank" rel="noopener">Apply now</a><a class="btn big-only" href="#job-full-stack-developer-ai-first-development" target="_blank" rel="noopener">View details</a><button class="bm small-only" type="button" aria-label="Save Full Stack Developer – AI-First Development" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M6 4h12v17l-6-4-6 4z"/></svg></button></div>
+</article><article class="sc" hidden data-mode="On-site" data-city="Kozhikode" data-level="Mid-level" data-kw="human resource executive smart moves on-site kozhikode human resources" data-slug="human-resource-executive">
+<span class="stamp apply" aria-hidden="true">APPLY</span><span class="stamp skip" aria-hidden="true">SKIP</span>
+<div class="row"><div class="lt small-only" style="color:#c0392b" aria-hidden="true">S</div><span class="badge big-only"></span><div class="ring small-only" role="img" aria-label="match"><svg width="48" height="48" viewBox="0 0 48 48"><circle cx="24" cy="24" r="19" fill="none" stroke="var(--surface2)" stroke-width="4"/><circle class="arc" cx="24" cy="24" r="19" fill="none" stroke="var(--fg)" stroke-width="4" stroke-linecap="round" stroke-dasharray="119.4" transform="rotate(-90 24 24)"/></svg><span></span></div></div>
+<div class="co2">Smart Moves · Kozhikode</div>
+<h3>Human Resource Executive</h3>
+<div class="chips"><span class="chip small-only">On-site · Entry to Mid-level</span><span class="chip big-only">On-site</span><span class="chip big-only">Entry to Mid-level</span><span class="chip big-only">Human Resources</span><span class="chip mob-only">On-site</span><span class="chip mob-only">Kozhikode</span><span class="chip mob-only">Entry to Mid-level</span></div>
+<div class="mob-skills"><div class="lbl">SKILLS</div><div class="sk"><span class="skill">Human Resources</span><span class="skill">+20 more</span></div></div>
+<div class="mob-foot mob-only"><a class="tap" href="#job-human-resource-executive" target="_blank" rel="noopener">Tap for details</a><span class="cnt"></span></div>
+<div class="acts"><a class="btn primary" href="#job-human-resource-executive" target="_blank" rel="noopener">Apply now</a><a class="btn big-only" href="#job-human-resource-executive" target="_blank" rel="noopener">View details</a><button class="bm small-only" type="button" aria-label="Save Human Resource Executive" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M6 4h12v17l-6-4-6 4z"/></svg></button></div>
+</article><article class="sc" hidden data-mode="Hybrid" data-city="Kozhikode" data-level="Mid-level" data-kw="python backend developer nimbus labs hybrid kozhikode python fastapi" data-slug="python-backend-developer">
+<span class="stamp apply" aria-hidden="true">APPLY</span><span class="stamp skip" aria-hidden="true">SKIP</span>
+<div class="row"><div class="lt small-only" style="color:#2f6fed" aria-hidden="true">N</div><span class="badge big-only"></span><div class="ring small-only" role="img" aria-label="match"><svg width="48" height="48" viewBox="0 0 48 48"><circle cx="24" cy="24" r="19" fill="none" stroke="var(--surface2)" stroke-width="4"/><circle class="arc" cx="24" cy="24" r="19" fill="none" stroke="var(--fg)" stroke-width="4" stroke-linecap="round" stroke-dasharray="119.4" transform="rotate(-90 24 24)"/></svg><span></span></div></div>
+<div class="co2">Nimbus Labs · Kozhikode</div>
+<h3>Python Backend Developer</h3>
+<div class="chips"><span class="chip small-only">Hybrid · 2+ yrs</span><span class="chip big-only">Hybrid</span><span class="chip big-only">2+ yrs</span><span class="chip big-only">Python</span><span class="chip mob-only">Hybrid</span><span class="chip mob-only">Kozhikode</span><span class="chip mob-only">2+ yrs</span></div>
+<div class="mob-skills"><div class="lbl">SKILLS</div><div class="sk"><span class="skill">Python</span><span class="skill">FastAPI</span><span class="skill">+12 more</span></div></div>
+<div class="mob-foot mob-only"><a class="tap" href="#job-python-backend-developer" target="_blank" rel="noopener">Tap for details</a><span class="cnt"></span></div>
+<div class="acts"><a class="btn primary" href="#job-python-backend-developer" target="_blank" rel="noopener">Apply now</a><a class="btn big-only" href="#job-python-backend-developer" target="_blank" rel="noopener">View details</a><button class="bm small-only" type="button" aria-label="Save Python Backend Developer" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M6 4h12v17l-6-4-6 4z"/></svg></button></div>
+</article><article class="sc" hidden data-mode="Remote" data-city="Across India" data-level="Fresher" data-kw="content writer brightline media remote india copywriting seo" data-slug="content-writer">
+<span class="stamp apply" aria-hidden="true">APPLY</span><span class="stamp skip" aria-hidden="true">SKIP</span>
+<div class="row"><div class="lt small-only" style="color:#b8860b" aria-hidden="true">B</div><span class="badge big-only"></span><div class="ring small-only" role="img" aria-label="match"><svg width="48" height="48" viewBox="0 0 48 48"><circle cx="24" cy="24" r="19" fill="none" stroke="var(--surface2)" stroke-width="4"/><circle class="arc" cx="24" cy="24" r="19" fill="none" stroke="var(--fg)" stroke-width="4" stroke-linecap="round" stroke-dasharray="119.4" transform="rotate(-90 24 24)"/></svg><span></span></div></div>
+<div class="co2">Brightline Media · India</div>
+<h3>Content Writer</h3>
+<div class="chips"><span class="chip small-only">Remote · Fresher</span><span class="chip big-only">Remote</span><span class="chip big-only">Fresher</span><span class="chip big-only">Copywriting</span><span class="chip mob-only">Remote</span><span class="chip mob-only">India</span><span class="chip mob-only">Fresher</span></div>
+<div class="mob-skills"><div class="lbl">SKILLS</div><div class="sk"><span class="skill">Copywriting</span><span class="skill">SEO</span><span class="skill">+8 more</span></div></div>
+<div class="mob-foot mob-only"><a class="tap" href="#job-content-writer" target="_blank" rel="noopener">Tap for details</a><span class="cnt"></span></div>
+<div class="acts"><a class="btn primary" href="#job-content-writer" target="_blank" rel="noopener">Apply now</a><a class="btn big-only" href="#job-content-writer" target="_blank" rel="noopener">View details</a><button class="bm small-only" type="button" aria-label="Save Content Writer" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M6 4h12v17l-6-4-6 4z"/></svg></button></div>
+</article><article class="sc" hidden data-mode="On-site" data-city="Ernakulam" data-level="Fresher" data-kw="customer support associate kerala cart on-site ernakulam communication malayalam" data-slug="customer-support-associate">
+<span class="stamp apply" aria-hidden="true">APPLY</span><span class="stamp skip" aria-hidden="true">SKIP</span>
+<div class="row"><div class="lt small-only" style="color:#2e8b57" aria-hidden="true">K</div><span class="badge big-only"></span><div class="ring small-only" role="img" aria-label="match"><svg width="48" height="48" viewBox="0 0 48 48"><circle cx="24" cy="24" r="19" fill="none" stroke="var(--surface2)" stroke-width="4"/><circle class="arc" cx="24" cy="24" r="19" fill="none" stroke="var(--fg)" stroke-width="4" stroke-linecap="round" stroke-dasharray="119.4" transform="rotate(-90 24 24)"/></svg><span></span></div></div>
+<div class="co2">Kerala Cart · Ernakulam</div>
+<h3>Customer Support Associate</h3>
+<div class="chips"><span class="chip small-only">On-site · Fresher</span><span class="chip big-only">On-site</span><span class="chip big-only">Fresher</span><span class="chip big-only">Communication</span><span class="chip mob-only">On-site</span><span class="chip mob-only">Ernakulam</span><span class="chip mob-only">Fresher</span></div>
+<div class="mob-skills"><div class="lbl">SKILLS</div><div class="sk"><span class="skill">Communication</span><span class="skill">Malayalam</span><span class="skill">+6 more</span></div></div>
+<div class="mob-foot mob-only"><a class="tap" href="#job-customer-support-associate" target="_blank" rel="noopener">Tap for details</a><span class="cnt"></span></div>
+<div class="acts"><a class="btn primary" href="#job-customer-support-associate" target="_blank" rel="noopener">Apply now</a><a class="btn big-only" href="#job-customer-support-associate" target="_blank" rel="noopener">View details</a><button class="bm small-only" type="button" aria-label="Save Customer Support Associate" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M6 4h12v17l-6-4-6 4z"/></svg></button></div>
+</article><article class="sc" hidden data-mode="Hybrid" data-city="Kozhikode" data-level="Junior" data-kw="data analyst insightloop hybrid kozhikode sql excel" data-slug="data-analyst">
+<span class="stamp apply" aria-hidden="true">APPLY</span><span class="stamp skip" aria-hidden="true">SKIP</span>
+<div class="row"><div class="lt small-only" style="color:#6d28d9" aria-hidden="true">I</div><span class="badge big-only"></span><div class="ring small-only" role="img" aria-label="match"><svg width="48" height="48" viewBox="0 0 48 48"><circle cx="24" cy="24" r="19" fill="none" stroke="var(--surface2)" stroke-width="4"/><circle class="arc" cx="24" cy="24" r="19" fill="none" stroke="var(--fg)" stroke-width="4" stroke-linecap="round" stroke-dasharray="119.4" transform="rotate(-90 24 24)"/></svg><span></span></div></div>
+<div class="co2">Insightloop · Kozhikode</div>
+<h3>Data Analyst</h3>
+<div class="chips"><span class="chip small-only">Hybrid · 1+ yr</span><span class="chip big-only">Hybrid</span><span class="chip big-only">1+ yr</span><span class="chip big-only">SQL</span><span class="chip mob-only">Hybrid</span><span class="chip mob-only">Kozhikode</span><span class="chip mob-only">1+ yr</span></div>
+<div class="mob-skills"><div class="lbl">SKILLS</div><div class="sk"><span class="skill">SQL</span><span class="skill">Excel</span><span class="skill">+10 more</span></div></div>
+<div class="mob-foot mob-only"><a class="tap" href="#job-data-analyst" target="_blank" rel="noopener">Tap for details</a><span class="cnt"></span></div>
+<div class="acts"><a class="btn primary" href="#job-data-analyst" target="_blank" rel="noopener">Apply now</a><a class="btn big-only" href="#job-data-analyst" target="_blank" rel="noopener">View details</a><button class="bm small-only" type="button" aria-label="Save Data Analyst" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M6 4h12v17l-6-4-6 4z"/></svg></button></div>
+</article><article class="sc" hidden data-mode="On-site" data-city="Ernakulam" data-level="Mid-level" data-kw="digital marketing executive spice route digital on-site ernakulam seo google ads" data-slug="digital-marketing-executive">
+<span class="stamp apply" aria-hidden="true">APPLY</span><span class="stamp skip" aria-hidden="true">SKIP</span>
+<div class="row"><div class="lt small-only" style="color:#c2410c" aria-hidden="true">S</div><span class="badge big-only"></span><div class="ring small-only" role="img" aria-label="match"><svg width="48" height="48" viewBox="0 0 48 48"><circle cx="24" cy="24" r="19" fill="none" stroke="var(--surface2)" stroke-width="4"/><circle class="arc" cx="24" cy="24" r="19" fill="none" stroke="var(--fg)" stroke-width="4" stroke-linecap="round" stroke-dasharray="119.4" transform="rotate(-90 24 24)"/></svg><span></span></div></div>
+<div class="co2">Spice Route Digital · Ernakulam</div>
+<h3>Digital Marketing Executive</h3>
+<div class="chips"><span class="chip small-only">On-site · Mid-level · 2–3 yrs</span><span class="chip big-only">On-site</span><span class="chip big-only">Mid-level · 2–3 yrs</span><span class="chip big-only">SEO</span><span class="chip mob-only">On-site</span><span class="chip mob-only">Ernakulam</span><span class="chip mob-only">Mid-level · 2–3 yrs</span></div>
+<div class="mob-skills"><div class="lbl">SKILLS</div><div class="sk"><span class="skill">SEO</span><span class="skill">Google Ads</span><span class="skill">+11 more</span></div></div>
+<div class="mob-foot mob-only"><a class="tap" href="#job-digital-marketing-executive" target="_blank" rel="noopener">Tap for details</a><span class="cnt"></span></div>
+<div class="acts"><a class="btn primary" href="#job-digital-marketing-executive" target="_blank" rel="noopener">Apply now</a><a class="btn big-only" href="#job-digital-marketing-executive" target="_blank" rel="noopener">View details</a><button class="bm small-only" type="button" aria-label="Save Digital Marketing Executive" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M6 4h12v17l-6-4-6 4z"/></svg></button></div>
+</article><article class="sc" hidden data-mode="Remote" data-city="Across India" data-level="Experienced" data-kw="devops engineer cloudmango remote india aws docker" data-slug="devops-engineer">
+<span class="stamp apply" aria-hidden="true">APPLY</span><span class="stamp skip" aria-hidden="true">SKIP</span>
+<div class="row"><div class="lt small-only" style="color:#0e7490" aria-hidden="true">C</div><span class="badge big-only"></span><div class="ring small-only" role="img" aria-label="match"><svg width="48" height="48" viewBox="0 0 48 48"><circle cx="24" cy="24" r="19" fill="none" stroke="var(--surface2)" stroke-width="4"/><circle class="arc" cx="24" cy="24" r="19" fill="none" stroke="var(--fg)" stroke-width="4" stroke-linecap="round" stroke-dasharray="119.4" transform="rotate(-90 24 24)"/></svg><span></span></div></div>
+<div class="co2">Cloudmango · India</div>
+<h3>DevOps Engineer</h3>
+<div class="chips"><span class="chip small-only">Remote · 3+ yrs</span><span class="chip big-only">Remote</span><span class="chip big-only">3+ yrs</span><span class="chip big-only">AWS</span><span class="chip mob-only">Remote</span><span class="chip mob-only">India</span><span class="chip mob-only">3+ yrs</span></div>
+<div class="mob-skills"><div class="lbl">SKILLS</div><div class="sk"><span class="skill">AWS</span><span class="skill">Docker</span><span class="skill">+16 more</span></div></div>
+<div class="mob-foot mob-only"><a class="tap" href="#job-devops-engineer" target="_blank" rel="noopener">Tap for details</a><span class="cnt"></span></div>
+<div class="acts"><a class="btn primary" href="#job-devops-engineer" target="_blank" rel="noopener">Apply now</a><a class="btn big-only" href="#job-devops-engineer" target="_blank" rel="noopener">View details</a><button class="bm small-only" type="button" aria-label="Save DevOps Engineer" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M6 4h12v17l-6-4-6 4z"/></svg></button></div>
+</article></div>
+<div class="deck-empty" id="deck-empty" hidden><h3 id="de-t">You're all caught up</h3><p id="de-p">You've been through every suggestion.</p><button class="btn primary" id="de-restart" type="button">Start over</button></div>
+<div class="dc" id="deck-ctl"><button class="sk" id="dc-skip" type="button" aria-label="Skip"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button><button class="sv" id="dc-save" type="button" aria-label="Save for later"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M6 4h12v17l-6-4-6 4z"/></svg></button><button class="ap" id="dc-apply" type="button" aria-label="Apply"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div>
+<div class="deck-hint" id="deck-hint"><span class="ar l">←</span> Skip · Swipe · Apply <span class="ar r">→</span></div>
+<div class="review" id="review-wrap"><button class="btn" id="apply-review" type="button" hidden>Review &amp; apply</button></div>
+<div class="sug-foot"><span id="sug-count"></span><div class="arrows"><button type="button" id="sug-prev" aria-label="Previous suggestions"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button><button type="button" id="sug-next" aria-label="Next suggestions"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button></div></div>
+</section>
+<section class="svs" id="saved-sec" aria-labelledby="sv-h"><h2 class="sv-h" id="sv-h">Saved roles <span id="sv-n"></span></h2><div class="sgrid" id="saved-grid"></div><div class="sv-empty" id="saved-empty"><b>No saved roles yet</b><p>Tap the bookmark on any suggested role and it will show up here.</p></div></section>
+<h2 class="sec-h" id="open-roles">All open roles</h2>
+<div class="toolbar"><div class="toolbar-in">
+<div class="field"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="q" type="search" placeholder="Search roles, skills, company" aria-label="Search roles"></div>
+<div class="field"><select id="f-mode" aria-label="Work mode"><option value="">All modes</option><option>Hybrid</option><option>On-site</option><option>Remote</option></select></div>
+<div class="field"><select id="f-city" aria-label="Location"><option value="">All locations</option><option>Across India</option><option>Ernakulam</option><option>Kozhikode</option></select></div>
+<div class="field"><select id="f-level" aria-label="Experience"><option value="">All experience</option><option>Fresher</option><option>Junior</option><option>Mid-level</option><option>Experienced</option></select></div>
+<button class="btn reset" id="reset" type="button">Reset</button>
+</div></div>
+<div class="count"><span id="count"></span><button id="reset2" type="button" hidden>Clear filters</button></div>
+<main class="grid" id="grid"><a class="card" style="--i:0" href="#job-business-development-executive" data-mode="On-site" data-city="Kozhikode" data-level="Fresher" data-q="business development executive termjobs fluent english communication kozhikode">
+<div class="card-head"><div class="logo" style="background:#e8e8ea;color:#111" aria-hidden="true">T</div><div style="min-width:0"><h3>Business Development Executive</h3><div class="co">TermJobs</div></div></div>
+<div class="chips"><span class="chip mode">On-site</span><span class="chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11.5V16c0 1.5 3 3 6 3s6-1.5 6-3v-4.5"/></svg>Fresher</span><span class="chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>Kozhikode</span></div>
+<p class="blurb">Drive TermJobs' growth by reaching out to staffing firms and employers, explaining the platform and booking demos. You'll own the pipeline from first call to signed client. Great first role for a confident communicator.</p>
+<div class="skills"><span class="skill">Fluent English</span><span class="skill">Communication</span><span class="skill">+7 more</span></div>
+<div class="card-foot"><span>View details</span><span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></div></a><a class="card" style="--i:1" href="#job-partner-enterprise" data-mode="On-site" data-city="Across India" data-level="Experienced" data-q="partner enterprise opening partner enterprise  india">
+<div class="card-head"><div class="logo" style="background:#2a2f3a;color:#fff" aria-hidden="true">P</div><div style="min-width:0"><h3>Partner Enterprise Opening</h3><div class="co">Partner Enterprise</div></div></div>
+<div class="chips"><span class="chip mode">On-site</span><span class="chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11.5V16c0 1.5 3 3 6 3s6-1.5 6-3v-4.5"/></svg>3+ years</span><span class="chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>India</span></div>
+<p class="blurb">A partner enterprise on TermJobs is hiring experienced professionals for an on-site position. Apply with your resume and the hiring team will match you to the best-fit opening across India.</p>
+<div class="skills"><span class="skill">Open to all skills</span></div>
+<div class="card-foot"><span>View details</span><span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></div></a><a class="card" style="--i:2" href="#job-partner-enterprise-2" data-mode="On-site" data-city="Across India" data-level="Experienced" data-q="partner enterprise opening partner enterprise  india">
+<div class="card-head"><div class="logo" style="background:#2a2f3a;color:#fff" aria-hidden="true">P</div><div style="min-width:0"><h3>Partner Enterprise Opening</h3><div class="co">Partner Enterprise</div></div></div>
+<div class="chips"><span class="chip mode">On-site</span><span class="chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11.5V16c0 1.5 3 3 6 3s6-1.5 6-3v-4.5"/></svg>3+ years</span><span class="chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>India</span></div>
+<p class="blurb">A partner enterprise on TermJobs is hiring experienced professionals for an on-site position. Apply with your resume and the hiring team will match you to the best-fit opening across India.</p>
+<div class="skills"><span class="skill">Open to all skills</span></div>
+<div class="card-foot"><span>View details</span><span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></div></a><a class="card" style="--i:3" href="#job-travel-research-associate-intern" data-mode="Remote" data-city="Across India" data-level="Fresher" data-q="travel research associate intern little known planet  india">
+<div class="card-head"><div class="logo" style="background:#1f6f5a;color:#fff" aria-hidden="true">L</div><div style="min-width:0"><h3>Travel Research Associate Intern</h3><div class="co">Little Known Planet</div></div></div>
+<div class="chips"><span class="chip mode">Remote</span><span class="chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11.5V16c0 1.5 3 3 6 3s6-1.5 6-3v-4.5"/></svg>Fresher / No experience</span><span class="chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>India</span></div>
+<p class="blurb">Research destinations, stays and local experiences, and turn them into clear, accurate trip notes for the team. Fully remote and beginner-friendly, so no prior experience is needed. Ideal if you love travel and detail.</p>
+<div class="skills"><span class="skill">+12 more</span></div>
+<div class="card-foot"><span>View details</span><span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></div></a><a class="card" style="--i:4" href="#job-key-account-manager-corporate-accounts" data-mode="On-site" data-city="Kozhikode" data-level="Mid-level" data-q="key account manager – corporate accounts sign mart key account management kozhikode">
+<div class="card-head"><div class="logo" style="background:#e8742a;color:#fff" aria-hidden="true">S</div><div style="min-width:0"><h3>Key Account Manager – Corporate Accounts</h3><div class="co">Sign Mart</div></div></div>
+<div class="chips"><span class="chip mode">On-site</span><span class="chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11.5V16c0 1.5 3 3 6 3s6-1.5 6-3v-4.5"/></svg>Mid-level (2–3 years)</span><span class="chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>Kozhikode</span></div>
+<p class="blurb">Manage and grow relationships with corporate clients, from onboarding and order follow-ups to renewals. You'll be the main point of contact for key accounts and keep them happy. Suits someone with 2–3 years in client-facing sales.</p>
+<div class="skills"><span class="skill">Key Account Management</span><span class="skill">+13 more</span></div>
+<div class="card-foot"><span>View details</span><span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></div></a><a class="card" style="--i:5" href="#job-marketing-growth-specialist" data-mode="Hybrid" data-city="Ernakulam" data-level="Mid-level" data-q="marketing &amp; growth specialist little known planet digital marketing ernakulam">
+<div class="card-head"><div class="logo" style="background:#1f6f5a;color:#fff" aria-hidden="true">L</div><div style="min-width:0"><h3>Marketing &amp; Growth Specialist</h3><div class="co">Little Known Planet</div></div></div>
+<div class="chips"><span class="chip mode">Hybrid</span><span class="chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11.5V16c0 1.5 3 3 6 3s6-1.5 6-3v-4.5"/></svg>Mid-level (4+ years)</span><span class="chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>Ernakulam</span></div>
+<p class="blurb">Plan and run growth campaigns across digital channels, track what's working and double down on it. You'll work closely with the team on brand, content and lead generation. Hybrid role for an experienced marketer.</p>
+<div class="skills"><span class="skill">Digital Marketing</span><span class="skill">+14 more</span></div>
+<div class="card-foot"><span>View details</span><span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></div></a><a class="card" style="--i:6" href="#job-flutter-developer" data-mode="On-site" data-city="Kozhikode" data-level="Junior" data-q="flutter developer aethanalytica flutter dart calicut, kerala">
+<div class="card-head"><div class="logo" style="background:#3b4cca;color:#fff" aria-hidden="true">A</div><div style="min-width:0"><h3>Flutter Developer</h3><div class="co">Aethanalytica</div></div></div>
+<div class="chips"><span class="chip mode">On-site</span><span class="chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11.5V16c0 1.5 3 3 6 3s6-1.5 6-3v-4.5"/></svg>1+ year</span><span class="chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>Calicut, Kerala</span></div>
+<p class="blurb">Build and maintain cross-platform mobile apps with Flutter and Dart, from clean UI to API integration. You'll ship features, fix bugs and work with designers and backend developers. On-site in Calicut.</p>
+<div class="skills"><span class="skill">Flutter</span><span class="skill">Dart</span><span class="skill">+20 more</span></div>
+<div class="card-foot"><span>View details</span><span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></div></a><a class="card" style="--i:7" href="#job-ui-developer" data-mode="Hybrid" data-city="Kozhikode" data-level="Junior" data-q="ui developer zensbee technologies pvt ltd react calicut, kerala">
+<div class="card-head"><div class="logo" style="background:#16181d;color:#fff" aria-hidden="true">Z</div><div style="min-width:0"><h3>UI Developer</h3><div class="co">Zensbee Technologies Pvt Ltd</div></div></div>
+<div class="chips"><span class="chip mode">Hybrid</span><span class="chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11.5V16c0 1.5 3 3 6 3s6-1.5 6-3v-4.5"/></svg>1+ year</span><span class="chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>Calicut, Kerala</span></div>
+<p class="blurb">Turn designs into fast, responsive interfaces using React. You'll build reusable components and polish details until they match the design. Hybrid role based in Calicut.</p>
+<div class="skills"><span class="skill">React</span><span class="skill">+15 more</span></div>
+<div class="card-foot"><span>View details</span><span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></div></a><a class="card" style="--i:8" href="#job-ui-ux-designer" data-mode="On-site" data-city="Kozhikode" data-level="Junior" data-q="ui/ux designer hivenesthq ui/ux design figma hilite business park">
+<div class="card-head"><div class="logo" style="background:#d9531e;color:#fff" aria-hidden="true">H</div><div style="min-width:0"><h3>UI/UX Designer</h3><div class="co">HiveNestHQ</div></div></div>
+<div class="chips"><span class="chip mode">On-site</span><span class="chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11.5V16c0 1.5 3 3 6 3s6-1.5 6-3v-4.5"/></svg>1+ year</span><span class="chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>HiLITE Business Park</span></div>
+<p class="blurb">Design intuitive web and mobile experiences in Figma, from user flows and wireframes to final screens. You'll work with developers to see designs through to launch. On-site at HiLITE Business Park.</p>
+<div class="skills"><span class="skill">UI/UX Design</span><span class="skill">Figma</span><span class="skill">+15 more</span></div>
+<div class="card-foot"><span>View details</span><span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></div></a><a class="card" style="--i:9" href="#job-front-end-developer-senior-junior" data-mode="On-site" data-city="Kozhikode" data-level="Junior" data-q="front end developer (senior &amp; junior) easy entrance pvt. ltd. html5 css3 calicut, kerala, india">
+<div class="card-head"><div class="logo" style="background:#7a3fb0;color:#fff" aria-hidden="true">E</div><div style="min-width:0"><h3>Front End Developer (Senior &amp; Junior)</h3><div class="co">Easy Entrance Pvt. Ltd.</div></div></div>
+<div class="chips"><span class="chip mode">On-site</span><span class="chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11.5V16c0 1.5 3 3 6 3s6-1.5 6-3v-4.5"/></svg>Junior: 0–2 years</span><span class="chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>Calicut, Kerala, India</span></div>
+<p class="blurb">Build clean, responsive websites and web apps with HTML5, CSS3 and JavaScript. Openings for both senior and junior developers, so you can join at your level. On-site in Calicut.</p>
+<div class="skills"><span class="skill">HTML5</span><span class="skill">CSS3</span><span class="skill">+14 more</span></div>
+<div class="card-foot"><span>View details</span><span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></div></a><a class="card" style="--i:10" href="#job-full-stack-developer-ai-first-development" data-mode="On-site" data-city="Kozhikode" data-level="Fresher" data-q="full stack developer – ai-first development nifama technologies private limited java calicut, kerala">
+<div class="card-head"><div class="logo" style="background:#0f7c9a;color:#fff" aria-hidden="true">N</div><div style="min-width:0"><h3>Full Stack Developer – AI-First Development</h3><div class="co">NIFAMA Technologies Private Limited</div></div></div>
+<div class="chips"><span class="chip mode">On-site</span><span class="chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11.5V16c0 1.5 3 3 6 3s6-1.5 6-3v-4.5"/></svg>Fresher (0–1 year)</span><span class="chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>Calicut, Kerala</span></div>
+<p class="blurb">Build full-stack products using an AI-first workflow, working across Java backends and modern front ends. Freshers are welcome and you'll learn quickly on real projects. On-site in Calicut.</p>
+<div class="skills"><span class="skill">Java</span><span class="skill">+21 more</span></div>
+<div class="card-foot"><span>View details</span><span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></div></a><a class="card" style="--i:11" href="#job-human-resource-executive" data-mode="On-site" data-city="Kozhikode" data-level="Mid-level" data-q="human resource executive smart moves human resources kozhikode">
+<div class="card-head"><div class="logo" style="background:#c0392b;color:#fff" aria-hidden="true">S</div><div style="min-width:0"><h3>Human Resource Executive</h3><div class="co">Smart Moves</div></div></div>
+<div class="chips"><span class="chip mode">On-site</span><span class="chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11.5V16c0 1.5 3 3 6 3s6-1.5 6-3v-4.5"/></svg>Entry to Mid-level</span><span class="chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>Kozhikode</span></div>
+<p class="blurb">Handle recruitment, onboarding, attendance and employee queries for a growing team. You'll coordinate interviews and keep HR records in order. Open to entry and mid-level candidates.</p>
+<div class="skills"><span class="skill">Human Resources</span><span class="skill">+20 more</span></div>
+<div class="card-foot"><span>View details</span><span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></div></a><a class="card" style="--i:12" href="#job-python-backend-developer" data-mode="Hybrid" data-city="Kozhikode" data-level="Mid-level" data-q="python backend developer nimbus labs python fastapi kozhikode">
+<div class="card-head"><div class="logo" style="background:#2f6fed;color:#fff" aria-hidden="true">N</div><div style="min-width:0"><h3>Python Backend Developer</h3><div class="co">Nimbus Labs</div></div></div>
+<div class="chips"><span class="chip mode">Hybrid</span><span class="chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11.5V16c0 1.5 3 3 6 3s6-1.5 6-3v-4.5"/></svg>2+ years</span><span class="chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>Kozhikode</span></div>
+<p class="blurb">Design and build backend services and APIs with Python and FastAPI, focusing on performance and clean code. You'll work with a small team on a hybrid schedule in Kozhikode.</p>
+<div class="skills"><span class="skill">Python</span><span class="skill">FastAPI</span><span class="skill">+12 more</span></div>
+<div class="card-foot"><span>View details</span><span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></div></a><a class="card" style="--i:13" href="#job-content-writer" data-mode="Remote" data-city="Across India" data-level="Fresher" data-q="content writer brightline media copywriting seo india">
+<div class="card-head"><div class="logo" style="background:#b8860b;color:#fff" aria-hidden="true">B</div><div style="min-width:0"><h3>Content Writer</h3><div class="co">Brightline Media</div></div></div>
+<div class="chips"><span class="chip mode">Remote</span><span class="chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11.5V16c0 1.5 3 3 6 3s6-1.5 6-3v-4.5"/></svg>Fresher</span><span class="chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>India</span></div>
+<p class="blurb">Write blogs, web copy and social posts that are clear, engaging and SEO-friendly. You'll research topics and work with the marketing team on deadlines. Remote and open to freshers.</p>
+<div class="skills"><span class="skill">Copywriting</span><span class="skill">SEO</span><span class="skill">+8 more</span></div>
+<div class="card-foot"><span>View details</span><span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></div></a><a class="card" style="--i:14" href="#job-customer-support-associate" data-mode="On-site" data-city="Ernakulam" data-level="Fresher" data-q="customer support associate kerala cart communication malayalam ernakulam">
+<div class="card-head"><div class="logo" style="background:#2e8b57;color:#fff" aria-hidden="true">K</div><div style="min-width:0"><h3>Customer Support Associate</h3><div class="co">Kerala Cart</div></div></div>
+<div class="chips"><span class="chip mode">On-site</span><span class="chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11.5V16c0 1.5 3 3 6 3s6-1.5 6-3v-4.5"/></svg>Fresher</span><span class="chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>Ernakulam</span></div>
+<p class="blurb">Help customers by phone, chat and email, resolving orders and delivery questions quickly and politely. Malayalam and English communication is key. Freshers are welcome, with training provided.</p>
+<div class="skills"><span class="skill">Communication</span><span class="skill">Malayalam</span><span class="skill">+6 more</span></div>
+<div class="card-foot"><span>View details</span><span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></div></a><a class="card" style="--i:15" href="#job-data-analyst" data-mode="Hybrid" data-city="Kozhikode" data-level="Junior" data-q="data analyst insightloop sql excel kozhikode">
+<div class="card-head"><div class="logo" style="background:#6d28d9;color:#fff" aria-hidden="true">I</div><div style="min-width:0"><h3>Data Analyst</h3><div class="co">Insightloop</div></div></div>
+<div class="chips"><span class="chip mode">Hybrid</span><span class="chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11.5V16c0 1.5 3 3 6 3s6-1.5 6-3v-4.5"/></svg>1+ year</span><span class="chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>Kozhikode</span></div>
+<p class="blurb">Turn raw data into clear reports and dashboards using SQL and Excel. You'll find trends, answer business questions and present insights to the team. Hybrid role in Kozhikode.</p>
+<div class="skills"><span class="skill">SQL</span><span class="skill">Excel</span><span class="skill">+10 more</span></div>
+<div class="card-foot"><span>View details</span><span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></div></a><a class="card" style="--i:16" href="#job-digital-marketing-executive" data-mode="On-site" data-city="Ernakulam" data-level="Mid-level" data-q="digital marketing executive spice route digital seo google ads ernakulam">
+<div class="card-head"><div class="logo" style="background:#c2410c;color:#fff" aria-hidden="true">S</div><div style="min-width:0"><h3>Digital Marketing Executive</h3><div class="co">Spice Route Digital</div></div></div>
+<div class="chips"><span class="chip mode">On-site</span><span class="chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11.5V16c0 1.5 3 3 6 3s6-1.5 6-3v-4.5"/></svg>Mid-level (2–3 years)</span><span class="chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>Ernakulam</span></div>
+<p class="blurb">Run SEO, Google Ads and social campaigns, and report on traffic and leads. You'll test ideas, optimise spend and keep campaigns on target. On-site in Ernakulam for someone with 2–3 years of experience.</p>
+<div class="skills"><span class="skill">SEO</span><span class="skill">Google Ads</span><span class="skill">+11 more</span></div>
+<div class="card-foot"><span>View details</span><span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></div></a><a class="card" style="--i:17" href="#job-devops-engineer" data-mode="Remote" data-city="Across India" data-level="Experienced" data-q="devops engineer cloudmango aws docker india">
+<div class="card-head"><div class="logo" style="background:#0e7490;color:#fff" aria-hidden="true">C</div><div style="min-width:0"><h3>DevOps Engineer</h3><div class="co">Cloudmango</div></div></div>
+<div class="chips"><span class="chip mode">Remote</span><span class="chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11.5V16c0 1.5 3 3 6 3s6-1.5 6-3v-4.5"/></svg>3+ years</span><span class="chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>India</span></div>
+<p class="blurb">Own cloud infrastructure and deployments on AWS, using Docker and CI/CD to keep releases smooth and systems reliable. Fully remote for engineers with 3+ years of experience.</p>
+<div class="skills"><span class="skill">AWS</span><span class="skill">Docker</span><span class="skill">+16 more</span></div>
+<div class="card-foot"><span>View details</span><span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></div></a><div class="empty" id="empty" hidden>No roles match these filters. Try clearing one.</div></main>
+<nav class="pager" id="pager" aria-label="Pagination"></nav>
+<section class="cta"><div><h2>Don't see your role?</h2><p>Join the verified talent pool and partners will reach out when something fits.</p></div><a class="btn primary" href="#">Join talent pool <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></section>
+<p class="foot">Roles are reviewed within 48 hours of posting.</p>
+</div>
+<div class="ov" id="ov" hidden><form class="modal" id="pf" role="dialog" aria-modal="true" aria-labelledby="m-t">
+<h2 id="m-t">Sign in to see your matches</h2>
+<p>Demo sign-in. Your answers stay in this browser and are only used to rank the roles for you.</p>
+<label>Your name<input id="pf-name" type="text" autocomplete="given-name" placeholder="First name"></label>
+<div class="two"><label>Work mode<select id="pf-mode"><option value="">Any mode</option><option value="On-site">On-site</option><option value="Hybrid">Hybrid</option><option value="Remote">Remote</option></select></label>
+<label>Location<select id="pf-city"><option value="">Anywhere</option><option value="Kozhikode">Kozhikode</option><option value="Ernakulam">Ernakulam</option><option value="Across India">Remote across India</option></select></label></div>
+<label>Experience<select id="pf-level"><option value="">Any level</option><option value="Fresher">Fresher</option><option value="Junior">Junior (1–2 years)</option><option value="Mid-level">Mid-level (2–4 years)</option><option value="Experienced">Experienced (3+ years)</option></select></label>
+<label>Skills<input id="pf-skills" type="text" placeholder="e.g. Flutter, SEO, Figma"></label>
+<div class="btns"><button class="btn" type="button" id="pf-cancel">Cancel</button><button class="btn primary" type="submit">Show my matches</button></div>
+</form></div>
+<div class="ov" id="sheet" hidden><div class="modal" role="dialog" aria-modal="true" aria-labelledby="sh-t"><h2 id="sh-t">Ready to apply</h2><div class="sheet-list" id="sheet-list"></div><div class="btns"><button class="btn" type="button" id="sheet-close">Close</button></div></div></div>
+<div class="snack" id="snack" hidden><span id="snack-t"></span><button type="button" id="snack-u">Undo</button></div>
+<script>
+(function(){
+var PER=(function(w){return w>=1200?8:w>=900?9:6;})(window.innerWidth),page=1,cards=[].slice.call(document.querySelectorAll('.card')),q=document.getElementById('q'),
+fm=document.getElementById('f-mode'),fc=document.getElementById('f-city'),fl=document.getElementById('f-level'),
+count=document.getElementById('count'),empty=document.getElementById('empty'),r2=document.getElementById('reset2'),
+pager=document.getElementById('pager'),grid=document.getElementById('grid'),toolbar=document.querySelector('.toolbar');
+var chev=function(d){return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="'+(d<0?'M15 6l-6 6 6 6':'M9 6l6 6-6 6')+'"/></svg>';};
+function match(c,t){return (!t||c.dataset.q.indexOf(t)>-1)&&(!fm.value||c.dataset.mode===fm.value)&&(!fc.value||c.dataset.city===fc.value)&&(!fl.value||c.dataset.level===fl.value);}
+function pageList(p,n){
+ if(n<=7){var a=[];for(var i=1;i<=n;i++)a.push(i);return a;}
+ var out=[1];if(p>3)out.push('…');
+ for(var k=Math.max(2,p-1);k<=Math.min(n-1,p+1);k++)out.push(k);
+ if(p<n-2)out.push('…');out.push(n);return out;
+}
+function run(scroll){
+ var t=q.value.trim().toLowerCase(),m=cards.filter(function(c){return match(c,t);}),n=m.length,pages=Math.max(1,Math.ceil(n/PER));
+ if(page>pages)page=pages;if(page<1)page=1;
+ var start=(page-1)*PER,show=m.slice(start,start+PER);
+ cards.forEach(function(c){c.hidden=true;});
+ show.forEach(function(c,i){c.hidden=false;c.style.setProperty('--i',i);c.style.animation='none';void c.offsetWidth;c.style.animation='';});
+ count.textContent=n?('Showing '+(start+1)+'–'+(start+show.length)+' of '+n+' roles'):'No roles found';
+ empty.hidden=n>0;
+ r2.hidden=!(t||fm.value||fc.value||fl.value);
+ var h='';
+ if(pages>1){
+  h+='<button class="nav" type="button" data-p="'+(page-1)+'"'+(page===1?' disabled':'')+' aria-label="Previous page">'+chev(-1)+'<span>Prev</span></button>';
+  pageList(page,pages).forEach(function(p){h+=p==='…'?'<span class="dots">…</span>':'<button type="button" data-p="'+p+'" class="'+(p===page?'on':'')+'"'+(p===page?' aria-current="page"':'')+' aria-label="Page '+p+'">'+p+'</button>';});
+  h+='<button class="nav" type="button" data-p="'+(page+1)+'"'+(page===pages?' disabled':'')+' aria-label="Next page"><span>Next</span>'+chev(1)+'</button>';
+ }
+ pager.innerHTML=h;pager.hidden=pages<2;
+ if(scroll){var y=grid.getBoundingClientRect().top+window.pageYOffset-toolbar.offsetHeight-12;window.scrollTo({top:Math.max(0,y),behavior:'smooth'});}
+}
+pager.addEventListener('click',function(e){var b=e.target.closest('button[data-p]');if(!b||b.disabled)return;page=+b.dataset.p;run(true);});
+function reset(){q.value='';fm.value='';fc.value='';fl.value='';page=1;run();}
+[q,fm,fc,fl].forEach(function(el){el.addEventListener('input',function(){page=1;run();});});
+document.getElementById('reset').addEventListener('click',reset);r2.addEventListener('click',reset);
+run();setTimeout(function(){document.body.classList.add('ready');},1200);
+})();
+</script><script>(function(){
+var $=function(id){return document.getElementById(id);};
+var sec=$('sug'),track=$('sug-track'),cards=[].slice.call(track.querySelectorAll('.sc')),pills=[].slice.call(document.querySelectorAll('.pill')),
+cnt=$('sug-count'),prev=$('sug-prev'),next=$('sug-next'),ov=$('ov'),form=$('pf'),signin=$('signin'),me=$('me'),
+snack=$('snack'),sheet=$('sheet'),sheetList=$('sheet-list'),deckCtl=$('deck-ctl'),deckEmpty=$('deck-empty'),applyBtn=$('apply-review'),
+mq=window.matchMedia('(max-width: 760px)'),LV=['Fresher','Junior','Mid-level','Experienced'];
+var mode='',start=0,PER=3,ranked=cards.slice(),decided={},last=null,snackT;
+function load(k,d){try{var v=JSON.parse(localStorage.getItem(k));return v==null?d:v;}catch(e){return d;}}
+function store(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}if(k==='tj-saved'&&window.TJ&&window.TJ.drawSaved)window.TJ.drawSaved();}
+var profile=load('tj-profile',null),applyList=load('tj-apply',[]),saved=load('tj-saved',[]),seen=false,hintT=null;
+applyList.forEach(function(s){decided[s]='apply';});
+function clamp(v){return Math.max(0,Math.min(1,v));}
+function score(c,pr){
+ var s=35;
+ if(!pr.mode||c.dataset.mode===pr.mode)s+=20;
+ if(!pr.city||c.dataset.city===pr.city)s+=15;else if(c.dataset.city==='Across India')s+=8;
+ if(!pr.level)s+=15;else{var d=Math.abs(LV.indexOf(c.dataset.level)-LV.indexOf(pr.level));s+=d===0?15:(d===1?7:0);}
+ var toks=(pr.skills||'').toLowerCase().split(/[,;\n]+/).map(function(t){return t.trim();}).filter(function(t){return t.length>1;});
+ if(toks.length){var h=toks.filter(function(t){return c.dataset.kw.indexOf(t)>-1;}).length;s+=Math.round(15*Math.min(1,h/Math.min(toks.length,2)));}else s+=7;
+ return Math.min(99,s);
+}
+function esc2(t){return String(t).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function expOf(c){var m=c.querySelectorAll('.chip.mob-only');return m.length?m[m.length-1].textContent:c.dataset.level;}
+function why(c){
+ var pr=profile||{},out=[],d=c.dataset;
+ if(pr.mode&&d.mode===pr.mode)out.push('Matches your '+d.mode+' preference');
+ if(pr.city){if(d.city===pr.city)out.push(d.city==='Across India'?'Open to candidates across India':'Based in '+d.city);else if(d.city==='Across India')out.push('Open to candidates across India');}
+ if(pr.level){var di=Math.abs(LV.indexOf(d.level)-LV.indexOf(pr.level));if(di===0)out.push('Fits your '+pr.level+' level');else if(di===1)out.push('Close to your '+pr.level+' level');}
+ var toks=(pr.skills||'').toLowerCase().split(/[,;\n]+/).map(function(t){return t.trim();}).filter(function(t){return t.length>1;});
+ var hits=toks.filter(function(t){return (d.kw||'').indexOf(t)>-1;});
+ if(hits.length)out.push('Uses your skills: '+hits.join(', '));
+ if(!out.length){out.push('Experience wanted: '+expOf(c));out.push('Reviewed within 48 hours');out.push('Apply directly with your resume');}
+ return out;
+}
+function rank(){
+ var pr=profile||{};
+ cards.forEach(function(c,i){c._p=score(c,pr);c._i=i;});
+ ranked=cards.slice().sort(function(a,b){return b._p-a._p||a._i-b._i;});
+ ranked.forEach(function(c,i){
+  track.appendChild(c);
+  var p=c._p,arc=c.querySelector('.arc'),sp=c.querySelector('.ring span'),bd=c.querySelector('.badge');
+  if(arc)arc.style.setProperty('--off',(119.4*(1-p/100)).toFixed(1));
+  if(sp)sp.textContent=p+'%';
+  if(bd)bd.textContent=i===0?'Top match':p+'% match';
+  c.querySelector('.ring').setAttribute('aria-label',p+'% match');
+  var w=c.querySelector('.why');
+  if(!w){w=document.createElement('div');w.className='why';c.insertBefore(w,c.querySelector('.mob-skills'));}
+  w.innerHTML='<div class="lbl">Why it matches</div><ul class="whyl">'+why(c).slice(0,3).map(function(r){return '<li>'+esc2(r)+'</li>';}).join('')+'</ul>';
+ });
+}
+function list(){return ranked.filter(function(c){return !mode||c.dataset.mode===mode;});}
+function deckList(){return list().filter(function(c){return !decided[c.dataset.slug];});}
+function reset(c){c.style.transform='';var a=c.querySelector('.stamp.apply'),k=c.querySelector('.stamp.skip');a.style.opacity=0;k.style.opacity=0;}
+function updApply(){applyBtn.hidden=!applyList.length;applyBtn.textContent='Review & apply ('+applyList.length+')';}
+function paintBm(){cards.forEach(function(c){var b=c.querySelector('.bm'),on=saved.indexOf(c.dataset.slug)>-1;if(b){b.classList.toggle('saved',on);b.setAttribute('aria-pressed',on);}});}
+function playHint(){
+ if(seen||!mq.matches||sec.hidden)return;
+ var c=track.querySelector('.sc.d0');if(!c||c.classList.contains('dragging'))return;
+ c.classList.remove('demo');void c.offsetWidth;c.classList.add('demo');
+}
+function startHint(){if(seen||hintT)return;setTimeout(playHint,900);hintT=setInterval(playHint,7000);}
+function stopHint(){
+ seen=true;
+ clearInterval(hintT);hintT=null;
+ [].slice.call(track.querySelectorAll('.demo')).forEach(function(x){x.classList.remove('demo');});
+}
+track.addEventListener('animationend',function(e){if(e.animationName==='swipeDemo')e.target.classList.remove('demo');});
+function renderGrid(){
+ var m=list(),show=m;
+ cards.forEach(function(c){c.hidden=true;c.classList.remove('big','d0','d1','d2');reset(c);});
+ show.forEach(function(c,i){c.hidden=false;c.style.setProperty('--i',i);c.style.animation='none';void c.offsetWidth;c.style.animation='';});
+ track.dataset.n=show.length;
+ cnt.textContent=m.length?(m.length+' suggestions · scroll or use the arrows'):'No suggestions for this filter';
+ track.scrollLeft=0;setTimeout(updArrows,60);
+ deckCtl.hidden=true;deckEmpty.hidden=true;$('deck-hint').hidden=true;
+}
+function renderDeck(){
+ var q=deckList(),total=list().length,done=total-q.length;
+ cards.forEach(function(c){c.hidden=true;c.classList.remove('big','d0','d1','d2','dragging');c.style.transition='';c.style.opacity='';reset(c);});
+ q.slice(0,3).forEach(function(c,i){c.hidden=false;c.classList.add('d'+i);});
+ q.forEach(function(c,i){c.querySelector('.cnt').textContent=(done+i+1)+' of '+total;});
+ track.dataset.n=Math.min(3,q.length);
+ deckCtl.hidden=!q.length;$('deck-hint').hidden=!q.length;
+ deckEmpty.hidden=!!q.length;track.hidden=!q.length;
+ if(!q.length){$('de-t').textContent=total?"You're all caught up":'No roles for this filter';$('de-p').textContent=total?'You have been through every suggestion. Review the roles you picked, or start again.':'Try another work mode.';$('de-restart').hidden=!total;}
+}
+function render(){
+ if(!profile)return;
+ var deck=mq.matches;track.classList.toggle('deck',deck);track.hidden=false;
+ if(deck){renderDeck();startHint();}else renderGrid();
+ updApply();paintBm();
+}
+function setAuth(){
+ var on=!!profile;sec.hidden=!on;signin.hidden=on;me.hidden=!on;document.body.classList.toggle('has-sug',on);
+ if(on){$('me-name').textContent=profile.name||'You';$('me-av').textContent=(profile.name||'U').charAt(0).toUpperCase();
+  var bits=[profile.mode||'Any mode',profile.city==='Across India'?'Remote across India':(profile.city||'Anywhere'),profile.level||'Any level'];
+  $('sug-sum').textContent='Based on: '+bits.join(' · ');rank();start=0;render();}
+}
+function snk(msg,undo){
+ $('snack-t').textContent=msg;$('snack-u').hidden=!undo;snack.hidden=false;clearTimeout(snackT);snackT=setTimeout(function(){snack.hidden=true;},4500);
+}
+function commit(dir){
+ stopHint();var q=deckList();if(!q.length)return;var c=q[0],slug=c.dataset.slug,w=window.innerWidth*1.3;
+ c.classList.remove('dragging');c.style.transition='transform .4s cubic-bezier(.4,.1,.6,1),opacity .4s';
+ c.style.transform=dir==='save'?'translateY(-110%) scale(.9)':('translateX('+(dir==='skip'?-w:w)+'px) rotate('+(dir==='skip'?-18:18)+'deg)');
+ c.style.opacity='0';
+ if(dir==='apply')c.querySelector('.stamp.apply').style.opacity=1;if(dir==='skip')c.querySelector('.stamp.skip').style.opacity=1;
+ setTimeout(function(){
+  decided[slug]=dir;
+  if(dir==='apply'&&applyList.indexOf(slug)<0){applyList.push(slug);store('tj-apply',applyList);}
+  if(dir==='save'&&saved.indexOf(slug)<0){saved.push(slug);store('tj-saved',saved);}
+  last={slug:slug,dir:dir};renderDeck();updApply();paintBm();
+  snk(dir==='apply'?'Added to your apply list':(dir==='save'?'Saved for later':'Skipped'),true);
+ },380);
+}
+$('snack-u').addEventListener('click',function(){
+ if(!last)return;delete decided[last.slug];
+ if(last.dir==='apply'){applyList=applyList.filter(function(s){return s!==last.slug;});store('tj-apply',applyList);}
+ if(last.dir==='save'){saved=saved.filter(function(s){return s!==last.slug;});store('tj-saved',saved);}
+ last=null;snack.hidden=true;render();
+});
+$('dc-skip').addEventListener('click',function(){commit('skip');});
+$('dc-save').addEventListener('click',function(){commit('save');});
+$('dc-apply').addEventListener('click',function(){commit('apply');});
+$('de-restart').addEventListener('click',function(){decided={};applyList.forEach(function(s){decided[s]='apply';});render();});
+track.addEventListener('pointerdown',function(e){
+ if(!track.classList.contains('deck')||(e.button&&e.button>0))return;
+ var c=e.target.closest('.sc.d0');if(!c||e.target.closest('a,button'))return;stopHint();
+ var sx=e.clientX,sy=e.clientY,t0=Date.now(),dx=0,moved=false,lx=sx,lt=t0,vx=0;
+ c.classList.add('dragging');try{c.setPointerCapture(e.pointerId);}catch(_){}
+ function mv(ev){
+  dx=ev.clientX-sx;var dy=ev.clientY-sy,now=Date.now();
+  if(Math.abs(dx)>6)moved=true;vx=(ev.clientX-lx)/Math.max(1,now-lt);lx=ev.clientX;lt=now;
+  c.style.transform='translate('+dx+'px,'+(dy*0.25)+'px) rotate('+(dx/18)+'deg)';
+  c.querySelector('.stamp.apply').style.opacity=clamp(dx/90);c.querySelector('.stamp.skip').style.opacity=clamp(-dx/90);
+ }
+ function off(){c.removeEventListener('pointermove',mv);c.removeEventListener('pointerup',up);c.removeEventListener('pointercancel',cx);}
+ function up(){
+  off();c.classList.remove('dragging');
+  if(!moved&&Date.now()-t0<400){reset(c);if(window.TJ&&TJ.open)TJ.open(c.dataset.slug,'deck');return;}
+  if(dx>110||(dx>40&&vx>0.6))commit('apply');else if(dx<-110||(dx<-40&&vx<-0.6))commit('skip');else reset(c);
+ }
+ function cx(){off();c.classList.remove('dragging');reset(c);}
+ c.addEventListener('pointermove',mv);c.addEventListener('pointerup',up);c.addEventListener('pointercancel',cx);
+});
+pills.forEach(function(p){p.addEventListener('click',function(){mode=p.dataset.m;start=0;pills.forEach(function(x){x.classList.toggle('on',x===p);});render();});});
+function updArrows(){if(mq.matches)return;prev.disabled=track.scrollLeft<=2;next.disabled=track.scrollLeft+track.clientWidth>=track.scrollWidth-2;}
+track.addEventListener('scroll',updArrows);window.addEventListener('resize',updArrows);
+prev.addEventListener('click',function(){track.scrollBy({left:-track.clientWidth*.9,behavior:'smooth'});});
+next.addEventListener('click',function(){track.scrollBy({left:track.clientWidth*.9,behavior:'smooth'});});
+if(mq.addEventListener)mq.addEventListener('change',function(){start=0;render();});
+cards.forEach(function(c){var b=c.querySelector('.bm'),id=c.dataset.slug;
+ b.addEventListener('click',function(ev){ev.preventDefault();var k=saved.indexOf(id);if(k>-1)saved.splice(k,1);else saved.push(id);store('tj-saved',saved);paintBm();});});
+function openModal(){
+ var p=profile||{};$('pf-name').value=p.name||'';$('pf-mode').value=p.mode||'';$('pf-city').value=p.city||'';$('pf-level').value=p.level||'';$('pf-skills').value=p.skills||'';
+ $('m-t').textContent=profile?'Edit your preferences':'Sign in to see your matches';ov.hidden=false;setTimeout(function(){$('pf-name').focus();},50);
+}
+signin.addEventListener('click',openModal);$('edit-pref').addEventListener('click',openModal);
+$('pf-cancel').addEventListener('click',function(){ov.hidden=true;});
+ov.addEventListener('click',function(e){if(e.target===ov)ov.hidden=true;});
+form.addEventListener('submit',function(e){
+ e.preventDefault();
+ profile={name:$('pf-name').value.trim(),mode:$('pf-mode').value,city:$('pf-city').value,level:$('pf-level').value,skills:$('pf-skills').value.trim()};
+ store('tj-profile',profile);ov.hidden=true;decided={};applyList.forEach(function(s){decided[s]='apply';});setAuth();
+ setTimeout(function(){sec.scrollIntoView({behavior:'smooth',block:'start'});},60);
+});
+$('signout').addEventListener('click',function(){profile=null;store('tj-profile',null);setAuth();});
+function drawSheet(){
+ sheetList.innerHTML='';
+ if(!applyList.length){sheetList.innerHTML='<p style="margin:0;color:var(--muted)">Nothing here yet. Swipe right on a role to add it.</p>';return;}
+ applyList.forEach(function(slug){
+  var c=cards.filter(function(x){return x.dataset.slug===slug;})[0];if(!c)return;
+  var row=document.createElement('div');row.className='srow';
+  var d=document.createElement('div'),b=document.createElement('b'),s=document.createElement('span');
+  b.textContent=c.querySelector('h3').textContent;s.textContent=c.querySelector('.co2').textContent.split(' · ')[0];d.appendChild(b);d.appendChild(s);
+  var a=document.createElement('a');a.className='btn primary';a.textContent='Apply';a.href='#job-'+slug;a.target='_blank';a.rel='noopener';
+  var x=document.createElement('button');x.className='x';x.type='button';x.setAttribute('aria-label','Remove');x.textContent='×';
+  x.addEventListener('click',function(){applyList=applyList.filter(function(v){return v!==slug;});delete decided[slug];store('tj-apply',applyList);drawSheet();render();});
+  row.appendChild(d);row.appendChild(a);row.appendChild(x);sheetList.appendChild(row);
+ });
+}
+applyBtn.addEventListener('click',function(){drawSheet();sheet.hidden=false;});
+$('sheet-close').addEventListener('click',function(){sheet.hidden=true;});
+sheet.addEventListener('click',function(e){if(e.target===sheet)sheet.hidden=true;});
+document.addEventListener('keydown',function(e){if(e.key==='Escape'){ov.hidden=true;sheet.hidden=true;}});
+setAuth();
+function addApply(slug){
+ if(applyList.indexOf(slug)<0){applyList.push(slug);store('tj-apply',applyList);}
+ decided[slug]='apply';stopHint();last={slug:slug,dir:'apply'};render();snk('Added to your apply list',true);
+}
+function drawSaved(){
+ var J=window.TJ_JOBS||[],D=window.TJ_DESC||{},g=document.getElementById('saved-grid');if(!g)return;
+ var CAPI='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11.5V16c0 1.5 3 3 6 3s6-1.5 6-3v-4.5"/></svg>',PINI='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>';
+ function e(t){return String(t).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+ var list=saved.map(function(sl){return J.filter(function(j){return j.slug===sl;})[0];}).filter(Boolean).reverse();
+ g.innerHTML=list.map(function(j){return '<div class="sw"><a class="card" href="#job-'+e(j.slug)+'" data-slug="'+e(j.slug)+'"><div class="card-head"><div class="logo" style="background:'+j.tone+';color:'+j.ink+'" aria-hidden="true">'+e(j.initial)+'</div><div style="min-width:0"><h3>'+e(j.title)+'</h3><div class="co">'+e(j.company)+'</div></div></div><div class="chips"><span class="chip mode">'+e(j.mode)+'</span><span class="chip">'+CAPI+e(j.exp)+'</span><span class="chip">'+PINI+e(j.loc)+'</span></div>'+(D[j.slug]?'<p class="blurb">'+e(D[j.slug])+'</p>':'')+'<div class="card-foot"><span>View details</span><span>&rarr;</span></div></a><button type="button" class="un" data-un="'+e(j.slug)+'" aria-label="Remove from saved"><svg width="18" height="18" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-6-4-6 4z"/></svg></button></div>';}).join('');
+ var b=document.body;b.classList.toggle('has-saved',list.length>0);b.classList.toggle('sv-none',list.length===0);
+ var n=document.getElementById('tab-s'),n2=document.getElementById('sv-n');if(n)n.textContent=list.length||'';if(n2)n2.textContent=list.length?'('+list.length+')':'';
+ paintBm();
+}
+document.getElementById('saved-grid').addEventListener('click',function(ev){
+ var u=ev.target.closest('button[data-un]');
+ if(u){var k=saved.indexOf(u.dataset.un);if(k>-1){saved.splice(k,1);store('tj-saved',saved);snk('Removed from saved',false);}return;}
+});
+window.TJ={drawSaved:drawSaved,why:why,profile:function(){return profile;},addApply:addApply,commit:commit,inApply:function(sl){return applyList.indexOf(sl)>-1;},open:null,hint:function(){setTimeout(function(){if(!seen)playHint();},450);}};
+[].slice.call(document.querySelectorAll('[data-jump]')).forEach(function(b){b.addEventListener('click',function(){var t=$('open-roles');if(t)t.scrollIntoView({behavior:'smooth',block:'start'});});});
+})();</script><div class="wrap" id="detail" hidden></div>
+<div class="toast" id="dtoast" role="status"></div>
+<script>(function(){
+var JOBS=[{"slug": "business-development-executive", "title": "Business Development Executive", "company": "TermJobs", "mode": "On-site", "exp": "Fresher", "loc": "Kozhikode", "skills": ["Fluent English", "Communication"], "more": 7, "tone": "#e8e8ea", "ink": "#111", "initial": "T"}, {"slug": "partner-enterprise", "title": "Partner Enterprise Opening", "company": "Partner Enterprise", "mode": "On-site", "exp": "3+ years", "loc": "India", "skills": [], "more": 0, "tone": "#2a2f3a", "ink": "#fff", "initial": "P"}, {"slug": "partner-enterprise-2", "title": "Partner Enterprise Opening", "company": "Partner Enterprise", "mode": "On-site", "exp": "3+ years", "loc": "India", "skills": [], "more": 0, "tone": "#2a2f3a", "ink": "#fff", "initial": "P"}, {"slug": "travel-research-associate-intern", "title": "Travel Research Associate Intern", "company": "Little Known Planet", "mode": "Remote", "exp": "Fresher / No experience", "loc": "India", "skills": [], "more": 12, "tone": "#1f6f5a", "ink": "#fff", "initial": "L"}, {"slug": "key-account-manager-corporate-accounts", "title": "Key Account Manager – Corporate Accounts", "company": "Sign Mart", "mode": "On-site", "exp": "Mid-level (2–3 years)", "loc": "Kozhikode", "skills": ["Key Account Management"], "more": 13, "tone": "#e8742a", "ink": "#fff", "initial": "S"}, {"slug": "marketing-growth-specialist", "title": "Marketing & Growth Specialist", "company": "Little Known Planet", "mode": "Hybrid", "exp": "Mid-level (4+ years)", "loc": "Ernakulam", "skills": ["Digital Marketing"], "more": 14, "tone": "#1f6f5a", "ink": "#fff", "initial": "L"}, {"slug": "flutter-developer", "title": "Flutter Developer", "company": "Aethanalytica", "mode": "On-site", "exp": "1+ year", "loc": "Calicut, Kerala", "skills": ["Flutter", "Dart"], "more": 20, "tone": "#3b4cca", "ink": "#fff", "initial": "A"}, {"slug": "ui-developer", "title": "UI Developer", "company": "Zensbee Technologies Pvt Ltd", "mode": "Hybrid", "exp": "1+ year", "loc": "Calicut, Kerala", "skills": ["React"], "more": 15, "tone": "#16181d", "ink": "#fff", "initial": "Z"}, {"slug": "ui-ux-designer", "title": "UI/UX Designer", "company": "HiveNestHQ", "mode": "On-site", "exp": "1+ year", "loc": "HiLITE Business Park", "skills": ["UI/UX Design", "Figma"], "more": 15, "tone": "#d9531e", "ink": "#fff", "initial": "H"}, {"slug": "front-end-developer-senior-junior", "title": "Front End Developer (Senior & Junior)", "company": "Easy Entrance Pvt. Ltd.", "mode": "On-site", "exp": "Junior: 0–2 years", "loc": "Calicut, Kerala, India", "skills": ["HTML5", "CSS3"], "more": 14, "tone": "#7a3fb0", "ink": "#fff", "initial": "E"}, {"slug": "full-stack-developer-ai-first-development", "title": "Full Stack Developer – AI-First Development", "company": "NIFAMA Technologies Private Limited", "mode": "On-site", "exp": "Fresher (0–1 year)", "loc": "Calicut, Kerala", "skills": ["Java"], "more": 21, "tone": "#0f7c9a", "ink": "#fff", "initial": "N"}, {"slug": "human-resource-executive", "title": "Human Resource Executive", "company": "Smart Moves", "mode": "On-site", "exp": "Entry to Mid-level", "loc": "Kozhikode", "skills": ["Human Resources"], "more": 20, "tone": "#c0392b", "ink": "#fff", "initial": "S"}, {"slug": "python-backend-developer", "title": "Python Backend Developer", "company": "Nimbus Labs", "mode": "Hybrid", "exp": "2+ years", "loc": "Kozhikode", "skills": ["Python", "FastAPI"], "more": 12, "tone": "#2f6fed", "ink": "#fff", "initial": "N"}, {"slug": "content-writer", "title": "Content Writer", "company": "Brightline Media", "mode": "Remote", "exp": "Fresher", "loc": "India", "skills": ["Copywriting", "SEO"], "more": 8, "tone": "#b8860b", "ink": "#fff", "initial": "B"}, {"slug": "customer-support-associate", "title": "Customer Support Associate", "company": "Kerala Cart", "mode": "On-site", "exp": "Fresher", "loc": "Ernakulam", "skills": ["Communication", "Malayalam"], "more": 6, "tone": "#2e8b57", "ink": "#fff", "initial": "K"}, {"slug": "data-analyst", "title": "Data Analyst", "company": "Insightloop", "mode": "Hybrid", "exp": "1+ year", "loc": "Kozhikode", "skills": ["SQL", "Excel"], "more": 10, "tone": "#6d28d9", "ink": "#fff", "initial": "I"}, {"slug": "digital-marketing-executive", "title": "Digital Marketing Executive", "company": "Spice Route Digital", "mode": "On-site", "exp": "Mid-level (2–3 years)", "loc": "Ernakulam", "skills": ["SEO", "Google Ads"], "more": 11, "tone": "#c2410c", "ink": "#fff", "initial": "S"}, {"slug": "devops-engineer", "title": "DevOps Engineer", "company": "Cloudmango", "mode": "Remote", "exp": "3+ years", "loc": "India", "skills": ["AWS", "Docker"], "more": 16, "tone": "#0e7490", "ink": "#fff", "initial": "C"}],APPLY_URL="",PIN="<svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z\"/><circle cx=\"12\" cy=\"9.5\" r=\"2.5\"/></svg>",CAP="<svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M2 9l10-5 10 5-10 5z\"/><path d=\"M6 11.5V16c0 1.5 3 3 6 3s6-1.5 6-3v-4.5\"/></svg>",ARROW="<svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M5 12h14M13 6l6 6-6 6\"/></svg>",BACK="<svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M19 12H5M11 6l-6 6 6 6\"/></svg>",LOGO="<svg width=\"34\" height=\"34\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect x=\"3\" y=\"7\" width=\"18\" height=\"13\" rx=\"3\"/><path d=\"M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7\"/><path d=\"M3 13h18\"/></svg>";
+window.TJ_JOBS=JOBS;var TJ_DESC=window.TJ_DESC={"business-development-executive": "Drive TermJobs' growth by reaching out to staffing firms and employers, explaining the platform and booking demos. You'll own the pipeline from first call to signed client. Great first role for a confident communicator.", "partner-enterprise": "A partner enterprise on TermJobs is hiring experienced professionals for an on-site position. Apply with your resume and the hiring team will match you to the best-fit opening across India.", "partner-enterprise-2": "A partner enterprise on TermJobs is hiring experienced professionals for an on-site position. Apply with your resume and the hiring team will match you to the best-fit opening across India.", "travel-research-associate-intern": "Research destinations, stays and local experiences, and turn them into clear, accurate trip notes for the team. Fully remote and beginner-friendly, so no prior experience is needed. Ideal if you love travel and detail.", "key-account-manager-corporate-accounts": "Manage and grow relationships with corporate clients, from onboarding and order follow-ups to renewals. You'll be the main point of contact for key accounts and keep them happy. Suits someone with 2\u20133 years in client-facing sales.", "marketing-growth-specialist": "Plan and run growth campaigns across digital channels, track what's working and double down on it. You'll work closely with the team on brand, content and lead generation. Hybrid role for an experienced marketer.", "flutter-developer": "Build and maintain cross-platform mobile apps with Flutter and Dart, from clean UI to API integration. You'll ship features, fix bugs and work with designers and backend developers. On-site in Calicut.", "ui-developer": "Turn designs into fast, responsive interfaces using React. You'll build reusable components and polish details until they match the design. Hybrid role based in Calicut.", "ui-ux-designer": "Design intuitive web and mobile experiences in Figma, from user flows and wireframes to final screens. You'll work with developers to see designs through to launch. On-site at HiLITE Business Park.", "front-end-developer-senior-junior": "Build clean, responsive websites and web apps with HTML5, CSS3 and JavaScript. Openings for both senior and junior developers, so you can join at your level. On-site in Calicut.", "full-stack-developer-ai-first-development": "Build full-stack products using an AI-first workflow, working across Java backends and modern front ends. Freshers are welcome and you'll learn quickly on real projects. On-site in Calicut.", "human-resource-executive": "Handle recruitment, onboarding, attendance and employee queries for a growing team. You'll coordinate interviews and keep HR records in order. Open to entry and mid-level candidates.", "python-backend-developer": "Design and build backend services and APIs with Python and FastAPI, focusing on performance and clean code. You'll work with a small team on a hybrid schedule in Kozhikode.", "content-writer": "Write blogs, web copy and social posts that are clear, engaging and SEO-friendly. You'll research topics and work with the marketing team on deadlines. Remote and open to freshers.", "customer-support-associate": "Help customers by phone, chat and email, resolving orders and delivery questions quickly and politely. Malayalam and English communication is key. Freshers are welcome, with training provided.", "data-analyst": "Turn raw data into clear reports and dashboards using SQL and Excel. You'll find trends, answer business questions and present insights to the team. Hybrid role in Kozhikode.", "digital-marketing-executive": "Run SEO, Google Ads and social campaigns, and report on traffic and leads. You'll test ideas, optimise spend and keep campaigns on target. On-site in Ernakulam for someone with 2\u20133 years of experience.", "devops-engineer": "Own cloud infrastructure and deployments on AWS, using Docker and CI/CD to keep releases smooth and systems reliable. Fully remote for engineers with 3+ years of experience."};var list=document.getElementById('list'),det=document.getElementById('detail'),tt;
+function esc(s){return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function toast(m){var t=document.getElementById('dtoast');t.textContent=m;t.classList.add('on');clearTimeout(tt);tt=setTimeout(function(){t.classList.remove('on');},2200);}
+function fallback(){var i=document.createElement('input');i.value=location.href;document.body.appendChild(i);i.select();try{document.execCommand('copy');toast('Link copied');}catch(e){toast('Copy the address from your browser bar');}i.remove();}
+function share(){if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(location.href).then(function(){toast('Link copied');},fallback);}else fallback();}
+function render(j){
+ var sk=j.skills.map(function(s){return '<span class="skill">'+esc(s)+'</span>';}).join('')+(j.more?'<span class="skill">+'+j.more+' more skills</span>':'');
+ if(!sk)sk='<span class="skill">Open to all skills</span>';
+ var tag=APPLY_URL?'a':'button',ap=APPLY_URL?'href="'+esc(APPLY_URL.replace('{slug}',j.slug))+'" target="_blank" rel="noopener"':'type="button" data-apply';
+ var logo='<div class="logo" style="background:'+j.tone+';color:'+j.ink+'" aria-hidden="true">'+esc(j.initial)+'</div>';
+ det.innerHTML='<header class="top"><a class="brand" href="#" aria-label="All TermJobs roles">'+LOGO+'<div><b>TERMJOBS</b><span>Contract workforce platform</span></div></a></header>'
+ +'<a class="crumb" href="#">'+BACK+' All open roles</a>'
+ +'<section class="d-head"><div class="d-top">'+logo+'<div class="co" style="font-size:16px">'+esc(j.company)+'</div></div><h1>'+esc(j.title)+'</h1>'
+ +'<div class="chips"><span class="chip mode">'+esc(j.mode)+'</span><span class="chip">'+CAP+esc(j.exp)+'</span><span class="chip">'+PIN+esc(j.loc)+'</span></div></section>'
+ +'<div class="d-layout"><div class="stack">'
+ +(TJ_DESC[j.slug]?'<section class="panel"><h2>About the role</h2><p style="margin:0;color:var(--muted)">'+esc(TJ_DESC[j.slug])+'</p></section>':'')
+ +'<section class="panel"><h2>At a glance</h2><dl class="facts"><div><dt>Company</dt><dd>'+esc(j.company)+'</dd></div><div><dt>Work mode</dt><dd>'+esc(j.mode)+'</dd></div><div><dt>Experience</dt><dd>'+esc(j.exp)+'</dd></div><div><dt>Location</dt><dd>'+esc(j.loc)+'</dd></div></dl></section>'
+ +'<section class="panel"><h2>Skills</h2><div class="skills">'+sk+'</div></section>'
+ +'<section class="panel"><h2>How applying works</h2><p style="margin:0;color:var(--muted)">Apply directly with your resume. Your profile is matched against the skills above and reviewed within 48 hours.</p></section></div>'
+ +'<aside class="panel apply side"><h2>Interested in this role?</h2><'+tag+' class="btn primary block" '+ap+'>Apply now '+ARROW+'</'+tag+'><button class="btn block" type="button" data-share>Copy link to share</button><small><i></i>Reviewed within 48 hours</small></aside></div>'
+ +'<div class="bar"><button class="btn share" type="button" data-share aria-label="Copy link">Share</button><'+tag+' class="btn primary" '+ap+'>Apply now</'+tag+'></div>';
+ [].slice.call(det.querySelectorAll('[data-share]')).forEach(function(b){b.addEventListener('click',share);});
+ [].slice.call(det.querySelectorAll('[data-apply]')).forEach(function(b){b.addEventListener('click',function(){toast('Apply link is not connected yet');});});
+}
+function route(){
+ var m=location.hash.match(/^#job-([a-z0-9-]+)$/),j=m&&JOBS.filter(function(x){return x.slug===m[1];})[0];
+ if(j){list.hidden=true;det.hidden=false;document.body.classList.add('detail');render(j);document.title=j.title+' at '+j.company;window.scrollTo(0,0);}
+ else{det.hidden=true;list.hidden=false;document.body.classList.remove('detail');document.title='TermJobs';if(window.__tjY){var y=window.__tjY;window.__tjY=0;setTimeout(function(){window.scrollTo(0,y);},0);}}
+}
+document.addEventListener('click',function(e){if(e.target.closest('a.card'))window.__tjY=window.scrollY;},true);
+window.addEventListener('scroll',function(){if(window.scrollX)window.scrollTo(0,window.scrollY);},{passive:true});
+window.addEventListener('hashchange',route);route();
+})();</script><script>(function(){
+var $=function(id){return document.getElementById(id);};
+var JOBS=window.TJ_JOBS||[],ov=null,dm=null,cur=null,from='list',lastF=null,tt,mqm=window.matchMedia('(max-width: 760px)');
+var SV='stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" aria-hidden="true"';
+var CAP='<svg width="14" height="14" viewBox="0 0 24 24" '+SV+'><path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11.5V16c0 1.5 3 3 6 3s6-1.5 6-3v-4.5"/></svg>';
+var PIN='<svg width="14" height="14" viewBox="0 0 24 24" '+SV+'><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>';
+var OUT='<svg width="16" height="16" viewBox="0 0 24 24" '+SV+'><path d="M7 17L17 7M8 7h9v9"/></svg>';
+var CHEV='<svg class="chev" width="22" height="22" viewBox="0 0 24 24" '+SV+'><path d="M6 9l6 6 6-6"/></svg>';
+function esc(s){return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function toast(m){var t=$('dtoast');if(!t)return;t.textContent=m;t.classList.add('on');clearTimeout(tt);tt=setTimeout(function(){t.classList.remove('on');},2200);}
+function inset(r,rad){return 'inset('+r.top+'px '+(window.innerWidth-r.right)+'px '+(window.innerHeight-r.bottom)+'px '+r.left+'px round '+rad+'px)';}
+function deckMode(){return from==='deck'&&mqm.matches;}
+function originCard(){return document.querySelector('#sug-track .sc.d0');}
+function build(){
+ ov=document.createElement('div');ov.className='ov dov';ov.hidden=true;
+ ov.innerHTML='<div class="dm" role="dialog" aria-modal="true" aria-labelledby="dm-t">'
+ +'<a class="dnew" id="d-new2" target="_blank" rel="noopener">Open in new tab '+OUT+'</a>'
+ +'<button class="dclose" type="button" aria-label="Close"><span class="x">&times;</span>'+CHEV+'</button>'
+ +'<div class="dbody" id="dbody"></div>'
+ +'<div class="dact"><button class="dsk" type="button" aria-label="Skip"><svg width="26" height="26" viewBox="0 0 24 24" '+SV+'><path d="M6 6l12 12M18 6L6 18"/></svg></button><button class="dsv" type="button" aria-label="Save for later"><svg width="20" height="20" viewBox="0 0 24 24" '+SV+'><path d="M6 4h12v17l-6-4-6 4z"/></svg></button><button class="dap" type="button" aria-label="Apply"><svg width="30" height="30" viewBox="0 0 24 24" '+SV+'><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div>'
+ +'<div class="dbar"><a class="btn" id="d-new" target="_blank" rel="noopener">Open in new tab '+OUT+'</a><button class="btn primary" type="button" id="d-apply">Apply now</button></div></div>';
+ document.body.appendChild(ov);dm=ov.querySelector('.dm');
+ ov.addEventListener('click',function(e){if(e.target===ov)closeAnim();});
+ ov.querySelector('.dclose').addEventListener('click',function(){closeAnim();});
+ function act(dir){closeAnim(function(){var T=window.TJ;if(T&&T.commit)T.commit(dir);});}
+ ov.querySelector('.dsk').addEventListener('click',function(){act('skip');});
+ ov.querySelector('.dsv').addEventListener('click',function(){act('save');});
+ ov.querySelector('.dap').addEventListener('click',function(){act('apply');});
+ $('d-apply').addEventListener('click',function(){
+  var T=window.TJ||{},sc=cur&&document.querySelector('.sc[data-slug="'+cur.slug+'"]');
+  if(cur&&sc&&T.profile&&T.profile()){
+   if(T.inApply(cur.slug)){toast('Already in your apply list');return;}
+   var sl=cur.slug;closeAnim(function(){T.addApply(sl);});
+  }else toast('Apply link is not connected yet');
+ });
+}
+function hide(){
+ ov.hidden=true;document.body.style.overflow='';
+ if(lastF&&lastF.focus&&document.body.contains(lastF))try{lastF.focus({preventScroll:true});}catch(_){}
+}
+function closeAnim(cb){
+ if(!ov||ov.hidden){if(cb)cb();return;}
+ var c=deckMode()?originCard():null;
+ if(c&&dm.animate){
+  var an=dm.animate([{clipPath:'inset(0px 0px 0px 0px round 0px)'},{clipPath:inset(c.getBoundingClientRect(),24)}],{duration:300,easing:'cubic-bezier(.4,0,.2,1)',fill:'forwards'});
+  an.onfinish=function(){hide();an.cancel();if(cb)cb();};
+ }else{hide();if(cb)cb();}
+}
+function open(slug,f){
+ var j=JOBS.filter(function(x){return x.slug===slug;})[0];if(!j)return;
+ if(!ov)build();
+ cur=j;from=f||'list';lastF=document.activeElement;
+ var T=window.TJ||{},pr=T.profile&&T.profile(),sc=document.querySelector('.sc[data-slug="'+slug+'"]'),p=sc&&sc._p;
+ var rs=(pr&&sc&&T.why)?T.why(sc):[];
+ var sk=j.skills.map(function(x){return '<span class="skill">'+esc(x)+'</span>';}).join('')+(j.more?'<span class="skill">+'+j.more+' more skills</span>':'');
+ if(!sk)sk='<span class="skill">Open to all skills</span>';
+ var match=(pr&&p)?'<span class="dmatch">'+p+'% match</span>':'';
+ $('dbody').innerHTML=
+  '<div class="dhero" style="background:'+j.tone+';color:'+j.ink+'"><span class="big" aria-hidden="true">'+esc(j.initial)+'</span><div class="hc">'+esc(j.company)+'</div><h2>'+esc(j.title)+'</h2>'+match+'</div>'
+ +'<div class="dh"><div class="logo" style="background:'+j.tone+';color:'+j.ink+'" aria-hidden="true">'+esc(j.initial)+'</div><div><div class="dco">'+esc(j.company)+'</div>'+match+'</div></div>'
+ +'<h2 class="dtd" id="dm-t">'+esc(j.title)+'</h2>'
+ +'<div class="chips"><span class="chip mode">'+esc(j.mode)+'</span><span class="chip">'+CAP+esc(j.exp)+'</span><span class="chip">'+PIN+esc(j.loc)+'</span></div>'
+ +(rs.length?'<section><h3 class="sh">Why it matches</h3><ul class="whyl">'+rs.map(function(r){return '<li>'+esc(r)+'</li>';}).join('')+'</ul></section>':'')
+ +'<section><h3 class="sh">At a glance</h3><dl class="facts"><div><dt>Company</dt><dd>'+esc(j.company)+'</dd></div><div><dt>Work mode</dt><dd>'+esc(j.mode)+'</dd></div><div><dt>Experience</dt><dd>'+esc(j.exp)+'</dd></div><div><dt>Location</dt><dd>'+esc(j.loc)+'</dd></div></dl></section>'
+ +'<section><h3 class="sh">Skills</h3><div class="skills">'+sk+'</div></section>'
+ +'<section><h3 class="sh">How applying works</h3><p>Apply directly with your resume. Your profile is matched against the skills above and reviewed within 48 hours.</p><div class="rev"><i></i>Reviewed within 48 hours</div></section>';
+ $('d-new').href='#job-'+slug;$('d-new2').href='#job-'+slug;
+ dm.classList.toggle('deckmode',deckMode());
+ ov.hidden=false;document.body.style.overflow='hidden';$('dbody').scrollTop=0;
+ var c=deckMode()?originCard():null;
+ if(c&&dm.animate)dm.animate([{clipPath:inset(c.getBoundingClientRect(),24)},{clipPath:'inset(0px 0px 0px 0px round 0px)'}],{duration:380,easing:'cubic-bezier(.2,.7,.2,1)'});
+ setTimeout(function(){var x=ov.querySelector('.dclose');if(x)x.focus({preventScroll:true});},60);
+}
+if(window.TJ)window.TJ.open=open;else window.TJ={open:open};
+document.addEventListener('keydown',function(e){if(e.key==='Escape')closeAnim();});
+var track=$('sug-track'),grid=$('grid');
+track.addEventListener('click',function(e){
+ var c=e.target.closest('.sc');if(!c)return;
+ var a=e.target.closest('a');if(e.target.closest('button'))return;
+ if(a&&a.classList.contains('primary'))return;
+ var deck=track.classList.contains('deck');
+ if(deck&&!a)return;
+ e.preventDefault();open(c.dataset.slug,deck?'deck':'list');
+});
+
+/* mobile pages: For you / All roles */
+var tn=$('tab-n');if(tn)tn.textContent=document.querySelectorAll('#grid .card').length;
+[].slice.call(document.querySelectorAll('#tabs .tab')).forEach(function(b){
+ b.addEventListener('click',function(){document.body.classList.toggle('show-roles',b.dataset.v==='roles');document.body.classList.toggle('show-saved',b.dataset.v==='saved');if(window.TJ&&TJ.drawSaved)TJ.drawSaved();window.scrollTo({top:0});if(b.dataset.v==='for'&&window.TJ&&TJ.hint)TJ.hint();});
+});
+if(window.TJ&&TJ.drawSaved)TJ.drawSaved();
+})();</script>
+</body></html>

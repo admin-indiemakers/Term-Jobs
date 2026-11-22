@@ -55,16 +55,27 @@ export function CandidateAuthProvider({ children }) {
       });
 
       if (!res.ok) {
-        if (res.status === 401 || res.status === 403) {
-          // Token expired or invalid
-          localStorage.removeItem(CANDIDATE_TOKEN_KEY);
-          localStorage.removeItem(CANDIDATE_USER_KEY);
+        if (res.status === 401 || res.status === 403 || res.status === 404) {
+          // Token expired, invalid, or candidate profile deleted from DB
+          try {
+            localStorage.removeItem(CANDIDATE_TOKEN_KEY);
+            localStorage.removeItem(CANDIDATE_USER_KEY);
+            localStorage.removeItem('candidate_email');
+            localStorage.removeItem('tj-profile');
+            localStorage.removeItem('tj-apply');
+            localStorage.removeItem('tj-saved');
+          } catch {}
           setCandidateToken(null);
           setCandidateUser(null);
           setApplications([]);
+          setAgreements([]);
+          setOutreachHistory([]);
           setProfileCompleted(false);
           setResumeFilename(null);
           setHasResume(false);
+          if (window.TJ && window.TJ.setAuth) {
+            window.TJ.setAuth(null);
+          }
         }
         return null;
       }
@@ -287,6 +298,9 @@ export function CandidateAuthProvider({ children }) {
       localStorage.removeItem(CANDIDATE_USER_KEY);
       localStorage.removeItem('candidate_email');
       localStorage.removeItem('candidate_profile_user');
+      localStorage.removeItem('tj-profile');
+      localStorage.removeItem('tj-apply');
+      localStorage.removeItem('tj-saved');
       localStorage.removeItem('tj_applied_jobs');
       Object.keys(localStorage).forEach((key) => {
         if (key.startsWith('tj_applied_jobs')) {
@@ -302,6 +316,9 @@ export function CandidateAuthProvider({ children }) {
     setHasResume(false);
     setProfileCompleted(false);
     setResumeFilename(null);
+    if (window.TJ && window.TJ.setAuth) {
+      window.TJ.setAuth(null);
+    }
   };
 
   const value = {

@@ -46,6 +46,10 @@ def test_nexus_style_system_prompt():
     # 6. Absence of old mechanical one-sentence restriction
     assert "DO NOT dump long 10-bullet contact breakdowns in text. Provide only a brief 1-sentence intro" not in prompt
 
+    # 7. Strict Domain & Out-of-Scope Boundaries
+    assert "STRICT DOMAIN SPECIALIZATION & OUT-OF-SCOPE BOUNDARIES" in prompt
+    assert "cannot assist with military hardware, recipes" in prompt
+
 def test_requisitions_filter_shortlisted():
     async def run():
         user = make_user()
