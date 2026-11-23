@@ -5087,3 +5087,33 @@ body.on-profile #profile-page {
     display: none !important;
   }
 }
+
+
+/* Floating top toast notification */
+.toast,
+#dtoast {
+  position: fixed !important;
+  top: 24px !important;
+  bottom: auto !important;
+  left: 50% !important;
+  transform: translateX(-50%) translateY(-24px) !important;
+  background: #111111 !important;
+  color: #ffffff !important;
+  padding: 12px 24px !important;
+  border-radius: 999px !important;
+  font-weight: 600 !important;
+  font-size: 14px !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transition: opacity .25s cubic-bezier(0.2, 0.8, 0.2, 1), transform .25s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
+  z-index: 9999 !important;
+  max-width: 90vw !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25) !important;
+  text-align: center !important;
+}
+
+.toast.on,
+#dtoast.on {
+  opacity: 1 !important;
+  transform: translateX(-50%) translateY(0) !important;
+}

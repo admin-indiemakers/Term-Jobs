@@ -38,45 +38,63 @@ export function mountOpenRolesEngine(container, options = {}) {
     });
   }
 
+    function esc(s) {
+    return String(s || '').replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  var COMPANY_LOGOS = {
+    "software-engineer-inntot-technologies-pv-e5e8b62a": "/companies/inntot.png",
+    "odoo-developer-nurture-spark-digital-951f75b9": "/companies/nurture-spark.png",
+    "python-developer-vivantify-technology-so-4ea1af55": "/companies/vivantify.png",
+    "python-developer-bot-development-vbots-35155b56": "/companies/vbots.png",
+    "flutter-developer-intern-hancod-98802267": "/companies/hancod.png",
+    "devops-engineer-acura-solutions-ltd-bb711af2": "/companies/acura.png",
+    "software-engineer-mailercloud-87b3c036": "/companies/mailercloud.png"
+  };
+
+  function getCompanyLogo(slug, companyName) {
+    if (slug && COMPANY_LOGOS[slug]) return COMPANY_LOGOS[slug];
+    var c = (companyName || '').toLowerCase();
+    if (c.indexOf('inntot') !== -1) return '/companies/inntot.png';
+    if (c.indexOf('nurture') !== -1) return '/companies/nurture-spark.png';
+    if (c.indexOf('vivantify') !== -1) return '/companies/vivantify.png';
+    if (c.indexOf('vbot') !== -1) return '/companies/vbots.png';
+    if (c.indexOf('hancod') !== -1) return '/companies/hancod.png';
+    if (c.indexOf('acura') !== -1) return '/companies/acura.png';
+    if (c.indexOf('mailercloud') !== -1) return '/companies/mailercloud.png';
+    return '';
+  }
+
+  function renderLogo(j, extraClass) {
+    var cls = extraClass ? 'logo ' + extraClass : 'logo';
+    var logoSrc = (j && j.logo) ? j.logo : getCompanyLogo(j ? j.slug : '', j ? j.company : '');
+    var tone = (j && j.tone) || '#2563eb';
+    var ink = (j && j.ink) || '#ffffff';
+    var initial = (j && j.initial) || ((j && j.company) ? j.company.charAt(0).toUpperCase() : 'T');
+    if (logoSrc) {
+      return '<div class="' + cls + ' logo-has-img" style="background:#fff;" aria-hidden="true">' +
+        '<img src="' + esc(logoSrc) + '" alt="' + esc(j ? j.company : '') + '" class="company-logo-img" onerror="this.style.display=\'none\';this.parentElement.style.background=\'' + tone + '\';this.parentElement.style.color=\'' + ink + '\';this.parentElement.textContent=\'' + esc(initial) + '\';" />' +
+      '</div>';
+    }
+    return '<div class="' + cls + '" style="background:' + tone + ';color:' + ink + '" aria-hidden="true">' + esc(initial) + '</div>';
+  }
+  window.TJ_renderLogo = renderLogo;
+
+  var toastTimer = null;
+  function showToast(m, dur) {
+    var t = document.getElementById('dtoast');
+    if (!t) return;
+    t.textContent = m;
+    t.classList.add('on');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.classList.remove('on'); }, dur || 4000);
+  }
+  window.TJ_showToast = showToast;
+
   // 1. Script 3: Job data & detailed route
   (function () {
-    var COMPANY_LOGOS = {
-      "software-engineer-inntot-technologies-pv-e5e8b62a": "/companies/inntot.png",
-      "odoo-developer-nurture-spark-digital-951f75b9": "/companies/nurture-spark.png",
-      "python-developer-vivantify-technology-so-4ea1af55": "/companies/vivantify.png",
-      "python-developer-bot-development-vbots-35155b56": "/companies/vbots.png",
-      "flutter-developer-intern-hancod-98802267": "/companies/hancod.png",
-      "devops-engineer-acura-solutions-ltd-bb711af2": "/companies/acura.png",
-      "software-engineer-mailercloud-87b3c036": "/companies/mailercloud.png"
-    };
-
-    function getCompanyLogo(slug, companyName) {
-      if (slug && COMPANY_LOGOS[slug]) return COMPANY_LOGOS[slug];
-      var c = (companyName || '').toLowerCase();
-      if (c.indexOf('inntot') !== -1) return '/companies/inntot.png';
-      if (c.indexOf('nurture') !== -1) return '/companies/nurture-spark.png';
-      if (c.indexOf('vivantify') !== -1) return '/companies/vivantify.png';
-      if (c.indexOf('vbot') !== -1) return '/companies/vbots.png';
-      if (c.indexOf('hancod') !== -1) return '/companies/hancod.png';
-      if (c.indexOf('acura') !== -1) return '/companies/acura.png';
-      if (c.indexOf('mailercloud') !== -1) return '/companies/mailercloud.png';
-      return '';
-    }
-
-    function renderLogo(j, extraClass) {
-      var cls = extraClass ? 'logo ' + extraClass : 'logo';
-      var logoSrc = (j && j.logo) ? j.logo : getCompanyLogo(j ? j.slug : '', j ? j.company : '');
-      var tone = (j && j.tone) || '#2563eb';
-      var ink = (j && j.ink) || '#ffffff';
-      var initial = (j && j.initial) || ((j && j.company) ? j.company.charAt(0).toUpperCase() : 'T');
-      if (logoSrc) {
-        return '<div class="' + cls + ' logo-has-img" style="background:#fff;" aria-hidden="true">' +
-          '<img src="' + esc(logoSrc) + '" alt="' + esc(j ? j.company : '') + '" class="company-logo-img" onerror="this.style.display=\'none\';this.parentElement.style.background=\'' + tone + '\';this.parentElement.style.color=\'' + ink + '\';this.parentElement.textContent=\'' + esc(initial) + '\';" />' +
-        '</div>';
-      }
-      return '<div class="' + cls + '" style="background:' + tone + ';color:' + ink + '" aria-hidden="true">' + esc(initial) + '</div>';
-    }
-
     var JOBS = [
       {
         slug: "software-engineer-inntot-technologies-pv-e5e8b62a",
@@ -253,7 +271,7 @@ export function mountOpenRolesEngine(container, options = {}) {
     function getList() { return container.querySelector('#list') || document.getElementById('list'); }
     function getDet() { return container.querySelector('#detail') || document.getElementById('detail'); }
     function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
-    function toast(m, dur) { var t = document.getElementById('dtoast'); if (!t) return; t.textContent = m; t.classList.add('on'); clearTimeout(tt); tt = setTimeout(function () { t.classList.remove('on'); }, dur || 3500); }
+    function toast(m, dur) { showToast(m, dur); }
     function fallback() { var i = document.createElement('input'); i.value = location.href; document.body.appendChild(i); i.select(); try { document.execCommand('copy'); toast('Link copied'); } catch (e) { toast('Copy the address from your browser bar'); } i.remove(); }
     function share() { if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(location.href).then(function () { toast('Link copied'); }, fallback); } else fallback(); }
 
@@ -1611,7 +1629,7 @@ export function mountOpenRolesEngine(container, options = {}) {
         if (!profile) return;
         var deck = mq.matches; track.classList.toggle('deck', deck); track.hidden = false;
         if (deck) { renderDeck(); startHint(); } else renderGrid();
-        updApply(); paintBm();
+        updApply(); paintBm(); paintApplyBtns();
       }
       function setAuth(newProfile) {
         if (newProfile !== undefined) {
@@ -1674,9 +1692,42 @@ export function mountOpenRolesEngine(container, options = {}) {
         if (dir === 'skip' && stS) stS.style.opacity = 1;
         setTimeout(function () {
           decided[slug] = dir;
-          if (dir === 'apply' && applyList.indexOf(slug) < 0) { applyList.push(slug); store('tj-apply', applyList); }
+          if (dir === 'apply') {
+            if (applyList.indexOf(slug) < 0) {
+              applyList.push(slug);
+              store('tj-apply', applyList);
+            }
+            var candUser = (options.getCandidateUser ? options.getCandidateUser() : options.candidateUser) || (window.TJ && window.TJ.profile ? window.TJ.profile() : null);
+            var cEmail = candUser ? (candUser.candidate_email || candUser.email || '') : '';
+            var cName = candUser ? (candUser.candidate_name || candUser.name || 'Candidate') : '';
+            var j = (window.TJ_JOBS || []).find(function (x) { return x.slug === slug; });
+            if (cEmail && j) {
+              fetch('/api/interviews/candidate/attend-ai', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: cEmail, name: cName, slug: j.slug, title: j.title, company: j.company }),
+              }).then(function (r) { return r.json(); }).then(function (res) {
+                if (res && res.round_id && window.TJ_ROUNDS) {
+                  if (!window.TJ_ROUNDS.some(function (r) { return r.id === res.round_id; })) {
+                    window.TJ_ROUNDS.unshift({
+                      id: res.round_id,
+                      round_name: j.title,
+                      round_type: 'AI',
+                      job_title: j.title,
+                      company_name: j.company,
+                      candidate_token: res.candidate_token,
+                      status: 'Scheduled',
+                      is_ai: true,
+                    });
+                    if (window.TJ && window.TJ.drawInterviews) window.TJ.drawInterviews();
+                  }
+                }
+              }).catch(function () {});
+            }
+            showToast('Applied successfully! Please attend your AI Interview for validation to fast-track your profile.', 4000);
+          }
           if (dir === 'save' && saved.indexOf(slug) < 0) { saved.push(slug); store('tj-saved', saved); }
-          last = { slug: slug, dir: dir }; renderDeck(); updApply(); paintBm();
+          last = { slug: slug, dir: dir }; renderDeck(); updApply(); paintBm(); paintApplyBtns();
           snk(dir === 'apply' ? 'Added to your apply list' : (dir === 'save' ? 'Saved for later' : 'Skipped'), true);
         }, 380);
       }
@@ -2390,14 +2441,57 @@ export function mountOpenRolesEngine(container, options = {}) {
             var isAuth = Boolean(candUser && (candUser.candidate_email || candUser.email || candUser.name));
             if (!isAuth) {
               if (options.onOpenAuth) options.onOpenAuth(j ? { slug: j.slug, title: j.title, company: j.company } : null);
-              else toast('Please sign in to apply');
+              else showToast('Please sign in to apply');
               return;
             }
-            if (slug) {
-              if (T.addApply) T.addApply(slug);
+
+            var isAlreadyApplied = applyBtn.getAttribute('data-applied') === 'true' || (T.inApply && T.inApply(slug)) || applyList.indexOf(slug) > -1 || applyBtn.classList.contains('applied-attend-btn');
+
+            if (isAlreadyApplied) {
               if (options.onStartAiInterview && j) {
                 options.onStartAiInterview({ slug: j.slug, title: j.title, company: j.company });
               }
+              return;
+            }
+
+            if (slug && j) {
+              if (T.addApply) T.addApply(slug);
+              if (applyList.indexOf(slug) < 0) {
+                applyList.push(slug);
+                store('tj-apply', applyList);
+              }
+              var cEmail = candUser.candidate_email || candUser.email || '';
+              var cName = candUser.candidate_name || candUser.name || 'Candidate';
+              if (cEmail) {
+                fetch('/api/interviews/candidate/attend-ai', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ email: cEmail, name: cName, slug: j.slug, title: j.title, company: j.company }),
+                }).then(function (r) { return r.json(); }).then(function (res) {
+                  if (res && res.round_id) {
+                    if (!window.TJ_ROUNDS) window.TJ_ROUNDS = [];
+                    if (!window.TJ_ROUNDS.some(function (r) { return r.id === res.round_id; })) {
+                      window.TJ_ROUNDS.unshift({
+                        id: res.round_id,
+                        round_name: j.title,
+                        round_type: 'AI',
+                        job_title: j.title,
+                        company_name: j.company,
+                        candidate_token: res.candidate_token,
+                        status: 'Scheduled',
+                        is_ai: true,
+                      });
+                      if (window.TJ && window.TJ.drawInterviews) window.TJ.drawInterviews();
+                    }
+                  }
+                }).catch(function () {});
+              }
+
+              applyBtn.setAttribute('data-applied', 'true');
+              applyBtn.classList.add('applied-attend-btn');
+              applyBtn.innerHTML = '<span class="iv-ai-play"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="display:inline-block;vertical-align:-2px;margin-right:6px;"><polygon points="5 3 19 12 5 21 5 3"/></svg></span> Attend AI Interview';
+
+              showToast('Applied successfully! Please attend your AI Interview for validation to fast-track your profile.', 4000);
             }
             return;
           }
