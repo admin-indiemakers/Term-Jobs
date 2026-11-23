@@ -36,6 +36,17 @@ _clients: dict[str, MongoClient] = {}
 
 def _create_mongo_client(url: str) -> MongoClient:
     import os
+    try:
+        import dns.resolver
+        # If router DNS (e.g. 192.168.1.1) fails or drops SRV queries, ensure reliable public fallbacks
+        default_ns = dns.resolver.get_default_resolver().nameservers
+        public_ns = ['8.8.8.8', '1.1.1.1']
+        for ns in public_ns:
+            if ns not in default_ns:
+                default_ns.append(ns)
+    except Exception:
+        pass
+
     kwargs = {
         "serverSelectionTimeoutMS": 5000,
         "connectTimeoutMS": 10000,
