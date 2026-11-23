@@ -3084,6 +3084,15 @@ h3 {
   display: none
 }
 
+/* Navigation tabs only show when signed in (.has-sug) */
+body:not(.has-sug) .tabs,
+body:not(.has-sug) #tabs,
+body:not(.has-sug) .top-actions .tabs,
+.tabs[hidden],
+#tabs[hidden] {
+  display: none !important;
+}
+
 body.has-sug .tabs {
   display: flex;
   align-items: center;
