@@ -462,18 +462,6 @@ export default function NewLandingPage() {
         </button>
         <div className="switch">
           <button
-            onClick={() => navigateTo('companies')}
-            aria-current={currentView === 'companies'}
-          >
-            Companies
-          </button>
-          <button
-            onClick={() => navigateTo('jobs')}
-            aria-current={currentView === 'jobs'}
-          >
-            Candidates
-          </button>
-          <button
             onClick={() => navigateTo('how')}
             aria-current={currentView === 'how'}
           >
@@ -578,9 +566,6 @@ export default function NewLandingPage() {
                     <div className="th-a">
                       <button className="th-b pri" onClick={() => navigateTo('jobs')}>
                         I&rsquo;m looking for work <i>&rarr;</i>
-                      </button>
-                      <button className="th-b sec" onClick={() => navigateTo('jobs')}>
-                        View open roles
                       </button>
                     </div>
                     <ul className="th-f">
