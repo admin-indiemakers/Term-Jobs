@@ -17,6 +17,8 @@ export default function NewOpenRolesPage({ enabled = true }) {
   candidateAuthRef.current = candidateAuth;
 
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const pendingApplyRef = useRef(null);
+  const handleStartAiInterviewRef = useRef(null);
   const markup = useMemo(() => ({ __html: NEW_OPEN_ROLES_HTML }), []);
 
   const formatSkills = (sk, fallback = '') => {
@@ -72,10 +74,12 @@ export default function NewOpenRolesPage({ enabled = true }) {
     const drawerNameEl = containerRef.current ? containerRef.current.querySelector('#drawer-name') : document.getElementById('drawer-name');
     const drawerEmailEl = containerRef.current ? containerRef.current.querySelector('#drawer-email') : document.getElementById('drawer-email');
     const secEl = containerRef.current ? containerRef.current.querySelector('#sug') : document.getElementById('sug');
+    const tabsEl = containerRef.current ? containerRef.current.querySelector('#tabs') : document.getElementById('tabs');
 
     if (user) {
       if (signinEl) { signinEl.hidden = true; signinEl.style.display = 'none'; }
       if (meEl) { meEl.hidden = false; meEl.style.display = 'inline-flex'; }
+      if (tabsEl) { tabsEl.hidden = false; tabsEl.style.display = ''; }
       const displayName = user.candidate_name || user.name || (user.candidate_email ? user.candidate_email.split('@')[0] : 'Candidate');
       const email = user.candidate_email || user.email || '';
       const initial = (displayName.charAt(0) || 'C').toUpperCase();
@@ -102,11 +106,12 @@ export default function NewOpenRolesPage({ enabled = true }) {
     } else {
       if (signinEl) { signinEl.hidden = false; signinEl.style.display = ''; }
       if (meEl) { meEl.hidden = true; meEl.style.display = 'none'; }
+      if (tabsEl) { tabsEl.hidden = true; tabsEl.style.display = 'none'; }
       if (secEl) { secEl.hidden = true; secEl.style.display = 'none'; }
       if (drawerAvEl) drawerAvEl.textContent = 'C';
       if (drawerNameEl) drawerNameEl.textContent = 'Candidate';
       if (drawerEmailEl) drawerEmailEl.textContent = '';
-      document.body.classList.remove('has-sug');
+      document.body.classList.remove('has-sug', 'show-roles', 'show-saved', 'show-interview');
     }
   }, []);
 
@@ -119,6 +124,15 @@ export default function NewOpenRolesPage({ enabled = true }) {
         window.TJ.setAuth(stored);
       }
       updateHeaderAuthDOM(candidate);
+      if (pendingApplyRef.current && handleStartAiInterviewRef.current) {
+        const pending = pendingApplyRef.current;
+        pendingApplyRef.current = null;
+        setTimeout(() => {
+          if (handleStartAiInterviewRef.current) {
+            handleStartAiInterviewRef.current(pending);
+          }
+        }, 120);
+      }
     } catch (e) {}
   }, [syncCandidateProfileToLocal, updateHeaderAuthDOM]);
 
@@ -130,14 +144,21 @@ export default function NewOpenRolesPage({ enabled = true }) {
 
     const handleStartAiInterview = async ({ slug, title, company, roundId }) => {
       const cand = candidateAuthRef.current?.candidateUser || (() => {
-        try { return JSON.parse(localStorage.getItem('candidate_profile_user') || '{}'); } catch (_) { return {}; }
-      })();
-      const candProfile = (() => {
-        try { return JSON.parse(localStorage.getItem('tj-profile') || '{}'); } catch (_) { return {}; }
+        try {
+          const u = JSON.parse(localStorage.getItem('candidate_profile_user') || '{}');
+          if (u && (u.candidate_email || u.email)) return u;
+        } catch (_) {}
+        return null;
       })();
 
-      const email = cand.candidate_email || cand.email || candProfile.email || 'candidate@termjobs.in';
-      const name = cand.candidate_name || cand.name || candProfile.name || 'Candidate';
+      if (!cand || (!cand.candidate_email && !cand.email)) {
+        pendingApplyRef.current = { slug, title, company, roundId };
+        setShowAuthModal(true);
+        return;
+      }
+
+      const email = cand.candidate_email || cand.email;
+      const name = cand.candidate_name || cand.name || 'Candidate';
 
       if (roundId) {
         navigate(`/interview/ai/${roundId}?role=candidate&name=${encodeURIComponent(name)}`);
@@ -164,9 +185,14 @@ export default function NewOpenRolesPage({ enabled = true }) {
       }
     };
 
+    handleStartAiInterviewRef.current = handleStartAiInterview;
+
     const unmountEngine = mountOpenRolesEngine(containerRef.current, {
       getCandidateUser: () => candidateAuthRef.current?.candidateUser,
-      onOpenAuth: () => setShowAuthModal(true),
+      onOpenAuth: (pendingRole) => {
+        if (pendingRole) pendingApplyRef.current = pendingRole;
+        setShowAuthModal(true);
+      },
       onHomeClick: () => navigate('/'),
       onStartAiInterview: handleStartAiInterview,
       onLogout: () => {
@@ -177,7 +203,9 @@ export default function NewOpenRolesPage({ enabled = true }) {
           localStorage.removeItem('tj-profile');
           localStorage.removeItem('candidate_profile_user');
           localStorage.removeItem('candidate_profile_token');
+          sessionStorage.removeItem('termjobs_candidate_session');
         } catch (e) {}
+        pendingApplyRef.current = null;
         if (window.TJ && window.TJ.setAuth) {
           window.TJ.setAuth(null);
         }

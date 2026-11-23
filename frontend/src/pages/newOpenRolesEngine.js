@@ -240,14 +240,18 @@ export function mountOpenRolesEngine(container, options = {}) {
           b.addEventListener('click', function (ev) {
             ev.preventDefault();
             var T = window.TJ || {};
+            var candUser = (options.getCandidateUser ? options.getCandidateUser() : options.candidateUser) || (T.profile ? T.profile() : null);
+            var isAuth = Boolean(candUser && (candUser.candidate_email || candUser.email || candUser.name));
+            if (!isAuth) {
+              if (options.onOpenAuth) options.onOpenAuth({ slug: j.slug, title: j.title, company: j.company });
+              else toast('Please sign in to apply');
+              return;
+            }
             if (T.addApply) T.addApply(j.slug);
             if (options.onStartAiInterview) {
               options.onStartAiInterview({ slug: j.slug, title: j.title, company: j.company });
-            } else if (options.candidateUser) {
-              toast('Application submitted for ' + j.title + ' at ' + j.company + '!');
             } else {
-              if (options.onOpenAuth) options.onOpenAuth();
-              else toast('Please sign in to apply');
+              toast('Application submitted for ' + j.title + ' at ' + j.company + '!');
             }
           });
         });
@@ -1150,6 +1154,7 @@ export function mountOpenRolesEngine(container, options = {}) {
         e.preventDefault();
         closeDrawer();
         closeProfilePage();
+        if (window.TJ && window.TJ.setAuth) window.TJ.setAuth(null);
         if (options.onLogout) options.onLogout();
       });
 
@@ -1502,10 +1507,15 @@ export function mountOpenRolesEngine(container, options = {}) {
         var curSec = $('sug') || sec;
         var curSignin = $('signin') || signin;
         var curMe = $('me') || me;
+        var curTabs = $('tabs');
+        if (curTabs) { curTabs.hidden = !on; curTabs.style.display = on ? '' : 'none'; }
         if (curSec) { curSec.hidden = !on; curSec.style.display = on ? '' : 'none'; }
         if (curSignin) { curSignin.hidden = on; curSignin.style.display = on ? 'none' : ''; }
         if (curMe) { curMe.hidden = !on; curMe.style.display = on ? 'inline-flex' : 'none'; }
         document.body.classList.toggle('has-sug', on);
+        if (!on) {
+          document.body.classList.remove('show-roles', 'show-saved', 'show-interview');
+        }
         if (on) {
           var candU = {};
           try { candU = JSON.parse(localStorage.getItem('candidate_profile_user') || '{}'); } catch (_) {}
@@ -1524,6 +1534,8 @@ export function mountOpenRolesEngine(container, options = {}) {
           var dAv0 = $('drawer-av'); if (dAv0) dAv0.textContent = 'C';
           var dNm0 = $('drawer-name'); if (dNm0) dNm0.textContent = 'Candidate';
           var dEm0 = $('drawer-email'); if (dEm0) dEm0.textContent = '';
+          var curTabs0 = $('tabs'); if (curTabs0) { curTabs0.hidden = true; curTabs0.style.display = 'none'; }
+          document.body.classList.remove('show-roles', 'show-saved', 'show-interview');
         }
       }
       function snk(msg, undo) {
@@ -2146,28 +2158,24 @@ export function mountOpenRolesEngine(container, options = {}) {
         if (dApply) {
           dApply.addEventListener('click', function () {
             var T = window.TJ || {}, sc = cur && document.querySelector('.sc[data-slug="' + cur.slug + '"]');
-            if (cur) {
-              if (T.inApply(cur.slug) || dApply.classList.contains('iv-attend-mode')) {
-                closeAnim(function () {
-                  if (options.onStartAiInterview) {
-                    options.onStartAiInterview({ slug: cur.slug, title: cur.title, company: cur.company });
-                  }
-                });
-                return;
+            if (!cur) {
+              toast('Apply link is not connected yet');
+              return;
+            }
+            var candUser = (options.getCandidateUser ? options.getCandidateUser() : options.candidateUser) || (T.profile ? T.profile() : null);
+            var isAuth = Boolean(candUser && (candUser.candidate_email || candUser.email || candUser.name));
+            if (!isAuth) {
+              if (options.onOpenAuth) options.onOpenAuth({ slug: cur.slug, title: cur.title, company: cur.company });
+              else toast('Please sign in to apply');
+              return;
+            }
+            var sl = cur.slug;
+            closeAnim(function () {
+              if (T.addApply) T.addApply(sl);
+              if (options.onStartAiInterview) {
+                options.onStartAiInterview({ slug: cur.slug, title: cur.title, company: cur.company });
               }
-              if (options.candidateUser || (T.profile && T.profile())) {
-                var sl = cur.slug;
-                closeAnim(function () {
-                  T.addApply(sl);
-                  if (options.onStartAiInterview) {
-                    options.onStartAiInterview({ slug: cur.slug, title: cur.title, company: cur.company });
-                  }
-                });
-              } else {
-                if (options.onOpenAuth) options.onOpenAuth();
-                else toast('Please sign in to apply');
-              }
-            } else toast('Apply link is not connected yet');
+            });
           });
         }
       }
@@ -2231,6 +2239,30 @@ export function mountOpenRolesEngine(container, options = {}) {
       var track = $('sug-track'), grid = $('grid');
       if (track) {
         track.addEventListener('click', function (e) {
+          var applyBtn = e.target.closest('[data-apply], .s-apply');
+          if (applyBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            var c = applyBtn.closest('.sc, [data-slug]');
+            var slug = c ? c.dataset.slug : null;
+            var j = slug ? (window.TJ_JOBS || []).find(function (x) { return x.slug === slug; }) : null;
+            var T = window.TJ || {};
+            var candUser = (options.getCandidateUser ? options.getCandidateUser() : options.candidateUser) || (T.profile ? T.profile() : null);
+            var isAuth = Boolean(candUser && (candUser.candidate_email || candUser.email || candUser.name));
+            if (!isAuth) {
+              if (options.onOpenAuth) options.onOpenAuth(j ? { slug: j.slug, title: j.title, company: j.company } : null);
+              else toast('Please sign in to apply');
+              return;
+            }
+            if (slug) {
+              if (T.addApply) T.addApply(slug);
+              if (options.onStartAiInterview && j) {
+                options.onStartAiInterview({ slug: j.slug, title: j.title, company: j.company });
+              }
+            }
+            return;
+          }
+
           var c = e.target.closest('.sc'); if (!c) return;
           var a = e.target.closest('a'); if (e.target.closest('button')) return;
           if (a && a.classList.contains('primary')) return;
