@@ -40,6 +40,43 @@ export function mountOpenRolesEngine(container, options = {}) {
 
   // 1. Script 3: Job data & detailed route
   (function () {
+    var COMPANY_LOGOS = {
+      "software-engineer-inntot-technologies-pv-e5e8b62a": "/companies/inntot.png",
+      "odoo-developer-nurture-spark-digital-951f75b9": "/companies/nurture-spark.png",
+      "python-developer-vivantify-technology-so-4ea1af55": "/companies/vivantify.png",
+      "python-developer-bot-development-vbots-35155b56": "/companies/vbots.png",
+      "flutter-developer-intern-hancod-98802267": "/companies/hancod.png",
+      "devops-engineer-acura-solutions-ltd-bb711af2": "/companies/acura.png",
+      "software-engineer-mailercloud-87b3c036": "/companies/mailercloud.png"
+    };
+
+    function getCompanyLogo(slug, companyName) {
+      if (slug && COMPANY_LOGOS[slug]) return COMPANY_LOGOS[slug];
+      var c = (companyName || '').toLowerCase();
+      if (c.indexOf('inntot') !== -1) return '/companies/inntot.png';
+      if (c.indexOf('nurture') !== -1) return '/companies/nurture-spark.png';
+      if (c.indexOf('vivantify') !== -1) return '/companies/vivantify.png';
+      if (c.indexOf('vbot') !== -1) return '/companies/vbots.png';
+      if (c.indexOf('hancod') !== -1) return '/companies/hancod.png';
+      if (c.indexOf('acura') !== -1) return '/companies/acura.png';
+      if (c.indexOf('mailercloud') !== -1) return '/companies/mailercloud.png';
+      return '';
+    }
+
+    function renderLogo(j, extraClass) {
+      var cls = extraClass ? 'logo ' + extraClass : 'logo';
+      var logoSrc = (j && j.logo) ? j.logo : getCompanyLogo(j ? j.slug : '', j ? j.company : '');
+      var tone = (j && j.tone) || '#2563eb';
+      var ink = (j && j.ink) || '#ffffff';
+      var initial = (j && j.initial) || ((j && j.company) ? j.company.charAt(0).toUpperCase() : 'T');
+      if (logoSrc) {
+        return '<div class="' + cls + ' logo-has-img" style="background:#fff;" aria-hidden="true">' +
+          '<img src="' + esc(logoSrc) + '" alt="' + esc(j ? j.company : '') + '" class="company-logo-img" onerror="this.style.display=\'none\';this.parentElement.style.background=\'' + tone + '\';this.parentElement.style.color=\'' + ink + '\';this.parentElement.textContent=\'' + esc(initial) + '\';" />' +
+        '</div>';
+      }
+      return '<div class="' + cls + '" style="background:' + tone + ';color:' + ink + '" aria-hidden="true">' + esc(initial) + '</div>';
+    }
+
     var JOBS = [
       {
         slug: "software-engineer-inntot-technologies-pv-e5e8b62a",
@@ -52,7 +89,8 @@ export function mountOpenRolesEngine(container, options = {}) {
         more: 10,
         tone: "#059669",
         ink: "#fff",
-        initial: "I"
+        initial: "I",
+        logo: "/companies/inntot.png"
       },
       {
         slug: "odoo-developer-nurture-spark-digital-951f75b9",
@@ -65,7 +103,8 @@ export function mountOpenRolesEngine(container, options = {}) {
         more: 17,
         tone: "#2563eb",
         ink: "#fff",
-        initial: "N"
+        initial: "N",
+        logo: "/companies/nurture-spark.png"
       },
       {
         slug: "python-developer-vivantify-technology-so-4ea1af55",
@@ -78,7 +117,8 @@ export function mountOpenRolesEngine(container, options = {}) {
         more: 10,
         tone: "#7c3aed",
         ink: "#fff",
-        initial: "V"
+        initial: "V",
+        logo: "/companies/vivantify.png"
       },
       {
         slug: "python-developer-bot-development-vbots-35155b56",
@@ -91,7 +131,8 @@ export function mountOpenRolesEngine(container, options = {}) {
         more: 12,
         tone: "#d97706",
         ink: "#fff",
-        initial: "V"
+        initial: "V",
+        logo: "/companies/vbots.png"
       },
       {
         slug: "flutter-developer-intern-hancod-98802267",
@@ -104,7 +145,8 @@ export function mountOpenRolesEngine(container, options = {}) {
         more: 10,
         tone: "#0891b2",
         ink: "#fff",
-        initial: "H"
+        initial: "H",
+        logo: "/companies/hancod.png"
       },
       {
         slug: "devops-engineer-acura-solutions-ltd-bb711af2",
@@ -117,7 +159,8 @@ export function mountOpenRolesEngine(container, options = {}) {
         more: 8,
         tone: "#dc2626",
         ink: "#fff",
-        initial: "A"
+        initial: "A",
+        logo: "/companies/acura.png"
       },
       {
         slug: "software-engineer-mailercloud-87b3c036",
@@ -130,7 +173,8 @@ export function mountOpenRolesEngine(container, options = {}) {
         more: 25,
         tone: "#4f46e5",
         ink: "#fff",
-        initial: "M"
+        initial: "M",
+        logo: "/companies/mailercloud.png"
       }
     ];
     var APPLY_URL = "";
@@ -240,7 +284,7 @@ export function mountOpenRolesEngine(container, options = {}) {
 
       var tag = APPLY_URL ? 'a' : 'button';
       var ap = APPLY_URL ? 'href="' + esc(APPLY_URL.replace('{slug}', j.slug)) + '" target="_blank" rel="noopener"' : 'type="button" data-apply data-applied="' + (hasApplied ? 'true' : 'false') + '"';
-      var logo = '<div class="logo" style="background:' + j.tone + ';color:' + j.ink + '" aria-hidden="true">' + esc(j.initial) + '</div>';
+      var logo = renderLogo(j);
 
       target.innerHTML = '<header class="top"><a class="brand" href="#" aria-label="All TermJobs roles">' + LOGO + '<div><b>TERMJOBS</b><span>Contract workforce platform</span></div></a><div class="top-actions"><button class="btn" type="button" data-signin>Sign in</button><div class="me" id="d-me" style="display:none"><button type="button" class="av-btn" id="d-av-trigger" aria-label="Open profile menu"><span class="av" id="d-me-av" aria-hidden="true">M</span></button></div></div></header>'
           + '<a class="crumb" href="#" aria-label="Back to all open roles">' + BACK + ' All open roles</a>'
@@ -1782,7 +1826,7 @@ export function mountOpenRolesEngine(container, options = {}) {
         var CAPI = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11.5V16c0 1.5 3 3 6 3s6-1.5 6-3v-4.5"/></svg>', PINI = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>';
         function e(t) { return String(t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
         var list = saved.map(function (sl) { return J.filter(function (j) { return j.slug === sl; })[0]; }).filter(Boolean).reverse();
-        g.innerHTML = list.map(function (j) { return '<div class="sw"><a class="card" href="#job-' + e(j.slug) + '" data-slug="' + e(j.slug) + '"><div class="card-head"><div class="logo" style="background:' + j.tone + ';color:' + j.ink + '" aria-hidden="true">' + e(j.initial) + '</div><div style="min-width:0"><h3>' + e(j.title) + '</h3><div class="co">' + e(j.company) + '</div></div></div><div class="chips"><span class="chip mode">' + e(j.mode) + '</span><span class="chip">' + CAPI + e(j.exp) + '</span><span class="chip">' + PINI + e(j.loc) + '</span></div>' + (D[j.slug] ? '<p class="blurb">' + e(D[j.slug]) + '</p>' : '') + '<div class="card-foot"><span>View details</span><span>&rarr;</span></div></a><button type="button" class="un" data-un="' + e(j.slug) + '" aria-label="Remove from saved"><svg width="18" height="18" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-6-4-6 4z"/></svg></button></div>'; }).join('');
+        g.innerHTML = list.map(function (j) { return '<div class="sw"><a class="card" href="#job-' + e(j.slug) + '" data-slug="' + e(j.slug) + '"><div class="card-head">' + renderLogo(j) + '<div style="min-width:0"><h3>' + e(j.title) + '</h3><div class="co">' + e(j.company) + '</div></div></div><div class="chips"><span class="chip mode">' + e(j.mode) + '</span><span class="chip">' + CAPI + e(j.exp) + '</span><span class="chip">' + PINI + e(j.loc) + '</span></div>' + (D[j.slug] ? '<p class="blurb">' + e(D[j.slug]) + '</p>' : '') + '<div class="card-foot"><span>View details</span><span>&rarr;</span></div></a><button type="button" class="un" data-un="' + e(j.slug) + '" aria-label="Remove from saved"><svg width="18" height="18" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-6-4-6 4z"/></svg></button></div>'; }).join('');
         var b = document.body; b.classList.toggle('has-saved', list.length > 0); b.classList.toggle('sv-none', list.length === 0);
         var n = document.getElementById('tab-s'), n2 = document.getElementById('sv-n'); if (n) n.textContent = list.length || ''; if (n2) n2.textContent = list.length ? '(' + list.length + ')' : '';
         paintBm();
@@ -1982,7 +2026,7 @@ export function mountOpenRolesEngine(container, options = {}) {
             cardHtml = (
               '<div class="card iv-card completed is-completed" data-mode="' + e(matchingJob.mode || '') + '">' +
                 '<div class="card-head">' +
-                  '<div class="logo" style="background:' + tone + ';color:' + ink + '" aria-hidden="true">' + e(initial) + '</div>' +
+                  renderLogo(matchingJob ? matchingJob : { company: company, tone: tone, ink: ink, initial: initial }) +
                   '<div style="min-width:0;flex:1">' +
                     '<h3>' + e(title) + '</h3>' +
                     '<div class="co">' + e(company) + '</div>' +
@@ -2008,7 +2052,7 @@ export function mountOpenRolesEngine(container, options = {}) {
             cardHtml = (
               '<div class="card iv-card scheduled ai-ready" data-mode="' + e(matchingJob.mode || '') + '">' +
                 '<div class="card-head">' +
-                  '<div class="logo" style="background:' + tone + ';color:' + ink + '" aria-hidden="true">' + e(initial) + '</div>' +
+                  renderLogo(matchingJob ? matchingJob : { company: company, tone: tone, ink: ink, initial: initial }) +
                   '<div style="min-width:0;flex:1">' +
                     '<h3>' + e(title) + '</h3>' +
                     '<div class="co">' + e(company) + '</div>' +
@@ -2061,7 +2105,7 @@ export function mountOpenRolesEngine(container, options = {}) {
             cardHtml = (
               '<div class="card iv-card completed is-completed" data-mode="' + e(j.mode || '') + '">' +
                 '<div class="card-head">' +
-                  '<div class="logo" style="background:' + j.tone + ';color:' + j.ink + '" aria-hidden="true">' + e(j.initial) + '</div>' +
+                  renderLogo(j) +
                   '<div style="min-width:0;flex:1">' +
                     '<h3>' + e(j.title) + '</h3>' +
                     '<div class="co">' + e(j.company) + '</div>' +
@@ -2087,7 +2131,7 @@ export function mountOpenRolesEngine(container, options = {}) {
             cardHtml = (
               '<div class="card iv-card applied ai-ready" data-mode="' + e(j.mode || '') + '">' +
                 '<div class="card-head">' +
-                  '<div class="logo" style="background:' + j.tone + ';color:' + j.ink + '" aria-hidden="true">' + e(j.initial) + '</div>' +
+                  renderLogo(j) +
                   '<div style="min-width:0;flex:1">' +
                     '<h3>' + e(j.title) + '</h3>' +
                     '<div class="co">' + e(j.company) + '</div>' +
@@ -2291,7 +2335,7 @@ export function mountOpenRolesEngine(container, options = {}) {
         if (dbodyEl) {
           dbodyEl.innerHTML =
             '<div class="dhero" style="background:' + j.tone + ';color:' + j.ink + '"><span class="big" aria-hidden="true">' + esc(j.initial) + '</span><div class="hc">' + esc(j.company) + '</div><h2>' + esc(j.title) + '</h2>' + match + '</div>'
-            + '<div class="dh"><div class="logo" style="background:' + j.tone + ';color:' + j.ink + '" aria-hidden="true">' + esc(j.initial) + '</div><div><div class="dco">' + esc(j.company) + '</div>' + match + '</div></div>'
+            + '<div class="dh">' + renderLogo(j) + '<div><div class="dco">' + esc(j.company) + '</div>' + match + '</div></div>'
             + '<h2 class="dtd" id="dm-t">' + esc(j.title) + '</h2>'
             + '<div class="chips"><span class="chip mode">' + esc(j.mode) + '</span><span class="chip">' + CAP + esc(j.exp) + '</span><span class="chip">' + PIN + esc(j.loc) + '</span></div>'
             + (rs.length ? '<section><h3 class="sh">Why it matches</h3><ul class="whyl">' + rs.map(function (r) { return '<li>' + esc(r) + '</li>'; }).join('') + '</ul></section>' : '')
