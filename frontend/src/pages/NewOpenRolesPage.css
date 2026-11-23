@@ -5071,3 +5071,19 @@ body.on-profile #profile-page {
   align-items: center;
   justify-content: center;
 }
+
+
+/* Mobile deck footer & control visibility guarantees */
+.mob-foot {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .mob-foot,
+  .mob-foot.mob-only {
+    display: flex !important;
+  }
+  .sc .acts {
+    display: none !important;
+  }
+}
