@@ -124,14 +124,37 @@ export default function NewOpenRolesPage({ enabled = true }) {
         window.TJ.setAuth(stored);
       }
       updateHeaderAuthDOM(candidate);
-      if (pendingApplyRef.current && handleStartAiInterviewRef.current) {
+      if (pendingApplyRef.current) {
         const pending = pendingApplyRef.current;
         pendingApplyRef.current = null;
-        setTimeout(() => {
-          if (handleStartAiInterviewRef.current) {
-            handleStartAiInterviewRef.current(pending);
+        if (window.TJ && window.TJ.addApply && pending.slug) {
+          window.TJ.addApply(pending.slug);
+        }
+        const cEmail = candidate.candidate_email || candidate.email || '';
+        const cName = candidate.candidate_name || candidate.name || 'Candidate';
+        if (cEmail && pending.slug) {
+          fetch('/api/interviews/candidate/attend-ai', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: cEmail, name: cName, slug: pending.slug, title: pending.title, company: pending.company }),
+          }).catch(() => {});
+        }
+        const applyBtns = document.querySelectorAll('[data-apply]');
+        applyBtns.forEach((btn) => {
+          btn.setAttribute('data-applied', 'true');
+          btn.classList.add('applied-attend-btn');
+          if (btn.classList.contains('block')) {
+            btn.innerHTML = '<span class="iv-ai-play"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="display:inline-block;vertical-align:-2px;margin-right:6px;"><polygon points="5 3 19 12 5 21 5 3"/></svg></span> Attend AI Interview &rarr;';
+          } else {
+            btn.innerHTML = '<span class="iv-ai-play"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="display:inline-block;vertical-align:-2px;margin-right:6px;"><polygon points="5 3 19 12 5 21 5 3"/></svg></span> Attend AI Interview';
           }
-        }, 120);
+        });
+        const toastEl = document.getElementById('dtoast');
+        if (toastEl) {
+          toastEl.textContent = 'Applied successfully! Please attend your AI Interview for validation to fast-track your profile.';
+          toastEl.classList.add('on');
+          setTimeout(() => toastEl.classList.remove('on'), 4000);
+        }
       }
     } catch (e) {}
   }, [syncCandidateProfileToLocal, updateHeaderAuthDOM]);
