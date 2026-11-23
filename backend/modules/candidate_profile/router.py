@@ -64,12 +64,14 @@ class ProfileUpdateRequest(BaseModel):
     summary: str | None = None
     onboarding_completed: bool | None = None
     picture: str | None = None
-    preferred_mode: str | None = None
-    experience_level: str | None = None
+    avatar_url: str | None = None
     city: str | None = None
-    experience: list[dict[str, Any]] | None = None
-    education: list[dict[str, Any]] | None = None
-    projects: list[dict[str, Any]] | None = None
+    mode: str | None = None
+    experience_level: str | None = None
+    experience: list[dict] | None = None
+    education: list[dict] | None = None
+    projects: list[dict] | None = None
+    certifications: list[str] | None = None
 
 
 # -----------------------------------------------------------------------------
@@ -1383,6 +1385,11 @@ async def update_my_candidate_profile(
         updates["skills"] = body.skills
     if body.summary is not None:
         updates["summary"] = body.summary.strip()
+    if body.picture is not None:
+        updates["picture"] = body.picture
+    if body.avatar_url is not None:
+        updates["avatar_url"] = body.avatar_url
+        updates["picture"] = body.avatar_url
     if body.onboarding_completed is not None:
         updates["onboarding_completed"] = bool(body.onboarding_completed)
         if body.onboarding_completed:
@@ -1395,23 +1402,24 @@ async def update_my_candidate_profile(
         details["github_url"] = body.github_url.strip()
     if body.skills is not None:
         details["skills"] = body.skills
-    if body.preferred_mode is not None:
-        details["preferred_mode"] = body.preferred_mode.strip()
-    if body.experience_level is not None:
-        details["experience_level"] = body.experience_level.strip()
     if body.city is not None:
+        updates["city"] = body.city.strip()
         details["city"] = body.city.strip()
+    if body.mode is not None:
+        updates["mode"] = body.mode.strip()
+        details["mode"] = body.mode.strip()
+        details["preferred_mode"] = body.mode.strip()
+    if body.experience_level is not None:
+        updates["experience_level"] = body.experience_level.strip()
+        details["experience_level"] = body.experience_level.strip()
     if body.experience is not None:
         details["experience"] = body.experience
     if body.education is not None:
         details["education"] = body.education
     if body.projects is not None:
         details["projects"] = body.projects
-    if body.summary is not None:
-        details["summary"] = body.summary.strip()
-    if body.picture is not None:
-        updates["picture"] = body.picture
-
+    if body.certifications is not None:
+        details["certifications"] = body.certifications
     updates["details"] = details
 
     db["candidates"].update_one({"candidate_email": email}, {"$set": updates})
@@ -1421,6 +1429,91 @@ async def update_my_candidate_profile(
         "status": "success",
         "candidate": sanitize_candidate_doc(updated_doc),
         "message": "Candidate profile updated successfully.",
+    }
+
+
+@router.post("/upload-resume")
+async def upload_candidate_resume(
+    resume: UploadFile = File(...),
+    candidate: dict = Depends(get_current_candidate),
+) -> dict:
+    """Upload and parse a new resume for the candidate profile."""
+    if not resume or not resume.filename:
+        raise HTTPException(status_code=400, detail="A resume file is required.")
+
+    content = await resume.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+    filename = resume.filename
+    file_type = "docx" if filename.lower().endswith(".docx") else "pdf"
+    pdf_base64 = base64.b64encode(content).decode("utf-8")
+
+    with tempfile.NamedTemporaryFile(suffix=f".{file_type}", delete=False) as tmp:
+        tmp.write(content)
+        tmp_path = tmp.name
+
+    extracted_text = ""
+    profile_extracted = {}
+    try:
+        from modules.resume_screener.pipeline.extractor import extract_text as _extract_text_new
+        extracted_text = _extract_text_new(tmp_path, file_type)
+    except Exception as ex:
+        print(f"[CANDIDATE UPLOAD RESUME EXTRACT ERR] {ex}")
+    finally:
+        try:
+            os.remove(tmp_path)
+        except Exception:
+            pass
+
+    if extracted_text:
+        try:
+            from modules.candidate.extractor import extract_candidate_profile
+            profile_extracted = await extract_candidate_profile(extracted_text, filename)
+        except Exception as ex:
+            print(f"[CANDIDATE UPLOAD PROFILE EXTRACT ERR] {ex}")
+
+    now_utc = datetime.now(timezone.utc)
+    email = candidate.get("candidate_email", "").lower()
+    details = candidate.get("details", {}) or {}
+
+    if profile_extracted.get("skills"):
+        details["skills"] = profile_extracted["skills"]
+    if profile_extracted.get("experience"):
+        details["experience"] = profile_extracted["experience"]
+    if profile_extracted.get("education"):
+        details["education"] = profile_extracted["education"]
+    if profile_extracted.get("projects"):
+        details["projects"] = profile_extracted["projects"]
+    if profile_extracted.get("linkedin_url"):
+        details["linkedin_url"] = profile_extracted["linkedin_url"]
+    if profile_extracted.get("github_url"):
+        details["github_url"] = profile_extracted["github_url"]
+
+    updates = {
+        "filename": filename,
+        "resume_pdf": pdf_base64,
+        "extracted_text": extracted_text,
+        "has_resume": True,
+        "details": details,
+        "updated_at": now_utc,
+    }
+    if profile_extracted.get("candidate_title") and not candidate.get("candidate_title"):
+        updates["candidate_title"] = profile_extracted["candidate_title"]
+    if profile_extracted.get("summary") and not candidate.get("summary"):
+        updates["summary"] = profile_extracted["summary"]
+    if profile_extracted.get("skills") and not candidate.get("skills"):
+        updates["skills"] = profile_extracted["skills"]
+
+    db["candidates"].update_one({"candidate_email": email}, {"$set": updates})
+    updated_doc = db["candidates"].find_one({"candidate_email": email})
+
+    return {
+        "status": "success",
+        "candidate": sanitize_candidate_doc(updated_doc),
+        "has_resume": True,
+        "resume_filename": filename,
+        "message": "Resume uploaded and profile updated successfully.",
     }
 
 

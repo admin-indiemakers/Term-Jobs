@@ -1,80 +1,5 @@
 // TermJobs New Open Roles Interactive Engine
 // Bundled from TermJobs openroles page.html
-import { marked } from 'marked';
-
-function formatRoleDescription(raw) {
-  if (!raw || typeof raw !== 'string') return '';
-  var text = raw.trim();
-
-  // Strip leading redundant metadata headers
-  var firstH = text.search(/#{1,4}\s+/);
-  if (firstH > 0 && (text.indexOf('**Job Title') > -1 || text.indexOf('**Company') > -1 || text.indexOf('**Location') > -1)) {
-    text = text.substring(firstH);
-  } else {
-    text = text.replace(/^\s*(?:\*\*(?:Job Title|Company|Location|Work Mode|Work Arrangement|Employment Type|Experience|Experience Level)[^\n*]*\*\*[:\s]*[^\n*#]+(?:\n|\s|\*)*)+/gi, '');
-  }
-
-  var knownHeaders = [
-    'Role Overview',
-    'About the Role',
-    'Overview',
-    'Company Overview',
-    'About the Company',
-    'About Us',
-    'Key Responsibilities',
-    'Responsibilities',
-    "What You'll Do",
-    "What you will do",
-    'Required Skills & Qualifications',
-    'Required Skills and Qualifications',
-    'Required Skills',
-    'Skills & Qualifications',
-    'Qualifications',
-    'Requirements',
-    'Must-Have Skills',
-    'Educational Qualifications',
-    'Education',
-    'Preferred Qualifications',
-    'Nice to Have',
-    'Nice-to-Have Skills',
-    'Employment Details',
-    'Job Details',
-    'Benefits & Perks',
-    'Benefits',
-    'Compensation'
-  ];
-
-  knownHeaders.sort(function (a, b) { return b.length - a.length; });
-
-  // Ensure headings have clean newlines before them
-  text = text.replace(/([^\n#])\s*(#{1,4}\s+)/g, '$1\n\n$2');
-
-  // Ensure known section headers followed by body text break into paragraphs
-  knownHeaders.forEach(function (h) {
-    var escaped = h.replace(/[-[\]{}()*+?.,\\^$|#]/g, '\\$&');
-    var regex = new RegExp('(#{1,4}\\s*' + escaped + ')(?:\\s+|\\s*:\\s*)(?=[A-Z0-9\\-])', 'gi');
-    text = text.replace(regex, '$1\n\n');
-  });
-
-  // Ensure bullets are properly separated onto newlines
-  text = text.replace(/([^\n])\s*([•\-\*]\s+)/g, '$1\n$2');
-  text = text.replace(/^[•]\s+/gm, '- ');
-
-  try {
-    return marked.parse(text, { breaks: true, gfm: true });
-  } catch (e) {
-    return text.replace(/\n/g, '<br/>');
-  }
-}
-
-function getCleanBlurb(text) {
-  if (!text || typeof text !== 'string') return '';
-  var clean = text.replace(/^\s*(?:\*\*(?:Job Title|Company|Location|Work Mode|Work Arrangement|Employment Type|Experience)[^\n*]*\*\*[:\s]*[^\n*#]+(?:\n|\s|\*)*)+/gi, '');
-  clean = clean.replace(/#{1,4}\s+[^\n]+/g, '');
-  clean = clean.replace(/[*_#`~[\]]/g, '');
-  clean = clean.replace(/\s+/g, ' ').trim();
-  return clean;
-}
 
 export function mountOpenRolesEngine(container, options = {}) {
   if (!container) return () => { };
@@ -98,180 +23,229 @@ export function mountOpenRolesEngine(container, options = {}) {
     cleanups.push(() => document.removeEventListener(type, listener, opt));
   }
 
-  function getCandAuth() {
-    var user = (options.getCandidateUser ? options.getCandidateUser() : options.candidateUser) ||
-               (window.TJ && window.TJ.profile ? window.TJ.profile() : null);
-    if (user && (user.candidate_email || user.email || user.candidate_name || user.name)) return user;
-    try {
-      var su = JSON.parse(sessionStorage.getItem('termjobs_candidate_session') || '{}');
-      if (su && (su.candidate_email || su.email || su.candidate_name || su.name)) return su;
-    } catch (_) {}
-    try {
-      var lu = JSON.parse(localStorage.getItem('candidate_profile_user') || '{}');
-      if (lu && (lu.candidate_email || lu.email || lu.candidate_name || lu.name)) return lu;
-    } catch (_) {}
-    try {
-      var pu = JSON.parse(localStorage.getItem('tj-profile') || '{}');
-      if (pu && (pu.email || pu.name)) return pu;
-    } catch (_) {}
-    if (localStorage.getItem('candidate_email') || localStorage.getItem('candidate_profile_token')) {
-      return { email: localStorage.getItem('candidate_email') || 'candidate@termjobs.in', name: 'Candidate' };
-    }
-    return null;
+  function updateAllAvatars(photoUrl, name) {
+    var initial = ((name || 'Candidate').charAt(0) || 'C').toUpperCase();
+    var els = document.querySelectorAll('#me-av, #drawer-av, #d-me-av, .av:not(.profile-avatar-initial)');
+    [].slice.call(els).forEach(function (el) {
+      if (photoUrl) {
+        var safeUrl = String(photoUrl).replace(/[&<>"']/g, function (c) {
+          return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+        el.innerHTML = '<img src="' + safeUrl + '" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;" />';
+      } else {
+        el.textContent = initial;
+      }
+    });
   }
 
   // 1. Script 3: Job data & detailed route
   (function () {
     var JOBS = [
-  {
-    "slug": "software-engineer-inntot-technologies-pv-e5e8b62a",
-    "id": "e5e8b62a-e5a6-5e98-a808-0c86e8cb210d",
-    "title": "Software Engineer",
-    "company": "Inntot Technologies Pvt. Ltd.",
-    "mode": "On-site",
-    "exp": "Entry-Level (0–2 years)",
-    "loc": "Kochi, Kerala, India",
-    "skills": [
-      "C",
-      "C++"
-    ],
-    "more": 10,
-    "tone": "#059669",
-    "ink": "#fff",
-    "initial": "I"
-  },
-  {
-    "slug": "odoo-developer-nurture-spark-digital-951f75b9",
-    "id": "951f75b9-7dfc-5770-9c15-1822f79ded29",
-    "title": "Odoo Developer",
-    "company": "Nurture Spark Digital",
-    "mode": "On-site",
-    "exp": "FRESHER",
-    "loc": "Payyannur, Kerala, India",
-    "skills": [
-      "Python",
-      "Odoo ERP"
-    ],
-    "more": 17,
-    "tone": "#2563eb",
-    "ink": "#fff",
-    "initial": "N"
-  },
-  {
-    "slug": "python-developer-vivantify-technology-so-4ea1af55",
-    "id": "4ea1af55-a2df-5ce1-a9ec-306e07349a2b",
-    "title": "Python Developer",
-    "company": "Vivantify Technology Solutions India Pvt. Ltd.",
-    "mode": "On-site",
-    "exp": "Mid-Level (3–5 years)",
-    "loc": "CHENNAI",
-    "skills": [
-      "Python",
-      "SQL"
-    ],
-    "more": 10,
-    "tone": "#7c3aed",
-    "ink": "#fff",
-    "initial": "V"
-  },
-  {
-    "slug": "python-developer-bot-development-vbots-35155b56",
-    "id": "35155b56-7130-5891-b553-040a78a24bb1",
-    "title": "Python Developer – Bot Development",
-    "company": "vBots",
-    "mode": "On-site",
-    "exp": "Mid-Level (2–4 years)",
-    "loc": "Coimbatore, Tamil Nadu",
-    "skills": [
-      "Python",
-      "Selenium"
-    ],
-    "more": 12,
-    "tone": "#d97706",
-    "ink": "#fff",
-    "initial": "V"
-  },
-  {
-    "slug": "flutter-developer-intern-hancod-98802267",
-    "id": "98802267-2805-56be-b910-b38da07f7a18",
-    "title": "Flutter Developer Intern",
-    "company": "Hancod",
-    "mode": "On-site",
-    "exp": "Fresher (Basic Flutter knowledge)",
-    "loc": "Perintalmanna, Kerala",
-    "skills": [
-      "Flutter",
-      "Dart"
-    ],
-    "more": 10,
-    "tone": "#0891b2",
-    "ink": "#fff",
-    "initial": "H"
-  },
-  {
-    "slug": "devops-engineer-acura-solutions-ltd-bb711af2",
-    "id": "bb711af2-b94c-5d00-87ce-050b785961ef",
-    "title": "DevOps Engineer",
-    "company": "ACURA SOLUTIONS LTD",
-    "mode": "On-site",
-    "exp": "FRESHER",
-    "loc": "Malappuram, Kerala",
-    "skills": [
-      "Kubernetes",
-      "Docker"
-    ],
-    "more": 8,
-    "tone": "#dc2626",
-    "ink": "#fff",
-    "initial": "A"
-  },
-  {
-    "slug": "software-engineer-mailercloud-87b3c036",
-    "id": "87b3c036-09ca-5b60-afbc-2bf72a661532",
-    "title": "Software Engineer",
-    "company": "mailercloud",
-    "mode": "On-site",
-    "exp": "3 – 6 years",
-    "loc": "KOZHIKODE",
-    "skills": [
-      "Go",
-      "PHP"
-    ],
-    "more": 25,
-    "tone": "#4f46e5",
-    "ink": "#fff",
-    "initial": "M"
-  }
-];
+      {
+        slug: "software-engineer-inntot-technologies-pv-e5e8b62a",
+        title: "Software Engineer",
+        company: "Inntot Technologies Pvt. Ltd.",
+        mode: "On-site",
+        exp: "Entry-Level (0–2 years)",
+        loc: "Kochi, Kerala, India",
+        skills: ["C", "C++", "Data Structures", "Algorithms", "RTOS", "Embedded Systems", "Software Debugging", "Unit Testing", "Problem Solving", "Bug Fixing", "Software Development", "Technical Documentation"],
+        more: 10,
+        tone: "#059669",
+        ink: "#fff",
+        initial: "I"
+      },
+      {
+        slug: "odoo-developer-nurture-spark-digital-951f75b9",
+        title: "Odoo Developer",
+        company: "Nurture Spark Digital",
+        mode: "On-site",
+        exp: "FRESHER",
+        loc: "Payyannur, Kerala, India",
+        skills: ["Python", "Odoo ERP", "Odoo ORM", "Odoo Studio", "Odoo 16", "Odoo 17", "Odoo 18", "PostgreSQL", "XML", "QWeb", "JavaScript", "OWL", "REST API", "XML-RPC", "JSON-RPC", "Git", "Odoo.sh", "Docker", "Linux"],
+        more: 17,
+        tone: "#2563eb",
+        ink: "#fff",
+        initial: "N"
+      },
+      {
+        slug: "python-developer-vivantify-technology-so-4ea1af55",
+        title: "Python Developer",
+        company: "Vivantify Technology Solutions India Pvt. Ltd.",
+        mode: "On-site",
+        exp: "Mid-Level (3–5 years)",
+        loc: "CHENNAI",
+        skills: ["Python", "SQL", "React.js", "Backend Development", "REST API Development", "SQL Query Optimization", "Stored Procedures", "Database Indexing", "Git", "Debugging", "Troubleshooting", "Performance Optimization"],
+        more: 10,
+        tone: "#7c3aed",
+        ink: "#fff",
+        initial: "V"
+      },
+      {
+        slug: "python-developer-bot-development-vbots-35155b56",
+        title: "Python Developer – Bot Development",
+        company: "vBots",
+        mode: "On-site",
+        exp: "Mid-Level (2–4 years)",
+        loc: "Coimbatore, Tamil Nadu",
+        skills: ["Python", "Selenium", "Pandas", "Openpyxl", "Automation Frameworks", "REST API Integration", "OCR", "NLP", "Tesseract", "spaCy", "OpenCV", "Bot Development", "Debugging", "Unit Testing"],
+        more: 12,
+        tone: "#d97706",
+        ink: "#fff",
+        initial: "V"
+      },
+      {
+        slug: "flutter-developer-intern-hancod-98802267",
+        title: "Flutter Developer Intern",
+        company: "Hancod",
+        mode: "On-site",
+        exp: "Fresher (Basic Flutter knowledge)",
+        loc: "Perintalmanna, Kerala",
+        skills: ["Flutter", "Dart", "Riverpod", "State Management", "Clean Architecture", "SQL", "Supabase", "Firebase", "REST API Integration", "Database Management", "MySQL", "FlutterFlow"],
+        more: 10,
+        tone: "#0891b2",
+        ink: "#fff",
+        initial: "H"
+      },
+      {
+        slug: "devops-engineer-acura-solutions-ltd-bb711af2",
+        title: "DevOps Engineer",
+        company: "ACURA SOLUTIONS LTD",
+        mode: "On-site",
+        exp: "FRESHER",
+        loc: "Malappuram, Kerala",
+        skills: ["Kubernetes", "Docker", "CI/CD Pipelines", "Cloud Platforms", "Infrastructure as Code (IaC)", "Container Orchestration", "DevOps Practices", "System Monitoring", "Troubleshooting", "Banking Domain Knowledge"],
+        more: 8,
+        tone: "#dc2626",
+        ink: "#fff",
+        initial: "A"
+      },
+      {
+        slug: "software-engineer-mailercloud-87b3c036",
+        title: "Software Engineer",
+        company: "mailercloud",
+        mode: "On-site",
+        exp: "3 – 6 years",
+        loc: "KOZHIKODE",
+        skills: ["Go", "PHP", "Vue.js", "React.js", "MySQL", "REST APIs", "GraphQL", "Microservices", "Linux", "CI/CD", "Docker", "RabbitMQ", "ClickHouse", "AI Agents"],
+        more: 25,
+        tone: "#4f46e5",
+        ink: "#fff",
+        initial: "M"
+      },
+      { "slug": "business-development-executive", "title": "Business Development Executive", "company": "TermJobs", "mode": "On-site", "exp": "Fresher", "loc": "Kozhikode", "skills": ["Fluent English", "Communication"], "more": 7, "tone": "#e8e8ea", "ink": "#111", "initial": "T" },
+      { "slug": "partner-enterprise", "title": "Partner Enterprise Opening", "company": "Partner Enterprise", "mode": "On-site", "exp": "3+ years", "loc": "India", "skills": [], "more": 0, "tone": "#2a2f3a", "ink": "#fff", "initial": "P" },
+      { "slug": "partner-enterprise-2", "title": "Partner Enterprise Opening", "company": "Partner Enterprise", "mode": "On-site", "exp": "3+ years", "loc": "India", "skills": [], "more": 0, "tone": "#2a2f3a", "ink": "#fff", "initial": "P" },
+      { "slug": "travel-research-associate-intern", "title": "Travel Research Associate Intern", "company": "Little Known Planet", "mode": "Remote", "exp": "Fresher / No experience", "loc": "India", "skills": [], "more": 12, "tone": "#1f6f5a", "ink": "#fff", "initial": "L" },
+      { "slug": "key-account-manager-corporate-accounts", "title": "Key Account Manager – Corporate Accounts", "company": "Sign Mart", "mode": "On-site", "exp": "Mid-level (2–3 years)", "loc": "Kozhikode", "skills": ["Key Account Management"], "more": 13, "tone": "#e8742a", "ink": "#fff", "initial": "S" },
+      { "slug": "marketing-growth-specialist", "title": "Marketing & Growth Specialist", "company": "Little Known Planet", "mode": "Hybrid", "exp": "Mid-level (4+ years)", "loc": "Ernakulam", "skills": ["Digital Marketing"], "more": 14, "tone": "#1f6f5a", "ink": "#fff", "initial": "L" },
+      { "slug": "flutter-developer", "title": "Flutter Developer", "company": "Aethanalytica", "mode": "On-site", "exp": "1+ year", "loc": "Calicut, Kerala", "skills": ["Flutter", "Dart"], "more": 20, "tone": "#3b4cca", "ink": "#fff", "initial": "A" },
+      { "slug": "ui-developer", "title": "UI Developer", "company": "Zensbee Technologies Pvt Ltd", "mode": "Hybrid", "exp": "1+ year", "loc": "Calicut, Kerala", "skills": ["React"], "more": 15, "tone": "#16181d", "ink": "#fff", "initial": "Z" },
+      { "slug": "ui-ux-designer", "title": "UI/UX Designer", "company": "HiveNestHQ", "mode": "On-site", "exp": "1+ year", "loc": "HiLITE Business Park", "skills": ["UI/UX Design", "Figma"], "more": 15, "tone": "#d9531e", "ink": "#fff", "initial": "H" },
+      { "slug": "front-end-developer-senior-junior", "title": "Front End Developer (Senior & Junior)", "company": "Easy Entrance Pvt. Ltd.", "mode": "On-site", "exp": "Junior: 0–2 years", "loc": "Calicut, Kerala, India", "skills": ["HTML5", "CSS3"], "more": 14, "tone": "#7a3fb0", "ink": "#fff", "initial": "E" },
+      { "slug": "full-stack-developer-ai-first-development", "title": "Full Stack Developer – AI-First Development", "company": "NIFAMA Technologies Private Limited", "mode": "On-site", "exp": "Fresher (0–1 year)", "loc": "Calicut, Kerala", "skills": ["Java"], "more": 21, "tone": "#0f7c9a", "ink": "#fff", "initial": "N" },
+      { "slug": "human-resource-executive", "title": "Human Resource Executive", "company": "Smart Moves", "mode": "On-site", "exp": "Entry to Mid-level", "loc": "Kozhikode", "skills": ["Human Resources"], "more": 20, "tone": "#c0392b", "ink": "#fff", "initial": "S" },
+      { "slug": "python-backend-developer", "title": "Python Backend Developer", "company": "Nimbus Labs", "mode": "Hybrid", "exp": "2+ years", "loc": "Kozhikode", "skills": ["Python", "FastAPI"], "more": 12, "tone": "#2f6fed", "ink": "#fff", "initial": "N" },
+      { "slug": "content-writer", "title": "Content Writer", "company": "Brightline Media", "mode": "Remote", "exp": "Fresher", "loc": "India", "skills": ["Copywriting", "SEO"], "more": 8, "tone": "#b8860b", "ink": "#fff", "initial": "B" },
+      { "slug": "customer-support-associate", "title": "Customer Support Associate", "company": "Kerala Cart", "mode": "On-site", "exp": "Fresher", "loc": "Ernakulam", "skills": ["Communication", "Malayalam"], "more": 6, "tone": "#2e8b57", "ink": "#fff", "initial": "K" },
+      { "slug": "data-analyst", "title": "Data Analyst", "company": "Insightloop", "mode": "Hybrid", "exp": "1+ year", "loc": "Kozhikode", "skills": ["SQL", "Excel"], "more": 10, "tone": "#6d28d9", "ink": "#fff", "initial": "I" },
+      { "slug": "digital-marketing-executive", "title": "Digital Marketing Executive", "company": "Spice Route Digital", "mode": "On-site", "exp": "Mid-level (2–3 years)", "loc": "Ernakulam", "skills": ["SEO", "Google Ads"], "more": 11, "tone": "#c2410c", "ink": "#fff", "initial": "S" },
+      { "slug": "devops-engineer", "title": "DevOps Engineer", "company": "Cloudmango", "mode": "Remote", "exp": "3+ years", "loc": "India", "skills": ["AWS", "Docker"], "more": 16, "tone": "#0e7490", "ink": "#fff", "initial": "C" }
+    ];
+    var APPLY_URL = "";
+    var PIN = "<svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z\"/><circle cx=\"12\" cy=\"9.5\" r=\"2.5\"/></svg>";
+    var CAP = "<svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M2 9l10-5 10 5-10 5z\"/><path d=\"M6 11.5V16c0 1.5 3 3 6 3s6-1.5 6-3v-4.5\"/></svg>";
+    var ARROW = "<svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M5 12h14M13 6l6 6-6 6\"/></svg>";
+    var BACK = "<svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M19 12H5M11 6l-6 6 6 6\"/></svg>";
+    var LOGO = "<img src=\"/logo.png\" alt=\"TermJobs Logo\" class=\"brand-logo-img\" style=\"width:34px;height:34px;object-fit:contain;border-radius:8px;flex-shrink:0;\" />";
     window.TJ_JOBS = JOBS;
     var TJ_DESC = window.TJ_DESC = {
-  "software-engineer-inntot-technologies-pv-e5e8b62a": "**Job Title: Software Engineer**\n\n**Company:** Inntot Technologies Pvt. Ltd.  \n**Location:** Kochi, Kerala, India  \n**Work Mode:** On-site  \n**Employment Type:** Full-time  \n**Experience:** 0–2 Years\n\n### Role Overview\n\nWe are looking for talented and motivated Software Engineers with strong programming skills in C/C++ to join our development team. Candidates should have a good understanding of Data Structures, Algorithms, and RTOS concepts, along with strong debugging and problem-solving abilities.\n\nFreshers with excellent academic records and very good programming skills in C are also encouraged to apply.\n\n### Key Responsibilities\n\n- Develop and implement software programs based on project requirements.\n- Perform unit testing to ensure software quality and reliability.\n- Debug software applications and identify and fix defects.\n- Prepare technical documentation covering development techniques and software designs.\n- Experiment with new technologies and ideas to improve existing solutions.\n- Contribute to software development and continuous improvement activities.\n\n### Required Skills & Qualifications\n\n- 0–2 years of experience in software development.\n- Excellent programming skills in C and C++.\n- Understanding of Real-Time Operating System (RTOS) concepts.\n- Strong knowledge of Data Structures and Algorithms.\n- Good software debugging and troubleshooting skills.\n- Strong analytical and problem-solving abilities.\n- Ability to learn quickly and adapt to new technologies.\n- Proactive attitude and ability to multitask.\n\n### Educational Qualifications\n\nCandidates with any of the following qualifications are eligible:\n\n- ME / M.Tech\n- BE / B.Tech\n- MCA\n\nFreshers with excellent academic records and strong C programming skills are encouraged to apply.\n\n### Employment Details\n\n- Employment Type: Full-time\n- Work Arrangement: On-site\n- Experience Level: 0–2 Years",
-  "e5e8b62a-e5a6-5e98-a808-0c86e8cb210d": "**Job Title: Software Engineer**\n\n**Company:** Inntot Technologies Pvt. Ltd.  \n**Location:** Kochi, Kerala, India  \n**Work Mode:** On-site  \n**Employment Type:** Full-time  \n**Experience:** 0–2 Years\n\n### Role Overview\n\nWe are looking for talented and motivated Software Engineers with strong programming skills in C/C++ to join our development team. Candidates should have a good understanding of Data Structures, Algorithms, and RTOS concepts, along with strong debugging and problem-solving abilities.\n\nFreshers with excellent academic records and very good programming skills in C are also encouraged to apply.\n\n### Key Responsibilities\n\n- Develop and implement software programs based on project requirements.\n- Perform unit testing to ensure software quality and reliability.\n- Debug software applications and identify and fix defects.\n- Prepare technical documentation covering development techniques and software designs.\n- Experiment with new technologies and ideas to improve existing solutions.\n- Contribute to software development and continuous improvement activities.\n\n### Required Skills & Qualifications\n\n- 0–2 years of experience in software development.\n- Excellent programming skills in C and C++.\n- Understanding of Real-Time Operating System (RTOS) concepts.\n- Strong knowledge of Data Structures and Algorithms.\n- Good software debugging and troubleshooting skills.\n- Strong analytical and problem-solving abilities.\n- Ability to learn quickly and adapt to new technologies.\n- Proactive attitude and ability to multitask.\n\n### Educational Qualifications\n\nCandidates with any of the following qualifications are eligible:\n\n- ME / M.Tech\n- BE / B.Tech\n- MCA\n\nFreshers with excellent academic records and strong C programming skills are encouraged to apply.\n\n### Employment Details\n\n- Employment Type: Full-time\n- Work Arrangement: On-site\n- Experience Level: 0–2 Years",
-  "odoo-developer-nurture-spark-digital-951f75b9": "**Job Title: Odoo Developer**\n\n**Company:** Nurture Spark Digital  \n**Location:** Payyannur, Kerala, India  \n**Work Mode:** On-site  \n**Employment Type:** Full-time\n\n### Role Overview\n\nWe are looking for a skilled and motivated Odoo Developer to join our team. The ideal candidate should have hands-on experience in Odoo development, customization, module implementation, and integration. You will be responsible for developing, customizing, maintaining, and supporting Odoo ERP solutions based on business requirements.\n\n### Key Responsibilities\n\n- Design, develop, and customize Odoo modules (Community and Enterprise editions) based on client requirements.\n- Extend models, views, wizards, and QWeb reports.\n- Configure applications using Odoo Studio, including custom fields, views, automated actions, and reports.\n- Convert Studio customizations into maintainable custom modules where required.\n- Develop frontend components using OWL and JavaScript.\n- Build and maintain third-party integrations using REST APIs, XML-RPC, and JSON-RPC.\n- Handle data migration, version upgrades, and deployments on Odoo.sh and on-premise environments.\n- Troubleshoot issues, optimize performance, and provide technical support for live implementations.\n- Collaborate with functional consultants to translate business requirements into technical solutions.\n\n### Required Skills & Qualifications\n\n- Bachelor's degree in Computer Science, Information Technology, or a related field.\n- Strong proficiency in Python and the Odoo ORM framework.\n- Hands-on experience with Odoo versions 16, 17, and 18.\n- Practical experience with Odoo Studio and custom module development.\n- Knowledge of PostgreSQL, XML, QWeb, and JavaScript (OWL).\n- Working knowledge of Git and Odoo.sh.\n- Understanding of core business modules, including Accounting, Sales, Purchase, Inventory, CRM, and HR/Payroll.\n- Strong analytical, problem-solving, and communication skills.\n\n### Preferred Qualifications\n\n- Experience with UAE/GCC localization, including VAT and WPS payroll.\n- Familiarity with Linux server administration and Docker.\n- Odoo certification.\n\n### Benefits\n\n- Opportunity to work on implementation projects for clients across the UAE and GCC.\n- Exposure to industries including trading, contracting, fleet, and manufacturing.\n- Collaborative work environment with opportunities for professional growth.\n- Competitive compensation package.",
-  "951f75b9-7dfc-5770-9c15-1822f79ded29": "**Job Title: Odoo Developer**\n\n**Company:** Nurture Spark Digital  \n**Location:** Payyannur, Kerala, India  \n**Work Mode:** On-site  \n**Employment Type:** Full-time\n\n### Role Overview\n\nWe are looking for a skilled and motivated Odoo Developer to join our team. The ideal candidate should have hands-on experience in Odoo development, customization, module implementation, and integration. You will be responsible for developing, customizing, maintaining, and supporting Odoo ERP solutions based on business requirements.\n\n### Key Responsibilities\n\n- Design, develop, and customize Odoo modules (Community and Enterprise editions) based on client requirements.\n- Extend models, views, wizards, and QWeb reports.\n- Configure applications using Odoo Studio, including custom fields, views, automated actions, and reports.\n- Convert Studio customizations into maintainable custom modules where required.\n- Develop frontend components using OWL and JavaScript.\n- Build and maintain third-party integrations using REST APIs, XML-RPC, and JSON-RPC.\n- Handle data migration, version upgrades, and deployments on Odoo.sh and on-premise environments.\n- Troubleshoot issues, optimize performance, and provide technical support for live implementations.\n- Collaborate with functional consultants to translate business requirements into technical solutions.\n\n### Required Skills & Qualifications\n\n- Bachelor's degree in Computer Science, Information Technology, or a related field.\n- Strong proficiency in Python and the Odoo ORM framework.\n- Hands-on experience with Odoo versions 16, 17, and 18.\n- Practical experience with Odoo Studio and custom module development.\n- Knowledge of PostgreSQL, XML, QWeb, and JavaScript (OWL).\n- Working knowledge of Git and Odoo.sh.\n- Understanding of core business modules, including Accounting, Sales, Purchase, Inventory, CRM, and HR/Payroll.\n- Strong analytical, problem-solving, and communication skills.\n\n### Preferred Qualifications\n\n- Experience with UAE/GCC localization, including VAT and WPS payroll.\n- Familiarity with Linux server administration and Docker.\n- Odoo certification.\n\n### Benefits\n\n- Opportunity to work on implementation projects for clients across the UAE and GCC.\n- Exposure to industries including trading, contracting, fleet, and manufacturing.\n- Collaborative work environment with opportunities for professional growth.\n- Competitive compensation package.",
-  "python-developer-vivantify-technology-so-4ea1af55": "**Job Title: Python Developer**\n\n**Company:** Vivantify Technology Solutions India Pvt. Ltd.  \n**Location:** PAN India  \n**Experience:** 3–5 Years  \n**Employment Type:** Full-time / Contractor\n\n**Role Overview**\n\nWe are looking for an experienced Python Developer to enhance and optimize enterprise applications. The role focuses on Python development, SQL optimization, backend services, API development, debugging, and application performance. The ideal candidate will work with existing codebases to implement enhancements and deliver scalable, maintainable, and high-performance solutions.\n\n**Key Responsibilities**\n\n- Develop and implement application features based on business and technical requirements.\n- Enhance existing codebases to improve scalability, maintainability, and code quality.\n- Optimize application, backend, and database performance.\n- Develop and maintain backend services, APIs, and database integrations.\n- Write and optimize SQL queries, stored procedures, joins, and indexing.\n- Troubleshoot defects and perform root cause analysis.\n- Participate in code reviews and maintain engineering standards.\n- Contribute to technical documentation, knowledge sharing, and process improvements.\n\n**Required Skills & Qualifications**\n\n- Strong hands-on experience in Python development.\n- Strong proficiency in SQL, including query optimization, joins, stored procedures, indexing, and performance tuning.\n- Experience developing and maintaining APIs and backend systems.\n- Strong debugging, troubleshooting, and root cause analysis skills.\n- Experience working with existing applications and implementing enhancements.\n- Knowledge of Git and version control systems.\n- Strong analytical and problem-solving abilities.\n\n**Preferred Skills**\n\n- Exposure to React.js.\n- Knowledge of Power BI.\n- Understanding of Large Language Models (LLMs) and AI integrations.\n\n**Mandatory Skills**\n\n- Python\n- React.js\n\n**What We Offer**\n\n- Competitive salary and benefits package.\n- Opportunities for professional growth and development.\n- Collaborative and inclusive work environment.\n- Opportunities to work on challenging projects with leading clients.",
-  "4ea1af55-a2df-5ce1-a9ec-306e07349a2b": "**Job Title: Python Developer**\n\n**Company:** Vivantify Technology Solutions India Pvt. Ltd.  \n**Location:** PAN India  \n**Experience:** 3–5 Years  \n**Employment Type:** Full-time / Contractor\n\n**Role Overview**\n\nWe are looking for an experienced Python Developer to enhance and optimize enterprise applications. The role focuses on Python development, SQL optimization, backend services, API development, debugging, and application performance. The ideal candidate will work with existing codebases to implement enhancements and deliver scalable, maintainable, and high-performance solutions.\n\n**Key Responsibilities**\n\n- Develop and implement application features based on business and technical requirements.\n- Enhance existing codebases to improve scalability, maintainability, and code quality.\n- Optimize application, backend, and database performance.\n- Develop and maintain backend services, APIs, and database integrations.\n- Write and optimize SQL queries, stored procedures, joins, and indexing.\n- Troubleshoot defects and perform root cause analysis.\n- Participate in code reviews and maintain engineering standards.\n- Contribute to technical documentation, knowledge sharing, and process improvements.\n\n**Required Skills & Qualifications**\n\n- Strong hands-on experience in Python development.\n- Strong proficiency in SQL, including query optimization, joins, stored procedures, indexing, and performance tuning.\n- Experience developing and maintaining APIs and backend systems.\n- Strong debugging, troubleshooting, and root cause analysis skills.\n- Experience working with existing applications and implementing enhancements.\n- Knowledge of Git and version control systems.\n- Strong analytical and problem-solving abilities.\n\n**Preferred Skills**\n\n- Exposure to React.js.\n- Knowledge of Power BI.\n- Understanding of Large Language Models (LLMs) and AI integrations.\n\n**Mandatory Skills**\n\n- Python\n- React.js\n\n**What We Offer**\n\n- Competitive salary and benefits package.\n- Opportunities for professional growth and development.\n- Collaborative and inclusive work environment.\n- Opportunities to work on challenging projects with leading clients.",
-  "python-developer-bot-development-vbots-35155b56": "**Job Title: Python Developer – Bot Development**\n\n**Company:** vBots  \n**Location:** Coimbatore, Tamil Nadu, India  \n**Work Mode:** On-site  \n**Employment Type:** Full-time  \n**Experience:** 2–4 Years\n\n**Role Overview**\n\nWe are looking for a skilled Python Developer to design, develop, and deploy intelligent bots that automate business processes and improve operational efficiency. The ideal candidate will have experience with Python development, automation frameworks, APIs, and AI/ML libraries to build scalable solutions that integrate with enterprise applications.\n\n**Key Responsibilities**\n\n- Design, develop, and maintain bots using Python and automation frameworks.\n- Write clean, efficient, reusable code for automation requirements.\n- Integrate bots with third-party applications.\n- Collaborate with project coordinators and business analysts to understand business requirements.\n- Develop custom automation logic, including OCR, NLP, and AI-based components.\n- Conduct unit testing and support QA/UAT teams during validation.\n- Monitor and troubleshoot production bots, implementing timely fixes and enhancements.\n- Maintain technical documentation, coding standards, and development best practices.\n\n**Required Skills & Qualifications**\n\n- BE (CSE) or B.Tech (IT, CSE, AIML, CSBS, AI & DS).\n- 2–4 years of experience in Python development.\n- Familiarity with automation libraries such as Selenium, Pandas, and OpenPyXL.\n- Knowledge of OCR/NLP libraries such as Tesseract, spaCy, and OpenCV is an advantage.\n- Strong debugging, problem-solving, and analytical skills.\n\n**Good to Have**\n\n- Exposure to RPA platforms such as UiPath, Automation Anywhere, or Microsoft Power Automate.\n\n**Employment Type:** Full-time  \n**Work Arrangement:** On-site",
-  "35155b56-7130-5891-b553-040a78a24bb1": "**Job Title: Python Developer – Bot Development**\n\n**Company:** vBots  \n**Location:** Coimbatore, Tamil Nadu, India  \n**Work Mode:** On-site  \n**Employment Type:** Full-time  \n**Experience:** 2–4 Years\n\n**Role Overview**\n\nWe are looking for a skilled Python Developer to design, develop, and deploy intelligent bots that automate business processes and improve operational efficiency. The ideal candidate will have experience with Python development, automation frameworks, APIs, and AI/ML libraries to build scalable solutions that integrate with enterprise applications.\n\n**Key Responsibilities**\n\n- Design, develop, and maintain bots using Python and automation frameworks.\n- Write clean, efficient, reusable code for automation requirements.\n- Integrate bots with third-party applications.\n- Collaborate with project coordinators and business analysts to understand business requirements.\n- Develop custom automation logic, including OCR, NLP, and AI-based components.\n- Conduct unit testing and support QA/UAT teams during validation.\n- Monitor and troubleshoot production bots, implementing timely fixes and enhancements.\n- Maintain technical documentation, coding standards, and development best practices.\n\n**Required Skills & Qualifications**\n\n- BE (CSE) or B.Tech (IT, CSE, AIML, CSBS, AI & DS).\n- 2–4 years of experience in Python development.\n- Familiarity with automation libraries such as Selenium, Pandas, and OpenPyXL.\n- Knowledge of OCR/NLP libraries such as Tesseract, spaCy, and OpenCV is an advantage.\n- Strong debugging, problem-solving, and analytical skills.\n\n**Good to Have**\n\n- Exposure to RPA platforms such as UiPath, Automation Anywhere, or Microsoft Power Automate.\n\n**Employment Type:** Full-time  \n**Work Arrangement:** On-site",
-  "flutter-developer-intern-hancod-98802267": "**Flutter Developer Intern**\n\n**Company:** Hancod  \n**Product:** Duxbe – AI-powered ERP & POS System  \n**Location:** Perintalmanna, Kerala, India  \n**Work Mode:** On-site  \n**Employment Type:** Internship (Unpaid)\n\n**About Hancod**\n\nAt Hancod, we're building Duxbe, an AI-powered ERP and POS system designed for small businesses across India and beyond. We focus on clean user interfaces, fast development, and building practical features that solve real-world business problems.\n\n**Role Overview**\n\nWe are looking for motivated Flutter Developer Interns, including freshers with a basic understanding of Flutter development, to join our development team. You will contribute to building and maintaining ERP modules for web and mobile platforms.\n\n**Key Responsibilities**\n\n- Build and maintain ERP modules, including inventory, accounting, GST, sales, and reports.\n- Develop responsive Flutter applications for web and mobile.\n- Implement Clean Architecture and Riverpod for state management.\n- Create reusable widgets and efficient offline/local data logic.\n- Integrate Supabase, Firebase, and REST APIs.\n- Work closely with backend, QA, and product teams in development sprints.\n\n**Required Skills & Qualifications**\n\n- Basic knowledge of Flutter and Dart.\n- Understanding of Riverpod and state management.\n- Basic understanding of Clean Architecture.\n- Familiarity with Supabase or similar backend platforms.\n- Knowledge of API integration and database concepts.\n- Interest in ERP and accounting features such as invoicing, ledgers, and taxation.\n- Good problem-solving skills and an interest in writing clean code.\n\n**Good to Have**\n\n- FlutterFlow experience.\n- Supabase SQL and Edge Functions.\n- Published applications on Play Store or App Store.\n\n**Internship Details**\n\n- Internship Type: Unpaid.\n- Work Arrangement: On-site.\n- Experience Level: Freshers welcome.\n- Duration: Not specified in the original posting.",
-  "98802267-2805-56be-b910-b38da07f7a18": "**Flutter Developer Intern**\n\n**Company:** Hancod  \n**Product:** Duxbe – AI-powered ERP & POS System  \n**Location:** Perintalmanna, Kerala, India  \n**Work Mode:** On-site  \n**Employment Type:** Internship (Unpaid)\n\n**About Hancod**\n\nAt Hancod, we're building Duxbe, an AI-powered ERP and POS system designed for small businesses across India and beyond. We focus on clean user interfaces, fast development, and building practical features that solve real-world business problems.\n\n**Role Overview**\n\nWe are looking for motivated Flutter Developer Interns, including freshers with a basic understanding of Flutter development, to join our development team. You will contribute to building and maintaining ERP modules for web and mobile platforms.\n\n**Key Responsibilities**\n\n- Build and maintain ERP modules, including inventory, accounting, GST, sales, and reports.\n- Develop responsive Flutter applications for web and mobile.\n- Implement Clean Architecture and Riverpod for state management.\n- Create reusable widgets and efficient offline/local data logic.\n- Integrate Supabase, Firebase, and REST APIs.\n- Work closely with backend, QA, and product teams in development sprints.\n\n**Required Skills & Qualifications**\n\n- Basic knowledge of Flutter and Dart.\n- Understanding of Riverpod and state management.\n- Basic understanding of Clean Architecture.\n- Familiarity with Supabase or similar backend platforms.\n- Knowledge of API integration and database concepts.\n- Interest in ERP and accounting features such as invoicing, ledgers, and taxation.\n- Good problem-solving skills and an interest in writing clean code.\n\n**Good to Have**\n\n- FlutterFlow experience.\n- Supabase SQL and Edge Functions.\n- Published applications on Play Store or App Store.\n\n**Internship Details**\n\n- Internship Type: Unpaid.\n- Work Arrangement: On-site.\n- Experience Level: Freshers welcome.\n- Duration: Not specified in the original posting.",
-  "devops-engineer-acura-solutions-ltd-bb711af2": "**Job Title: DevOps Engineer**\n\n**Company:** ACURA SOLUTIONS LTD  \n**Location:** Malappuram, Kerala, India  \n**Work Mode:** On-site  \n**Employment Type:** Full-time\n\n**Role Overview**\n\nWe are seeking a skilled DevOps Engineer to join our dynamic team in Kerala. The ideal candidate should have a strong understanding of DevOps practices, particularly within the banking domain, and experience implementing and managing CI/CD pipelines and Kubernetes environments.\n\n**Key Responsibilities**\n\n- Design, implement, and manage CI/CD pipelines to automate software delivery.\n- Deploy and manage containerized applications using Kubernetes.\n- Collaborate with development and operations teams to establish DevOps best practices.\n- Monitor system performance and troubleshoot infrastructure issues.\n- Improve deployment processes, infrastructure reliability, and automation.\n- Stay updated with emerging DevOps technologies and cloud computing trends.\n\n**Required Skills & Qualifications**\n\n- Strong experience with Kubernetes and container orchestration.\n- Proficiency in CI/CD tools and practices.\n- Familiarity with cloud platforms and Infrastructure as Code (IaC).\n- Understanding of banking domain requirements.\n- Excellent problem-solving and troubleshooting abilities.\n- Ability to work effectively in a fast-paced environment.\n\n**Employment Type:** Full-time  \n**Work Arrangement:** On-site",
-  "bb711af2-b94c-5d00-87ce-050b785961ef": "**Job Title: DevOps Engineer**\n\n**Company:** ACURA SOLUTIONS LTD  \n**Location:** Malappuram, Kerala, India  \n**Work Mode:** On-site  \n**Employment Type:** Full-time\n\n**Role Overview**\n\nWe are seeking a skilled DevOps Engineer to join our dynamic team in Kerala. The ideal candidate should have a strong understanding of DevOps practices, particularly within the banking domain, and experience implementing and managing CI/CD pipelines and Kubernetes environments.\n\n**Key Responsibilities**\n\n- Design, implement, and manage CI/CD pipelines to automate software delivery.\n- Deploy and manage containerized applications using Kubernetes.\n- Collaborate with development and operations teams to establish DevOps best practices.\n- Monitor system performance and troubleshoot infrastructure issues.\n- Improve deployment processes, infrastructure reliability, and automation.\n- Stay updated with emerging DevOps technologies and cloud computing trends.\n\n**Required Skills & Qualifications**\n\n- Strong experience with Kubernetes and container orchestration.\n- Proficiency in CI/CD tools and practices.\n- Familiarity with cloud platforms and Infrastructure as Code (IaC).\n- Understanding of banking domain requirements.\n- Excellent problem-solving and troubleshooting abilities.\n- Ability to work effectively in a fast-paced environment.\n\n**Employment Type:** Full-time  \n**Work Arrangement:** On-site",
-  "software-engineer-mailercloud-87b3c036": "**About Mailercloud**\n\nMailercloud is a product-based company offering an email marketing platform used by businesses across 100+ countries, delivering billions of emails annually.\n\nWe are looking for an experienced Full Stack Engineer with 3–6 years of professional experience to join our engineering team at our Kozhikode office.\n\n**Key Responsibilities**\n\n**1. Product Development**\n- Design, develop, and maintain backend APIs and microservices using Go and PHP.\n- Build and maintain frontend applications using Vue.js 2/3 or React.\n- Develop responsive, high-performance interfaces based on Figma designs.\n- Own features throughout the development lifecycle, from requirements and implementation to testing, deployment, and monitoring.\n- Develop integrations with e-commerce, CRM, and third-party platforms using REST APIs, GraphQL, and webhooks.\n\n**2. Infrastructure & DevOps**\n- Work with Linux-based bare-metal server infrastructure, particularly Rocky Linux 9.\n- Manage and improve CI/CD pipelines, automated testing, linting, and deployment processes.\n- Optimize ClickHouse database schemas and queries for large-scale analytics.\n- Support MySQL operations, including schema migrations, indexing, query optimization, and partition management.\n- Assist with RabbitMQ infrastructure and HAProxy configuration.\n\n**3. AI Agents & Developer Tooling**\n- Build and maintain AI-powered agents for QA, code reviews, and SRE operations.\n- Work with MCP-first architecture and Claude through the Anthropic API.\n- Develop and maintain CLAUDE.md configurations, sprint SOPs, and developer tooling.\n- Contribute to the Mailercloud MCP connector and technical documentation.\n\n**4. Code Quality & Collaboration**\n- Participate in code reviews, sprint planning, and retrospectives.\n- Write clean, scalable, maintainable, and well-tested code.\n- Follow established coding standards and branching strategies.\n- Identify technical debt and recommend practical improvements.\n- Collaborate with engineering teams to improve product performance and reliability.\n\n**Required Qualifications & Skills**\n- 3–6 years of professional software development experience, preferably in a product-based company.\n- Strong proficiency in Go (preferred) or PHP.\n- Frontend development experience with Vue.js 2/3 or React.\n- Good understanding of MySQL, database design, indexing, and query optimization.\n- Experience working with Linux environments such as CentOS, RHEL, or Rocky Linux.\n- Familiarity with CI/CD tools such as GitHub Actions or GitLab CI.\n- Strong understanding of data structures, algorithms, and system design.\n- Ability to understand infrastructure-as-code and deployment scripts.\n- Knowledge of REST APIs, GraphQL, microservices, and webhooks.\n- Good written English and technical documentation skills.\n\n**Preferred Skills**\n- Experience with ClickHouse, RabbitMQ, and HAProxy.\n- Knowledge of AI agents, MCP architecture, and Anthropic API.\n- Experience building and maintaining large-scale SaaS products.\n\n**Employment Details**\n- Employment Type: Full-time\n- Work Location: Kozhikode, Kerala\n- Work Mode: On-site\n- Experience: 3–6 years\n\nWe are looking for an engineer who enjoys building production-grade software, solving complex technical challenges, and contributing to scalable product development.",
-  "87b3c036-09ca-5b60-afbc-2bf72a661532": "**About Mailercloud**\n\nMailercloud is a product-based company offering an email marketing platform used by businesses across 100+ countries, delivering billions of emails annually.\n\nWe are looking for an experienced Full Stack Engineer with 3–6 years of professional experience to join our engineering team at our Kozhikode office.\n\n**Key Responsibilities**\n\n**1. Product Development**\n- Design, develop, and maintain backend APIs and microservices using Go and PHP.\n- Build and maintain frontend applications using Vue.js 2/3 or React.\n- Develop responsive, high-performance interfaces based on Figma designs.\n- Own features throughout the development lifecycle, from requirements and implementation to testing, deployment, and monitoring.\n- Develop integrations with e-commerce, CRM, and third-party platforms using REST APIs, GraphQL, and webhooks.\n\n**2. Infrastructure & DevOps**\n- Work with Linux-based bare-metal server infrastructure, particularly Rocky Linux 9.\n- Manage and improve CI/CD pipelines, automated testing, linting, and deployment processes.\n- Optimize ClickHouse database schemas and queries for large-scale analytics.\n- Support MySQL operations, including schema migrations, indexing, query optimization, and partition management.\n- Assist with RabbitMQ infrastructure and HAProxy configuration.\n\n**3. AI Agents & Developer Tooling**\n- Build and maintain AI-powered agents for QA, code reviews, and SRE operations.\n- Work with MCP-first architecture and Claude through the Anthropic API.\n- Develop and maintain CLAUDE.md configurations, sprint SOPs, and developer tooling.\n- Contribute to the Mailercloud MCP connector and technical documentation.\n\n**4. Code Quality & Collaboration**\n- Participate in code reviews, sprint planning, and retrospectives.\n- Write clean, scalable, maintainable, and well-tested code.\n- Follow established coding standards and branching strategies.\n- Identify technical debt and recommend practical improvements.\n- Collaborate with engineering teams to improve product performance and reliability.\n\n**Required Qualifications & Skills**\n- 3–6 years of professional software development experience, preferably in a product-based company.\n- Strong proficiency in Go (preferred) or PHP.\n- Frontend development experience with Vue.js 2/3 or React.\n- Good understanding of MySQL, database design, indexing, and query optimization.\n- Experience working with Linux environments such as CentOS, RHEL, or Rocky Linux.\n- Familiarity with CI/CD tools such as GitHub Actions or GitLab CI.\n- Strong understanding of data structures, algorithms, and system design.\n- Ability to understand infrastructure-as-code and deployment scripts.\n- Knowledge of REST APIs, GraphQL, microservices, and webhooks.\n- Good written English and technical documentation skills.\n\n**Preferred Skills**\n- Experience with ClickHouse, RabbitMQ, and HAProxy.\n- Knowledge of AI agents, MCP architecture, and Anthropic API.\n- Experience building and maintaining large-scale SaaS products.\n\n**Employment Details**\n- Employment Type: Full-time\n- Work Location: Kozhikode, Kerala\n- Work Mode: On-site\n- Experience: 3–6 years\n\nWe are looking for an engineer who enjoys building production-grade software, solving complex technical challenges, and contributing to scalable product development."
-};
+      "software-engineer-inntot-technologies-pv-e5e8b62a": "We are looking for talented and motivated Software Engineers with strong programming skills in C/C++ to join our development team. Candidates should have a good understanding of Data Structures, Algorithms, and RTOS concepts, along with strong debugging and problem-solving abilities.",
+      "odoo-developer-nurture-spark-digital-951f75b9": "We are looking for a skilled and motivated Odoo Developer to join our team. The ideal candidate should have hands-on experience in Odoo development, customization, module implementation, and integration. You will be responsible for developing, customizing, maintaining, and supporting Odoo ERP solutions based on business requirements.",
+      "python-developer-vivantify-technology-so-4ea1af55": "We are looking for an experienced Python Developer to enhance and optimize enterprise applications. The role focuses on Python development, SQL optimization, backend services, API development, debugging, and application performance. The ideal candidate will work with existing codebases to implement enhancements and deliver scalable, maintainable, and high-performance solutions.",
+      "python-developer-bot-development-vbots-35155b56": "We are looking for a skilled Python Developer to design, develop, and deploy intelligent bots that automate business processes and improve operational efficiency. The ideal candidate will have experience with Python development, automation frameworks, APIs, and AI/ML libraries to build scalable solutions that integrate with enterprise applications.",
+      "flutter-developer-intern-hancod-98802267": "We are looking for motivated Flutter Developer Interns, including freshers with a basic understanding of Flutter development, to join our development team. You will contribute to building and maintaining ERP modules for web and mobile platforms.",
+      "devops-engineer-acura-solutions-ltd-bb711af2": "We are seeking a skilled DevOps Engineer to join our dynamic team in Kerala. The ideal candidate should have a strong understanding of DevOps practices, particularly within the banking domain, and experience implementing and managing CI/CD pipelines and Kubernetes environments.",
+      "software-engineer-mailercloud-87b3c036": "We are looking for an experienced Software Engineer with 3 to 6 years of hands-on experience building scalable applications, distributed systems, and modern web architectures. You will work across Go, PHP, Vue.js, React, and MySQL, with exposure to microservices, containerization, and AI-driven automation.",
+      "business-development-executive": "Drive TermJobs' growth by reaching out to staffing firms and employers, explaining the platform and booking demos. You'll own the pipeline from first call to signed client. Great first role for a confident communicator.",
+      "partner-enterprise": "A partner enterprise on TermJobs is hiring experienced professionals for an on-site position. Apply with your resume and the hiring team will match you to the best-fit opening across India.",
+      "partner-enterprise-2": "A partner enterprise on TermJobs is hiring experienced professionals for an on-site position. Apply with your resume and the hiring team will match you to the best-fit opening across India.",
+      "travel-research-associate-intern": "Research destinations, stays and local experiences, and turn them into clear, accurate trip notes for the team. Fully remote and beginner-friendly, so no prior experience is needed. Ideal if you love travel and detail.",
+      "key-account-manager-corporate-accounts": "Manage and grow relationships with corporate clients, from onboarding and order follow-ups to renewals. You'll be the main point of contact for key accounts and keep them happy. Suits someone with 2–3 years in client-facing sales.",
+      "marketing-growth-specialist": "Plan and run growth campaigns across digital channels, track what's working and double down on it. You'll work closely with the team on brand, content and lead generation. Hybrid role for an experienced marketer.",
+      "flutter-developer": "Build and maintain cross-platform mobile apps with Flutter and Dart, from clean UI to API integration. You'll ship features, fix bugs and work with designers and backend developers. On-site in Calicut.",
+      "ui-developer": "Turn designs into fast, responsive interfaces using React. You'll build reusable components and polish details until they match the design. Hybrid role based in Calicut.",
+      "ui-ux-designer": "Design intuitive web and mobile experiences in Figma, from user flows and wireframes to final screens. You'll work with developers to see designs through to launch. On-site at HiLITE Business Park.",
+      "front-end-developer-senior-junior": "Build clean, responsive websites and web apps with HTML5, CSS3 and JavaScript. Openings for both senior and junior developers, so you can join at your level. On-site in Calicut.",
+      "full-stack-developer-ai-first-development": "Build full-stack products using an AI-first workflow, working across Java backends and modern front ends. Freshers are welcome and you'll learn quickly on real projects. On-site in Calicut.",
+      "human-resource-executive": "Handle recruitment, onboarding, attendance and employee queries for a growing team. You'll coordinate interviews and keep HR records in order. Open to entry and mid-level candidates.",
+      "python-backend-developer": "Design and build backend services and APIs with Python and FastAPI, focusing on performance and clean code. You'll work with a small team on a hybrid schedule in Kozhikode.",
+      "content-writer": "Write blogs, web copy and social posts that are clear, engaging and SEO-friendly. You'll research topics and work with the marketing team on deadlines. Remote and open to freshers.",
+      "customer-support-associate": "Help customers by phone, chat and email, resolving orders and delivery questions quickly and politely. Malayalam and English communication is key. Freshers are welcome, with training provided.",
+      "data-analyst": "Turn raw data into clear reports and dashboards using SQL and Excel. You'll find trends, answer business questions and present insights to the team. Hybrid role in Kozhikode.",
+      "digital-marketing-executive": "Run SEO, Google Ads and social campaigns, and report on traffic and leads. You'll test ideas, optimise spend and keep campaigns on target. On-site in Ernakulam for someone with 2–3 years of experience.",
+      "devops-engineer": "Own cloud infrastructure and deployments on AWS, using Docker and CI/CD to keep releases smooth and systems reliable. Fully remote for engineers with 3+ years of experience."
+    };
     var tt;
+
+    function findJob(slug) {
+      if (!slug) return null;
+      var cleanSlug = String(slug).replace(/^#job-/, '').trim();
+      var found = JOBS.filter(function (x) { return x.slug === cleanSlug || x.slug === slug; })[0];
+      if (found) return found;
+
+      // Dynamic fallback: extract metadata from DOM if a card exists
+      var card = (container && container.querySelector('[data-slug="' + cleanSlug + '"], a.card[href*="' + cleanSlug + '"]')) ||
+                 document.querySelector('[data-slug="' + cleanSlug + '"], a.card[href*="' + cleanSlug + '"]');
+      if (card) {
+        var h3 = card.querySelector('h3');
+        var co = card.querySelector('.co, .co2');
+        var logoEl = card.querySelector('.logo, .lt');
+        var blurbEl = card.querySelector('.blurb');
+        var modeChip = card.querySelector('.chips .mode');
+        var allChips = [].slice.call(card.querySelectorAll('.chips .chip, .chips > span'));
+        var title = h3 ? h3.textContent.trim() : 'Open Role';
+        var company = co ? co.textContent.trim() : 'Partner Enterprise';
+        var initial = logoEl ? logoEl.textContent.trim() : (title ? title.charAt(0).toUpperCase() : 'T');
+        var tone = (logoEl && (logoEl.style.backgroundColor || logoEl.style.background)) || '#2563eb';
+        var ink = (logoEl && logoEl.style.color) || '#ffffff';
+        var mode = card.dataset.mode || (modeChip ? modeChip.textContent.trim() : 'On-site');
+        var loc = card.dataset.city || (allChips[2] ? allChips[2].textContent.trim() : 'India');
+        var exp = card.dataset.level || (allChips[1] ? allChips[1].textContent.trim() : 'Experienced');
+        var blurb = blurbEl ? blurbEl.textContent.trim() : '';
+
+        var skills = [];
+        [].slice.call(card.querySelectorAll('.skills .skill, .sk .skill')).forEach(function (sk) {
+          var text = sk.textContent.trim();
+          if (text && !text.startsWith('+')) skills.push(text);
+        });
+
+        var dynamicJob = {
+          slug: cleanSlug,
+          title: title,
+          company: company,
+          mode: mode,
+          exp: exp,
+          loc: loc,
+          skills: skills.length ? skills : ['Technical Skills'],
+          more: Math.max(0, 10 - skills.length),
+          tone: tone,
+          ink: ink,
+          initial: initial
+        };
+        JOBS.push(dynamicJob);
+        if (blurb && !TJ_DESC[cleanSlug]) {
+          TJ_DESC[cleanSlug] = blurb;
+        }
+        window.TJ_JOBS = JOBS;
+        window.TJ_DESC = TJ_DESC;
+        return dynamicJob;
+      }
+      return null;
+    }
     function getList() { return container.querySelector('#list') || document.getElementById('list'); }
     function getDet() { return container.querySelector('#detail') || document.getElementById('detail'); }
     function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
-    function toast(m, dur) {
-      var t = document.getElementById('dtoast');
-      if (!t) return;
-      t.textContent = m;
-      t.classList.add('on');
-      clearTimeout(tt);
-      tt = setTimeout(function () { t.classList.remove('on'); }, dur || 4000);
-    }
+    function toast(m) { var t = document.getElementById('dtoast'); if (!t) return; t.textContent = m; t.classList.add('on'); clearTimeout(tt); tt = setTimeout(function () { t.classList.remove('on'); }, 2400); }
     function fallback() { var i = document.createElement('input'); i.value = location.href; document.body.appendChild(i); i.select(); try { document.execCommand('copy'); toast('Link copied'); } catch (e) { toast('Copy the address from your browser bar'); } i.remove(); }
     function share() { if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(location.href).then(function () { toast('Link copied'); }, fallback); } else fallback(); }
 
@@ -284,134 +258,80 @@ export function mountOpenRolesEngine(container, options = {}) {
       if (!target) return;
       var sk = (Array.isArray(j.skills) ? j.skills : []).map(function (s) { return '<span class="skill">' + esc(s) + '</span>'; }).join('') + (j.more ? '<span class="skill">+' + j.more + ' more skills</span>' : '');
       if (!sk) sk = '<span class="skill">Open to all skills</span>';
-
-      var isApplied = !!(window.TJ && window.TJ.inApply && window.TJ.inApply(j.slug));
-      if (!isApplied) {
-        var appList = [];
-        try { appList = JSON.parse(localStorage.getItem('tj-apply') || '[]'); } catch (_) {}
-        isApplied = appList.indexOf(j.slug) > -1;
-      }
-      var compTitles = [];
-      try { compTitles = JSON.parse(localStorage.getItem('tj_completed_titles') || '[]'); } catch (_) {}
-      var isCompleted = compTitles.indexOf(j.title.toLowerCase()) > -1;
-
-      var applySideBtnHtml = '';
-      var barApplyBtnHtml = '';
-      if (isCompleted) {
-        applySideBtnHtml = '<button class="btn block iv-completed-btn" type="button" disabled style="display:flex;align-items:center;justify-content:center;gap:6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg><span>Interview Completed</span></button>';
-        barApplyBtnHtml = '<button class="btn iv-completed-btn" type="button" disabled style="display:flex;align-items:center;justify-content:center;gap:6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg><span>Interview Completed</span></button>';
-      } else if (isApplied) {
-        applySideBtnHtml = '<button class="btn primary block iv-attend-ai-btn" type="button" data-attend-ai style="display:flex;align-items:center;justify-content:center;gap:6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg><span>Attend AI Interview</span></button>';
-        barApplyBtnHtml = '<button class="btn primary iv-attend-ai-btn" type="button" data-attend-ai style="display:flex;align-items:center;justify-content:center;gap:6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg><span>Attend AI Interview</span></button>';
-      } else {
-        applySideBtnHtml = '<button class="btn primary block" type="button" data-apply>Apply now ' + ARROW + '</button>';
-        barApplyBtnHtml = '<button class="btn primary" type="button" data-apply>Apply now</button>';
-      }
-
+      var tag = APPLY_URL ? 'a' : 'button', ap = APPLY_URL ? 'href="' + esc(APPLY_URL.replace('{slug}', j.slug)) + '" target="_blank" rel="noopener"' : 'type="button" data-apply';
       var logo = '<div class="logo" style="background:' + j.tone + ';color:' + j.ink + '" aria-hidden="true">' + esc(j.initial) + '</div>';
       target.innerHTML = '<header class="top"><a class="brand" href="#" aria-label="All TermJobs roles">' + LOGO + '<div><b>TERMJOBS</b><span>Contract workforce platform</span></div></a><div class="top-actions"><button class="btn" type="button" data-signin>Sign in</button><div class="me" id="d-me" style="display:none"><button type="button" class="av-btn" id="d-av-trigger" aria-label="Open profile menu"><span class="av" id="d-me-av" aria-hidden="true">M</span></button></div></div></header>'
           + '<a class="crumb" href="#" aria-label="Back to all open roles">' + BACK + ' All open roles</a>'
           + '<section class="d-head"><div class="d-top">' + logo + '<div class="co" style="font-size:16px">' + esc(j.company) + '</div></div><h1>' + esc(j.title) + '</h1>'
           + '<div class="chips"><span class="chip mode">' + esc(j.mode) + '</span><span class="chip">' + CAP + esc(j.exp) + '</span><span class="chip">' + PIN + esc(j.loc) + '</span></div></section>'
           + '<div class="d-layout"><div class="stack">'
-          + (TJ_DESC[j.slug] ? '<section class="panel jd-panel"><h2>About the role</h2><div class="jd-body">' + formatRoleDescription(TJ_DESC[j.slug]) + '</div></section>' : '')
+          + (TJ_DESC[j.slug] ? '<section class="panel"><h2>About the role</h2><p style="margin:0;color:var(--muted)">' + esc(TJ_DESC[j.slug]) + '</p></section>' : '')
           + '<section class="panel"><h2>At a glance</h2><dl class="facts"><div><dt>Company</dt><dd>' + esc(j.company) + '</dd></div><div><dt>Work mode</dt><dd>' + esc(j.mode) + '</dd></div><div><dt>Experience</dt><dd>' + esc(j.exp) + '</dd></div><div><dt>Location</dt><dd>' + esc(j.loc) + '</dd></div></dl></section>'
           + '<section class="panel"><h2>Skills</h2><div class="skills">' + sk + '</div></section>'
           + '<section class="panel"><h2>How applying works</h2><p style="margin:0;color:var(--muted)">Apply directly with your resume. Your profile is matched against the skills above and reviewed within 48 hours.</p></section></div>'
-          + '<aside class="panel apply side"><h2>Interested in this role?</h2>' + applySideBtnHtml + '<button class="btn block" type="button" data-share>Copy link to share</button><small><i></i>Reviewed within 48 hours</small></aside></div>'
-          + '<div class="bar"><button class="btn share" type="button" data-share aria-label="Copy link">Share</button>' + barApplyBtnHtml + '</div>';
-
-      [].slice.call(target.querySelectorAll('[data-share]')).forEach(function (b) { b.addEventListener('click', share); });
-
-      function handleStartAi() {
-        if (options.onStartAiInterview) {
-          options.onStartAiInterview({ slug: j.slug, title: j.title, company: j.company });
-        } else {
-          window.location.href = '/interview/candidate';
-        }
-      }
-
-      function updateButtonsToAttendAi() {
-        var applyBtns = target.querySelectorAll('[data-apply]');
-        [].slice.call(applyBtns).forEach(function (btn) {
-          btn.removeAttribute('data-apply');
-          btn.setAttribute('data-attend-ai', 'true');
-          btn.classList.add('iv-attend-mode');
-          btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="margin-right:6px"><polygon points="5 3 19 12 5 21 5 3"/></svg><span>Attend AI Interview</span>';
-        });
-      }
-
-      target.addEventListener('click', function (ev) {
-        var attendBtn = ev.target.closest('[data-attend-ai]');
-        if (attendBtn) {
-          ev.preventDefault();
-          handleStartAi();
-          return;
-        }
-        var applyBtn = ev.target.closest('[data-apply]');
-        if (applyBtn) {
-          ev.preventDefault();
-          var candAuth = getCandAuth();
-          if (candAuth) {
-            if (window.TJ && window.TJ.addApply) {
-              window.TJ.addApply(j.slug);
+          + '<aside class="panel apply side"><h2>Interested in this role?</h2><' + tag + ' class="btn primary block" ' + ap + '>Apply now ' + ARROW + '</' + tag + '><button class="btn block" type="button" data-share>Copy link to share</button><small><i></i>Reviewed within 48 hours</small></aside></div>'
+          + '<div class="bar"><button class="btn share" type="button" data-share aria-label="Copy link">Share</button><' + tag + ' class="btn primary" ' + ap + '>Apply now</' + tag + '></div>';
+        [].slice.call(target.querySelectorAll('[data-share]')).forEach(function (b) { b.addEventListener('click', share); });
+        [].slice.call(target.querySelectorAll('[data-apply]')).forEach(function (b) {
+          b.addEventListener('click', function (ev) {
+            ev.preventDefault();
+            var T = window.TJ || {};
+            if (T.addApply) T.addApply(j.slug);
+            if (options.onStartAiInterview) {
+              options.onStartAiInterview({ slug: j.slug, title: j.title, company: j.company });
+            } else if (options.candidateUser) {
+              toast('Application submitted for ' + j.title + ' at ' + j.company + '!');
             } else {
-              var al = [];
-              try { al = JSON.parse(localStorage.getItem('tj-apply') || '[]'); } catch (_) {}
-              if (al.indexOf(j.slug) < 0) {
-                al.push(j.slug);
-                try { localStorage.setItem('tj-apply', JSON.stringify(al)); } catch (_) {}
-              }
+              if (options.onOpenAuth) options.onOpenAuth();
+              else toast('Please sign in to apply');
             }
-            updateButtonsToAttendAi();
-            toast('Application submitted successfully! Attend your AI Interview for review and validation.', 4500);
-          } else {
-            if (options.onOpenAuth) options.onOpenAuth();
-            else toast('Please sign in to apply');
-          }
-          return;
+          });
+        });
+        var crumbBtn = target.querySelector('.crumb');
+        if (crumbBtn) {
+          crumbBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            closeDetail();
+          });
         }
-      });
+        var brandBtn = target.querySelector('header .brand');
+        if (brandBtn) {
+          brandBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            closeDetail();
+          });
+        }
+        var signinBtn = target.querySelector('[data-signin]');
+        var dMe = target.querySelector('#d-me');
+        var dMeName = target.querySelector('#d-me-name');
+        var dMeAv = target.querySelector('#d-me-av');
+        var dSignout = target.querySelector('#d-signout');
 
-      var crumbBtn = target.querySelector('.crumb');
-      if (crumbBtn) {
-        crumbBtn.addEventListener('click', function (e) {
-          e.preventDefault();
-          closeDetail();
-        });
+        var currentProfile = (options.getCandidateUser ? options.getCandidateUser() : options.candidateUser) || (window.TJ && window.TJ.profile ? window.TJ.profile() : null);
+        var isAuth = Boolean(currentProfile && (currentProfile.candidate_name || currentProfile.name));
+        if (signinBtn) {
+          signinBtn.hidden = isAuth;
+          signinBtn.style.display = isAuth ? 'none' : '';
+          signinBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            if (options.onOpenAuth) options.onOpenAuth();
+          });
+        }
+        if (dMe) {
+          dMe.hidden = !isAuth;
+          dMe.style.display = isAuth ? 'inline-flex' : 'none';
+        }
+        if (isAuth) {
+          var displayName = currentProfile.candidate_name || currentProfile.name || 'Candidate';
+          var pic = currentProfile.picture || currentProfile.avatar_url;
+          if (dMeAv) {
+            if (pic) dMeAv.innerHTML = '<img src="' + esc(pic) + '" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;" />';
+            else dMeAv.textContent = displayName.charAt(0).toUpperCase();
+          }
+        }
+        var dAv = target.querySelector('#d-av-trigger');
+        if (dAv) dAv.addEventListener('click', toggleDrawer);
       }
-      var brandBtn = target.querySelector('header .brand');
-      if (brandBtn) {
-        brandBtn.addEventListener('click', function (e) {
-          e.preventDefault();
-          closeDetail();
-        });
-      }
-      var signinBtn = target.querySelector('[data-signin]');
-      var dMe = target.querySelector('#d-me');
-      var dMeAv = target.querySelector('#d-me-av');
-
-      var currentProfile = getCandAuth();
-      var isAuth = Boolean(currentProfile);
-      if (signinBtn) {
-        signinBtn.hidden = isAuth;
-        signinBtn.style.display = isAuth ? 'none' : '';
-        signinBtn.addEventListener('click', function (e) {
-          e.preventDefault();
-          if (options.onOpenAuth) options.onOpenAuth();
-        });
-      }
-      if (dMe) {
-        dMe.hidden = !isAuth;
-        dMe.style.display = isAuth ? 'inline-flex' : 'none';
-      }
-      if (isAuth) {
-        var displayName = (currentProfile && (currentProfile.candidate_name || currentProfile.name)) || 'Candidate';
-        if (dMeAv) dMeAv.textContent = displayName.charAt(0).toUpperCase();
-      }
-      var dAv = target.querySelector('#d-av-trigger');
-      if (dAv) dAv.addEventListener('click', toggleDrawer);
-    }
 
       function getProf() { return container.querySelector('#profile-page') || document.getElementById('profile-page'); }
 
@@ -429,7 +349,11 @@ export function mountOpenRolesEngine(container, options = {}) {
         var av = document.getElementById('drawer-av');
         var nm = document.getElementById('drawer-name');
         var em = document.getElementById('drawer-email');
-        if (av) av.textContent = (name.charAt(0) || 'C').toUpperCase();
+        var pic = cand.picture || cand.avatar_url;
+        if (av) {
+          if (pic) av.innerHTML = '<img src="' + esc(pic) + '" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;" />';
+          else av.textContent = (name.charAt(0) || 'C').toUpperCase();
+        }
         if (nm) nm.textContent = name;
         if (em) em.textContent = email;
       }
@@ -452,167 +376,103 @@ export function mountOpenRolesEngine(container, options = {}) {
 
       function renderProfileContent(profEl) {
         if (!profEl) return;
-        var p = {};
-        try { p = JSON.parse(localStorage.getItem('tj-profile') || '{}'); } catch (_) {}
+        var p = (window.TJ && window.TJ.profile ? window.TJ.profile() : null) || {};
         var cand = {};
         try { cand = JSON.parse(localStorage.getItem('candidate_profile_user') || '{}'); } catch (_) {}
-        var details = cand.details || p.details || {};
 
-        var name = p.name || cand.candidate_name || cand.name || 'Mohammed Hashil';
-        var title = p.title || cand.candidate_title || cand.title || details.title || 'AI Engineer | Python Backend Developer';
+        var details = cand.details || {};
+        var name = cand.candidate_name || cand.name || p.name || 'Mohammed Hashil';
+        var title = cand.candidate_title || cand.title || 'AI Engineer | Python Backend Developer';
         var email = cand.candidate_email || cand.email || p.email || 'mohammedhashil2018@gmail.com';
-        var phone = p.phone || cand.candidate_phone || cand.phone || details.phone || '8590955632';
+        var phone = cand.candidate_phone || cand.phone || details.candidate_phone || '8590955632';
         var initial = (name.charAt(0) || 'M').toUpperCase();
-        var mode = p.mode || details.preferred_mode || cand.preferred_mode || 'Hybrid';
-        var city = p.city || details.city || cand.location || 'Kozhikode, Kerala';
-        var level = p.level || details.experience_level || cand.experience_level || 'Junior (1–2 years)';
-        var photo = localStorage.getItem('candidate_photo') || cand.picture || p.picture || 'https://lh3.googleusercontent.com/a/ACg8ocJgmlA0pkgUg3Z75WHh2MwKpX42S9GTTdeV_2aI6HkM_ENmvC34=s96-c';
+        var photoUrl = cand.picture || cand.avatar_url || '';
 
-        var summary = p.summary || details.summary || cand.summary ||
-          'AI Engineer and Python Backend Developer with hands-on experience building AI agents, LLM-powered applications, RAG systems, and scalable backend services. Currently developing agentic AI workflows and AI-integrated applications using Python, FastAPI, LangGraph, and MCP. Experienced in prompt engineering, tool calling, LLM evaluation, and building production-ready AI solutions.';
+        var mode = p.mode || cand.mode || details.preferred_mode || details.mode || 'Hybrid';
+        var city = p.city || cand.city || details.city || 'Kozhikode, Kerala';
+        var level = p.level || cand.experience_level || details.experience_level || 'Junior (1–2 years)';
+        var summary = cand.summary || details.summary || 'AI Engineer and Python Backend Developer with hands-on experience building AI agents, LLM-powered applications, RAG systems, and scalable backend services. Currently developing agentic AI workflows and AI-integrated applications using Python, FastAPI, LangGraph, and MCP. Experienced in prompt engineering, tool calling, LLM evaluation, and building production-ready AI solutions.';
+        var linkedinUrl = details.linkedin_url || cand.linkedin_url || 'https://linkedin.com/in/mohammed-hashil-nk';
+        var githubUrl = details.github_url || cand.github_url || 'https://github.com/HASHILnk';
+        var resumeFilename = cand.filename || 'Mohammed_Hashil_N_K_Resume (3).pdf';
 
-        var github = details.github_url || cand.github_url || p.github_url || 'https://github.com/HASHILnk';
-        var linkedin = details.linkedin_url || cand.linkedin_url || p.linkedin_url || 'https://linkedin.com/in/mohammed-hashil-nk';
-
+        // Skills
         var skillsList = [];
-        if (p.skillsList && Array.isArray(p.skillsList) && p.skillsList.length) {
-          skillsList = p.skillsList;
+        if (Array.isArray(details.skills) && details.skills.length) {
+          skillsList = details.skills;
         } else if (p.skills) {
           skillsList = p.skills.split(/[,;\n]+/).map(function (s) { return s.trim(); }).filter(Boolean);
-        } else if (cand.skills && Array.isArray(cand.skills)) {
-          skillsList = cand.skills;
         } else if (cand.skills) {
-          skillsList = String(cand.skills).split(/[,;\n]+/).map(function (s) { return s.trim(); }).filter(Boolean);
-        } else if (details.skills && Array.isArray(details.skills)) {
-          skillsList = details.skills;
+          skillsList = (Array.isArray(cand.skills) ? cand.skills : String(cand.skills).split(/[,;\n]+/)).map(function (s) { return String(s).trim(); }).filter(Boolean);
         }
         if (!skillsList.length) {
-          skillsList = [
-            'Python', 'FastAPI', 'LangGraph', 'LangChain', 'AI Agents', 'MCP',
-            'RAG', 'Prompt Engineering', 'LLM Evaluation', 'PostgreSQL',
-            'Docker', 'SQL', 'Git', 'GitHub', 'Flask', 'REST APIs'
-          ];
+          skillsList = ['Python', 'FastAPI', 'LangGraph', 'LangChain', 'AI Agents', 'MCP', 'RAG', 'Prompt Engineering', 'LLM Evaluation', 'PostgreSQL', 'Docker', 'SQL', 'Git', 'GitHub', 'Flask', 'REST APIs'];
         }
         var skHtml = skillsList.map(function (s) { return '<span class="skill">' + esc(s) + '</span>'; }).join('');
 
-        var experience = p.experience || details.experience || cand.experience || [
-          {
-            title: 'AI Engineer',
-            company: 'Asimov X Technologies AB',
-            duration: '04/2026 – Present',
-            location: 'Kozhikode',
-            description: 'Developed AI-powered applications and agentic AI workflows using Python and FastAPI. Designed LLM-integrated features using prompt engineering and tool calling.'
-          },
-          {
-            title: 'AI Engineering Intern',
-            company: 'Codely AI',
-            duration: '01/2026 – 07/2026',
-            location: 'Kozhikode',
-            description: 'Built AI-powered applications and backend services using Python and FastAPI. Developed AI agents, multilingual voice applications, and LLM-powered workflows.'
-          },
-          {
-            title: 'Junior Data Scientist Intern',
-            company: 'Codeme Hub International',
-            duration: '06/2025 – 08/2025',
-            location: 'Kozhikode',
-            description: 'Analyzed and visualized business data using Power BI, Excel, SQL, and Python.'
-          }
+        // Experience
+        var experiences = (Array.isArray(details.experience) && details.experience.length) ? details.experience : [
+          { title: 'AI Engineer', company: 'Asimov X Technologies AB', duration: '04/2026 – Present', location: 'Kozhikode', description: 'Developed AI-powered applications and agentic AI workflows using Python and FastAPI. Designed LLM-integrated features using prompt engineering and tool calling.' },
+          { title: 'AI Engineering Intern', company: 'Codely AI', duration: '01/2026 – 07/2026', location: 'Kozhikode', description: 'Built AI-powered applications and backend services using Python and FastAPI. Developed AI agents, multilingual voice applications, and LLM-powered workflows.' },
+          { title: 'Junior Data Scientist Intern', company: 'Codeme Hub International', duration: '06/2025 – 08/2025', location: 'Kozhikode', description: 'Analyzed and visualized business data using Power BI, Excel, SQL, and Python.' }
         ];
-
-        var expHtml = '<div class="prof-timeline">';
-        experience.forEach(function (exp) {
-          expHtml +=
-            '<div class="prof-timeline-item">' +
-              '<div class="prof-timeline-dot"></div>' +
-              '<div class="prof-timeline-header">' +
-                '<span class="prof-timeline-title">' + esc(exp.title || '') + '</span>' +
-                '<span class="prof-timeline-company">' + esc(exp.company || '') + '</span>' +
-              '</div>' +
-              '<div class="prof-timeline-meta">' +
-                '<span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:-1px;margin-right:3px"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>' + esc(exp.duration || '') + '</span>' +
-                (exp.location ? '<span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:-1px;margin-right:3px"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>' + esc(exp.location) + '</span>' : '') +
-              '</div>' +
-              '<p class="prof-timeline-desc">' + esc(exp.description || '') + '</p>' +
-            '</div>';
-        });
-        expHtml += '</div>';
-
-        var education = p.education || details.education || cand.education || [
-          {
-            degree: 'B.Tech in Computer Science and Engineering',
-            institution: 'AWH Engineering College',
-            score: 'CGPA: 8.32/10',
-            duration: '11/2022 – 05/2026',
-            location: 'Kozhikode'
-          }
-        ];
-
-        var eduHtml = '';
-        education.forEach(function (edu) {
-          eduHtml +=
-            '<div class="prof-edu-item">' +
+        var expHtml = experiences.map(function (exp) {
+          return '<div class="profile-entry-card">' +
+            '<div class="entry-header">' +
               '<div>' +
-                '<div class="prof-edu-degree">' + esc(edu.degree || '') + '</div>' +
-                '<div class="prof-edu-inst">' + esc(edu.institution || '') + '</div>' +
-                (edu.score ? '<span class="prof-edu-score">' + esc(edu.score) + '</span>' : '') +
+                '<h3 class="entry-title">' + esc(exp.title || 'Role') + '</h3>' +
+                '<div class="entry-sub"><strong>' + esc(exp.company || 'Company') + '</strong>' + (exp.location ? ' · ' + esc(exp.location) : '') + '</div>' +
               '</div>' +
-              '<div class="prof-edu-date">' + esc(edu.duration || '') + '</div>' +
-            '</div>';
-        });
+              (exp.duration ? '<span class="entry-date">' + esc(exp.duration) + '</span>' : '') +
+            '</div>' +
+            (exp.description ? '<p class="entry-desc">' + esc(exp.description) + '</p>' : '') +
+          '</div>';
+        }).join('');
 
-        var projects = p.projects || details.projects || cand.projects || [
-          {
-            title: 'AI Voice Hotel Booking Agent',
-            technologies: ['STT', 'LLMs', 'TTS', 'RAG', 'VAD', 'Python'],
-            description: 'Built a multilingual voice AI agent with RAG for hotel search and policy retrieval, prompt engineering, conversation memory, and low-latency voice detection.'
-          },
-          {
-            title: 'LoopFlow – Event-Driven AI Agent Platform',
-            technologies: ['Python', 'FastAPI', 'LangGraph', 'MCP', 'Docker'],
-            description: 'Developed an event-driven AI agent platform for repository analysis and autonomous tool-calling workflows.'
-          }
+        // Projects
+        var projects = (Array.isArray(details.projects) && details.projects.length) ? details.projects : [
+          { title: 'AI Voice Hotel Booking Agent', technologies: ['STT', 'LLMs', 'TTS', 'RAG', 'VAD', 'Python'], description: 'Built a multilingual voice AI agent with RAG for hotel search and policy retrieval, prompt engineering, conversation memory, and low-latency voice detection.' },
+          { title: 'LoopFlow – Event-Driven AI Agent Platform', technologies: ['Python', 'FastAPI', 'LangGraph', 'MCP', 'Docker'], description: 'Developed an event-driven AI agent platform for repository analysis and autonomous tool-calling workflows.' }
         ];
+        var projHtml = projects.map(function (proj) {
+          var tech = Array.isArray(proj.technologies) ? proj.technologies : (proj.technologies ? String(proj.technologies).split(',') : []);
+          var techHtml = tech.map(function (t) { return '<span class="proj-tag">' + esc(String(t).trim()) + '</span>'; }).join('');
+          return '<div class="profile-entry-card">' +
+            '<div class="entry-header">' +
+              '<h3 class="entry-title">' + esc(proj.title || 'Project') + '</h3>' +
+            '</div>' +
+            (techHtml ? '<div class="proj-tags">' + techHtml + '</div>' : '') +
+            (proj.description ? '<p class="entry-desc">' + esc(proj.description) + '</p>' : '') +
+          '</div>';
+        }).join('');
 
-        var projHtml = '<div class="prof-projects-grid">';
-        projects.forEach(function (proj) {
-          var techChips = '';
-          if (Array.isArray(proj.technologies)) {
-            techChips = proj.technologies.map(function (t) { return '<span class="prof-project-tag">' + esc(t) + '</span>'; }).join('');
-          }
-          projHtml +=
-            '<div class="prof-project-card">' +
-              '<div class="prof-project-title">' + esc(proj.title || '') + '</div>' +
-              (techChips ? '<div class="prof-project-tags">' + techChips + '</div>' : '') +
-              '<p class="prof-project-desc">' + esc(proj.description || '') + '</p>' +
-            '</div>';
-        });
-        projHtml += '</div>';
+        // Education
+        var educations = (Array.isArray(details.education) && details.education.length) ? details.education : [
+          { degree: 'B.Tech in Computer Science and Engineering', institution: 'AWH Engineering College', score: 'CGPA: 8.32/10', duration: '11/2022 – 05/2026', location: 'Kozhikode' }
+        ];
+        var eduHtml = educations.map(function (edu) {
+          return '<div class="profile-entry-card">' +
+            '<div class="entry-header">' +
+              '<div>' +
+                '<h3 class="entry-title">' + esc(edu.degree || 'Degree') + '</h3>' +
+                '<div class="entry-sub"><strong>' + esc(edu.institution || 'Institution') + '</strong>' + (edu.location ? ' · ' + esc(edu.location) : '') + '</div>' +
+              '</div>' +
+              (edu.duration ? '<span class="entry-date">' + esc(edu.duration) + '</span>' : '') +
+            '</div>' +
+            (edu.score ? '<div class="entry-score"><span class="chip-score">' + esc(edu.score) + '</span></div>' : '') +
+          '</div>';
+        }).join('');
+
+        // Certifications
+        var certifications = (Array.isArray(details.certifications) && details.certifications.length) ? details.certifications : [
+          'Python Developer (Sololearn)', 'Data analytics (Deloitte)', 'FastAPI (CodeSignal)'
+        ];
+        var certHtml = certifications.map(function (c) {
+          return '<li class="cert-item"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-right:8px;flex-shrink:0"><polyline points="20 6 9 17 4 12"/></svg>' + esc(c) + '</li>';
+        }).join('');
 
         var applied = [];
         try { applied = JSON.parse(localStorage.getItem('tj-apply') || '[]'); } catch (_) {}
-
-        var avatarHtml = '';
-        if (photo) {
-          avatarHtml =
-            '<div class="prof-avatar-wrap" id="prof-avatar-trigger" title="Click to upload/change photo">' +
-              '<img src="' + esc(photo) + '" alt="' + esc(name) + '" class="prof-avatar-img" />' +
-              '<div class="prof-photo-upload-badge" title="Change photo">' +
-                '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>' +
-              '</div>' +
-            '</div>';
-        } else {
-          avatarHtml =
-            '<div class="prof-avatar-wrap" id="prof-avatar-trigger" title="Click to upload photo">' +
-              '<div class="prof-avatar-fallback">' + esc(initial) + '</div>' +
-              '<div class="prof-photo-upload-badge" title="Upload photo">' +
-                '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>' +
-              '</div>' +
-            '</div>';
-        }
-
-        var headerAvatarHtml = photo ?
-          '<img src="' + esc(photo) + '" alt="' + esc(name) + '" style="width:34px;height:34px;border-radius:50%;object-fit:cover;border:1px solid #e4e4e7" />' :
-          '<span class="av">' + esc(initial) + '</span>';
 
         profEl.innerHTML =
           '<header class="top">' +
@@ -623,49 +483,72 @@ export function mountOpenRolesEngine(container, options = {}) {
             '<div class="top-actions">' +
               '<div class="me">' +
                 '<button type="button" class="av-btn profile-trigger-btn" aria-label="Open profile menu">' +
-                  headerAvatarHtml +
+                  (photoUrl ? '<span class="av"><img src="' + esc(photoUrl) + '" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;" /></span>' : '<span class="av">' + esc(initial) + '</span>') +
                 '</button>' +
               '</div>' +
             '</div>' +
           '</header>' +
           '<a class="crumb" href="#" id="profile-back-link" aria-label="Back to all open roles">' + BACK + ' All open roles</a>' +
-          '<section class="d-head">' +
-            '<div class="d-top" style="align-items:center;gap:18px">' +
-              avatarHtml +
-              '<input type="file" id="prof-direct-avatar-input" accept="image/*" style="display:none" />' +
-              '<div>' +
-                '<div class="co" style="font-size:15px;display:flex;align-items:center;gap:6px">' +
-                  '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>' +
-                  '<span>Candidate Profile &middot; <b style="color:#059669">Verified</b></span>' +
+          '<section class="d-head profile-head">' +
+            '<div class="profile-hero-content">' +
+              '<div class="profile-avatar-wrap" id="profile-avatar-trigger" title="Click to upload profile photo">' +
+                (photoUrl ? '<img src="' + esc(photoUrl) + '" class="profile-avatar-img" alt="' + esc(name) + '" />' : '<span class="profile-avatar-initial">' + esc(initial) + '</span>') +
+                '<button type="button" class="avatar-photo-btn" id="btn-change-photo" title="Upload profile photo" aria-label="Upload profile photo">' +
+                  '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>' +
+                '</button>' +
+                '<input type="file" id="profile-photo-file-input" accept="image/*" style="display:none;" />' +
+              '</div>' +
+              '<div class="profile-hero-text">' +
+                '<div class="co" style="font-size:14px;color:#10b981;font-weight:600;display:inline-flex;align-items:center;gap:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> Candidate Profile · Verified</div>' +
+                '<h1>' + esc(name) + '</h1>' +
+                '<div class="profile-title-text">' + esc(title) + '</div>' +
+                '<div class="chips">' +
+                  '<span class="chip mode">' + esc(mode) + '</span>' +
+                  '<span class="chip">' + PIN + esc(city) + '</span>' +
+                  '<span class="chip">' + CAP + esc(level) + '</span>' +
+                  (phone ? '<span class="chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>' + esc(phone) + '</span>' : '') +
+                  '<span class="chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>' + esc(email) + '</span>' +
+                  (linkedinUrl ? '<a href="' + esc(linkedinUrl) + '" target="_blank" rel="noopener noreferrer" class="chip chip-link"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="margin-right:4px;"><path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.46 10.9v8.37H9.2V10.9H6.46M7.83 6.45c-.96 0-1.74.78-1.74 1.74s.78 1.74 1.74 1.74 1.74-.78 1.74-1.74-.78-1.74-1.74-1.74z"/></svg>LinkedIn</a>' : '') +
+                  (githubUrl ? '<a href="' + esc(githubUrl) + '" target="_blank" rel="noopener noreferrer" class="chip chip-link"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="margin-right:4px;"><path d="M12 2A10 10 0 0 0 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.87 1.52 2.34 1.07 2.91.83.1-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0 0 12 2z"/></svg>GitHub</a>' : '') +
                 '</div>' +
-                '<h1 style="margin:2px 0 6px">' + esc(name) + '</h1>' +
-                '<div class="prof-headline">' + esc(title) + '</div>' +
               '</div>' +
             '</div>' +
-            '<div class="chips">' +
-              '<span class="chip mode">' + esc(mode) + '</span>' +
-              '<span class="chip">' + PIN + esc(city) + '</span>' +
-              '<span class="chip">' + CAP + esc(level) + '</span>' +
-              '<span class="chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>' + esc(email) + '</span>' +
-              (phone ? '<span class="chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>+91 ' + esc(phone.replace(/^\+91/, '').trim()) + '</span>' : '') +
-              (github ? '<a href="' + esc(github) + '" target="_blank" rel="noopener noreferrer" class="chip link-chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>GitHub</a>' : '') +
-              (linkedin ? '<a href="' + esc(linkedin) + '" target="_blank" rel="noopener noreferrer" class="chip link-chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="#0A66C2"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/></svg>LinkedIn</a>' : '') +
+            '<div class="profile-hero-actions">' +
+              '<button type="button" class="btn" id="profile-hero-edit-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-right:6px"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>Edit profile</button>' +
+              '<button type="button" class="btn primary" id="profile-hero-edit-pref-btn">Edit preferences &rarr;</button>' +
             '</div>' +
           '</section>' +
           '<div class="d-layout">' +
             '<div class="stack">' +
+              '<section class="panel profile-resume-section">' +
+                '<div class="profile-resume-card">' +
+                  '<div class="resume-icon-wrap">' +
+                    '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>' +
+                  '</div>' +
+                  '<div class="resume-meta">' +
+                    '<div class="resume-name">' + esc(resumeFilename) + '</div>' +
+                    '<div class="resume-sub">Verified resume on file · Parsed with AI & synced to candidate profile</div>' +
+                  '</div>' +
+                  '<div class="resume-actions">' +
+                    '<button type="button" class="btn btn-sm" id="btn-download-resume">Download</button>' +
+                    '<button type="button" class="btn btn-sm primary" id="btn-upload-resume">Upload new</button>' +
+                    '<input type="file" id="profile-resume-file-input" accept=".pdf,.docx" style="display:none;" />' +
+                  '</div>' +
+                '</div>' +
+              '</section>' +
               '<section class="panel">' +
-                '<h2>About you</h2>' +
-                '<p style="margin:0;color:#374151;line-height:1.65;font-size:14.5px">' +
-                  esc(summary) +
-                '</p>' +
+                '<div class="panel-head-row">' +
+                  '<h2>About you</h2>' +
+                  '<button type="button" class="btn-text-edit" id="btn-edit-about">Edit summary</button>' +
+                '</div>' +
+                '<p style="margin:0;color:var(--muted);line-height:1.7;white-space:pre-line;">' + esc(summary) + '</p>' +
               '</section>' +
               '<section class="panel">' +
                 '<h2>Work Experience</h2>' +
                 expHtml +
               '</section>' +
               '<section class="panel">' +
-                '<h2>Key Projects</h2>' +
+                '<h2>Featured Projects</h2>' +
                 projHtml +
               '</section>' +
               '<section class="panel">' +
@@ -675,18 +558,7 @@ export function mountOpenRolesEngine(container, options = {}) {
               '<section class="panel">' +
                 '<h2>Skills &amp; Match Profile</h2>' +
                 '<div class="skills">' + skHtml + '</div>' +
-              '</section>' +
-              '<section class="panel">' +
-                '<h2>At a glance</h2>' +
-                '<dl class="facts">' +
-                  '<div><dt>Candidate</dt><dd>' + esc(name) + '</dd></div>' +
-                  '<div><dt>Headline</dt><dd>' + esc(title) + '</dd></div>' +
-                  '<div><dt>Preferred mode</dt><dd>' + esc(mode) + '</dd></div>' +
-                  '<div><dt>Location</dt><dd>' + esc(city) + '</dd></div>' +
-                  '<div><dt>Experience</dt><dd>' + esc(level) + '</dd></div>' +
-                  '<div><dt>Email</dt><dd>' + esc(email) + '</dd></div>' +
-                  '<div><dt>Applications</dt><dd>' + applied.length + ' applied</dd></div>' +
-                '</dl>' +
+                (certHtml ? '<div style="margin-top:20px;padding-top:16px;border-top:1px solid rgba(0,0,0,0.08);"><h3 style="font-size:14px;font-weight:600;margin:0 0 10px;color:var(--fg);">Verified Certifications</h3><ul class="cert-list" style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px;">' + certHtml + '</ul></div>' : '') +
               '</section>' +
               '<section class="panel">' +
                 '<h2>Application &amp; AI Interview Status</h2>' +
@@ -700,13 +572,116 @@ export function mountOpenRolesEngine(container, options = {}) {
             '<aside class="panel apply side">' +
               '<h2>Candidate Account</h2>' +
               '<button class="btn primary block" type="button" id="profile-side-edit">Edit preferences ' + ARROW + '</button>' +
+              '<button class="btn block" type="button" id="profile-side-edit-profile">Edit profile</button>' +
               '<button class="btn block" type="button" id="profile-side-logout">Sign out</button>' +
+              '<hr style="border:none;border-top:1px solid rgba(0,0,0,0.08);margin:16px 0;" />' +
+              '<div style="font-weight:600;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:10px;">At a glance</div>' +
+              '<dl class="facts">' +
+                '<div><dt>Name</dt><dd>' + esc(name) + '</dd></div>' +
+                '<div><dt>Title</dt><dd>' + esc(title) + '</dd></div>' +
+                '<div><dt>Mode</dt><dd>' + esc(mode) + '</dd></div>' +
+                '<div><dt>Location</dt><dd>' + esc(city) + '</dd></div>' +
+                '<div><dt>Experience</dt><dd>' + esc(level) + '</dd></div>' +
+                (phone ? '<div><dt>Phone</dt><dd>' + esc(phone) + '</dd></div>' : '') +
+                '<div><dt>Email</dt><dd style="word-break:break-all;">' + esc(email) + '</dd></div>' +
+                '<div><dt>Applications</dt><dd>' + applied.length + ' applied</dd></div>' +
+              '</dl>' +
               '<small><i></i>Auto-matches with 18 open partner roles</small>' +
             '</aside>' +
           '</div>' +
           '<div class="bar">' +
             '<button class="btn" type="button" id="profile-bar-edit">Edit preferences</button>' +
             '<button class="btn primary" type="button" id="profile-bar-logout">Sign out</button>' +
+          '</div>' +
+
+          '<!-- Edit Preferences Modal -->' +
+          '<div class="profile-modal-overlay" id="profile-pref-modal-overlay" style="display:none;" hidden>' +
+            '<div class="profile-modal-card" role="dialog" aria-modal="true" aria-labelledby="pref-modal-title">' +
+              '<div class="profile-modal-header">' +
+                '<h3 id="pref-modal-title">Edit Work Preferences</h3>' +
+                '<button type="button" class="profile-modal-close" id="pref-modal-close" aria-label="Close">&times;</button>' +
+              '</div>' +
+              '<form id="profile-pref-form">' +
+                '<div class="profile-modal-body">' +
+                  '<div class="profile-form-group">' +
+                    '<label for="edit-pref-mode">Preferred Work Mode</label>' +
+                    '<select id="edit-pref-mode">' +
+                      '<option value="Any mode">Any mode</option>' +
+                      '<option value="Remote">Remote</option>' +
+                      '<option value="Hybrid">Hybrid</option>' +
+                      '<option value="On-site">On-site</option>' +
+                    '</select>' +
+                  '</div>' +
+                  '<div class="profile-form-group">' +
+                    '<label for="edit-pref-city">Preferred Location / City</label>' +
+                    '<input type="text" id="edit-pref-city" placeholder="e.g. Kozhikode, Kerala or Across India" />' +
+                  '</div>' +
+                  '<div class="profile-form-group">' +
+                    '<label for="edit-pref-level">Experience Level</label>' +
+                    '<select id="edit-pref-level">' +
+                      '<option value="Fresher / Entry-Level (0–2 years)">Fresher / Entry-Level (0–2 years)</option>' +
+                      '<option value="Junior (1–2 years)">Junior (1–2 years)</option>' +
+                      '<option value="Mid-Level (2–4 years)">Mid-Level (2–4 years)</option>' +
+                      '<option value="Senior (5+ years)">Senior (5+ years)</option>' +
+                    '</select>' +
+                  '</div>' +
+                  '<div class="profile-form-group">' +
+                    '<label for="edit-pref-skills">Target Match Skills (comma-separated)</label>' +
+                    '<textarea id="edit-pref-skills" rows="3" placeholder="e.g. Python, FastAPI, LangGraph, AI Agents, Docker"></textarea>' +
+                  '</div>' +
+                '</div>' +
+                '<div class="profile-modal-footer">' +
+                  '<button type="button" class="btn" id="pref-modal-cancel">Cancel</button>' +
+                  '<button type="submit" class="btn primary">Save preferences</button>' +
+                '</div>' +
+              '</form>' +
+            '</div>' +
+          '</div>' +
+
+          '<!-- Edit Profile Modal -->' +
+          '<div class="profile-modal-overlay" id="profile-edit-modal-overlay" style="display:none;" hidden>' +
+            '<div class="profile-modal-card" role="dialog" aria-modal="true" aria-labelledby="edit-profile-title">' +
+              '<div class="profile-modal-header">' +
+                '<h3 id="edit-profile-title">Edit Candidate Profile</h3>' +
+                '<button type="button" class="profile-modal-close" id="edit-profile-close" aria-label="Close">&times;</button>' +
+              '</div>' +
+              '<form id="profile-edit-form">' +
+                '<div class="profile-modal-body">' +
+                  '<div class="profile-form-group">' +
+                    '<label for="edit-prof-name">Full Name</label>' +
+                    '<input type="text" id="edit-prof-name" required />' +
+                  '</div>' +
+                  '<div class="profile-form-group">' +
+                    '<label for="edit-prof-title">Professional Title</label>' +
+                    '<input type="text" id="edit-prof-title" placeholder="e.g. AI Engineer | Python Backend Developer" />' +
+                  '</div>' +
+                  '<div class="profile-form-group">' +
+                    '<label for="edit-prof-phone">Phone Number</label>' +
+                    '<input type="tel" id="edit-prof-phone" placeholder="e.g. +91 8590955632" />' +
+                  '</div>' +
+                  '<div class="profile-form-group">' +
+                    '<label for="edit-prof-city">Location / City</label>' +
+                    '<input type="text" id="edit-prof-city" placeholder="e.g. Kozhikode, Kerala" />' +
+                  '</div>' +
+                  '<div class="profile-form-group">' +
+                    '<label for="edit-prof-linkedin">LinkedIn URL</label>' +
+                    '<input type="url" id="edit-prof-linkedin" placeholder="https://linkedin.com/in/username" />' +
+                  '</div>' +
+                  '<div class="profile-form-group">' +
+                    '<label for="edit-prof-github">GitHub URL</label>' +
+                    '<input type="url" id="edit-prof-github" placeholder="https://github.com/username" />' +
+                  '</div>' +
+                  '<div class="profile-form-group">' +
+                    '<label for="edit-prof-summary">About you / Summary</label>' +
+                    '<textarea id="edit-prof-summary" rows="4" placeholder="Brief summary of your background, technical expertise, and career goals..."></textarea>' +
+                  '</div>' +
+                '</div>' +
+                '<div class="profile-modal-footer">' +
+                  '<button type="button" class="btn" id="edit-profile-cancel">Cancel</button>' +
+                  '<button type="submit" class="btn primary">Save profile</button>' +
+                '</div>' +
+              '</form>' +
+            '</div>' +
           '</div>';
 
         var backBtn = profEl.querySelector('#profile-back-link');
@@ -716,335 +691,295 @@ export function mountOpenRolesEngine(container, options = {}) {
         var trig = profEl.querySelector('.profile-trigger-btn');
         if (trig) trig.addEventListener('click', toggleDrawer);
 
-        // Direct photo upload trigger on profile avatar
-        var avTrigger = profEl.querySelector('#prof-avatar-trigger');
-        var avFileInput = profEl.querySelector('#prof-direct-avatar-input');
-        if (avTrigger && avFileInput) {
-          avTrigger.addEventListener('click', function (e) {
-            e.preventDefault();
-            avFileInput.click();
-          });
-          avFileInput.addEventListener('change', function () {
-            if (avFileInput.files && avFileInput.files[0]) {
-              var reader = new FileReader();
-              reader.onload = function (ev) {
-                var newPhotoUrl = ev.target.result;
-                try {
-                  localStorage.setItem('candidate_photo', newPhotoUrl);
-                  var pObj = JSON.parse(localStorage.getItem('tj-profile') || '{}');
-                  pObj.picture = newPhotoUrl;
-                  localStorage.setItem('tj-profile', JSON.stringify(pObj));
-
-                  var cObj = JSON.parse(localStorage.getItem('candidate_profile_user') || '{}');
-                  cObj.picture = newPhotoUrl;
-                  localStorage.setItem('candidate_profile_user', JSON.stringify(cObj));
-
-                  // Async server update
-                  var token = localStorage.getItem('candidate_profile_token');
-                  if (token) {
-                    fetch('/api/candidate-profile/me', {
-                      method: 'PUT',
-                      headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': 'Bearer ' + token
-                      },
-                      body: JSON.stringify({ picture: newPhotoUrl })
-                    }).catch(function () {});
-                  }
-                } catch (_) {}
-                renderProfileContent(profEl);
-                toast('Profile photo updated successfully!', 3500);
-              };
-              reader.readAsDataURL(avFileInput.files[0]);
+        // Photo Upload Handlers
+        var photoInput = profEl.querySelector('#profile-photo-file-input');
+        var avatarWrap = profEl.querySelector('#profile-avatar-trigger');
+        var btnPhoto = profEl.querySelector('#btn-change-photo');
+        var onTriggerPhoto = function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (photoInput) photoInput.click();
+        };
+        if (avatarWrap) avatarWrap.addEventListener('click', onTriggerPhoto);
+        if (btnPhoto) btnPhoto.addEventListener('click', onTriggerPhoto);
+        if (photoInput) {
+          photoInput.addEventListener('change', function () {
+            var file = photoInput.files && photoInput.files[0];
+            if (!file) return;
+            if (file.size > 5 * 1024 * 1024) {
+              snk('Please select an image smaller than 5MB');
+              return;
             }
-          });
-        }
-
-        // In-place "Edit preferences" / Edit Profile modal
-        function openProfileEditModal() {
-          var pCurrent = {};
-          try { pCurrent = JSON.parse(localStorage.getItem('tj-profile') || '{}'); } catch (_) {}
-          var cCurrent = {};
-          try { cCurrent = JSON.parse(localStorage.getItem('candidate_profile_user') || '{}'); } catch (_) {}
-          var detCurrent = cCurrent.details || pCurrent.details || {};
-
-          var curName = pCurrent.name || cCurrent.candidate_name || cCurrent.name || 'Mohammed Hashil';
-          var curTitle = pCurrent.title || cCurrent.candidate_title || cCurrent.title || detCurrent.title || 'AI Engineer | Python Backend Developer';
-          var curMode = pCurrent.mode || detCurrent.preferred_mode || cCurrent.preferred_mode || 'Hybrid';
-          var curCity = pCurrent.city || detCurrent.city || cCurrent.location || 'Kozhikode, Kerala';
-          var curLevel = pCurrent.level || detCurrent.experience_level || cCurrent.experience_level || 'Junior (1–2 years)';
-          var curSkills = pCurrent.skills || (Array.isArray(cCurrent.skills) ? cCurrent.skills.join(', ') : cCurrent.skills) || '';
-          var curSummary = pCurrent.summary || detCurrent.summary || cCurrent.summary || '';
-          var curPhone = pCurrent.phone || cCurrent.candidate_phone || cCurrent.phone || detCurrent.phone || '8590955632';
-          var curGithub = detCurrent.github_url || cCurrent.github_url || pCurrent.github_url || 'https://github.com/HASHILnk';
-          var curLinkedin = detCurrent.linkedin_url || cCurrent.linkedin_url || pCurrent.linkedin_url || 'https://linkedin.com/in/mohammed-hashil-nk';
-          var curPhoto = localStorage.getItem('candidate_photo') || cCurrent.picture || pCurrent.picture || '';
-
-          // Remove any existing edit modal
-          var existingModal = document.getElementById('prof-edit-modal-wrap');
-          if (existingModal) existingModal.remove();
-
-          var modalWrap = document.createElement('div');
-          modalWrap.className = 'prof-edit-modal-wrap';
-          modalWrap.id = 'prof-edit-modal-wrap';
-
-          var previewAvatarHtml = curPhoto ?
-            '<img src="' + esc(curPhoto) + '" alt="' + esc(curName) + '" class="prof-edit-photo-preview" id="modal-photo-img" />' :
-            '<div class="prof-edit-photo-preview" id="modal-photo-img">' + esc((curName.charAt(0) || 'M').toUpperCase()) + '</div>';
-
-          modalWrap.innerHTML =
-            '<div class="prof-edit-modal-card" role="dialog" aria-modal="true" aria-label="Edit Profile & Preferences">' +
-              '<div class="prof-edit-modal-head">' +
-                '<h3>Edit Profile &amp; Preferences</h3>' +
-                '<button type="button" class="prof-edit-modal-close" id="modal-edit-close" aria-label="Close modal">&times;</button>' +
-              '</div>' +
-              '<form id="prof-edit-form" class="prof-edit-modal-body">' +
-                '<div class="prof-edit-photo-row">' +
-                  previewAvatarHtml +
-                  '<div style="display:flex;flex-direction:column;gap:6px">' +
-                    '<span style="font-weight:600;font-size:14px">Profile Photo</span>' +
-                    '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
-                      '<button type="button" class="btn" style="padding:6px 12px;font-size:12.5px" id="modal-upload-btn">Upload new photo</button>' +
-                      (curPhoto ? '<button type="button" class="btn" style="padding:6px 12px;font-size:12.5px;color:#d93025" id="modal-remove-photo-btn">Remove</button>' : '') +
-                    '</div>' +
-                    '<input type="file" id="modal-photo-input" accept="image/*" style="display:none" />' +
-                  '</div>' +
-                '</div>' +
-                '<div class="prof-edit-grid-2">' +
-                  '<div class="prof-edit-field">' +
-                    '<label for="ep-name">Full Name</label>' +
-                    '<input type="text" id="ep-name" value="' + esc(curName) + '" required />' +
-                  '</div>' +
-                  '<div class="prof-edit-field">' +
-                    '<label for="ep-title">Professional Title</label>' +
-                    '<input type="text" id="ep-title" value="' + esc(curTitle) + '" placeholder="e.g. AI Engineer | Python Developer" required />' +
-                  '</div>' +
-                '</div>' +
-                '<div class="prof-edit-grid-2">' +
-                  '<div class="prof-edit-field">' +
-                    '<label for="ep-mode">Preferred Work Mode</label>' +
-                    '<select id="ep-mode">' +
-                      '<option value="Any mode"' + (curMode === 'Any mode' ? ' selected' : '') + '>Any mode</option>' +
-                      '<option value="Hybrid"' + (curMode === 'Hybrid' ? ' selected' : '') + '>Hybrid</option>' +
-                      '<option value="Remote"' + (curMode === 'Remote' ? ' selected' : '') + '>Remote</option>' +
-                      '<option value="On-site"' + (curMode === 'On-site' ? ' selected' : '') + '>On-site</option>' +
-                    '</select>' +
-                  '</div>' +
-                  '<div class="prof-edit-field">' +
-                    '<label for="ep-city">Location / City</label>' +
-                    '<input type="text" id="ep-city" value="' + esc(curCity) + '" placeholder="e.g. Kozhikode, Kerala" />' +
-                  '</div>' +
-                '</div>' +
-                '<div class="prof-edit-grid-2">' +
-                  '<div class="prof-edit-field">' +
-                    '<label for="ep-level">Experience Level</label>' +
-                    '<select id="ep-level">' +
-                      '<option value="Fresher"' + (curLevel === 'Fresher' ? ' selected' : '') + '>Fresher</option>' +
-                      '<option value="Junior (1–2 years)"' + (curLevel.indexOf('Junior') > -1 || curLevel.indexOf('1') > -1 ? ' selected' : '') + '>Junior (1–2 years)</option>' +
-                      '<option value="Mid-level (2–4 years)"' + (curLevel.indexOf('Mid') > -1 ? ' selected' : '') + '>Mid-level (2–4 years)</option>' +
-                      '<option value="Experienced (3+ years)"' + (curLevel.indexOf('Experienced') > -1 || curLevel.indexOf('Senior') > -1 ? ' selected' : '') + '>Experienced (3+ years)</option>' +
-                    '</select>' +
-                  '</div>' +
-                  '<div class="prof-edit-field">' +
-                    '<label for="ep-phone">Phone Number</label>' +
-                    '<input type="tel" id="ep-phone" value="' + esc(phone) + '" placeholder="e.g. 8590955632" />' +
-                  '</div>' +
-                '</div>' +
-                '<div class="prof-edit-field">' +
-                  '<label for="ep-skills">Skills (Comma-separated)</label>' +
-                  '<input type="text" id="ep-skills" value="' + esc(skillsList.join(', ')) + '" placeholder="e.g. Python, FastAPI, LangGraph, Docker" />' +
-                '</div>' +
-                '<div class="prof-edit-field">' +
-                  '<label for="ep-summary">About you / Profile Statement</label>' +
-                  '<textarea id="ep-summary" rows="4">' + esc(summary) + '</textarea>' +
-                '</div>' +
-                '<div class="prof-edit-grid-2">' +
-                  '<div class="prof-edit-field">' +
-                    '<label for="ep-github">GitHub Profile URL</label>' +
-                    '<input type="url" id="ep-github" value="' + esc(github) + '" placeholder="https://github.com/username" />' +
-                  '</div>' +
-                  '<div class="prof-edit-field">' +
-                    '<label for="ep-linkedin">LinkedIn Profile URL</label>' +
-                    '<input type="url" id="ep-linkedin" value="' + esc(linkedin) + '" placeholder="https://linkedin.com/in/username" />' +
-                  '</div>' +
-                '</div>' +
-              '</form>' +
-              '<div class="prof-edit-modal-foot">' +
-                '<button type="button" class="btn" id="modal-edit-cancel">Cancel</button>' +
-                '<button type="button" class="btn primary" id="modal-edit-save">Save changes</button>' +
-              '</div>' +
-            '</div>';
-
-          document.body.appendChild(modalWrap);
-
-          var closeModal = function () {
-            if (modalWrap) modalWrap.remove();
-          };
-
-          var closeBtn = modalWrap.querySelector('#modal-edit-close');
-          if (closeBtn) closeBtn.addEventListener('click', closeModal);
-          var cancelBtn = modalWrap.querySelector('#modal-edit-cancel');
-          if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
-
-          modalWrap.addEventListener('click', function (e) {
-            if (e.target === modalWrap) closeModal();
-          });
-
-          // Upload photo inside modal
-          var modalUploadBtn = modalWrap.querySelector('#modal-upload-btn');
-          var modalPhotoInput = modalWrap.querySelector('#modal-photo-input');
-          var modalRemovePhotoBtn = modalWrap.querySelector('#modal-remove-photo-btn');
-          var pendingPhotoUrl = curPhoto;
-
-          if (modalUploadBtn && modalPhotoInput) {
-            modalUploadBtn.addEventListener('click', function () {
-              modalPhotoInput.click();
-            });
-            modalPhotoInput.addEventListener('change', function () {
-              if (modalPhotoInput.files && modalPhotoInput.files[0]) {
-                var reader = new FileReader();
-                reader.onload = function (ev) {
-                  pendingPhotoUrl = ev.target.result;
-                  var imgContainer = modalWrap.querySelector('#modal-photo-img');
-                  if (imgContainer) {
-                    var newImg = document.createElement('img');
-                    newImg.src = pendingPhotoUrl;
-                    newImg.className = 'prof-edit-photo-preview';
-                    newImg.id = 'modal-photo-img';
-                    imgContainer.replaceWith(newImg);
-                  }
-                };
-                reader.readAsDataURL(modalPhotoInput.files[0]);
-              }
-            });
-          }
-
-          if (modalRemovePhotoBtn) {
-            modalRemovePhotoBtn.addEventListener('click', function () {
-              pendingPhotoUrl = '';
-              var imgContainer = modalWrap.querySelector('#modal-photo-img');
-              if (imgContainer) {
-                var initialDiv = document.createElement('div');
-                initialDiv.className = 'prof-edit-photo-preview';
-                initialDiv.id = 'modal-photo-img';
-                initialDiv.textContent = (curName.charAt(0) || 'M').toUpperCase();
-                imgContainer.replaceWith(initialDiv);
-              }
-            });
-          }
-
-          // Save changes inside modal
-          var saveBtn = modalWrap.querySelector('#modal-edit-save');
-          if (saveBtn) {
-            saveBtn.addEventListener('click', function (e) {
-              e.preventDefault();
-              var newName = (modalWrap.querySelector('#ep-name') ? modalWrap.querySelector('#ep-name').value.trim() : '') || curName;
-              var newTitle = (modalWrap.querySelector('#ep-title') ? modalWrap.querySelector('#ep-title').value.trim() : '') || curTitle;
-              var newMode = modalWrap.querySelector('#ep-mode') ? modalWrap.querySelector('#ep-mode').value : curMode;
-              var newCity = (modalWrap.querySelector('#ep-city') ? modalWrap.querySelector('#ep-city').value.trim() : '') || curCity;
-              var newLevel = modalWrap.querySelector('#ep-level') ? modalWrap.querySelector('#ep-level').value : curLevel;
-              var newSkillsStr = modalWrap.querySelector('#ep-skills') ? modalWrap.querySelector('#ep-skills').value.trim() : '';
-              var newSummary = (modalWrap.querySelector('#ep-summary') ? modalWrap.querySelector('#ep-summary').value.trim() : '') || curSummary;
-              var newPhone = (modalWrap.querySelector('#ep-phone') ? modalWrap.querySelector('#ep-phone').value.trim() : '') || curPhone;
-              var newGithub = (modalWrap.querySelector('#ep-github') ? modalWrap.querySelector('#ep-github').value.trim() : '') || curGithub;
-              var newLinkedin = (modalWrap.querySelector('#ep-linkedin') ? modalWrap.querySelector('#ep-linkedin').value.trim() : '') || curLinkedin;
-
-              var newSkillsArr = newSkillsStr.split(/[,;\n]+/).map(function (s) { return s.trim(); }).filter(Boolean);
-
-              // Update localStorage
-              try {
-                if (pendingPhotoUrl) {
-                  localStorage.setItem('candidate_photo', pendingPhotoUrl);
-                } else if (pendingPhotoUrl === '') {
-                  localStorage.removeItem('candidate_photo');
-                }
-
-                var updatedTj = {
-                  ...pCurrent,
-                  name: newName,
-                  title: newTitle,
-                  mode: newMode,
-                  city: newCity,
-                  level: newLevel,
-                  skills: newSkillsArr.join(', '),
-                  skillsList: newSkillsArr,
-                  summary: newSummary,
-                  phone: newPhone,
-                  picture: pendingPhotoUrl,
-                  github_url: newGithub,
-                  linkedin_url: newLinkedin
-                };
-                localStorage.setItem('tj-profile', JSON.stringify(updatedTj));
-
-                var updatedCand = {
-                  ...cCurrent,
-                  candidate_name: newName,
-                  name: newName,
-                  candidate_title: newTitle,
-                  title: newTitle,
-                  candidate_phone: newPhone,
-                  skills: newSkillsArr,
-                  summary: newSummary,
-                  picture: pendingPhotoUrl,
-                  details: {
-                    ...(cCurrent.details || {}),
-                    preferred_mode: newMode,
-                    city: newCity,
-                    experience_level: newLevel,
-                    github_url: newGithub,
-                    linkedin_url: newLinkedin,
-                    skills: newSkillsArr,
-                    summary: newSummary
-                  }
-                };
-                localStorage.setItem('candidate_profile_user', JSON.stringify(updatedCand));
-
-                // Async backend PUT
-                var token = localStorage.getItem('candidate_profile_token');
-                if (token) {
-                  fetch('/api/candidate-profile/me', {
-                    method: 'PUT',
-                    headers: {
-                      'Content-Type': 'application/json',
-                      'Authorization': 'Bearer ' + token
-                    },
-                    body: JSON.stringify({
-                      candidate_name: newName,
-                      candidate_title: newTitle,
-                      candidate_phone: newPhone,
-                      skills: newSkillsArr,
-                      summary: newSummary,
-                      preferred_mode: newMode,
-                      city: newCity,
-                      experience_level: newLevel,
-                      github_url: newGithub,
-                      linkedin_url: newLinkedin,
-                      picture: pendingPhotoUrl
-                    })
-                  }).catch(function () {});
-                }
-
-                // Update header DOM
-                var meName = document.getElementById('me-name');
-                var dName = document.getElementById('drawer-name');
-                if (meName) meName.textContent = newName;
-                if (dName) dName.textContent = newName;
-              } catch (_) {}
-
-              closeModal();
+            var reader = new FileReader();
+            reader.onload = function (evt) {
+              var dataUrl = evt.target.result;
+              cand.picture = dataUrl;
+              cand.avatar_url = dataUrl;
+              localStorage.setItem('candidate_profile_user', JSON.stringify(cand));
+              updateAllAvatars(dataUrl, name);
               renderProfileContent(profEl);
-              toast('Profile & preferences updated successfully!', 4000);
-            });
-          }
+              snk('Profile photo updated successfully!');
+
+              var token = localStorage.getItem('candidate_profile_token') || cand.token || cand.candidate_token;
+              if (token) {
+                fetch('/api/candidate-profile/me', {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                  body: JSON.stringify({ picture: dataUrl, avatar_url: dataUrl }),
+                }).then(function (r) { return r.json(); }).then(function (res) {
+                  if (res && res.candidate) {
+                    localStorage.setItem('candidate_profile_user', JSON.stringify(res.candidate));
+                  }
+                }).catch(function (err) {
+                  console.warn('Avatar sync error:', err);
+                });
+              }
+            };
+            reader.readAsDataURL(file);
+          });
         }
 
-        var editBtns = profEl.querySelectorAll('#profile-side-edit, #profile-bar-edit');
-        [].slice.call(editBtns).forEach(function (b) {
+        // Resume Download & Upload Handlers
+        var btnDlResume = profEl.querySelector('#btn-download-resume');
+        if (btnDlResume) {
+          btnDlResume.addEventListener('click', function (e) {
+            e.preventDefault();
+            var token = localStorage.getItem('candidate_profile_token') || cand.token || cand.candidate_token;
+            var dlUrl = '/api/candidate-profile/resume' + (token ? '?token=' + encodeURIComponent(token) : '');
+            window.open(dlUrl, '_blank');
+          });
+        }
+
+        var btnUpResume = profEl.querySelector('#btn-upload-resume');
+        var resumeInput = profEl.querySelector('#profile-resume-file-input');
+        if (btnUpResume && resumeInput) {
+          btnUpResume.addEventListener('click', function (e) {
+            e.preventDefault();
+            resumeInput.click();
+          });
+          resumeInput.addEventListener('change', function () {
+            var file = resumeInput.files && resumeInput.files[0];
+            if (!file) return;
+            snk('Uploading and parsing resume with AI...');
+            var fd = new FormData();
+            fd.append('resume', file);
+            var token = localStorage.getItem('candidate_profile_token') || cand.token || cand.candidate_token;
+            fetch('/api/candidate-profile/upload-resume', {
+              method: 'POST',
+              headers: token ? { 'Authorization': 'Bearer ' + token } : {},
+              body: fd,
+            }).then(function (r) { return r.json(); }).then(function (res) {
+              if (res && res.candidate) {
+                localStorage.setItem('candidate_profile_user', JSON.stringify(res.candidate));
+                renderProfileContent(profEl);
+                snk('Resume uploaded & profile updated successfully!');
+              } else {
+                snk(res.detail || 'Resume uploaded.');
+              }
+            }).catch(function (err) {
+              console.warn('Resume upload err:', err);
+              snk('Failed to upload resume. Please try again.');
+            });
+          });
+        }
+
+        // Preferences Modal Handlers
+        var prefOverlay = profEl.querySelector('#profile-pref-modal-overlay');
+        var prefForm = profEl.querySelector('#profile-pref-form');
+        var prefClose = profEl.querySelector('#pref-modal-close');
+        var prefCancel = profEl.querySelector('#pref-modal-cancel');
+
+        function openPrefModal() {
+          if (!prefOverlay) return;
+          var m = profEl.querySelector('#edit-pref-mode');
+          var c = profEl.querySelector('#edit-pref-city');
+          var l = profEl.querySelector('#edit-pref-level');
+          var s = profEl.querySelector('#edit-pref-skills');
+          if (m) m.value = mode || 'Hybrid';
+          if (c) c.value = city || 'Kozhikode, Kerala';
+          if (l) l.value = level || 'Junior (1–2 years)';
+          if (s) s.value = skillsList.join(', ');
+          prefOverlay.hidden = false;
+          prefOverlay.style.display = 'flex';
+        }
+        function closePrefModal() {
+          if (!prefOverlay) return;
+          prefOverlay.hidden = true;
+          prefOverlay.style.display = 'none';
+        }
+
+        if (prefClose) prefClose.addEventListener('click', closePrefModal);
+        if (prefCancel) prefCancel.addEventListener('click', closePrefModal);
+        if (prefOverlay) prefOverlay.addEventListener('click', function (e) {
+          if (e.target === prefOverlay) closePrefModal();
+        });
+
+        var editPrefBtns = profEl.querySelectorAll('#profile-side-edit, #profile-bar-edit, #profile-hero-edit-pref-btn');
+        [].slice.call(editPrefBtns).forEach(function (b) {
           b.addEventListener('click', function (e) {
             e.preventDefault();
-            openProfileEditModal();
+            openPrefModal();
           });
         });
+
+        if (prefForm) {
+          prefForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var m = profEl.querySelector('#edit-pref-mode');
+            var c = profEl.querySelector('#edit-pref-city');
+            var l = profEl.querySelector('#edit-pref-level');
+            var s = profEl.querySelector('#edit-pref-skills');
+
+            var newMode = m ? m.value : mode;
+            var newCity = c ? c.value.trim() : city;
+            var newLevel = l ? l.value : level;
+            var newSkills = s ? s.value.split(/[,;\n]+/).map(function (x) { return x.trim(); }).filter(Boolean) : skillsList;
+
+            cand.mode = newMode;
+            cand.city = newCity;
+            cand.experience_level = newLevel;
+            cand.skills = newSkills;
+            if (!cand.details) cand.details = {};
+            cand.details.preferred_mode = newMode;
+            cand.details.city = newCity;
+            cand.details.experience_level = newLevel;
+            cand.details.skills = newSkills;
+            localStorage.setItem('candidate_profile_user', JSON.stringify(cand));
+
+            var tjProf = JSON.parse(localStorage.getItem('tj-profile') || '{}');
+            tjProf.mode = newMode;
+            tjProf.city = newCity;
+            tjProf.level = newLevel;
+            tjProf.skills = newSkills.join(', ');
+            localStorage.setItem('tj-profile', JSON.stringify(tjProf));
+
+            var token = localStorage.getItem('candidate_profile_token') || cand.token || cand.candidate_token;
+            if (token) {
+              fetch('/api/candidate-profile/me', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                body: JSON.stringify({ mode: newMode, city: newCity, experience_level: newLevel, skills: newSkills }),
+              }).catch(function (err) { console.warn('Sync error:', err); });
+            }
+
+            setAuth(tjProf);
+            closePrefModal();
+            renderProfileContent(profEl);
+            snk('Preferences updated successfully!');
+          });
+        }
+
+        // Edit Profile Modal Handlers
+        var editProfOverlay = profEl.querySelector('#profile-edit-modal-overlay');
+        var editProfForm = profEl.querySelector('#profile-edit-form');
+        var editProfClose = profEl.querySelector('#edit-profile-close');
+        var editProfCancel = profEl.querySelector('#edit-profile-cancel');
+
+        function openEditProfModal() {
+          if (!editProfOverlay) return;
+          var inName = profEl.querySelector('#edit-prof-name');
+          var inTitle = profEl.querySelector('#edit-prof-title');
+          var inPhone = profEl.querySelector('#edit-prof-phone');
+          var inCity = profEl.querySelector('#edit-prof-city');
+          var inLi = profEl.querySelector('#edit-prof-linkedin');
+          var inGh = profEl.querySelector('#edit-prof-github');
+          var inSum = profEl.querySelector('#edit-prof-summary');
+
+          if (inName) inName.value = name || '';
+          if (inTitle) inTitle.value = title || '';
+          if (inPhone) inPhone.value = phone || '';
+          if (inCity) inCity.value = city || '';
+          if (inLi) inLi.value = linkedinUrl || '';
+          if (inGh) inGh.value = githubUrl || '';
+          if (inSum) inSum.value = summary || '';
+
+          editProfOverlay.hidden = false;
+          editProfOverlay.style.display = 'flex';
+        }
+        function closeEditProfModal() {
+          if (!editProfOverlay) return;
+          editProfOverlay.hidden = true;
+          editProfOverlay.style.display = 'none';
+        }
+
+        if (editProfClose) editProfClose.addEventListener('click', closeEditProfModal);
+        if (editProfCancel) editProfCancel.addEventListener('click', closeEditProfModal);
+        if (editProfOverlay) editProfOverlay.addEventListener('click', function (e) {
+          if (e.target === editProfOverlay) closeEditProfModal();
+        });
+
+        var editProfTriggers = profEl.querySelectorAll('#profile-hero-edit-btn, #profile-side-edit-profile, #btn-edit-about');
+        [].slice.call(editProfTriggers).forEach(function (b) {
+          b.addEventListener('click', function (e) {
+            e.preventDefault();
+            openEditProfModal();
+          });
+        });
+
+        if (editProfForm) {
+          editProfForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var inName = profEl.querySelector('#edit-prof-name');
+            var inTitle = profEl.querySelector('#edit-prof-title');
+            var inPhone = profEl.querySelector('#edit-prof-phone');
+            var inCity = profEl.querySelector('#edit-prof-city');
+            var inLi = profEl.querySelector('#edit-prof-linkedin');
+            var inGh = profEl.querySelector('#edit-prof-github');
+            var inSum = profEl.querySelector('#edit-prof-summary');
+
+            var updatedName = inName ? inName.value.trim() : name;
+            var updatedTitle = inTitle ? inTitle.value.trim() : title;
+            var updatedPhone = inPhone ? inPhone.value.trim() : phone;
+            var updatedCity = inCity ? inCity.value.trim() : city;
+            var updatedLi = inLi ? inLi.value.trim() : linkedinUrl;
+            var updatedGh = inGh ? inGh.value.trim() : githubUrl;
+            var updatedSum = inSum ? inSum.value.trim() : summary;
+
+            cand.candidate_name = updatedName;
+            cand.name = updatedName;
+            cand.candidate_title = updatedTitle;
+            cand.candidate_phone = updatedPhone;
+            cand.city = updatedCity;
+            cand.summary = updatedSum;
+            if (!cand.details) cand.details = {};
+            cand.details.city = updatedCity;
+            cand.details.linkedin_url = updatedLi;
+            cand.details.github_url = updatedGh;
+            cand.details.candidate_phone = updatedPhone;
+            cand.details.summary = updatedSum;
+            localStorage.setItem('candidate_profile_user', JSON.stringify(cand));
+
+            var tjProf = JSON.parse(localStorage.getItem('tj-profile') || '{}');
+            tjProf.name = updatedName;
+            tjProf.city = updatedCity;
+            localStorage.setItem('tj-profile', JSON.stringify(tjProf));
+
+            updateAllAvatars(cand.picture || cand.avatar_url, updatedName);
+            var meName = $('me-name'); if (meName) meName.textContent = updatedName;
+            var dNm = $('drawer-name'); if (dNm) dNm.textContent = updatedName;
+
+            var token = localStorage.getItem('candidate_profile_token') || cand.token || cand.candidate_token;
+            if (token) {
+              fetch('/api/candidate-profile/me', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                body: JSON.stringify({
+                  candidate_name: updatedName,
+                  candidate_title: updatedTitle,
+                  candidate_phone: updatedPhone,
+                  city: updatedCity,
+                  linkedin_url: updatedLi,
+                  github_url: updatedGh,
+                  summary: updatedSum,
+                }),
+              }).catch(function (err) { console.warn('Profile sync error:', err); });
+            }
+
+            closeEditProfModal();
+            renderProfileContent(profEl);
+            snk('Profile updated successfully!');
+          });
+        }
 
         var logoutBtns = profEl.querySelectorAll('#profile-side-logout, #profile-bar-logout');
         [].slice.call(logoutBtns).forEach(function (b) {
@@ -1110,61 +1045,26 @@ export function mountOpenRolesEngine(container, options = {}) {
         setScrollPos(window.__tjY || 0);
       }
 
-      function findJob(slug) {
-        if (!slug) return null;
-        var all = (window.TJ_JOBS && window.TJ_JOBS.length) ? window.TJ_JOBS : JOBS;
-        var target = String(slug).toLowerCase().trim();
-
-        // 1. Direct match on slug or id
-        var match = all.filter(function (x) {
-          return (x.slug && x.slug.toLowerCase() === target) ||
-                 (x.id && x.id.toLowerCase() === target);
-        })[0];
-        if (match) return match;
-
-        // 2. Match by 8-hex prefix anywhere in target (e.g. e5e8b62a)
-        var hexMatch = target.match(/([a-f0-9]{8})/);
-        var hex = hexMatch ? hexMatch[1] : '';
-        if (hex) {
-          match = all.filter(function (x) {
-            return (x.id && x.id.toLowerCase().indexOf(hex) === 0) ||
-                   (x.slug && x.slug.toLowerCase().indexOf(hex) > -1);
-          })[0];
-          if (match) return match;
-        }
-
-        // 3. Substring match
-        match = all.filter(function (x) {
-          return (x.slug && target.indexOf(x.slug.toLowerCase()) > -1) ||
-                 (x.slug && x.slug.toLowerCase().indexOf(target) > -1);
-        })[0];
-        return match || null;
-      }
-
       function openDetail(slug) {
         closeProfilePage();
         var list = getList(), det = getDet();
         if (!list || !det) return;
-        var j = findJob(slug);
-        if (!j) {
-          console.warn('[openDetail] Job not found for slug:', slug);
-          return;
-        }
-        if (!det.hidden && det.dataset.curSlug === j.slug) return;
+        var j = findJob(slug); if (!j) return;
+        if (!det.hidden && det.dataset.curSlug === slug) return;
         window.__tjY = getScrollPos();
         list.hidden = true;
         list.style.display = 'none';
         det.hidden = false;
         det.style.display = 'block';
-        det.dataset.curSlug = j.slug;
+        det.dataset.curSlug = slug;
         document.body.classList.add('detail');
         render(j, det);
         document.title = j.title + ' at ' + j.company + ' – TermJobs';
-        if (window.location.hash !== '#job-' + j.slug) {
+        if (window.location.hash !== '#job-' + slug) {
           try {
-            history.pushState({ tjSlug: j.slug }, '', window.location.pathname + window.location.search + '#job-' + j.slug);
+            history.pushState({ tjSlug: slug }, '', window.location.pathname + window.location.search + '#job-' + slug);
           } catch (e) {
-            history.replaceState(null, '', window.location.pathname + window.location.search + '#job-' + j.slug);
+            history.replaceState(null, '', window.location.pathname + window.location.search + '#job-' + slug);
           }
         }
         setScrollPos(0);
@@ -1197,16 +1097,12 @@ export function mountOpenRolesEngine(container, options = {}) {
           openProfilePage();
           return;
         }
-        var m = location.hash.match(/^#job-([a-z0-9-]+)$/i);
-        if (m) {
-          var j = findJob(m[1]);
-          if (j) {
-            openDetail(j.slug);
-            return;
-          }
+        var m = location.hash.match(/^#job-([a-z0-9-]+)$/), j = m && findJob(m[1]);
+        if (j) { openDetail(j.slug); }
+        else {
+          closeDetail();
+          closeProfilePage();
         }
-        closeDetail();
-        closeProfilePage();
       }
 
       // Container-level click delegator for card clicks, crumb, and detail actions
@@ -1223,7 +1119,7 @@ export function mountOpenRolesEngine(container, options = {}) {
         }
         var c = e.target.closest('a.card, [data-slug]');
         if (c && !e.target.closest('button.bm, button.un, button.dsk, button.dsv, button.dap, button.iv-attend-ai, .iv-attend-ai')) {
-          var slug = c.dataset.slug || c.dataset.id;
+          var slug = c.dataset.slug;
           if (!slug) {
             var h = c.getAttribute('href') || '';
             var m = h.match(/#job-([a-z0-9-]+)/i);
@@ -1240,6 +1136,9 @@ export function mountOpenRolesEngine(container, options = {}) {
       cleanups.push(function () { container.removeEventListener('click', onContainerClick); });
 
       window.TJ = window.TJ || {};
+      window.TJ.findJob = findJob;
+      window.TJ.openDetail = openDetail;
+      window.TJ.closeDetail = closeDetail;
       window.TJ.openDrawer = openDrawer;
       window.TJ.closeDrawer = closeDrawer;
       window.TJ.toggleDrawer = toggleDrawer;
@@ -1312,7 +1211,7 @@ export function mountOpenRolesEngine(container, options = {}) {
 
     // 2. Script 1: Search & pagination
     (function () {
-      var PER = (function (w) { return w >= 1200 ? 8 : w >= 900 ? 9 : 6; })(window.innerWidth), page = 1, cards = [].slice.call(document.querySelectorAll('#grid .card')), q = document.getElementById('q'),
+      var PER = (function (w) { return w >= 1200 ? 8 : w >= 900 ? 9 : 6; })(window.innerWidth), page = 1, cards = [].slice.call(document.querySelectorAll('.card')), q = document.getElementById('q'),
         fm = document.getElementById('f-mode'), fc = document.getElementById('f-city'), fl = document.getElementById('f-level'),
         count = document.getElementById('count'), empty = document.getElementById('empty'), r2 = document.getElementById('reset2'),
         pager = document.getElementById('pager'), grid = document.getElementById('grid'), toolbar = document.querySelector('.toolbar');
@@ -1639,22 +1538,19 @@ export function mountOpenRolesEngine(container, options = {}) {
         var curSec = $('sug') || sec;
         var curSignin = $('signin') || signin;
         var curMe = $('me') || me;
-        var curTabs = $('tabs');
-        if (curTabs) { curTabs.hidden = !on; curTabs.style.display = on ? '' : 'none'; }
         if (curSec) { curSec.hidden = !on; curSec.style.display = on ? '' : 'none'; }
         if (curSignin) { curSignin.hidden = on; curSignin.style.display = on ? 'none' : ''; }
         if (curMe) { curMe.hidden = !on; curMe.style.display = on ? 'inline-flex' : 'none'; }
         document.body.classList.toggle('has-sug', on);
-        if (!on) {
-          document.body.classList.add('show-roles');
-          document.body.classList.remove('show-saved', 'show-interview');
-        }
         if (on) {
-          var meName = $('me-name'); if (meName) meName.textContent = profile.name || 'Candidate';
-          var meAv = $('me-av'); if (meAv) meAv.textContent = (profile.name || 'C').charAt(0).toUpperCase();
-          var dAv = $('drawer-av'); if (dAv) dAv.textContent = (profile.name || 'C').charAt(0).toUpperCase();
-          var dNm = $('drawer-name'); if (dNm) dNm.textContent = profile.name || 'Candidate';
-          var dEm = $('drawer-email'); if (dEm) dEm.textContent = profile.email || '';
+          var candU = {};
+          try { candU = JSON.parse(localStorage.getItem('candidate_profile_user') || '{}'); } catch (_) {}
+          var photo = candU.picture || candU.avatar_url;
+          var displayName = profile.name || candU.candidate_name || 'Candidate';
+          var meName = $('me-name'); if (meName) meName.textContent = displayName;
+          updateAllAvatars(photo, displayName);
+          var dNm = $('drawer-name'); if (dNm) dNm.textContent = displayName;
+          var dEm = $('drawer-email'); if (dEm) dEm.textContent = profile.email || candU.candidate_email || '';
           var bits = [profile.mode || 'Any mode', profile.city === 'Across India' ? 'Remote across India' : (profile.city || 'Anywhere'), profile.level || 'Any level'];
           var sugSum = $('sug-sum'); if (sugSum) sugSum.textContent = 'Based on: ' + bits.join(' · ');
           rank();
@@ -1809,11 +1705,11 @@ export function mountOpenRolesEngine(container, options = {}) {
       setAuth();
       function addApply(slug) {
         if (applyList.indexOf(slug) < 0) { applyList.push(slug); store('tj-apply', applyList); }
-        decided[slug] = 'apply'; stopHint(); last = { slug: slug, dir: 'apply' }; render();
-        toast('Application submitted successfully! Attend your AI Interview for review and validation.', 4500);
+        decided[slug] = 'apply'; stopHint(); last = { slug: slug, dir: 'apply' }; render(); snk('Applied! AI Interview ready in Interviews tab', true);
         if (window.TJ && window.TJ.drawInterviews) window.TJ.drawInterviews();
         // Provision AI interview round in background
-        var candUser = getCandAuth();
+        var candUser = null;
+        try { candUser = JSON.parse(localStorage.getItem('candidate_profile_user') || '{}'); } catch (_) {}
         var candEmail = (candUser && (candUser.candidate_email || candUser.email)) || '';
         var candName = (candUser && (candUser.candidate_name || candUser.name)) || 'Candidate';
         var j = (window.TJ_JOBS || []).find(function (x) { return x.slug === slug; });
@@ -1828,7 +1724,7 @@ export function mountOpenRolesEngine(container, options = {}) {
               if (!window.TJ_ROUNDS.some(function (r) { return r.id === res.round_id; })) {
                 window.TJ_ROUNDS.unshift({
                   id: res.round_id,
-                  round_name: 'AI Technical Interview - ' + j.title,
+                  round_name: j.title,
                   round_type: 'AI',
                   job_title: j.title,
                   company_name: j.company,
@@ -1847,7 +1743,7 @@ export function mountOpenRolesEngine(container, options = {}) {
         var CAPI = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11.5V16c0 1.5 3 3 6 3s6-1.5 6-3v-4.5"/></svg>', PINI = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>';
         function e(t) { return String(t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
         var list = saved.map(function (sl) { return J.filter(function (j) { return j.slug === sl; })[0]; }).filter(Boolean).reverse();
-        g.innerHTML = list.map(function (j) { return '<div class="sw"><a class="card" href="#job-' + e(j.slug) + '" data-slug="' + e(j.slug) + '"><div class="card-head"><div class="logo" style="background:' + j.tone + ';color:' + j.ink + '" aria-hidden="true">' + e(j.initial) + '</div><div style="min-width:0"><h3>' + e(j.title) + '</h3><div class="co">' + e(j.company) + '</div></div></div><div class="chips"><span class="chip mode">' + e(j.mode) + '</span><span class="chip">' + CAPI + e(j.exp) + '</span><span class="chip">' + PINI + e(j.loc) + '</span></div>' + (D[j.slug] ? '<p class="blurb">' + e(getCleanBlurb(D[j.slug])) + '</p>' : '') + '<div class="card-foot"><span>View details</span><span>&rarr;</span></div></a><button type="button" class="un" data-un="' + e(j.slug) + '" aria-label="Remove from saved"><svg width="18" height="18" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-6-4-6 4z"/></svg></button></div>'; }).join('');
+        g.innerHTML = list.map(function (j) { return '<div class="sw"><a class="card" href="#job-' + e(j.slug) + '" data-slug="' + e(j.slug) + '"><div class="card-head"><div class="logo" style="background:' + j.tone + ';color:' + j.ink + '" aria-hidden="true">' + e(j.initial) + '</div><div style="min-width:0"><h3>' + e(j.title) + '</h3><div class="co">' + e(j.company) + '</div></div></div><div class="chips"><span class="chip mode">' + e(j.mode) + '</span><span class="chip">' + CAPI + e(j.exp) + '</span><span class="chip">' + PINI + e(j.loc) + '</span></div>' + (D[j.slug] ? '<p class="blurb">' + e(D[j.slug]) + '</p>' : '') + '<div class="card-foot"><span>View details</span><span>&rarr;</span></div></a><button type="button" class="un" data-un="' + e(j.slug) + '" aria-label="Remove from saved"><svg width="18" height="18" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-6-4-6 4z"/></svg></button></div>'; }).join('');
         var b = document.body; b.classList.toggle('has-saved', list.length > 0); b.classList.toggle('sv-none', list.length === 0);
         var n = document.getElementById('tab-s'), n2 = document.getElementById('sv-n'); if (n) n.textContent = list.length || ''; if (n2) n2.textContent = list.length ? '(' + list.length + ')' : '';
         paintBm();
@@ -2024,7 +1920,8 @@ export function mountOpenRolesEngine(container, options = {}) {
                    (r.round_name && r.round_name.toLowerCase().indexOf(j.title.toLowerCase()) > -1);
           })[0] || {};
 
-          var title = r.title || r.round_name || r.round_type || matchingJob.title || 'AI Technical Interview';
+          var rawTitle = r.job_title || r.requisition_title || matchingJob.title || r.title || r.round_name || 'Interview';
+          var title = String(rawTitle).replace(/^AI\s+(Technical\s+)?Interview\s*[-–:]\s*/i, '').trim() || rawTitle;
           var company = r.company_name || matchingJob.company || 'Hiring Partner';
           var initial = (company.charAt(0) || 'T').toUpperCase();
           var tone = matchingJob.tone || '#2a2f3a';
@@ -2053,6 +1950,7 @@ export function mountOpenRolesEngine(container, options = {}) {
                   '</div>' +
                 '</div>' +
                 '<div class="iv-status-row">' +
+                  '<span class="iv-badge status-completed"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Interview Completed</span>' +
                   '<span class="chip chip-completed"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Under Evaluation</span>' +
                 '</div>' +
                 '<div class="chips">' +
@@ -2131,6 +2029,7 @@ export function mountOpenRolesEngine(container, options = {}) {
                   '</div>' +
                 '</div>' +
                 '<div class="iv-status-row">' +
+                  '<span class="iv-badge status-completed"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Interview Completed</span>' +
                   '<span class="chip chip-completed"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Under Evaluation</span>' +
                 '</div>' +
                 '<div class="chips">' +
@@ -2282,7 +2181,7 @@ export function mountOpenRolesEngine(container, options = {}) {
         var dApply = ov.querySelector('#d-apply');
         if (dApply) {
           dApply.addEventListener('click', function () {
-            var T = window.TJ || {};
+            var T = window.TJ || {}, sc = cur && document.querySelector('.sc[data-slug="' + cur.slug + '"]');
             if (cur) {
               if (T.inApply(cur.slug) || dApply.classList.contains('iv-attend-mode')) {
                 closeAnim(function () {
@@ -2292,13 +2191,14 @@ export function mountOpenRolesEngine(container, options = {}) {
                 });
                 return;
               }
-              var candUser = getCandAuth();
-              if (candUser) {
+              if (options.candidateUser || (T.profile && T.profile())) {
                 var sl = cur.slug;
-                if (T.addApply) T.addApply(sl);
-                toast('Application submitted successfully! Attend your AI Interview for review and validation.', 4500);
-                dApply.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="margin-right:6px"><polygon points="5 3 19 12 5 21 5 3"/></svg>Attend AI Interview';
-                dApply.classList.add('iv-attend-mode');
+                closeAnim(function () {
+                  T.addApply(sl);
+                  if (options.onStartAiInterview) {
+                    options.onStartAiInterview({ slug: cur.slug, title: cur.title, company: cur.company });
+                  }
+                });
               } else {
                 if (options.onOpenAuth) options.onOpenAuth();
                 else toast('Please sign in to apply');
@@ -2321,7 +2221,7 @@ export function mountOpenRolesEngine(container, options = {}) {
         } else { hide(); if (cb) cb(); }
       }
       function open(slug, f) {
-        var j = JOBS.filter(function (x) { return x.slug === slug || x.id === slug; })[0]; if (!j) return;
+        var j = (window.TJ && window.TJ.findJob ? window.TJ.findJob(slug) : null) || (window.TJ_JOBS || JOBS).filter(function (x) { return x.slug === slug; })[0]; if (!j) return;
         if (!ov || !document.body.contains(ov)) build();
         cur = j; from = f || 'list'; lastF = document.activeElement;
         var T = window.TJ || {}, pr = T.profile && T.profile(), sc = document.querySelector('.sc[data-slug="' + slug + '"]'), p = sc && sc._p;
@@ -2347,26 +2247,12 @@ export function mountOpenRolesEngine(container, options = {}) {
         if (dNew2) dNew2.href = '#job-' + slug;
         var dApply = ov.querySelector('#d-apply');
         if (dApply) {
-          var isApp = window.TJ && window.TJ.inApply && window.TJ.inApply(slug);
-          if (!isApp) {
-            try { var al = JSON.parse(localStorage.getItem('tj-apply') || '[]'); isApp = al.indexOf(slug) > -1; } catch (_) {}
-          }
-          var compTitles = [];
-          try { compTitles = JSON.parse(localStorage.getItem('tj_completed_titles') || '[]'); } catch (_) {}
-          var isComp = compTitles.indexOf(j.title.toLowerCase()) > -1;
-
-          if (isComp) {
-            dApply.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-right:6px"><polyline points="20 6 9 17 4 12"/></svg>Interview Completed';
-            dApply.disabled = true;
-            dApply.className = 'btn iv-completed-btn';
-          } else if (isApp) {
+          if (window.TJ && window.TJ.inApply(slug)) {
             dApply.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="margin-right:6px"><polygon points="5 3 19 12 5 21 5 3"/></svg>Attend AI Interview';
-            dApply.disabled = false;
-            dApply.className = 'btn primary iv-attend-mode';
+            dApply.classList.add('iv-attend-mode');
           } else {
             dApply.textContent = 'Apply now';
-            dApply.disabled = false;
-            dApply.className = 'btn primary';
+            dApply.classList.remove('iv-attend-mode');
           }
         }
         dm.classList.toggle('deckmode', deckMode());
@@ -2394,80 +2280,6 @@ export function mountOpenRolesEngine(container, options = {}) {
 
       /* mobile pages: For you / All roles / Saved / Interviews */
       var tn = $('tab-n'); if (tn) tn.textContent = document.querySelectorAll('#grid .card').length;
-
-      // Dynamically sync roles with backend DB (QA and Main)
-      function syncBackendRoles() {
-        fetch('/api/public/requisitions')
-          .then(function (r) { return r.json(); })
-          .then(function (reqs) {
-            if (!Array.isArray(reqs) || !reqs.length) return;
-            var valid = reqs.filter(function (r) { return r && (r.title || (r.structured_role && r.structured_role.title)); });
-            if (!valid.length) return;
-
-            var BRAND_COLORS = [
-              ['#059669', '#fff'],
-              ['#2563eb', '#fff'],
-              ['#7c3aed', '#fff'],
-              ['#d97706', '#fff'],
-              ['#0891b2', '#fff'],
-              ['#dc2626', '#fff'],
-              ['#4f46e5', '#fff']
-            ];
-
-            var newJobs = [];
-            var newDesc = window.TJ_DESC || {};
-
-            valid.forEach(function (r, i) {
-              var sr = r.structured_role || {};
-              var title = r.title || sr.title || 'Open Position';
-              var company = r.company_name || 'Partner Enterprise';
-              var mode = sr.work_mode || r.work_mode || 'On-site';
-              var exp = sr.experience || r.experience_level || '1–3 years';
-              var loc = sr.location || r.company_location || 'India';
-              if (Array.isArray(loc)) loc = loc[0] || 'India';
-              var skills = sr.must_have_skills || r.skills || [];
-              var color = BRAND_COLORS[i % BRAND_COLORS.length];
-
-              var existing = JOBS.filter(function (x) {
-                return x.id === r.id || (r.id && x.id && x.id.indexOf(r.id.slice(0, 8)) > -1);
-              })[0];
-
-              var slug = existing ? existing.slug : (r.slug || r.id);
-              var desc = r.generated_jd_markdown || sr.job_description || (existing ? TJ_DESC[existing.slug] : '');
-
-              newJobs.push({
-                slug: slug,
-                id: r.id,
-                title: title,
-                company: company,
-                mode: mode,
-                exp: exp,
-                loc: String(loc),
-                skills: skills.slice(0, 2),
-                more: Math.max(0, skills.length - 2),
-                tone: color[0],
-                ink: color[1],
-                initial: (company.trim().charAt(0) || 'T').toUpperCase()
-              });
-              newDesc[slug] = desc;
-              newDesc[r.id] = desc;
-            });
-
-            JOBS = newJobs;
-            window.TJ_JOBS = newJobs;
-            window.TJ_DESC = newDesc;
-
-            var tabN = $('tab-n');
-            if (tabN) tabN.textContent = newJobs.length;
-            var heroRolesB = document.querySelector('.hero-r .st:first-child b');
-            if (heroRolesB) heroRolesB.textContent = newJobs.length;
-            var heroCoB = document.querySelector('.hero-r .st:nth-child(2) b');
-            if (heroCoB) heroCoB.textContent = newJobs.length;
-          })
-          .catch(function () {});
-      }
-      syncBackendRoles();
-
       [].slice.call(document.querySelectorAll('#tabs .tab')).forEach(function (b) {
         b.addEventListener('click', function () {
           var v = b.dataset.v;
