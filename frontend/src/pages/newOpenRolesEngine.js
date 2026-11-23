@@ -1567,7 +1567,10 @@ export function mountOpenRolesEngine(container, options = {}) {
         track.dataset.n = show.length;
         cnt.textContent = m.length ? (m.length + ' suggestions · scroll or use the arrows') : 'No suggestions for this filter';
         track.scrollLeft = 0; setTimeout(updArrows, 60);
-        deckCtl.hidden = true; deckEmpty.hidden = true; $('deck-hint').hidden = true;
+        if (deckCtl) deckCtl.hidden = true;
+        if (deckEmpty) deckEmpty.hidden = true;
+        var dhGrid = $('deck-hint');
+        if (dhGrid) dhGrid.hidden = true;
       }
       function renderDeck() {
         var q = deckList(), total = list().length, done = total - q.length;
@@ -1592,10 +1595,16 @@ export function mountOpenRolesEngine(container, options = {}) {
           }
           tb.hidden = (done + i !== 0);
         });
-        q.forEach(function (c, i) { c.querySelector('.cnt').textContent = (done + i + 1) + ' of ' + total; });
+        q.forEach(function (c, i) {
+          var cntEl = c.querySelector('.cnt');
+          if (cntEl) cntEl.textContent = (done + i + 1) + ' of ' + total;
+        });
         track.dataset.n = Math.min(3, q.length);
-        deckCtl.hidden = !q.length; $('deck-hint').hidden = !q.length;
-        deckEmpty.hidden = !!q.length; track.hidden = !q.length;
+        if (deckCtl) deckCtl.hidden = !q.length;
+        var dh = $('deck-hint');
+        if (dh) dh.hidden = !q.length;
+        if (deckEmpty) deckEmpty.hidden = !!q.length;
+        track.hidden = !q.length;
         if (!q.length) { $('de-t').textContent = total ? "You're all caught up" : 'No roles for this filter'; $('de-p').textContent = total ? 'You have been through every suggestion. Review the roles you picked, or start again.' : 'Try another work mode.'; $('de-restart').hidden = !total; }
       }
       function render() {
