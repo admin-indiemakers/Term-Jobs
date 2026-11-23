@@ -209,7 +209,7 @@ export function mountOpenRolesEngine(container, options = {}) {
     function getList() { return container.querySelector('#list') || document.getElementById('list'); }
     function getDet() { return container.querySelector('#detail') || document.getElementById('detail'); }
     function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
-    function toast(m) { var t = document.getElementById('dtoast'); if (!t) return; t.textContent = m; t.classList.add('on'); clearTimeout(tt); tt = setTimeout(function () { t.classList.remove('on'); }, 2400); }
+    function toast(m, dur) { var t = document.getElementById('dtoast'); if (!t) return; t.textContent = m; t.classList.add('on'); clearTimeout(tt); tt = setTimeout(function () { t.classList.remove('on'); }, dur || 3500); }
     function fallback() { var i = document.createElement('input'); i.value = location.href; document.body.appendChild(i); i.select(); try { document.execCommand('copy'); toast('Link copied'); } catch (e) { toast('Copy the address from your browser bar'); } i.remove(); }
     function share() { if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(location.href).then(function () { toast('Link copied'); }, fallback); } else fallback(); }
 
@@ -222,8 +222,26 @@ export function mountOpenRolesEngine(container, options = {}) {
       if (!target) return;
       var sk = (Array.isArray(j.skills) ? j.skills : []).map(function (s) { return '<span class="skill">' + esc(s) + '</span>'; }).join('') + (j.more ? '<span class="skill">+' + j.more + ' more skills</span>' : '');
       if (!sk) sk = '<span class="skill">Open to all skills</span>';
-      var tag = APPLY_URL ? 'a' : 'button', ap = APPLY_URL ? 'href="' + esc(APPLY_URL.replace('{slug}', j.slug)) + '" target="_blank" rel="noopener"' : 'type="button" data-apply';
+
+      var hasApplied = false;
+      try {
+        var appList = JSON.parse(localStorage.getItem('tj-apply') || '[]');
+        if (Array.isArray(appList) && appList.indexOf(j.slug) > -1) hasApplied = true;
+      } catch (_) {}
+      if (window.TJ && window.TJ.inApply && window.TJ.inApply(j.slug)) hasApplied = true;
+
+      var applySideBtnText = hasApplied
+        ? '<span class="iv-ai-play"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="display:inline-block;vertical-align:-2px;margin-right:6px;"><polygon points="5 3 19 12 5 21 5 3"/></svg></span> Attend AI Interview ' + ARROW
+        : 'Apply now ' + ARROW;
+
+      var applyBarBtnText = hasApplied
+        ? '<span class="iv-ai-play"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="display:inline-block;vertical-align:-2px;margin-right:6px;"><polygon points="5 3 19 12 5 21 5 3"/></svg></span> Attend AI Interview'
+        : 'Apply now';
+
+      var tag = APPLY_URL ? 'a' : 'button';
+      var ap = APPLY_URL ? 'href="' + esc(APPLY_URL.replace('{slug}', j.slug)) + '" target="_blank" rel="noopener"' : 'type="button" data-apply data-applied="' + (hasApplied ? 'true' : 'false') + '"';
       var logo = '<div class="logo" style="background:' + j.tone + ';color:' + j.ink + '" aria-hidden="true">' + esc(j.initial) + '</div>';
+
       target.innerHTML = '<header class="top"><a class="brand" href="#" aria-label="All TermJobs roles">' + LOGO + '<div><b>TERMJOBS</b><span>Contract workforce platform</span></div></a><div class="top-actions"><button class="btn" type="button" data-signin>Sign in</button><div class="me" id="d-me" style="display:none"><button type="button" class="av-btn" id="d-av-trigger" aria-label="Open profile menu"><span class="av" id="d-me-av" aria-hidden="true">M</span></button></div></div></header>'
           + '<a class="crumb" href="#" aria-label="Back to all open roles">' + BACK + ' All open roles</a>'
           + '<section class="d-head"><div class="d-top">' + logo + '<div class="co" style="font-size:16px">' + esc(j.company) + '</div></div><h1>' + esc(j.title) + '</h1>'
@@ -233,8 +251,9 @@ export function mountOpenRolesEngine(container, options = {}) {
           + '<section class="panel"><h2>At a glance</h2><dl class="facts"><div><dt>Company</dt><dd>' + esc(j.company) + '</dd></div><div><dt>Work mode</dt><dd>' + esc(j.mode) + '</dd></div><div><dt>Experience</dt><dd>' + esc(j.exp) + '</dd></div><div><dt>Location</dt><dd>' + esc(j.loc) + '</dd></div></dl></section>'
           + '<section class="panel"><h2>Skills</h2><div class="skills">' + sk + '</div></section>'
           + '<section class="panel"><h2>How applying works</h2><p style="margin:0;color:var(--muted)">Apply directly with your resume. Your profile is matched against the skills above and reviewed within 48 hours.</p></section></div>'
-          + '<aside class="panel apply side"><h2>Interested in this role?</h2><' + tag + ' class="btn primary block" ' + ap + '>Apply now ' + ARROW + '</' + tag + '><button class="btn block" type="button" data-share>Copy link to share</button><small><i></i>Reviewed within 48 hours</small></aside></div>'
-          + '<div class="bar"><button class="btn share" type="button" data-share aria-label="Copy link">Share</button><' + tag + ' class="btn primary" ' + ap + '>Apply now</' + tag + '></div>';
+          + '<aside class="panel apply side"><h2>Interested in this role?</h2><' + tag + ' class="btn primary block' + (hasApplied ? ' applied-attend-btn' : '') + '" ' + ap + '>' + applySideBtnText + '</' + tag + '><button class="btn block" type="button" data-share>Copy link to share</button><small><i></i>Reviewed within 48 hours</small></aside></div>'
+          + '<div class="bar"><button class="btn share" type="button" data-share aria-label="Copy link">Share</button><' + tag + ' class="btn primary' + (hasApplied ? ' applied-attend-btn' : '') + '" ' + ap + '>' + applyBarBtnText + '</' + tag + '></div>';
+
         [].slice.call(target.querySelectorAll('[data-share]')).forEach(function (b) { b.addEventListener('click', share); });
         [].slice.call(target.querySelectorAll('[data-apply]')).forEach(function (b) {
           b.addEventListener('click', function (ev) {
@@ -247,12 +266,56 @@ export function mountOpenRolesEngine(container, options = {}) {
               else toast('Please sign in to apply');
               return;
             }
-            if (T.addApply) T.addApply(j.slug);
-            if (options.onStartAiInterview) {
-              options.onStartAiInterview({ slug: j.slug, title: j.title, company: j.company });
-            } else {
-              toast('Application submitted for ' + j.title + ' at ' + j.company + '!');
+
+            var isAlreadyApplied = b.getAttribute('data-applied') === 'true' || (T.inApply && T.inApply(j.slug));
+
+            if (isAlreadyApplied) {
+              if (options.onStartAiInterview) {
+                options.onStartAiInterview({ slug: j.slug, title: j.title, company: j.company });
+              }
+              return;
             }
+
+            if (T.addApply) T.addApply(j.slug);
+
+            var cEmail = candUser.candidate_email || candUser.email || '';
+            var cName = candUser.candidate_name || candUser.name || 'Candidate';
+            if (cEmail) {
+              fetch('/api/interviews/candidate/attend-ai', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: cEmail, name: cName, slug: j.slug, title: j.title, company: j.company }),
+              }).then(function (r) { return r.json(); }).then(function (res) {
+                if (res && res.round_id) {
+                  if (!window.TJ_ROUNDS) window.TJ_ROUNDS = [];
+                  if (!window.TJ_ROUNDS.some(function (r) { return r.id === res.round_id; })) {
+                    window.TJ_ROUNDS.unshift({
+                      id: res.round_id,
+                      round_name: j.title,
+                      round_type: 'AI',
+                      job_title: j.title,
+                      company_name: j.company,
+                      candidate_token: res.candidate_token,
+                      status: 'Scheduled',
+                      is_ai: true,
+                    });
+                    if (window.TJ && window.TJ.drawInterviews) window.TJ.drawInterviews();
+                  }
+                }
+              }).catch(function () {});
+            }
+
+            [].slice.call(target.querySelectorAll('[data-apply]')).forEach(function (btn) {
+              btn.setAttribute('data-applied', 'true');
+              btn.classList.add('applied-attend-btn');
+              if (btn.classList.contains('block')) {
+                btn.innerHTML = '<span class="iv-ai-play"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="display:inline-block;vertical-align:-2px;margin-right:6px;"><polygon points="5 3 19 12 5 21 5 3"/></svg></span> Attend AI Interview ' + ARROW;
+              } else {
+                btn.innerHTML = '<span class="iv-ai-play"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="display:inline-block;vertical-align:-2px;margin-right:6px;"><polygon points="5 3 19 12 5 21 5 3"/></svg></span> Attend AI Interview';
+              }
+            });
+
+            toast('Applied successfully! Please attend your AI Interview for validation to fast-track your profile.', 4000);
           });
         });
         var crumbBtn = target.querySelector('.crumb');
@@ -2169,13 +2232,36 @@ export function mountOpenRolesEngine(container, options = {}) {
               else toast('Please sign in to apply');
               return;
             }
+
+            var isAlreadyApplied = dApply.getAttribute('data-applied') === 'true' || (T.inApply && T.inApply(cur.slug)) || dApply.classList.contains('iv-attend-mode');
+
+            if (isAlreadyApplied) {
+              closeAnim(function () {
+                if (options.onStartAiInterview) {
+                  options.onStartAiInterview({ slug: cur.slug, title: cur.title, company: cur.company });
+                }
+              });
+              return;
+            }
+
             var sl = cur.slug;
-            closeAnim(function () {
-              if (T.addApply) T.addApply(sl);
-              if (options.onStartAiInterview) {
-                options.onStartAiInterview({ slug: cur.slug, title: cur.title, company: cur.company });
-              }
-            });
+            if (T.addApply) T.addApply(sl);
+
+            var cEmail = candUser.candidate_email || candUser.email || '';
+            var cName = candUser.candidate_name || candUser.name || 'Candidate';
+            if (cEmail) {
+              fetch('/api/interviews/candidate/attend-ai', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: cEmail, name: cName, slug: cur.slug, title: cur.title, company: cur.company }),
+              }).catch(function () {});
+            }
+
+            dApply.setAttribute('data-applied', 'true');
+            dApply.classList.add('iv-attend-mode');
+            dApply.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="margin-right:6px"><polygon points="5 3 19 12 5 21 5 3"/></svg>Attend AI Interview';
+
+            toast('Applied successfully! Please attend your AI Interview for validation to fast-track your profile.', 4000);
           });
         }
       }

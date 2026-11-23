@@ -5034,3 +5034,15 @@ body.on-profile #profile-page {
   font-size: 13px !important;
   height: auto !important;
 }
+
+.applied-attend-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+}
+.applied-attend-btn .iv-ai-play {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
