@@ -87,9 +87,23 @@ async def authorize_interview_request(connection: HTTPConnection):
                 actor = get_current_user(authorization, session)
         except Exception:
             actor = None
+        if not actor and authorization.startswith('Bearer '):
+            cand_jwt = authorization[7:].strip()
+            try:
+                from modules.identity.services.auth_service import decode_access_token
+                payload = decode_access_token(cand_jwt)
+                if payload and payload.get('sub'):
+                    from types import SimpleNamespace
+                    actor = SimpleNamespace(email=payload.get('sub').strip().lower(), role='Candidate', tenant_id=None, id=None)
+            except Exception:
+                pass
     invitation = connection.query_params.get('token', '') or connection.query_params.get('candidate_token', '') or connection.query_params.get('interviewer_token', '')
     if round_id:
         doc = db['interview_rounds'].find_one({'id': round_id})
+        if not invitation and authorization and authorization.startswith('Bearer ') and doc:
+            cand_raw = authorization[7:].strip()
+            if cand_raw == doc.get('candidate_token') or cand_raw == doc.get('interviewer_token'):
+                invitation = cand_raw
         role = authorize_round(db, doc, actor, invitation)
         connection.state.interview_role = role
         if isinstance(connection, Request) and connection.url.path.endswith('/livekit/token'):
@@ -619,6 +633,7 @@ class AttendAiInterviewRequest(BaseModel):
     title: Optional[str] = None
     company: Optional[str] = None
     requisition_id: Optional[str] = None
+    round_id: Optional[str] = None
 
 
 @router.post("/candidate/attend-ai")
@@ -634,6 +649,7 @@ def candidate_attend_ai_endpoint(body: AttendAiInterviewRequest):
     cand_name = (body.name or "").strip() or "Candidate"
     req_title = (body.title or "").strip() or "Technical Role"
     comp_name = (body.company or "").strip() or "Hiring Partner"
+    target_round_id = (body.round_id or body.requisition_id or "").strip()
 
     with get_session() as session:
         candidate_rounds = session.query(InterviewRound).filter(
@@ -643,9 +659,13 @@ def candidate_attend_ai_endpoint(body: AttendAiInterviewRequest):
 
         existing = next((
             r for r in candidate_rounds
-            if (r.round_type == "AI" or "ai" in (r.round_name or "").lower())
-            and (req_title.lower() in (r.requisition_title or "").lower() or (r.requisition_title or "").lower() in req_title.lower())
-            and str(r.status).lower() not in ("cancelled", "rejected")
+            if (target_round_id and (r.id == target_round_id or r.requisition_id == target_round_id))
+            or (
+                (r.round_type == "AI" or "ai" in (r.round_name or "").lower())
+                and req_title != "Technical Role"
+                and (req_title.lower() in (r.requisition_title or "").lower() or (r.requisition_title or "").lower() in req_title.lower())
+                and str(r.status).lower() not in ("cancelled", "rejected")
+            )
         ), None)
 
         if existing:
@@ -833,6 +853,8 @@ async def resolve_interview_join_identity(round_id: str, request: Request, token
         if token and token == interview.interviewer_token:
             return {'role': 'interviewer', 'name': interview.interviewer_name or 'Interviewer'}
         if token and token == interview.candidate_token:
+            return {'role': 'candidate', 'name': interview.candidate_name or 'Candidate'}
+        if interview and (interview.round_type == 'AI' or (interview.round_name and 'ai' in interview.round_name.lower()) or str(interview.id).startswith('ai_round_')):
             return {'role': 'candidate', 'name': interview.candidate_name or 'Candidate'}
         # Fallback if round exists and user is accessing round directly
         if interview.interviewer_name:

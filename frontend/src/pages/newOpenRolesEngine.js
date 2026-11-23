@@ -2186,7 +2186,7 @@ export function mountOpenRolesEngine(container, options = {}) {
                 '</div>' +
                 '<p class="blurb iv-ai-desc">Your autonomous AI Interview is prepared. Complete it on-demand with camera &amp; mic.</p>' +
                 '<div class="iv-card-acts">' +
-                  '<button type="button" class="btn primary iv-act-btn iv-attend-ai" data-round="' + e(roomId) + '" data-slug="' + e(matchingJob.slug || '') + '" data-title="' + e(title) + '" data-company="' + e(company) + '"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg><span>Attend AI Interview</span></button>' +
+                  '<button type="button" class="btn primary iv-act-btn iv-attend-ai" data-round="' + e(roomId) + '" data-token="' + e(r.candidate_token || '') + '" data-slug="' + e(matchingJob.slug || '') + '" data-title="' + e(title) + '" data-company="' + e(company) + '"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg><span>Attend AI Interview</span></button>' +
                   '<a href="' + (matchingJob.slug ? '#job-' + e(matchingJob.slug) : '/interview/candidate') + '" ' + (matchingJob.slug ? 'data-slug="' + e(matchingJob.slug) + '"' : '') + ' class="btn secondary iv-act-btn"><span>View Details</span></a>' +
                 '</div>' +
               '</div>'

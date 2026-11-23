@@ -165,7 +165,7 @@ export default function NewOpenRolesPage({ enabled = true }) {
 
     document.body.classList.add('new-open-roles-active');
 
-    const handleStartAiInterview = async ({ slug, title, company, roundId }) => {
+    const handleStartAiInterview = async ({ slug, title, company, roundId, token }) => {
       const cand = candidateAuthRef.current?.candidateUser || (() => {
         try {
           const u = JSON.parse(localStorage.getItem('candidate_profile_user') || '{}');
@@ -175,7 +175,7 @@ export default function NewOpenRolesPage({ enabled = true }) {
       })();
 
       if (!cand || (!cand.candidate_email && !cand.email)) {
-        pendingApplyRef.current = { slug, title, company, roundId };
+        pendingApplyRef.current = { slug, title, company, roundId, token };
         setShowAuthModal(true);
         return;
       }
@@ -184,7 +184,24 @@ export default function NewOpenRolesPage({ enabled = true }) {
       const name = cand.candidate_name || cand.name || 'Candidate';
 
       if (roundId) {
-        navigate(`/interview/ai/${roundId}?role=candidate&name=${encodeURIComponent(name)}`);
+        let tok = token;
+        if (!tok && window.TJ_ROUNDS) {
+          const m = window.TJ_ROUNDS.find((r) => r.id === roundId || r.round_id === roundId);
+          if (m && m.candidate_token) tok = m.candidate_token;
+        }
+        if (!tok) {
+          try {
+            const res = await fetch('/api/interviews/candidate/attend-ai', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email, name, slug, title, company, round_id: roundId }),
+            });
+            const data = await res.json();
+            if (data && data.candidate_token) tok = data.candidate_token;
+          } catch (_) {}
+        }
+        const tokParam = tok ? `&token=${encodeURIComponent(tok)}` : '';
+        navigate(`/interview/ai/${roundId}?role=candidate&name=${encodeURIComponent(name)}${tokParam}`);
         return;
       }
 
@@ -318,7 +335,8 @@ export default function NewOpenRolesPage({ enabled = true }) {
         const title = aiBtn.dataset.title || '';
         const company = aiBtn.dataset.company || '';
         const roundId = aiBtn.dataset.round || '';
-        handleStartAiInterview({ slug, title, company, roundId });
+        const token = aiBtn.dataset.token || '';
+        handleStartAiInterview({ slug, title, company, roundId, token });
         return;
       }
       const jumpRoles = e.target.closest('[data-jump="open-roles"]');

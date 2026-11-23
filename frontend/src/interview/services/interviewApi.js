@@ -14,13 +14,23 @@ export function interviewCredentialsQuery() {
 
 function request(path, options = {}) {
   const query = new URLSearchParams(window.location.search);
-  const invitation = query.get('token');
+  const invitation = options.token && !options.token.startsWith('ey') ? options.token : query.get('token');
   if (invitation && path.includes('/interviews/') && !path.includes('token=')) {
     path += `${path.includes('?') ? '&' : '?'}token=${encodeURIComponent(invitation)}`;
   }
+  const candidateToken = localStorage.getItem('candidate_profile_token') || sessionStorage.getItem('termjobs_candidate_session');
+  let authTok = localStorage.getItem('auth_token');
+  if (!authTok && candidateToken) {
+    try {
+      const parsed = JSON.parse(candidateToken);
+      authTok = parsed.token || parsed.candidate_token || candidateToken;
+    } catch (_) {
+      authTok = candidateToken;
+    }
+  }
   return apiRequest(path, {
     ...options,
-    token: options.token || (invitation ? undefined : localStorage.getItem('auth_token')),
+    token: options.token || (invitation ? undefined : authTok),
   });
 }
 
@@ -91,10 +101,12 @@ export const interviewApi = {
   },
 
   // Meeting & Round Operations
-  async getRoundDetail(roundId) {
-    return request(`/api/interviews/rounds/${roundId}`, {
+  async getRoundDetail(roundId, token) {
+    const q = token ? `?token=${encodeURIComponent(token)}` : '';
+    return request(`/api/interviews/rounds/${roundId}${q}`, {
       method: 'GET',
       noCache: true,
+      token,
     });
   },
 
