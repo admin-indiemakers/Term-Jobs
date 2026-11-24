@@ -62,8 +62,9 @@ export default function SuperAdminRequisitions() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setError('');
     try {
-      const nextRows = await request('/api/superadmin/requisitions', { token, noCache: true });
+      const nextRows = await request('/api/superadmin/requisitions', { token, noCache: true, timeout: 30000 });
       setRows(nextRows);
       setHasLoaded(true);
       setSelected(previous => previous ? nextRows.find(row => row.id === previous.id) || null : null);

@@ -99,4 +99,13 @@ async def join_talent_pool(
     }
     # The Google request is blocking; keep it off the async event loop.
     from starlette.concurrency import run_in_threadpool
-    return await run_in_threadpool(submit_to_sheet, payload)
+    res = await run_in_threadpool(submit_to_sheet, payload)
+    try:
+        from modules.candidate_screening_agent.services.email_service import send_candidate_waitlist_welcome_email
+        send_candidate_waitlist_welcome_email(
+            candidate_name=name,
+            candidate_email=str(email),
+        )
+    except Exception as mail_err:
+        print(f"[WAITLIST TALENT-POOL WELCOME EMAIL ERROR] {mail_err}")
+    return res

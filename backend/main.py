@@ -2688,6 +2688,15 @@ async def register_public_candidate(
     from modules.candidate.telegram_service import get_telegram_bot_username
     tg_bot_username = get_telegram_bot_username()
 
+    try:
+        from modules.candidate_screening_agent.services.email_service import send_candidate_waitlist_welcome_email
+        send_candidate_waitlist_welcome_email(
+            candidate_name=name.strip(),
+            candidate_email=email.strip().lower()
+        )
+    except Exception as mail_err:
+        print(f"[WAITLIST WELCOME EMAIL ERROR] {mail_err}")
+
     return {
         "status": "success",
         "candidate_id": cand_id,

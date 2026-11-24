@@ -1,4 +1,5 @@
 """Platform-managed requisitions posted on behalf of client companies."""
+from collections import Counter
 from typing import Literal
 from datetime import timezone
 from uuid import NAMESPACE_URL, uuid5
@@ -145,29 +146,66 @@ def posting_role(body: PostingDetails):
     }
 
 
-def posting_view(row):
+def posting_view(row, link=None, applicants_count=None, viewers_count=None):
     role = row.get('structured_role') or {}
-    private = db.requisition_internal_links.find_one({'_id': row['id']}) or {}
+    if link is None:
+        private = db.requisition_internal_links.find_one({'_id': row['id']}) or {}
+        link = private.get('url', '')
+    if applicants_count is None:
+        applicants_count = db.candidate_submissions.count_documents({'requisition_id': row['id']})
+    if viewers_count is None:
+        viewers_count = db.requisition_views.count_documents({'requisition_id': row['id']})
     return {'id': row['id'], 'title': row.get('title'), 'company_name': row.get('company_name'),
-            'status': row.get('status'), 'structured_role': role, 'internal_link': private.get('url', ''),
-            'created_at': row.get('created_at'), 'applicants_count': db.candidate_submissions.count_documents({'requisition_id': row['id']}),
-            'viewers_count': db.requisition_views.count_documents({'requisition_id': row['id']})}
+            'status': row.get('status'), 'structured_role': role, 'internal_link': link,
+            'created_at': row.get('created_at'), 'applicants_count': applicants_count,
+            'viewers_count': viewers_count}
 
 
 @router.get('')
 def list_postings(user=Depends(require_superadmin)):
     rows = list(db.requisitions.find(MANAGED).sort('created_at', -1))
+    if not rows:
+        return []
+
+    now = _utcnow()
+    expired_ids = []
     for row in rows:
         role = row.get('structured_role') or {}
         if row.get('status') == 'Published' and submission_deadline_passed(role):
-            result = db.requisitions.update_one({
-                'id': row['id'], **MANAGED, 'status': 'Published',
-                'structured_role.submission_deadline': role.get('submission_deadline'),
-            }, {'$set': {'status': 'Closed', 'updated_at': _utcnow()}})
-            if result.modified_count:
-                cache.clear()
-            row.update(db.requisitions.find_one({'id': row['id'], **MANAGED}) or {})
-    return [posting_view(row) for row in rows]
+            row['status'] = 'Closed'
+            row['updated_at'] = now
+            expired_ids.append(row['id'])
+
+    if expired_ids:
+        db.requisitions.update_many(
+            {'id': {'$in': expired_ids}, **MANAGED, 'status': 'Published'},
+            {'$set': {'status': 'Closed', 'updated_at': now}}
+        )
+        cache.clear()
+
+    req_ids = [r['id'] for r in rows if 'id' in r]
+    links_map = {
+        doc['_id']: doc.get('url', '')
+        for doc in db.requisition_internal_links.find({'_id': {'$in': req_ids}}, {'url': 1})
+    }
+    applicant_counts = Counter(
+        s.get('requisition_id')
+        for s in db.candidate_submissions.find({'requisition_id': {'$in': req_ids}}, {'requisition_id': 1})
+    )
+    viewer_counts = Counter(
+        v.get('requisition_id')
+        for v in db.requisition_views.find({'requisition_id': {'$in': req_ids}}, {'requisition_id': 1})
+    )
+
+    return [
+        posting_view(
+            row,
+            link=links_map.get(row['id'], ''),
+            applicants_count=applicant_counts.get(row['id'], 0),
+            viewers_count=viewer_counts.get(row['id'], 0)
+        )
+        for row in rows
+    ]
 
 
 @router.post('', status_code=201)

@@ -309,3 +309,112 @@ def send_shortlist_dispatch_to_hiring_manager(
     </div>
     """
     return send_email_via_gmail(hm_email, subject, html)
+
+
+WAITLIST_EMAIL_TEMPLATE = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>You’re one of the first on the TermJobs list</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+body{margin:0;padding:0;background:#f2f2ef;-webkit-text-size-adjust:100%}
+a{text-decoration:none}
+@media (max-width:620px){.px{padding-left:24px!important;padding-right:24px!important}.h1{font-size:44px!important;line-height:46px!important}.btn a{display:block!important}}
+</style>
+</head>
+<body style="margin:0;padding:0;background:#f2f2ef;">
+<!-- Subject: You’re in. Seriously early. -->
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:#f2f2ef;">Your spot is saved. You’ll hear from us first. &#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f2f2ef;">
+<tr><td align="center" style="padding:32px 12px;">
+ <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;background:#0a0a0a;border-radius:32px;font-family:'Plus Jakarta Sans',-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;">
+
+  <tr><td class="px" style="padding:36px 48px 0;">
+   <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+    <td style="color:#ffffff;font-size:13px;letter-spacing:5px;font-weight:500;">TERM JOBS</td>
+    <td align="right" style="color:#8d8d94;font-size:13px;">Waiting list</td>
+   </tr></table>
+  </td></tr>
+
+  <tr><td class="px" style="padding:56px 48px 0;">
+   <span style="display:inline-block;border:1px solid #2e2e32;border-radius:999px;padding:8px 16px;color:#c9c9ce;font-size:13px;"><span style="color:#d9a441;">&#9679;</span>&nbsp; Early access member</span>
+  </td></tr>
+
+  <tr><td class="px" style="padding:28px 48px 0;">
+   <h1 class="h1" style="margin:0;font-size:64px;line-height:64px;font-weight:500;letter-spacing:-3px;color:#ffffff;">You got in<br>early<span style="color:#56565c;">.</span></h1>
+  </td></tr>
+
+  <tr><td class="px" style="padding:24px 48px 0;color:#9a9aa1;font-size:17px;line-height:27px;font-weight:300;">
+   Hi {{first_name}}, you’re officially on the TermJobs waiting list, one of the first to be here. Your profile and résumé are in, and we’re already lining up verified companies hiring for contract and permanent roles.
+  </td></tr>
+
+  <tr><td class="px" style="padding:44px 48px 0;color:#ffffff;font-size:13px;letter-spacing:3px;">WHAT HAPPENS NEXT</td></tr>
+  <tr><td class="px" style="padding:12px 48px 0;">
+   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:16px;color:#ffffff;">
+    <tr><td width="40" style="padding:16px 0;border-top:1px solid #232327;color:#d9a441;font-size:14px;">01</td><td style="padding:16px 0;border-top:1px solid #232327;">We review your profile and résumé</td></tr>
+    <tr><td width="40" style="padding:16px 0;border-top:1px solid #232327;color:#d9a441;font-size:14px;">02</td><td style="padding:16px 0;border-top:1px solid #232327;">We match you with verified companies</td></tr>
+    <tr><td width="40" style="padding:16px 0;border-top:1px solid #232327;border-bottom:1px solid #232327;color:#d9a441;font-size:14px;">03</td><td style="padding:16px 0;border-top:1px solid #232327;border-bottom:1px solid #232327;">You hear from us first, right here in your inbox</td></tr>
+   </table>
+  </td></tr>
+
+  <tr><td class="px btn" style="padding:40px 48px 0;">
+   <a href="{{website_url}}" style="display:inline-block;background:#ffffff;color:#0a0a0a;border-radius:999px;padding:18px 36px;font-size:16px;font-weight:500;text-align:center;">Visit TermJobs &nbsp;&rarr;</a>
+  </td></tr>
+
+  <tr><td class="px" style="padding:28px 48px 0;color:#8d8d94;font-size:15px;line-height:24px;font-weight:300;">
+   Nothing else to do for now. Need to update your résumé? Just reply to this email.
+  </td></tr>
+
+  <tr><td class="px" style="padding:40px 48px 0;color:#ffffff;font-size:16px;line-height:24px;">
+   Thanks for being early,<br><span style="color:#9a9aa1;">Team TermJobs</span>
+  </td></tr>
+
+  <tr><td class="px" style="padding:44px 48px 40px;">
+   <div style="border-top:1px solid #232327;padding-top:22px;color:#5f5f66;font-size:12px;line-height:19px;">
+    You’re receiving this because you joined the TermJobs waiting list with {{email}}.
+   </div>
+  </td></tr>
+
+ </table>
+</td></tr>
+</table>
+</body>
+</html>"""
+
+
+def send_candidate_waitlist_welcome_email(
+    candidate_name: str,
+    candidate_email: str,
+    website_url: Optional[str] = None
+) -> Dict[str, Any]:
+    """Send waiting list confirmation email to candidate with custom early-access dark template."""
+    from html import escape
+
+    clean_email = (candidate_email or "").strip().lower()
+    if not clean_email:
+        return {"status": "skipped", "reason": "No candidate email provided"}
+
+    raw_name = (candidate_name or "there").strip()
+    first_name = raw_name.split()[0] if raw_name else "there"
+
+    site_url = (
+        website_url
+        or os.getenv("INTERVIEW_PUBLIC_DOMAIN")
+        or "https://termjobs.in"
+    ).strip().rstrip("/")
+
+    html = WAITLIST_EMAIL_TEMPLATE
+    html = html.replace("{{first_name}}", escape(first_name))
+    html = html.replace("{{website_url}}", site_url)
+    html = html.replace("{{email}}", escape(clean_email))
+
+    subject = "You’re in. Seriously early."
+    return send_email_via_gmail(
+        to_email=clean_email,
+        subject=subject,
+        html_content=html,
+        to_name=raw_name,
+    )
