@@ -166,8 +166,12 @@ def send_interview_invitation_email(
 
     domain = public_origin or _resolve_interview_domain()
     if meeting_link:
+        if not meeting_link.startswith("http"):
+            meeting_link = f"{domain}{meeting_link if meeting_link.startswith('/') else '/' + meeting_link}"
         meeting_link = re.sub(r"https?://(localhost|127\.0\.0\.1)(:\d+)?", domain, meeting_link)
     if candidate_portal_link:
+        if not candidate_portal_link.startswith("http"):
+            candidate_portal_link = f"{domain}{candidate_portal_link if candidate_portal_link.startswith('/') else '/' + candidate_portal_link}"
         candidate_portal_link = re.sub(r"https?://(localhost|127\.0\.0\.1)(:\d+)?", domain, candidate_portal_link)
     
     from html import escape
@@ -184,14 +188,13 @@ def send_interview_invitation_email(
     content += email_details([
         ('Position', requisition_title), ('Company', company_name), ('Interview', round_name),
         ('Date', scheduled_date or 'To be confirmed'), ('Time', scheduled_time or 'To be confirmed'),
-        ('Duration', f'{duration_minutes} minutes'), ('Your passcode', passcode),
+        ('Duration', f'{duration_minutes} minutes'),
     ])
     if is_ai:
-        content += email_note('Your interview window', 'Your AI interview link and passcode are valid for 10 hours from delivery. Complete your interview within this window.')
+        content += email_note('Your interview window', 'Your AI interview link is valid for 10 hours from delivery. Complete your interview within this window.')
     if instructions:
         content += email_note('Before your interview', instructions)
     content += email_button('Start AI interview' if is_ai else 'Join interview', meeting_link)
-    content += email_paragraph(email_link('Open candidate interview portal', candidate_portal_link), secondary=True)
     content += email_paragraph('Use Chrome, Safari, or Microsoft Edge. Choose a quiet place and allow camera and microphone access when prompted.', secondary=True)
     html = light_email(
         title='Your interview invitation', category='Candidate interviews', content=content,
@@ -199,7 +202,7 @@ def send_interview_invitation_email(
         footer='You received this email because the hiring team invited you to an interview through TermJobs.',
     )
 
-    return send_email_via_gmail(candidate_email, subject, html)
+    return send_email_via_gmail(candidate_email, subject, html, to_name=candidate_name)
 
 
 def send_interviewer_invitation_email(
@@ -269,7 +272,7 @@ def send_interviewer_invitation_email(
         footer='You received this email because you were assigned an interview through TermJobs.',
     )
 
-    return send_email_via_gmail(interviewer_email, subject, html)
+    return send_email_via_gmail(interviewer_email, subject, html, to_name=interviewer_name)
 
 
 def normalize_cal_url(raw_input: str, event_slug: str = "30min") -> tuple[str, str]:

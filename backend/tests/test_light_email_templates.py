@@ -65,7 +65,8 @@ def test_email_dynamic_content_is_escaped_and_action_links_are_preserved(emails)
         assert 'Arjun &lt;m&gt;' in html
         assert '<m>' not in html
         assert 'Example &amp; Partners' in html
-    assert 'TJ-INT-TEST' in emails['candidate']
+    assert 'TJ-INT-TEST' not in emails['candidate']
+    assert 'Start AI interview' in emails['candidate']
     assert 'token=test-only' in emails['candidate']
     assert 'Your interview window' in emails['candidate']
     assert 'Please bring &lt;notes&gt; &amp; allow audio.' in emails['candidate']
