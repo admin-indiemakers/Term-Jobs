@@ -577,7 +577,6 @@ export default function NewLandingPage() {
                 )}
               </div>
             </div>
-            <div className="cue" aria-hidden="true">Scroll</div>
           </main>
 
           <div className="mq" aria-hidden="true">
