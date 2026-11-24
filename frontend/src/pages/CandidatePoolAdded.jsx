@@ -1,5 +1,5 @@
 import { Link, Navigate, useLocation } from 'react-router-dom';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, Check } from 'lucide-react';
 import SEOHead from '../components/SEOHead';
 import './CandidatePoolAdded.css';
 
@@ -21,7 +21,13 @@ export default function CandidatePoolAdded() {
         </header>
         <main className="candidate-waiting-main">
           <section>
-            <div className="pass"><i></i>Early access member</div>
+            <div className="pass">
+              <span className="pass-mark" aria-hidden="true">
+                <Check size={10} strokeWidth={3} />
+              </span>
+              <span>Verified candidate</span>
+              <span className="pass-status">Waiting list</span>
+            </div>
             <h1>
               <b>You&rsquo;re one</b>
               <b>of the first</b>

@@ -25,6 +25,14 @@ def detect_branch_name() -> str:
         val = (os.getenv(var) or "").strip().lower()
         if val:
             return val
+    for var in ("VERCEL_BRANCH_URL", "VERCEL_URL"):
+        val = (os.getenv(var) or "").strip().lower()
+        if val:
+            host = val.replace("https://", "").replace("http://", "").split("/", 1)[0]
+            if "git-qa-" in host or "-qa-" in host or host.startswith("qa.") or host.startswith("qa-"):
+                return "qa"
+            if "git-dev-" in host or "-dev-" in host or host.startswith("dev.") or host.startswith("dev-"):
+                return "dev"
     try:
         repo_root = Path(__file__).resolve().parent.parent.parent.parent
         git_head = repo_root / ".git" / "HEAD"
@@ -40,6 +48,11 @@ def detect_branch_name() -> str:
 
 def is_dev_qa_environment() -> bool:
     """Only an explicitly identified main branch may use production."""
+    explicit_environment = (os.getenv("TERMJOBS_ENVIRONMENT") or "").strip().lower()
+    if explicit_environment in ("dev", "qa", "dev_qa", "development", "preview", "staging"):
+        return True
+    if explicit_environment in ("main", "production", "prod"):
+        return False
     if os.getenv('VERCEL') and os.getenv('VERCEL_ENV') != 'production':
         return True
     return detect_branch_name() != "main"

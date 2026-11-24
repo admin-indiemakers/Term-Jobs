@@ -49,7 +49,8 @@ test('Bashaar verifies the testing cluster before forwarding authenticated reque
 
 test('only main production deployments may use production backend', () => {
   assert.equal(backendTarget({ VERCEL_GIT_COMMIT_REF: 'main', VERCEL_ENV: 'production' }).cluster, 'main');
-  for (const branch of ['dev', 'main', '', 'feature/test']) {
+  assert.equal(backendTarget({ VERCEL_GIT_COMMIT_REF: 'dev', VERCEL_ENV: 'preview' }).cluster, 'dev_qa');
+  for (const branch of ['main', '', 'feature/test']) {
     assert.throws(() => backendTarget({ VERCEL_GIT_COMMIT_REF: branch, VERCEL_ENV: 'preview' }), /disabled/);
   }
 });
