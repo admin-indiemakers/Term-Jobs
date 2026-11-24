@@ -74,6 +74,32 @@
   transition: background .25s, border-color .25s, transform .25s;
 }
 
+.candidate-waiting-wrap .waiting-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.candidate-waiting-wrap .waiting-logout-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: #cfcfd4;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color .25s, background .25s;
+}
+
+.candidate-waiting-wrap .waiting-logout-link:hover {
+  color: var(--waiting-white);
+  background: rgba(255, 255, 255, .06);
+}
+
 .candidate-waiting-wrap .waiting-home-link:hover {
   background: rgba(255, 255, 255, .06);
   border-color: #4a4a50;

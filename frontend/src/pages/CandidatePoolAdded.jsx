@@ -1,11 +1,19 @@
 import { Link, Navigate, useLocation } from 'react-router-dom';
-import { ArrowRight, Check } from 'lucide-react';
+import { ArrowRight, Check, LogOut } from 'lucide-react';
 import SEOHead from '../components/SEOHead';
+import { useCandidateAuth } from '../context/CandidateAuthContext';
+import { useNavigate } from 'react-router-dom';
 import './CandidatePoolAdded.css';
 
 export default function CandidatePoolAdded() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { logout, isAuthenticated } = useCandidateAuth();
   if (!location.state?.poolSubmitted) return <Navigate to="/" replace />;
+  const handleLogout = () => {
+    logout();
+    navigate('/', { replace: true });
+  };
   return (
     <main className="candidate-waiting-page">
       <SEOHead title="You’re on the Candidate Waiting List — TermJobs" noindex />
@@ -14,10 +22,18 @@ export default function CandidatePoolAdded() {
           <Link className="waiting-brand" to="/" aria-label="Go to TermJobs homepage">
             <img src="/logo.png" alt="TermJobs" />
           </Link>
-          <Link className="waiting-home-link" to="/">
-            Go to home
-            <ArrowRight size={15} aria-hidden="true" />
-          </Link>
+          <div className="waiting-header-actions">
+            {isAuthenticated && (
+              <button type="button" className="waiting-logout-link" onClick={handleLogout}>
+                <LogOut size={15} aria-hidden="true" />
+                Logout
+              </button>
+            )}
+            <Link className="waiting-home-link" to="/">
+              Go to home
+              <ArrowRight size={15} aria-hidden="true" />
+            </Link>
+          </div>
         </header>
         <main className="candidate-waiting-main">
           <section>
