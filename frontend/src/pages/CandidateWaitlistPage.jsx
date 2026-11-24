@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, CheckCircle2, ShieldCheck, Upload } from 'lucide-react';
 import CandidateAuthModal from '../components/CandidateAuthModal';
@@ -8,9 +8,42 @@ import SEOHead from '../components/SEOHead';
 export default function CandidateWaitlistPage() {
   const navigate = useNavigate();
   const candidateAuth = useCandidateAuth();
-  const [authOpen, setAuthOpen] = useState(true);
+  const [authOpen, setAuthOpen] = useState(() => !candidateAuth.isAuthenticated);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const autoJoinStarted = useRef(false);
+
+  useEffect(() => {
+    if (
+      !candidateAuth.candidateLoading &&
+      candidateAuth.isAuthenticated &&
+      candidateAuth.candidateUser &&
+      !autoJoinStarted.current
+    ) {
+      autoJoinStarted.current = true;
+      setAuthOpen(false);
+      const email = String(candidateAuth.candidateUser.candidate_email || candidateAuth.candidateUser.email || '').trim().toLowerCase();
+      if (email) {
+        try {
+          const joinedEmails = JSON.parse(localStorage.getItem('tj_waitlist_joined') || '[]');
+          if (Array.isArray(joinedEmails) && joinedEmails.includes(email)) {
+            navigate('/candidate-pool/added', {
+              replace: true,
+              state: { poolSubmitted: true },
+            });
+            return;
+          }
+        } catch {}
+      }
+      joinCandidatePool(candidateAuth.candidateUser);
+    } else if (!candidateAuth.candidateLoading && !candidateAuth.isAuthenticated) {
+      setAuthOpen(true);
+    }
+  }, [
+    candidateAuth.candidateLoading,
+    candidateAuth.isAuthenticated,
+    candidateAuth.candidateUser,
+  ]);
 
   const joinCandidatePool = async (candidate) => {
     if (submitting) return;
@@ -38,6 +71,16 @@ export default function CandidateWaitlistPage() {
       const result = await response.json().catch(() => null);
       if (!response.ok) {
         throw new Error(result?.detail || result?.message || 'Could not add you to the candidate pool.');
+      }
+      const email = String(current.candidate_email || current.email || '').trim().toLowerCase();
+      if (email) {
+        try {
+          const existing = JSON.parse(localStorage.getItem('tj_waitlist_joined') || '[]');
+          const joinedEmails = Array.isArray(existing) ? existing : [];
+          if (!joinedEmails.includes(email)) {
+            localStorage.setItem('tj_waitlist_joined', JSON.stringify([...joinedEmails, email]));
+          }
+        } catch {}
       }
       navigate('/candidate-pool/added', {
         replace: true,

@@ -2,12 +2,24 @@ const PRODUCTION_BACKEND = 'https://term-jobs-j8ja-seven.vercel.app';
 const QA_BACKEND = 'https://term-jobs-j8ja-git-qa-i-ndiemakers.vercel.app';
 
 export function backendTarget(env = process.env) {
-  const branch = (env.VERCEL_GIT_COMMIT_REF || '').toLowerCase();
-  const production = branch === 'main' && env.VERCEL_ENV === 'production';
+  const branch = (env.VERCEL_GIT_COMMIT_REF || env.BRANCH_NAME || env.GIT_BRANCH || '').toLowerCase();
+  const environment = (env.TERMJOBS_ENVIRONMENT || '').toLowerCase();
+  const deploymentUrl = (env.VERCEL_BRANCH_URL || env.VERCEL_URL || '').toLowerCase();
+  const qaDeployment = (
+    environment === 'qa' ||
+    environment === 'dev_qa' ||
+    branch === 'qa' ||
+    branch === 'dev' ||
+    deploymentUrl.includes('git-qa-') ||
+    deploymentUrl.includes('-qa-') ||
+    deploymentUrl.startsWith('qa.') ||
+    deploymentUrl.startsWith('qa-')
+  );
+  const production = branch === 'main' && env.VERCEL_ENV === 'production' && !qaDeployment;
   const bashaar = branch === 'bashaar_edit';
   const configured = production ? env.PRODUCTION_BACKEND_URL || PRODUCTION_BACKEND
     : bashaar ? env.BASHAAR_BACKEND_URL || env.QA_BACKEND_URL || env.DEV_QA_BACKEND_URL || QA_BACKEND
-      : (branch === 'qa' ? env.QA_BACKEND_URL || env.DEV_QA_BACKEND_URL || QA_BACKEND : branch === 'dev' ? env.DEV_BACKEND_URL || env.DEV_QA_BACKEND_URL : env.DEV_QA_BACKEND_URL);
+      : (qaDeployment ? env.QA_BACKEND_URL || env.DEV_QA_BACKEND_URL || env.DEV_BACKEND_URL || QA_BACKEND : env.DEV_QA_BACKEND_URL);
   if (!configured) throw new Error('QA/dev API is disabled until QA_BACKEND_URL, DEV_BACKEND_URL, or DEV_QA_BACKEND_URL is configured.');
   const target = new URL(configured);
   if (target.protocol !== 'https:' || target.username || target.password || !['', '/', '/api', '/api/'].includes(target.pathname) || target.search || target.hash) {
