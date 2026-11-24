@@ -1,0 +1,282 @@
+:root {
+  --waiting-black: #0a0a0a;
+  --waiting-white: #fff;
+  --waiting-mute: #8d8d94;
+  --waiting-dim: #56565c;
+  --waiting-line: #e7e7e3;
+  --waiting-gold: #d9a441;
+}
+
+.candidate-waiting-page {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--waiting-black);
+  color: var(--waiting-white);
+  font-family: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  background-image: radial-gradient(800px 500px at 12% 30%, rgba(255, 255, 255, .07), transparent 70%);
+  padding-top: env(safe-area-inset-top, 0);
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.candidate-waiting-wrap {
+  width: 100%;
+  max-width: 1160px;
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: 0 clamp(20px, 5vw, 48px);
+  display: flex;
+  flex-direction: column;
+}
+
+.candidate-waiting-wrap header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 30px 0;
+  font-size: 13px;
+  letter-spacing: .3em;
+  font-weight: 500;
+}
+
+.candidate-waiting-wrap header small {
+  letter-spacing: 0;
+  font-size: 14px;
+  font-weight: 300;
+  color: var(--waiting-mute);
+}
+
+.candidate-waiting-wrap .waiting-brand {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+.candidate-waiting-wrap .waiting-brand img {
+  width: 46px;
+  height: 46px;
+  object-fit: contain;
+  filter: brightness(0) invert(1);
+}
+
+.candidate-waiting-wrap .waiting-home-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--waiting-white);
+  border: 1px solid #2c2c30;
+  border-radius: 999px;
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-decoration: none;
+  transition: background .25s, border-color .25s, transform .25s;
+}
+
+.candidate-waiting-wrap .waiting-home-link:hover {
+  background: rgba(255, 255, 255, .06);
+  border-color: #4a4a50;
+  transform: translateY(-1px);
+}
+
+.candidate-waiting-main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1.15fr .85fr;
+  gap: clamp(32px, 6vw, 80px);
+  align-items: center;
+  padding: 16px 0 56px;
+}
+
+.candidate-waiting-main .pass {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #2c2c30;
+  border-radius: 999px;
+  padding: 9px 18px;
+  font-size: 13px;
+  color: #c9c9ce;
+  opacity: 0;
+  animation: waiting-up .8s cubic-bezier(.2, .8, .2, 1) .1s forwards;
+}
+
+.candidate-waiting-main .pass i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--waiting-gold);
+}
+
+.candidate-waiting-main h1 {
+  font-weight: 500;
+  font-size: clamp(46px, 7.4vw, 104px);
+  line-height: .96;
+  letter-spacing: -.065em;
+  margin: 26px 0;
+}
+
+.candidate-waiting-main h1 b {
+  display: block;
+  font-weight: 500;
+  opacity: 0;
+  transform: translateY(26px);
+  animation: waiting-up .9s cubic-bezier(.2, .8, .2, 1) forwards;
+}
+
+.candidate-waiting-main h1 b:nth-child(1) { animation-delay: .25s; }
+.candidate-waiting-main h1 b:nth-child(2) { animation-delay: .4s; }
+.candidate-waiting-main h1 b:nth-child(3) { animation-delay: .55s; color: var(--waiting-dim); }
+
+.candidate-waiting-main .lede {
+  color: var(--waiting-mute);
+  font-weight: 300;
+  font-size: clamp(16px, 1.6vw, 20px);
+  line-height: 1.6;
+  max-width: 28em;
+  margin: 0;
+  opacity: 0;
+  animation: waiting-up .8s ease .8s forwards;
+}
+
+.ticket {
+  background: var(--waiting-white);
+  color: var(--waiting-black);
+  border-radius: 32px;
+  padding: clamp(26px, 3.5vw, 40px);
+  box-shadow: 0 40px 90px -30px rgba(255, 255, 255, .18);
+  opacity: 0;
+  transform: translateY(30px);
+  animation: waiting-up 1s cubic-bezier(.2, .8, .2, 1) .5s forwards;
+}
+
+.ticket .head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 22px;
+}
+
+.ticket .mark {
+  width: 56px;
+  height: 56px;
+  flex: none;
+  overflow: visible;
+}
+
+.ticket .mark circle {
+  fill: var(--waiting-black);
+  stroke: var(--waiting-black);
+  stroke-width: 1;
+}
+
+.ticket .mark path {
+  fill: none;
+  stroke: var(--waiting-white);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 40;
+  stroke-dashoffset: 40;
+  animation: waiting-draw .6s ease-out 1.1s forwards;
+}
+
+.ticket .head h2 {
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -.03em;
+  margin: 0 0 3px;
+  line-height: 1.15;
+}
+
+.ticket .head p {
+  margin: 0;
+  font-size: 14px;
+  color: #77777d;
+  font-weight: 300;
+}
+
+.ticket ul {
+  list-style: none;
+  margin: 0 0 28px;
+  padding: 0;
+  border-top: 1px solid var(--waiting-line);
+}
+
+.ticket li {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 2px;
+  border-bottom: 1px solid var(--waiting-line);
+  font-size: 15px;
+}
+
+.ticket li svg {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  stroke: var(--waiting-gold);
+  fill: none;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.ticket li:last-child { color: #77777d; }
+
+.ticket .btn {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  background: var(--waiting-black);
+  color: var(--waiting-white);
+  border-radius: 999px;
+  padding: 19px 24px;
+  font-size: 16px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: transform .25s, box-shadow .25s;
+}
+
+.ticket .btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 30px -14px rgba(0, 0, 0, .6);
+}
+
+.ticket .btn:focus-visible {
+  outline: 2px solid var(--waiting-black);
+  outline-offset: 4px;
+}
+
+.ticket .btn svg {
+  transition: transform .25s;
+}
+
+.ticket .btn:hover svg { transform: translateX(4px); }
+
+@keyframes waiting-draw { to { stroke-dashoffset: 0; } }
+@keyframes waiting-up { to { opacity: 1; transform: none; } }
+
+@media (max-width: 860px) {
+  .candidate-waiting-main {
+    grid-template-columns: 1fr;
+    gap: 36px;
+    padding-bottom: 40px;
+  }
+
+  .candidate-waiting-main h1 {
+    font-size: clamp(44px, 13vw, 72px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .candidate-waiting-page *,
+  .candidate-waiting-page *::before,
+  .candidate-waiting-page *::after {
+    animation-duration: .01ms !important;
+    animation-delay: 0s !important;
+  }
+}

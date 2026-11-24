@@ -647,6 +647,10 @@
 }
 
 .tj-landing-root #v-home .th[data-mode="cand"] .th-pill {
+  transform: translateX(0);
+}
+
+.tj-landing-root #v-home .th[data-mode="hire"] .th-pill {
   transform: translateX(100%);
 }
 

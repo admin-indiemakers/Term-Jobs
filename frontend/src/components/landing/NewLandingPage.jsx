@@ -134,7 +134,7 @@ export default function NewLandingPage() {
   const [slideIdx, setSlideIdx] = useState(0);
 
   // Toggle hero mode: 'hire' | 'cand'
-  const [heroMode, setHeroMode] = useState('hire');
+  const [heroMode, setHeroMode] = useState('cand');
 
   // Candidate pool state
   const [poolCat, setPoolCat] = useState('All');
@@ -513,15 +513,6 @@ export default function NewLandingPage() {
                 <span className="th-pill" aria-hidden="true"></span>
                 <button
                   role="tab"
-                  id="tt-hire"
-                  aria-selected={heroMode === 'hire'}
-                  aria-controls="tp-hire"
-                  onClick={() => setHeroMode('hire')}
-                >
-                  Hiring manager
-                </button>
-                <button
-                  role="tab"
                   id="tt-cand"
                   aria-selected={heroMode === 'cand'}
                   aria-controls="tp-cand"
@@ -529,6 +520,16 @@ export default function NewLandingPage() {
                   onClick={() => setHeroMode('cand')}
                 >
                   Candidate
+                </button>
+                <button
+                  role="tab"
+                  id="tt-hire"
+                  aria-selected={heroMode === 'hire'}
+                  aria-controls="tp-hire"
+                  tabIndex={heroMode === 'hire' ? 0 : -1}
+                  onClick={() => setHeroMode('hire')}
+                >
+                  Hiring manager
                 </button>
               </div>
 
@@ -564,7 +565,7 @@ export default function NewLandingPage() {
                       Share your skills once. We match you with verified companies hiring for contract and permanent roles.
                     </p>
                     <div className="th-a">
-                      <button className="th-b pri" onClick={() => navigateTo('jobs')}>
+                      <button className="th-b pri" onClick={() => navigate('/talent-waitlist')}>
                         I&rsquo;m looking for work <i>&rarr;</i>
                       </button>
                     </div>

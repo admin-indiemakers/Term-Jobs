@@ -340,37 +340,37 @@ export default function CandidateAuthModal({
   if (!isOpen || typeof document === 'undefined') return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-xl font-sans animate-in fade-in duration-200">
-      <div className="bg-white border border-neutral-200 rounded-3xl max-w-md w-full shadow-[0_25px_60px_-15px_rgba(0,0,0,0.35),0_0_0_1px_rgba(0,0,0,0.06)] p-6 sm:p-7 relative max-h-[90vh] overflow-y-auto text-neutral-900">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-[#090a0c]/75 backdrop-blur-md font-sans animate-in fade-in duration-200">
+      <div className="relative w-full max-w-[620px] max-h-[92vh] overflow-y-auto rounded-[30px] border border-white/80 bg-[#fbfbf9] p-5 shadow-[0_32px_90px_-24px_rgba(0,0,0,.65)] sm:p-8 text-neutral-900">
         {/* Close button */}
         <button
           type="button"
           onClick={onClose}
-          className="absolute top-5 right-5 p-2 rounded-full text-neutral-500 hover:text-neutral-900 bg-neutral-100 hover:bg-neutral-200 border border-neutral-200/80 transition cursor-pointer"
+          className="absolute top-5 right-5 z-10 grid h-9 w-9 place-items-center rounded-full border border-neutral-200 bg-white text-neutral-500 shadow-sm transition hover:-translate-y-0.5 hover:text-neutral-950 cursor-pointer"
           aria-label="Close"
         >
           <X size={16} />
         </button>
 
         {/* Brand Header */}
-        <div className="text-center mb-6">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-neutral-100 border border-neutral-200 text-[0.65rem] font-bold tracking-[0.2em] text-neutral-600 uppercase mb-3">
-            <span className="w-1.5 h-1.5 rounded-full bg-neutral-900 animate-pulse" />
-            <span>Candidate Talent Portal</span>
+        <div className="mb-7 pr-12 text-left">
+          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-neutral-600 shadow-sm">
+            <span className="h-1.5 w-1.5 rounded-full bg-neutral-950" />
+            <span>Candidate waiting list</span>
           </div>
-          <h3 className="font-display text-xl font-extrabold text-neutral-900 tracking-tight">
+          <h3 className="font-display text-3xl font-bold tracking-[-0.035em] text-neutral-950">
             {googleResumeRequired
-              ? 'Add your resume'
+              ? 'Complete your profile'
               : authTab === 'login'
-              ? 'Sign In to Candidate Profile'
-              : 'Create Talent Profile'}
+              ? 'Welcome back'
+              : 'Join the talent network'}
           </h3>
-          <p className="text-xs text-neutral-500 mt-1">
+          <p className="mt-2 max-w-md text-sm leading-6 text-neutral-500">
             {googleResumeRequired
-              ? 'One last step to complete your candidate profile.'
+              ? 'One final step — add your résumé to enter the candidate pool.'
               : authTab === 'login'
-              ? 'Access verified partner requisitions and 1-click apply.'
-              : 'Join the verified talent network to browse and apply for roles.'}
+              ? 'Sign in to manage your profile and matched opportunities.'
+              : 'Use Google or email to create your verified candidate profile.'}
           </p>
         </div>
 
@@ -416,7 +416,7 @@ export default function CandidateAuthModal({
             type="button"
             onClick={handleGoogleSignIn}
             disabled={authLoading}
-            className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-xl border border-neutral-300 bg-white hover:bg-neutral-50 text-neutral-800 font-bold text-xs tracking-wide shadow-xs active:scale-[0.99] transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed mb-5"
+            className="mb-5 flex h-12 w-full items-center justify-center gap-3 rounded-full border border-neutral-300 bg-white px-5 text-sm font-bold text-neutral-900 shadow-sm transition hover:-translate-y-0.5 hover:border-neutral-400 hover:shadow-md active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <GoogleIcon className="w-4 h-4" />
             <span>{authLoading ? 'Connecting…' : 'Continue with Google'}</span>
@@ -426,15 +426,15 @@ export default function CandidateAuthModal({
         {!googleResumeRequired && (
           <>
             {/* Divider */}
-            <div className="relative flex items-center justify-center mb-5">
+            <div className="relative mb-5 flex items-center justify-center">
               <div className="border-t border-neutral-200 w-full" />
-              <span className="bg-white px-3 text-[10px] font-bold uppercase tracking-wider text-neutral-400 absolute">
-                or use candidate credentials
+              <span className="absolute bg-[#fbfbf9] px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-neutral-400">
+                or continue with email
               </span>
             </div>
 
             {/* Tab Switcher */}
-            <div className="flex p-1 bg-neutral-100 border border-neutral-200 rounded-xl mb-4">
+            <div className="mb-5 flex rounded-full border border-neutral-200 bg-neutral-100 p-1">
               <button
                 type="button"
                 onClick={() => {
@@ -529,9 +529,9 @@ export default function CandidateAuthModal({
             <button
               type="submit"
               disabled={authLoading}
-              className="w-full py-3 rounded-xl bg-neutral-900 hover:bg-black active:scale-[0.99] text-white font-bold text-xs uppercase tracking-[0.14em] transition cursor-pointer shadow-md hover:shadow-lg mt-3 disabled:opacity-50"
+              className="mt-4 h-12 w-full rounded-full bg-neutral-950 px-5 text-sm font-bold text-white shadow-lg transition hover:-translate-y-0.5 hover:bg-neutral-800 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {authLoading ? 'Signing In…' : 'Sign In to Candidate Profile'}
+              {authLoading ? 'Signing in…' : 'Sign in to continue'}
             </button>
           </form>
         )}
@@ -550,7 +550,7 @@ export default function CandidateAuthModal({
                   value={regName}
                   onChange={(e) => setRegName(e.target.value)}
                   placeholder="Alex Johnson"
-                  className="w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border border-neutral-300 rounded-xl px-3 py-2 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 transition-all"
+                  className="h-11 w-full rounded-xl border border-neutral-300 bg-white px-3.5 text-sm text-neutral-900 placeholder-neutral-400 transition focus:border-neutral-950 focus:outline-none focus:ring-2 focus:ring-neutral-950/10"
                 />
               </div>
               <div>
@@ -570,7 +570,7 @@ export default function CandidateAuthModal({
                     regEmail && validateCandidateEmail(regEmail, { required: false })
                       ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-500'
                       : 'border-neutral-300 focus:border-neutral-900 focus:ring-neutral-900'
-                  } rounded-xl px-3 py-2 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-1 transition-all`}
+                  } h-11 rounded-xl px-3.5 text-sm text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-2 transition-all`}
                 />
               </div>
             </div>
@@ -646,9 +646,9 @@ export default function CandidateAuthModal({
             <button
               type="submit"
               disabled={authLoading}
-              className="w-full py-3 rounded-xl bg-neutral-900 hover:bg-black active:scale-[0.99] text-white font-bold text-xs uppercase tracking-[0.14em] transition cursor-pointer shadow-md hover:shadow-lg mt-3 disabled:opacity-50"
+              className="mt-4 h-12 w-full rounded-full bg-neutral-950 px-5 text-sm font-bold text-white shadow-lg transition hover:-translate-y-0.5 hover:bg-neutral-800 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {authLoading ? 'Creating Profile…' : 'Create Talent Profile & Continue'}
+              {authLoading ? 'Creating your profile…' : 'Create profile & join the pool'}
             </button>
           </form>
         )}

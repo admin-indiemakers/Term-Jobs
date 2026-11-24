@@ -1,20 +1,65 @@
 import { Link, Navigate, useLocation } from 'react-router-dom';
-import { CheckCircle2 } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import SEOHead from '../components/SEOHead';
+import './CandidatePoolAdded.css';
 
 export default function CandidatePoolAdded() {
   const location = useLocation();
   if (!location.state?.poolSubmitted) return <Navigate to="/" replace />;
   return (
-    <main className="min-h-dvh bg-[#f7f7f5] flex items-center justify-center px-5 py-12">
-      <SEOHead title="Added to Candidate Pool — TermJobs" noindex />
-      <section className="w-full max-w-xl rounded-[32px] border border-neutral-200 bg-white p-8 sm:p-12 text-center shadow-sm">
-        <p className="text-xs font-bold tracking-[0.2em] uppercase text-neutral-500">Candidate talent network</p>
-        <CheckCircle2 className="mx-auto my-8 h-16 w-16 text-emerald-600" aria-hidden="true" />
-        <h1 className="text-3xl font-bold tracking-tight text-neutral-900">Added to Candidate Pool</h1>
-        <p className="mt-5 text-sm leading-relaxed text-neutral-600">Your profile and résumé have been submitted successfully. We’ll contact you by email about matching opportunities.</p>
-        <Link to="/" className="mt-8 inline-flex rounded-full bg-neutral-900 px-7 py-3 text-sm font-bold text-white hover:bg-neutral-700">Back to home</Link>
-      </section>
+    <main className="candidate-waiting-page">
+      <SEOHead title="You’re on the Candidate Waiting List — TermJobs" noindex />
+      <div className="candidate-waiting-wrap">
+        <header>
+          <Link className="waiting-brand" to="/" aria-label="Go to TermJobs homepage">
+            <img src="/logo.png" alt="TermJobs" />
+          </Link>
+          <Link className="waiting-home-link" to="/">
+            Go to home
+            <ArrowRight size={15} aria-hidden="true" />
+          </Link>
+        </header>
+        <main className="candidate-waiting-main">
+          <section>
+            <div className="pass"><i></i>Early access member</div>
+            <h1>
+              <b>You&rsquo;re one</b>
+              <b>of the first</b>
+              <b>on the list.</b>
+            </h1>
+            <p className="lede">
+              Your profile and résumé are in. As an early member, you’ll hear from us first when verified contract and permanent roles open up.
+            </p>
+          </section>
+
+          <section className="ticket" aria-label="Waiting list status">
+            <div className="head">
+              <svg className="mark" viewBox="0 0 56 56" aria-hidden="true">
+                <circle cx="28" cy="28" r="27" />
+                <path d="M17 29l8 8 14-17" />
+              </svg>
+              <div>
+                <h2>Added to candidate pool</h2>
+                <p>Your spot is saved</p>
+              </div>
+            </div>
+            <ul>
+              {['Profile received', 'Résumé uploaded', 'First access when we open the doors'].map((item) => (
+                <li key={item}>
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="m5 12 5 5 9-10" />
+                  </svg>
+                  {item}
+                </li>
+              ))}
+            </ul>
+            <Link className="btn" to="/">
+              Back to home
+              <ArrowRight size={17} aria-hidden="true" />
+            </Link>
+          </section>
+        </main>
+      </div>
     </main>
   );
 }

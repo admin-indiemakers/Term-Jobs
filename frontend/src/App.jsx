@@ -10,6 +10,7 @@ import { motion } from 'framer-motion';
 import { useAuth } from './context/AuthContext';
 import { CandidateAuthProvider } from './context/CandidateAuthContext';
 import LandingPage from './pages/LandingPage';
+import CandidateWaitlistPage from './pages/CandidateWaitlistPage';
 const AuthPage = lazyWithRetry(() => import('./pages/AuthPage'));
 const OpenRolesPage = lazyWithRetry(() => import('./pages/OpenRolesPage'));
 const NewOpenRolesPage = lazyWithRetry(() => import('./pages/NewOpenRolesPage'));
@@ -276,6 +277,7 @@ export default function App() {
         <Suspense fallback={<FullScreenLoader />}>
           <Routes>
             <Route path="/candidate-pool/added" element={<CandidatePoolAdded />} />
+            <Route path="/talent-waitlist" element={<CandidateWaitlistPage />} />
             <Route path="/privacy-policy" element={<LegalPage type="privacy" />} />
             <Route path="/terms-and-conditions" element={<LegalPage type="terms" />} />
             <Route path="/platform-rules" element={<LegalPage type="rules" />} />
