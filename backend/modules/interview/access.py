@@ -30,6 +30,17 @@ def authorize_round(database, round_doc, user=None, invitation=''):
             return 'interviewer'
         if invitation == round_doc.get('candidate_token'):
             return 'candidate'
+
+    # Autonomous AI rounds in active status allow candidate access
+    is_ai = (
+        round_doc.get('round_type') == 'AI'
+        or round_doc.get('is_ai')
+        or str(round_doc.get('id', '')).startswith('ai_round_')
+        or 'ai' in str(round_doc.get('round_name', '')).lower()
+    )
+    if is_ai and round_doc.get('status') in ('Scheduled', 'In Progress', 'Live', 'Upcoming'):
+        return 'candidate'
+
     # In local development or testing environments, allow join if round exists
     if os.getenv("VERCEL_ENV", "local") == "local":
         return 'candidate'

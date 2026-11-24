@@ -302,6 +302,8 @@ export function CandidateAuthProvider({ children }) {
       localStorage.removeItem('tj-apply');
       localStorage.removeItem('tj-saved');
       localStorage.removeItem('tj_applied_jobs');
+      localStorage.removeItem('tj_completed_round_ids');
+      localStorage.removeItem('tj_completed_titles');
       Object.keys(localStorage).forEach((key) => {
         if (key.startsWith('tj_applied_jobs')) {
           localStorage.removeItem(key);

@@ -72,39 +72,66 @@ export function InterviewMeetingRoomPage() {
       return;
     }
 
-    interviewApi
-      .getRoundDetail(roundId)
-      .then(async (res) => {
-        if (res) {
-          const isLiveOrActive = res.status === 'In Progress' || res.status === 'Live' || res.status === 'Upcoming' || res.round_type === 'AI';
-          if (accountToken || invitationToken || searchParams.get('role') === 'interviewer') {
-            try {
-              const identity = await request(`/api/interviews/rounds/${roundId}/join-identity?token=${encodeURIComponent(invitationToken)}`, { token: accountToken, noCache: true });
-              setJoinIdentity(identity);
-              if (res.is_expired && !isLiveOrActive && res.status !== 'Completed' && identity?.role !== 'interviewer') {
-                setErrorMsg('This interview link has expired. Please request a new interview invitation.');
-              }
-            } catch (idErr) {
-              // If join-identity check fails, fallback to query role
-              console.warn('[Meeting Room] Identity resolution fallback:', idErr);
+    const loadRoom = async () => {
+      let activeToken = invitationToken;
+      const isAiPath = window.location.pathname.startsWith('/interview/ai');
+      if (!activeToken && (isAiPath || searchParams.get('role') === 'candidate')) {
+        try {
+          const candUser = JSON.parse(localStorage.getItem('candidate_profile_user') || '{}');
+          const candEmail = candUser.candidate_email || candUser.email || '';
+          if (candEmail) {
+            const res = await fetch('/api/interviews/candidate/attend-ai', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email: candEmail, round_id: roundId }),
+            });
+            const data = await res.json();
+            if (data && data.candidate_token) {
+              activeToken = data.candidate_token;
+              const newUrl = new URL(window.location.href);
+              newUrl.searchParams.set('token', activeToken);
+              window.history.replaceState(null, '', newUrl.toString());
             }
-          } else if (res.is_expired && !isLiveOrActive && res.status !== 'Completed') {
-            setErrorMsg('This interview link has expired. Please request a new interview invitation.');
           }
-          setRound(res);
-          if (res?.id && sessionStorage.getItem(`tj_onboarding_done_${res.id}`) === 'true') {
-            setIsOnboardingCompleted(true);
+        } catch (_) {}
+      }
+
+      interviewApi
+        .getRoundDetail(roundId, activeToken)
+        .then(async (res) => {
+          if (res) {
+            const isLiveOrActive = res.status === 'In Progress' || res.status === 'Live' || res.status === 'Upcoming' || res.round_type === 'AI';
+            if (accountToken || activeToken || searchParams.get('role') === 'interviewer') {
+              try {
+                const identity = await request(`/api/interviews/rounds/${roundId}/join-identity?token=${encodeURIComponent(activeToken || '')}`, { token: accountToken, noCache: true });
+                setJoinIdentity(identity);
+                if (res.is_expired && !isLiveOrActive && res.status !== 'Completed' && identity?.role !== 'interviewer') {
+                  setErrorMsg('This interview link has expired. Please request a new interview invitation.');
+                }
+              } catch (idErr) {
+                // If join-identity check fails, fallback to query role
+                console.warn('[Meeting Room] Identity resolution fallback:', idErr);
+              }
+            } else if (res.is_expired && !isLiveOrActive && res.status !== 'Completed') {
+              setErrorMsg('This interview link has expired. Please request a new interview invitation.');
+            }
+            setRound(res);
+            if (res?.id && sessionStorage.getItem(`tj_onboarding_done_${res.id}`) === 'true') {
+              setIsOnboardingCompleted(true);
+            }
+          } else {
+            setErrorMsg('Interview round not found.');
           }
-        } else {
-          setErrorMsg('Interview round not found.');
-        }
-      })
-      .catch((err) => {
-        setErrorMsg(err?.message || 'Failed to load interview room.');
-      })
-      .finally(() => {
-        setLoading(false);
-      });
+        })
+        .catch((err) => {
+          setErrorMsg(err?.message || 'Failed to load interview room.');
+        })
+        .finally(() => {
+          setLoading(false);
+        });
+    };
+
+    loadRoom();
   }, [roundId, accountToken, invitationToken, authLoading]);
 
   const handleLeave = () => {

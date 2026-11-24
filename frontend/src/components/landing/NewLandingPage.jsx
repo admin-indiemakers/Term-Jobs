@@ -244,7 +244,7 @@ export default function NewLandingPage() {
       else next[id] = 1;
       try {
         localStorage.setItem('tj_saved', JSON.stringify(next));
-      } catch {}
+      } catch { }
       return next;
     });
   };
@@ -309,7 +309,7 @@ export default function NewLandingPage() {
         const next = { ...prev, [currentApplyJob.id]: 1 };
         try {
           localStorage.setItem('tj_applied', JSON.stringify(next));
-        } catch {}
+        } catch { }
         return next;
       });
       setApplySubmitting(false);
@@ -1121,7 +1121,7 @@ export default function NewLandingPage() {
                     <small>Email</small>
                     <b>{CONTACT_EMAIL}</b>
                   </span>
-                  <i className="ar">&nearr;</i>
+                  <i className="ar">↗</i>
                 </a>
                 <a className="ctc" href="tel:+919400352440">
                   <span className="ci">
@@ -1133,7 +1133,7 @@ export default function NewLandingPage() {
                     <small>Phone</small>
                     <b>+91 94003 52440</b>
                   </span>
-                  <i className="ar">&nearr;</i>
+                  <i className="ar">↗</i>
                 </a>
                 <a className="ctc" href="https://www.instagram.com/termjobs/" target="_blank" rel="noopener noreferrer">
                   <span className="ci">
@@ -1147,7 +1147,7 @@ export default function NewLandingPage() {
                     <small>Instagram</small>
                     <b>@termjobs</b>
                   </span>
-                  <i className="ar">&nearr;</i>
+                  <i className="ar">↗</i>
                 </a>
                 <div className="ctc ctoff">
                   <span className="ci">

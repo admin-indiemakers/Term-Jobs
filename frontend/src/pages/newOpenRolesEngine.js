@@ -320,6 +320,11 @@ export function mountOpenRolesEngine(container, options = {}) {
         [].slice.call(target.querySelectorAll('[data-apply]')).forEach(function (b) {
           b.addEventListener('click', function (ev) {
             ev.preventDefault();
+            ev.stopPropagation();
+            if (ev._applyHandled) return;
+            ev._applyHandled = true;
+            if (b.dataset.applying === 'true') return;
+
             var T = window.TJ || {};
             var candUser = (options.getCandidateUser ? options.getCandidateUser() : options.candidateUser) || (T.profile ? T.profile() : null);
             var isAuth = Boolean(candUser && (candUser.candidate_email || candUser.email || candUser.name));
@@ -329,7 +334,7 @@ export function mountOpenRolesEngine(container, options = {}) {
               return;
             }
 
-            var isAlreadyApplied = b.getAttribute('data-applied') === 'true' || (T.inApply && T.inApply(j.slug));
+            var isAlreadyApplied = b.getAttribute('data-applied') === 'true' || b.classList.contains('applied-attend-btn');
 
             if (isAlreadyApplied) {
               if (options.onStartAiInterview) {
@@ -337,6 +342,9 @@ export function mountOpenRolesEngine(container, options = {}) {
               }
               return;
             }
+
+            b.dataset.applying = 'true';
+            setTimeout(function () { delete b.dataset.applying; }, 800);
 
             if (T.addApply) T.addApply(j.slug);
 
@@ -1546,6 +1554,24 @@ export function mountOpenRolesEngine(container, options = {}) {
       function reset(c) { c.style.transform = ''; var a = c.querySelector('.stamp.apply'), k = c.querySelector('.stamp.skip'); a.style.opacity = 0; k.style.opacity = 0; }
       function updApply() { applyBtn.hidden = !applyList.length; applyBtn.textContent = 'Review & apply (' + applyList.length + ')'; }
       function paintBm() { cards.forEach(function (c) { var b = c.querySelector('.bm'), on = saved.indexOf(c.dataset.slug) > -1; if (b) { b.classList.toggle('saved', on); b.setAttribute('aria-pressed', on); } }); }
+      function paintApplyBtns() {
+        cards.forEach(function (c) {
+          var sl = c.dataset.slug;
+          var isApplied = applyList.indexOf(sl) > -1 || (window.TJ && window.TJ.inApply && window.TJ.inApply(sl));
+          var btn = c.querySelector('[data-apply], .s-apply');
+          if (btn) {
+            if (isApplied) {
+              btn.setAttribute('data-applied', 'true');
+              btn.classList.add('applied-attend-btn');
+              btn.innerHTML = '<span class="iv-ai-play"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="display:inline-block;vertical-align:-2px;margin-right:6px;"><polygon points="5 3 19 12 5 21 5 3"/></svg></span> Attend AI Interview';
+            } else {
+              btn.setAttribute('data-applied', 'false');
+              btn.classList.remove('applied-attend-btn');
+              btn.innerHTML = 'Apply now';
+            }
+          }
+        });
+      }
       function playHint() {
         if (seen || !mq.matches || sec.hidden) return;
         var c = track.querySelector('.sc.d0'); if (!c || c.classList.contains('dragging')) return;
@@ -2041,6 +2067,38 @@ export function mountOpenRolesEngine(container, options = {}) {
             .then(function (res) {
               if (res && res.rounds && Array.isArray(res.rounds)) {
                 window.TJ_ROUNDS = res.rounds;
+                var roundTitles = res.rounds.map(function (r) {
+                  return (r.job_title || r.round_name || '').toLowerCase().trim();
+                }).filter(Boolean);
+                // Synchronize local applyList with actual DB rounds for this candidate
+                applyList = applyList.filter(function (sl) {
+                  var j = (window.TJ_JOBS || []).find(function (x) { return x.slug === sl; });
+                  return j && roundTitles.some(function (t) {
+                    return t.indexOf(j.title.toLowerCase().trim()) > -1 || j.title.toLowerCase().trim().indexOf(t) > -1;
+                  });
+                });
+                store('tj-apply', applyList);
+                if (res.rounds.length === 0) {
+                  try {
+                    localStorage.removeItem('tj-apply');
+                    localStorage.removeItem('tj_completed_round_ids');
+                    localStorage.removeItem('tj_completed_titles');
+                  } catch (_) {}
+                }
+                paintApplyBtns();
+                paintBm();
+                var detApplyBtns = document.querySelectorAll('#detail [data-apply]');
+                if (detApplyBtns.length && res.rounds.length === 0) {
+                  detApplyBtns.forEach(function (btn) {
+                    btn.setAttribute('data-applied', 'false');
+                    btn.classList.remove('applied-attend-btn');
+                    if (btn.classList.contains('block')) {
+                      btn.innerHTML = 'Apply now ' + ARROW;
+                    } else {
+                      btn.innerHTML = 'Apply now';
+                    }
+                  });
+                }
                 drawInterviews();
               }
             })
@@ -2128,7 +2186,7 @@ export function mountOpenRolesEngine(container, options = {}) {
                 '</div>' +
                 '<p class="blurb iv-ai-desc">Your autonomous AI Interview is prepared. Complete it on-demand with camera &amp; mic.</p>' +
                 '<div class="iv-card-acts">' +
-                  '<button type="button" class="btn primary iv-act-btn iv-attend-ai" data-round="' + e(roomId) + '" data-slug="' + e(matchingJob.slug || '') + '" data-title="' + e(title) + '" data-company="' + e(company) + '"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg><span>Attend AI Interview</span></button>' +
+                  '<button type="button" class="btn primary iv-act-btn iv-attend-ai" data-round="' + e(roomId) + '" data-token="' + e(r.candidate_token || '') + '" data-slug="' + e(matchingJob.slug || '') + '" data-title="' + e(title) + '" data-company="' + e(company) + '"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg><span>Attend AI Interview</span></button>' +
                   '<a href="' + (matchingJob.slug ? '#job-' + e(matchingJob.slug) : '/interview/candidate') + '" ' + (matchingJob.slug ? 'data-slug="' + e(matchingJob.slug) + '"' : '') + ' class="btn secondary iv-act-btn"><span>View Details</span></a>' +
                 '</div>' +
               '</div>'
@@ -2282,7 +2340,7 @@ export function mountOpenRolesEngine(container, options = {}) {
       var OUT = '<svg width="16" height="16" viewBox="0 0 24 24" ' + SV + '><path d="M7 17L17 7M8 7h9v9"/></svg>';
       var CHEV = '<svg class="chev" width="22" height="22" viewBox="0 0 24 24" ' + SV + '><path d="M6 9l6 6 6-6"/></svg>';
       function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
-      function toast(m) { var t = $('dtoast'); if (!t) return; t.textContent = m; t.classList.add('on'); clearTimeout(tt); tt = setTimeout(function () { t.classList.remove('on'); }, 2200); }
+      function toast(m, dur) { showToast(m, dur); }
       function inset(r, rad) { return 'inset(' + r.top + 'px ' + (window.innerWidth - r.right) + 'px ' + (window.innerHeight - r.bottom) + 'px ' + r.left + 'px round ' + rad + 'px)'; }
       function deckMode() { return from === 'deck' && mqm.matches; }
       function originCard() { return document.querySelector('#sug-track .sc.d0'); }
@@ -2323,7 +2381,14 @@ export function mountOpenRolesEngine(container, options = {}) {
 
         var dApply = ov.querySelector('#d-apply');
         if (dApply) {
-          dApply.addEventListener('click', function () {
+          dApply.addEventListener('click', function (ev) {
+            if (ev) {
+              ev.preventDefault();
+              ev.stopPropagation();
+              if (ev._applyHandled) return;
+              ev._applyHandled = true;
+            }
+            if (dApply.dataset.applying === 'true') return;
             var T = window.TJ || {}, sc = cur && document.querySelector('.sc[data-slug="' + cur.slug + '"]');
             if (!cur) {
               toast('Apply link is not connected yet');
@@ -2337,7 +2402,7 @@ export function mountOpenRolesEngine(container, options = {}) {
               return;
             }
 
-            var isAlreadyApplied = dApply.getAttribute('data-applied') === 'true' || (T.inApply && T.inApply(cur.slug)) || dApply.classList.contains('iv-attend-mode');
+            var isAlreadyApplied = dApply.getAttribute('data-applied') === 'true' || dApply.classList.contains('iv-attend-mode');
 
             if (isAlreadyApplied) {
               closeAnim(function () {
@@ -2427,84 +2492,62 @@ export function mountOpenRolesEngine(container, options = {}) {
       if (window.TJ) window.TJ.open = open; else window.TJ = { open: open };
       addDocListener('keydown', function (e) { if (e.key === 'Escape') closeAnim(); });
       var track = $('sug-track'), grid = $('grid');
-      if (track) {
-        track.addEventListener('click', function (e) {
-          var applyBtn = e.target.closest('[data-apply], .s-apply');
-          if (applyBtn) {
-            e.preventDefault();
-            e.stopPropagation();
-            var c = applyBtn.closest('.sc, [data-slug]');
-            var slug = c ? c.dataset.slug : null;
-            var j = slug ? (window.TJ_JOBS || []).find(function (x) { return x.slug === slug; }) : null;
-            var T = window.TJ || {};
-            var candUser = (options.getCandidateUser ? options.getCandidateUser() : options.candidateUser) || (T.profile ? T.profile() : null);
-            var isAuth = Boolean(candUser && (candUser.candidate_email || candUser.email || candUser.name));
-            if (!isAuth) {
-              if (options.onOpenAuth) options.onOpenAuth(j ? { slug: j.slug, title: j.title, company: j.company } : null);
-              else showToast('Please sign in to apply');
-              return;
-            }
+      var onTrackClick = function (e) {
+        var applyBtn = e.target.closest('[data-apply], .s-apply');
+        if (applyBtn) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (e._applyHandled) return;
+          e._applyHandled = true;
+          if (applyBtn.dataset.applying === 'true') return;
 
-            var isAlreadyApplied = applyBtn.getAttribute('data-applied') === 'true' || (T.inApply && T.inApply(slug)) || applyList.indexOf(slug) > -1 || applyBtn.classList.contains('applied-attend-btn');
+          var c = applyBtn.closest('.sc, [data-slug]');
+          var slug = c ? c.dataset.slug : null;
+          var j = slug ? (window.TJ_JOBS || []).find(function (x) { return x.slug === slug; }) : null;
+          var T = window.TJ || {};
+          var candUser = (options.getCandidateUser ? options.getCandidateUser() : options.candidateUser) || (T.profile ? T.profile() : null);
+          var isAuth = Boolean(candUser && (candUser.candidate_email || candUser.email || candUser.name));
+          if (!isAuth) {
+            if (options.onOpenAuth) options.onOpenAuth(j ? { slug: j.slug, title: j.title, company: j.company } : null);
+            else showToast('Please sign in to apply');
+            return;
+          }
 
-            if (isAlreadyApplied) {
-              if (options.onStartAiInterview && j) {
-                options.onStartAiInterview({ slug: j.slug, title: j.title, company: j.company });
-              }
-              return;
-            }
+          var isAlreadyApplied = applyBtn.getAttribute('data-applied') === 'true' || applyBtn.classList.contains('applied-attend-btn');
 
-            if (slug && j) {
-              if (T.addApply) T.addApply(slug);
-              if (applyList.indexOf(slug) < 0) {
-                applyList.push(slug);
-                store('tj-apply', applyList);
-              }
-              var cEmail = candUser.candidate_email || candUser.email || '';
-              var cName = candUser.candidate_name || candUser.name || 'Candidate';
-              if (cEmail) {
-                fetch('/api/interviews/candidate/attend-ai', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ email: cEmail, name: cName, slug: j.slug, title: j.title, company: j.company }),
-                }).then(function (r) { return r.json(); }).then(function (res) {
-                  if (res && res.round_id) {
-                    if (!window.TJ_ROUNDS) window.TJ_ROUNDS = [];
-                    if (!window.TJ_ROUNDS.some(function (r) { return r.id === res.round_id; })) {
-                      window.TJ_ROUNDS.unshift({
-                        id: res.round_id,
-                        round_name: j.title,
-                        round_type: 'AI',
-                        job_title: j.title,
-                        company_name: j.company,
-                        candidate_token: res.candidate_token,
-                        status: 'Scheduled',
-                        is_ai: true,
-                      });
-                      if (window.TJ && window.TJ.drawInterviews) window.TJ.drawInterviews();
-                    }
-                  }
-                }).catch(function () {});
-              }
-
-              applyBtn.setAttribute('data-applied', 'true');
-              applyBtn.classList.add('applied-attend-btn');
-              applyBtn.innerHTML = '<span class="iv-ai-play"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="display:inline-block;vertical-align:-2px;margin-right:6px;"><polygon points="5 3 19 12 5 21 5 3"/></svg></span> Attend AI Interview';
-
-              showToast('Applied successfully! Please attend your AI Interview for validation to fast-track your profile.', 4000);
+          if (isAlreadyApplied) {
+            if (options.onStartAiInterview && j) {
+              options.onStartAiInterview({ slug: j.slug, title: j.title, company: j.company });
             }
             return;
           }
 
-          var c = e.target.closest('.sc'); if (!c) return;
-          var a = e.target.closest('a'); if (e.target.closest('button')) return;
-          if (a && a.classList.contains('primary')) return;
-          var deck = track.classList.contains('deck');
-          if (deck && !a) return;
-          e.preventDefault();
-          e.stopPropagation();
-          open(c.dataset.slug, deck ? 'deck' : 'list');
-        });
+          applyBtn.dataset.applying = 'true';
+          setTimeout(function () { delete applyBtn.dataset.applying; }, 800);
+
+          applyBtn.setAttribute('data-applied', 'true');
+          applyBtn.classList.add('applied-attend-btn');
+          applyBtn.innerHTML = '<span class="iv-ai-play"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="display:inline-block;vertical-align:-2px;margin-right:6px;"><polygon points="5 3 19 12 5 21 5 3"/></svg></span> Attend AI Interview';
+
+          if (slug && j) {
+            if (T.addApply) T.addApply(slug);
+            showToast('Applied successfully! Please attend your AI Interview for validation to fast-track your profile.', 4000);
+          }
+          return;
+        }
+
+        var c = e.target.closest('.sc'); if (!c) return;
+        var a = e.target.closest('a'); if (e.target.closest('button')) return;
+        if (a && a.classList.contains('primary')) return;
+        var deck = track.classList.contains('deck');
+        if (deck && !a) return;
+        e.preventDefault();
+        e.stopPropagation();
+        open(c.dataset.slug, deck ? 'deck' : 'list');
+      };
+      if (track) {
+        track.addEventListener('click', onTrackClick);
+        cleanups.push(function () { track.removeEventListener('click', onTrackClick); });
       }
 
       /* mobile pages: For you / All roles / Saved / Interviews */
