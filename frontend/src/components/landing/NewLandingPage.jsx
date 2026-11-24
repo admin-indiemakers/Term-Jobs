@@ -439,8 +439,8 @@ export default function NewLandingPage() {
             <h4>Get in touch</h4>
             <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
             <a href="tel:+919400352440">+91 94003 52440</a>
-            <a href="https://www.instagram.com/termjobs/" target="_blank" rel="noopener noreferrer">
-              Instagram @termjobs
+            <a href="https://www.instagram.com/termjobsofficial/" target="_blank" rel="noopener noreferrer">
+              Instagram @termjobsofficial
             </a>
           </div>
         </div>
@@ -1135,7 +1135,7 @@ export default function NewLandingPage() {
                   </span>
                   <i className="ar">↗</i>
                 </a>
-                <a className="ctc" href="https://www.instagram.com/termjobs/" target="_blank" rel="noopener noreferrer">
+                <a className="ctc" href="https://www.instagram.com/termjobsofficial/" target="_blank" rel="noopener noreferrer">
                   <span className="ci">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
                       <rect x="3.5" y="3.5" width="17" height="17" rx="5" />
@@ -1145,7 +1145,7 @@ export default function NewLandingPage() {
                   </span>
                   <span className="ctt">
                     <small>Instagram</small>
-                    <b>@termjobs</b>
+                    <b>@termjobsofficial</b>
                   </span>
                   <i className="ar">↗</i>
                 </a>
