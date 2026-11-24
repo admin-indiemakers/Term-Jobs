@@ -340,8 +340,8 @@ export default function CandidateAuthModal({
   if (!isOpen || typeof document === 'undefined') return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-[#090a0c]/75 backdrop-blur-md font-sans animate-in fade-in duration-200">
-      <div className="relative w-full max-w-[620px] max-h-[92vh] overflow-y-auto rounded-[30px] border border-white/80 bg-[#fbfbf9] p-5 shadow-[0_32px_90px_-24px_rgba(0,0,0,.65)] sm:p-8 text-neutral-900">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-[#090a0c]/75 backdrop-blur-md font-sans animate-in fade-in duration-200">
+      <div className="relative w-full max-w-[520px] max-h-[92vh] overflow-y-auto rounded-[28px] border border-white/80 bg-[#fbfbf9] p-6 shadow-[0_32px_90px_-24px_rgba(0,0,0,.65)] sm:p-7 text-neutral-900">
         {/* Close button */}
         <button
           type="button"
@@ -353,12 +353,14 @@ export default function CandidateAuthModal({
         </button>
 
         {/* Brand Header */}
-        <div className="mb-7 pr-12 text-left">
-          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-neutral-600 shadow-sm">
-            <span className="h-1.5 w-1.5 rounded-full bg-neutral-950" />
-            <span>Candidate waiting list</span>
-          </div>
-          <h3 className="font-display text-3xl font-bold tracking-[-0.035em] text-neutral-950">
+        <div className="mb-6 pr-10 text-left">
+          {authTab === 'register' && !googleResumeRequired && (
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-neutral-600 shadow-sm">
+              <span className="h-1.5 w-1.5 rounded-full bg-neutral-950" />
+              <span>Candidate waiting list</span>
+            </div>
+          )}
+          <h3 className="font-display text-[28px] font-bold leading-tight tracking-[-0.035em] text-neutral-950">
             {googleResumeRequired
               ? 'Complete your profile'
               : authTab === 'login'
@@ -416,7 +418,7 @@ export default function CandidateAuthModal({
             type="button"
             onClick={handleGoogleSignIn}
             disabled={authLoading}
-            className="mb-5 flex h-12 w-full items-center justify-center gap-3 rounded-full border border-neutral-300 bg-white px-5 text-sm font-bold text-neutral-900 shadow-sm transition hover:-translate-y-0.5 hover:border-neutral-400 hover:shadow-md active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50"
+            className="mb-4 flex h-12 w-full items-center justify-center gap-3 rounded-full border border-neutral-300 bg-white px-5 text-sm font-bold text-neutral-900 shadow-sm transition hover:-translate-y-0.5 hover:border-neutral-400 hover:shadow-md active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <GoogleIcon className="w-4 h-4" />
             <span>{authLoading ? 'Connecting…' : 'Continue with Google'}</span>
@@ -426,7 +428,7 @@ export default function CandidateAuthModal({
         {!googleResumeRequired && (
           <>
             {/* Divider */}
-            <div className="relative mb-5 flex items-center justify-center">
+            <div className="relative mb-4 flex items-center justify-center">
               <div className="border-t border-neutral-200 w-full" />
               <span className="absolute bg-[#fbfbf9] px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-neutral-400">
                 or continue with email
@@ -434,7 +436,7 @@ export default function CandidateAuthModal({
             </div>
 
             {/* Tab Switcher */}
-            <div className="mb-5 flex rounded-full border border-neutral-200 bg-neutral-100 p-1">
+            <div className="mb-4 flex rounded-full border border-neutral-200 bg-neutral-100 p-1">
               <button
                 type="button"
                 onClick={() => {
@@ -484,7 +486,7 @@ export default function CandidateAuthModal({
 
         {/* TAB 1: LOGIN FORM */}
         {!googleResumeRequired && authTab === 'login' && (
-          <form onSubmit={handleEmailLogin} className="space-y-3.5">
+          <form onSubmit={handleEmailLogin} className="space-y-4">
             <div>
               <label className="block text-[11px] font-semibold text-neutral-700 uppercase tracking-wider mb-1">
                 Email Address
@@ -497,7 +499,7 @@ export default function CandidateAuthModal({
                   value={authEmail}
                   onChange={(e) => setAuthEmail(e.target.value)}
                   placeholder="you@domain.com"
-                  className="w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border border-neutral-300 rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 transition-all"
+                  className="h-12 w-full rounded-xl border border-neutral-300 bg-neutral-50 pl-10 pr-3.5 text-sm text-neutral-900 placeholder-neutral-400 transition hover:bg-neutral-100/60 focus:border-neutral-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-neutral-900/10"
                 />
               </div>
             </div>
@@ -514,7 +516,7 @@ export default function CandidateAuthModal({
                   value={authPassword}
                   onChange={(e) => setAuthPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border border-neutral-300 rounded-xl pl-10 pr-10 py-2.5 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 transition-all"
+                  className="h-12 w-full rounded-xl border border-neutral-300 bg-neutral-50 pl-10 pr-10 text-sm text-neutral-900 placeholder-neutral-400 transition hover:bg-neutral-100/60 focus:border-neutral-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-neutral-900/10"
                 />
                 <button
                   type="button"
@@ -529,7 +531,7 @@ export default function CandidateAuthModal({
             <button
               type="submit"
               disabled={authLoading}
-              className="mt-4 h-12 w-full rounded-full bg-neutral-950 px-5 text-sm font-bold text-white shadow-lg transition hover:-translate-y-0.5 hover:bg-neutral-800 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50"
+              className="mt-5 h-13 w-full rounded-full bg-neutral-950 px-5 text-sm font-bold text-white shadow-lg transition hover:-translate-y-0.5 hover:bg-neutral-800 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {authLoading ? 'Signing in…' : 'Sign in to continue'}
             </button>
