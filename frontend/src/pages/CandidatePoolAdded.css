@@ -80,24 +80,108 @@
   gap: 10px;
 }
 
-.candidate-waiting-wrap .waiting-logout-link {
+.candidate-waiting-wrap .waiting-profile {
+  position: relative;
+}
+
+.candidate-waiting-wrap .waiting-profile-trigger {
   display: inline-flex;
   align-items: center;
   gap: 9px;
-  color: #cfcfd4;
-  border: 1px solid transparent;
+  min-width: 0;
+  height: 44px;
+  max-width: 260px;
+  color: var(--waiting-white);
+  border: 1px solid #2c2c30;
   border-radius: 999px;
-  background: transparent;
-  padding: 10px 12px;
-  font-size: 13px;
-  font-weight: 500;
+  background: rgba(255, 255, 255, .035);
+  padding: 4px 13px 4px 5px;
   cursor: pointer;
-  transition: color .25s, background .25s;
+  transition: background .25s, border-color .25s;
 }
 
-.candidate-waiting-wrap .waiting-logout-link:hover {
-  color: var(--waiting-white);
-  background: rgba(255, 255, 255, .06);
+.candidate-waiting-wrap .waiting-profile-trigger:hover,
+.candidate-waiting-wrap .waiting-profile-trigger[aria-expanded="true"] {
+  background: rgba(255, 255, 255, .08);
+  border-color: #48484e;
+}
+
+.candidate-waiting-wrap .waiting-profile-avatar {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #f3f3ef;
+  color: #111;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+
+.candidate-waiting-wrap .waiting-profile-email {
+  max-width: 170px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.candidate-waiting-wrap .waiting-profile-menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 260px;
+  border: 1px solid #e6e6e1;
+  border-radius: 18px;
+  background: #fff;
+  padding: 8px;
+  color: #111;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .28);
+}
+
+.candidate-waiting-wrap .waiting-profile-details {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 10px 12px;
+  border-bottom: 1px solid #ededE8;
+}
+
+.candidate-waiting-wrap .waiting-profile-details span {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.candidate-waiting-wrap .waiting-profile-details small {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #77777d;
+  font-size: 11px;
+}
+
+.candidate-waiting-wrap .waiting-profile-menu button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 6px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  padding: 11px 10px;
+  color: #111;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.candidate-waiting-wrap .waiting-profile-menu button:hover {
+  background: #f3f3ef;
 }
 
 .candidate-waiting-wrap .waiting-home-link:hover {

@@ -1,19 +1,36 @@
-import { Link, Navigate, useLocation } from 'react-router-dom';
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowRight, Check, LogOut } from 'lucide-react';
 import SEOHead from '../components/SEOHead';
 import { useCandidateAuth } from '../context/CandidateAuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
 import './CandidatePoolAdded.css';
 
 export default function CandidatePoolAdded() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { logout, isAuthenticated } = useCandidateAuth();
-  if (!location.state?.poolSubmitted) return <Navigate to="/" replace />;
+  const { logout, isAuthenticated, candidateUser } = useCandidateAuth();
+  const [profileOpen, setProfileOpen] = useState(false);
+  const profileRef = useRef(null);
+
+  useEffect(() => {
+    const closeMenu = (event) => {
+      if (profileRef.current && !profileRef.current.contains(event.target)) {
+        setProfileOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', closeMenu);
+    return () => document.removeEventListener('mousedown', closeMenu);
+  }, []);
+
   const handleLogout = () => {
     logout();
     navigate('/', { replace: true });
   };
+  const email = candidateUser?.candidate_email || candidateUser?.email || '';
+  const name = candidateUser?.candidate_name || candidateUser?.name || 'Candidate';
+  const initials = String(name).split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
+
+  if (!location.state?.poolSubmitted) return <Navigate to="/" replace />;
   return (
     <main className="candidate-waiting-page">
       <SEOHead title="You’re on the Candidate Waiting List — TermJobs" noindex />
@@ -24,10 +41,30 @@ export default function CandidatePoolAdded() {
           </Link>
           <div className="waiting-header-actions">
             {isAuthenticated && (
-              <button type="button" className="waiting-logout-link" onClick={handleLogout}>
-                <LogOut size={15} aria-hidden="true" />
-                Logout
-              </button>
+              <div className="waiting-profile" ref={profileRef}>
+                <button
+                  type="button"
+                  className="waiting-profile-trigger"
+                  aria-expanded={profileOpen}
+                  aria-haspopup="menu"
+                  onClick={() => setProfileOpen((open) => !open)}
+                >
+                  <span className="waiting-profile-avatar">{initials || 'C'}</span>
+                  <span className="waiting-profile-email">{email || 'Candidate account'}</span>
+                </button>
+                {profileOpen && (
+                  <div className="waiting-profile-menu" role="menu">
+                    <div className="waiting-profile-details">
+                      <span>{name}</span>
+                      <small>{email}</small>
+                    </div>
+                    <button type="button" role="menuitem" onClick={handleLogout}>
+                      <LogOut size={15} aria-hidden="true" />
+                      Logout
+                    </button>
+                  </div>
+                )}
+              </div>
             )}
             <Link className="waiting-home-link" to="/">
               Go to home
