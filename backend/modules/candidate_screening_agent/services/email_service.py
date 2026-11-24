@@ -56,17 +56,108 @@ def _plain_email(html):
     return '\n'.join(line for raw in ''.join(parser.parts).splitlines() if (line := ' '.join(raw.split())))
 
 
+def send_email_via_brevo(
+    to_email: str,
+    subject: str,
+    html_content: str,
+    to_name: Optional[str] = None,
+    sender_email: Optional[str] = None,
+    sender_name: Optional[str] = None,
+    api_key: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Send an email using Brevo's Transactional Email REST API."""
+    import logging
+    import httpx
+
+    logger = logging.getLogger(__name__)
+
+    key = (api_key or os.getenv("BREVO_API_KEY") or "").strip()
+    if not key:
+        from dotenv import load_dotenv
+        load_dotenv(override=not bool(os.getenv("VERCEL")))
+        key = (os.getenv("BREVO_API_KEY") or "").strip()
+
+    if not key:
+        return {"status": "skipped", "reason": "Brevo API key not configured"}
+
+    s_email = (
+        sender_email
+        or os.getenv("EMAIL_SENDER_ADDRESS")
+        or os.getenv("GMAIL_SENDER_EMAIL")
+        or GMAIL_SENDER_EMAIL
+        or "termjobsofficial@gmail.com"
+    ).strip()
+    s_name = (sender_name or os.getenv("EMAIL_SENDER_NAME") or "Termjobs").strip()
+
+    recipient = {"email": to_email.strip()}
+    if to_name and to_name.strip():
+        recipient["name"] = to_name.strip()
+
+    payload = {
+        "sender": {"name": s_name, "email": s_email},
+        "to": [recipient],
+        "subject": subject,
+        "htmlContent": html_content,
+        "textContent": _plain_email(html_content),
+    }
+    headers = {
+        "accept": "application/json",
+        "api-key": key,
+        "content-type": "application/json",
+    }
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.post("https://api.brevo.com/v3/smtp/email", headers=headers, json=payload)
+            if resp.status_code in (200, 201, 202):
+                data = resp.json()
+                message_id = data.get("messageId", "")
+                logger.info(f"Email sent via Brevo to {to_email}: messageId={message_id}")
+                return {"status": "success", "transport": "brevo_api", "message_id": message_id}
+            else:
+                logger.warning(f"Brevo API error ({resp.status_code}): {resp.text}")
+                return {"status": "failed", "code": f"brevo_{resp.status_code}", "reason": resp.text}
+    except Exception as exc:
+        logger.warning(f"Brevo dispatch exception: {exc}")
+        return {"status": "failed", "reason": str(exc)}
+
+
 def send_email_via_gmail(
     to_email: str,
     subject: str,
     html_content: str,
     sender_email: Optional[str] = None,
-    app_password: Optional[str] = None
+    app_password: Optional[str] = None,
+    to_name: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Send an email to any recipient using Gmail SMTP."""
+    """Send an email to any recipient. Prioritizes Brevo API if configured, falling back to Gmail SMTP."""
     if not to_email:
         return {"status": "skipped", "reason": "No candidate email provided"}
 
+    # 1. Prioritize Brevo API unless caller explicitly provided app_password for direct SMTP testing
+    if not app_password:
+        brevo_key = (os.getenv("BREVO_API_KEY") or "").strip()
+        if not brevo_key:
+            from dotenv import load_dotenv
+            load_dotenv(override=not bool(os.getenv("VERCEL")))
+            brevo_key = (os.getenv("BREVO_API_KEY") or "").strip()
+
+        if brevo_key:
+            brevo_result = send_email_via_brevo(
+                to_email=to_email,
+                subject=subject,
+                html_content=html_content,
+                to_name=to_name,
+                sender_email=sender_email,
+                api_key=brevo_key,
+            )
+            if brevo_result.get("status") == "success":
+                return brevo_result
+            import logging
+            logging.getLogger(__name__).warning(
+                f"Brevo delivery failed ({brevo_result.get('reason')}), attempting Gmail SMTP fallback..."
+            )
+
+    # 2. Gmail SMTP fallback
     sender = (sender_email or os.getenv("GMAIL_SENDER_EMAIL") or GMAIL_SENDER_EMAIL or "").strip()
     pw = (app_password or os.getenv("GMAIL_APP_PASSWORD") or GMAIL_APP_PASSWORD or "").strip()
     if not sender or not pw:
@@ -93,6 +184,10 @@ def send_email_via_gmail(
     return deliver_credentials_message(msg, sender, pw, to_email)
 
 
+# Clean alias
+send_email = send_email_via_gmail
+
+
 def send_shortlist_notification(
     candidate_name: str,
     candidate_email: str,
@@ -113,7 +208,7 @@ def send_shortlist_notification(
         <p>Best regards,<br><strong>Hiring & Recruitment Team</strong></p>
     </div>
     """
-    return send_email_via_gmail(candidate_email, subject, html)
+    return send_email_via_gmail(candidate_email, subject, html, to_name=candidate_name)
 
 
 def send_rejection_notification(
@@ -136,7 +231,7 @@ def send_rejection_notification(
         <p>Best regards,<br><strong>Hiring & Recruitment Team</strong></p>
     </div>
     """
-    return send_email_via_gmail(candidate_email, subject, html)
+    return send_email_via_gmail(candidate_email, subject, html, to_name=candidate_name)
 
 
 def send_shortlist_dispatch_to_hiring_manager(

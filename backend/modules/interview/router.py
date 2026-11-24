@@ -672,12 +672,40 @@ def candidate_attend_ai_endpoint(body: AttendAiInterviewRequest):
             token = existing.candidate_token or str(uuid.uuid4())
             name_enc = urllib.parse.quote(existing.candidate_name or cand_name)
             token_enc = urllib.parse.quote(token)
+            rel_meeting = f"/interview/ai/{existing.id}?role=candidate&name={name_enc}&token={token_enc}"
+
+            # Dispatch invitation email if not already delivered
+            if not getattr(existing, "email_delivery", None) or (isinstance(existing.email_delivery, dict) and existing.email_delivery.get("status") != "success"):
+                try:
+                    from modules.interview.services.interview_service import send_interview_invitation_email
+                    domain = _resolve_interview_domain()
+                    ai_meeting_link = f"{domain}{rel_meeting}"
+                    cand_portal_link = f"{domain}/interview/candidate/login?token={token}&email={urllib.parse.quote(cand_email)}&passcode={existing.candidate_passcode or ''}"
+                    delivery_res = send_interview_invitation_email(
+                        candidate_name=existing.candidate_name or cand_name,
+                        candidate_email=cand_email,
+                        requisition_title=existing.requisition_title or req_title,
+                        company_name=comp_name,
+                        round_name=existing.round_name or f"AI Technical Interview - {req_title}",
+                        scheduled_date=existing.scheduled_date or "Immediate / On-Demand",
+                        scheduled_time=existing.scheduled_time or "Immediate / On-Demand",
+                        duration_minutes=int(existing.duration_minutes or 45),
+                        meeting_link=ai_meeting_link,
+                        candidate_portal_link=cand_portal_link,
+                        passcode=str(existing.candidate_passcode or ""),
+                        instructions=existing.instructions or f"AI Interview for {req_title}. Please join with audio and video enabled.",
+                    )
+                    existing.email_delivery = delivery_res
+                    session.commit()
+                except Exception as mail_err:
+                    print(f"[ATTEND-AI EMAIL ERROR] {mail_err}")
+
             return {
                 "success": True,
                 "round_id": existing.id,
                 "candidate_token": token,
                 "candidate_name": existing.candidate_name or cand_name,
-                "meeting_link": f"/interview/ai/{existing.id}?role=candidate&name={name_enc}&token={token_enc}"
+                "meeting_link": rel_meeting
             }
 
         req = session.query(Requisition).filter(
@@ -721,14 +749,40 @@ def candidate_attend_ai_endpoint(body: AttendAiInterviewRequest):
         session.add(round_obj)
         session.commit()
 
+        domain = _resolve_interview_domain()
         name_enc = urllib.parse.quote(cand_name)
         token_enc = urllib.parse.quote(cand_token)
+        rel_meeting = f"/interview/ai/{round_obj.id}?role=candidate&name={name_enc}&token={token_enc}"
+        ai_meeting_link = f"{domain}{rel_meeting}"
+        cand_portal_link = f"{domain}/interview/candidate/login?token={cand_token}&email={urllib.parse.quote(cand_email)}&passcode={passcode}"
+
+        try:
+            from modules.interview.services.interview_service import send_interview_invitation_email
+            delivery_res = send_interview_invitation_email(
+                candidate_name=cand_name,
+                candidate_email=cand_email,
+                requisition_title=req_title,
+                company_name=comp_name,
+                round_name=round_obj.round_name,
+                scheduled_date=round_obj.scheduled_date or "Immediate / On-Demand",
+                scheduled_time=round_obj.scheduled_time or "Immediate / On-Demand",
+                duration_minutes=int(round_obj.duration_minutes or 45),
+                meeting_link=ai_meeting_link,
+                candidate_portal_link=cand_portal_link,
+                passcode=str(passcode),
+                instructions=round_obj.instructions or f"AI Interview for {req_title}. Please join with audio and video enabled.",
+            )
+            round_obj.email_delivery = delivery_res
+            session.commit()
+        except Exception as mail_err:
+            print(f"[ATTEND-AI EMAIL ERROR] {mail_err}")
+
         return {
             "success": True,
             "round_id": round_obj.id,
             "candidate_token": cand_token,
             "candidate_name": cand_name,
-            "meeting_link": f"/interview/ai/{round_obj.id}?role=candidate&name={name_enc}&token={token_enc}"
+            "meeting_link": rel_meeting
         }
 
 
