@@ -1,6 +1,7 @@
 export function superAdminNavigation({ icons, selectedCount, candidateCount, onboardCompany, onboardVendor }) {
   return [
     { to: '/dashboard/superadmin', label: 'Overview', end: true, section: 'WORKSPACE', icon: icons.Dashboard },
+    { to: '/statistics', label: 'TermJobs Admin Statistics', end: true, section: 'WORKSPACE', icon: icons.BarChart3 },
     { to: '/dashboard/superadmin/chat', label: 'AI Assistant', end: true, section: 'WORKSPACE', icon: icons.Chat },
     { to: '/reports', label: 'Reports & Growth', end: false, section: 'WORKSPACE', icon: icons.Requisitions },
     { to: '/dashboard/superadmin/requisitions', label: 'Company Requisitions', section: 'HIRING', icon: icons.Requisitions },

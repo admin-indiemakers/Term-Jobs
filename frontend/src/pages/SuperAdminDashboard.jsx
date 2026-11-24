@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import NotificationBell from '../components/NotificationBell';
 import OnboardCompanyModal from '../components/OnboardCompanyModal';
 import OnboardVendorModal from '../components/OnboardVendorModal';
-import { Building2, Users, Layers, Plus, ArrowRight, UserCheck, FileText, Mail, Download, Loader2, LogOut, RefreshCw, ShieldCheck, Activity, Briefcase } from 'lucide-react';
+import { Building2, Users, Layers, Plus, ArrowRight, UserCheck, FileText, Mail, Download, Loader2, LogOut, RefreshCw, ShieldCheck, Activity, Briefcase, BarChart3 } from 'lucide-react';
 
 function formatRelativeTime(dateString) {
   if (!dateString) return 'Recent';
@@ -155,6 +155,7 @@ export default function SuperAdminDashboard() {
   }, [stats]);
 
   const workspaceLinks = [
+    { to: '/statistics', title: 'TermJobs admin statistics', detail: 'Candidate joins and website traffic', icon: BarChart3 },
     { to: '/dashboard/superadmin/requisitions', title: 'Company requisitions', detail: 'Post roles and review applications', icon: Briefcase },
     { to: '/dashboard/superadmin/candidates', title: 'Candidate pool', detail: 'Review resumes, invite and shortlist', icon: Users },
     { to: '/dashboard/interviews', title: 'Interviews & AI scores', detail: 'Track interviews and assessments', icon: Activity },

@@ -35,7 +35,7 @@ from fastapi import Depends, FastAPI, HTTPException, UploadFile, File, Form, Que
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from modules.shared.cors import ALLOWED_ORIGINS, cors_headers_for_origin
-from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
+from fastapi.responses import FileResponse, JSONResponse, HTMLResponse, Response
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -229,6 +229,107 @@ def api_environment():
     """Allow proxies to verify isolation without accessing a database or credentials."""
     from modules.shared.config import get_active_cluster
     return JSONResponse({'active_cluster': get_active_cluster()}, headers={'Cache-Control': 'no-store'})
+
+
+class PublicPageVisit(BaseModel):
+    visitor_id: str = Field(min_length=8, max_length=100)
+    page: str = Field(min_length=1, max_length=200)
+
+
+def _utc_day_start(day_offset: int = 0):
+    now = datetime.now(timezone.utc)
+    return now.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=day_offset)
+
+
+@app.post("/api/public/statistics/visit", status_code=204)
+def record_public_page_visit(body: PublicPageVisit, request: Request):
+    from modules.shared.db import db
+    now = datetime.now(timezone.utc)
+    page = body.page if body.page.startswith("/") else f"/{body.page}"
+    visitor_id = str(body.visitor_id)
+
+    db["public_page_views"].update_one(
+        {"_id": f"{visitor_id}:{page}:{now.strftime('%Y-%m-%d')}"},
+        {"$set": {
+            "visitor_id": visitor_id,
+            "page": page,
+            "last_viewed_at": now,
+        }, "$setOnInsert": {
+            "first_viewed_at": now,
+        }},
+        upsert=True,
+    )
+    db["public_site_visitors"].update_one(
+        {"_id": visitor_id},
+        {"$set": {"last_seen_at": now}, "$setOnInsert": {"first_seen_at": now}},
+        upsert=True,
+    )
+    return Response(status_code=204)
+
+
+@app.get("/api/public/statistics")
+def get_public_termjobs_statistics():
+    """Read-only, public TermJobs statistics used by the shareable statistics page."""
+    from modules.shared.db import db
+    today = _utc_day_start()
+    week = _utc_day_start(6)
+
+    total_candidates = db["candidates"].count_documents({})
+    today_candidates = db["candidates"].count_documents({"created_at": {"$gte": today}})
+    week_candidates = db["candidates"].count_documents({"created_at": {"$gte": week}})
+
+    candidate_rows = list(
+        db["candidates"].find(
+            {"created_at": {"$gte": _utc_day_start(29)}},
+            {"candidate_name": 1, "name": 1, "created_at": 1, "_id": 0},
+        ).sort("created_at", -1).limit(200)
+    )
+    daily_candidates = {}
+    for row in candidate_rows:
+        created = row.get("created_at")
+        if isinstance(created, str):
+            try:
+                created = datetime.fromisoformat(created.replace("Z", "+00:00"))
+            except Exception:
+                continue
+        if not isinstance(created, datetime):
+            continue
+        key = created.astimezone(timezone.utc).strftime("%Y-%m-%d")
+        name = str(row.get("candidate_name") or row.get("name") or "Candidate").strip()
+        daily_candidates.setdefault(key, []).append(name)
+
+    recent_joiners = [
+        {
+            "date": day,
+            "count": len(names),
+            "names": names[:8],
+        }
+        for day, names in sorted(daily_candidates.items(), key=lambda item: item[0], reverse=True)
+    ]
+
+    page_rows = list(
+        db["public_page_views"].find({}, {"page": 1, "_id": 0}).sort("last_viewed_at", -1).limit(5000)
+    )
+    page_hits = {}
+    for row in page_rows:
+        page = str(row.get("page") or "/")
+        page_hits[page] = page_hits.get(page, 0) + 1
+    top_pages = [
+        {"page": page, "visits": visits}
+        for page, visits in sorted(page_hits.items(), key=lambda item: item[1], reverse=True)[:10]
+    ]
+
+    return JSONResponse({
+        "total_candidates": total_candidates,
+        "joined_today": today_candidates,
+        "joined_last_7_days": week_candidates,
+        "recent_joiners": recent_joiners,
+        "total_visitors": db["public_site_visitors"].count_documents({}),
+        "today_visitors": db["public_site_visitors"].count_documents({"first_seen_at": {"$gte": today}}),
+        "page_hits": db["public_page_views"].count_documents({}),
+        "top_pages": top_pages,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }, headers={"Cache-Control": "no-store"})
 
 
 @app.get("/health")

@@ -88,6 +88,7 @@ const SuperAdminRequisitions = lazyWithRetry(() => import('./pages/SuperAdminReq
 const SuperAdminCandidatePool = lazyWithRetry(() => import('./pages/SuperAdminCandidatePool'));
 const SuperAdminCandidateManagement = lazyWithRetry(() => import('./pages/SuperAdminCandidateManagement'));
 const SuperAdminOutreachControl = lazyWithRetry(() => import('./pages/SuperAdminOutreachControl'));
+const TermJobsStatistics = lazyWithRetry(() => import('./pages/TermJobsStatistics'));
 
 // LiveKit & Video Interview components (isolated 1MB chunk loaded strictly on-demand)
 const CandidateInterviewLogin = lazyWithRetry(() => import('./interview/pages/CandidateInterviewLogin').then(m => ({ default: m.CandidateInterviewLogin })));
@@ -103,6 +104,34 @@ function FullScreenLoader() {
       <TermJobsLoader size={38} ariaLabel="Loading workspace..." />
     </div>
   );
+}
+
+function PublicPageVisitTracker() {
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    if (!pathname) return;
+    const key = 'tj_site_visitor_id';
+    let visitorId;
+    try {
+      visitorId = localStorage.getItem(key);
+      if (!visitorId) {
+        visitorId = crypto.randomUUID();
+        localStorage.setItem(key, visitorId);
+      }
+    } catch {
+      visitorId = crypto.randomUUID();
+    }
+
+    fetch('/api/public/statistics/visit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ visitor_id: visitorId, page: pathname }),
+      keepalive: true,
+    }).catch(() => {});
+  }, [pathname]);
+
+  return null;
 }
 
 function RequireAuth({ children }) {
@@ -273,6 +302,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <CandidateAuthProvider>
+        <PublicPageVisitTracker />
         <FieldRequirementIndicators />
         <Suspense fallback={<FullScreenLoader />}>
           <Routes>
@@ -281,6 +311,7 @@ export default function App() {
             <Route path="/privacy-policy" element={<LegalPage type="privacy" />} />
             <Route path="/terms-and-conditions" element={<LegalPage type="terms" />} />
             <Route path="/platform-rules" element={<LegalPage type="rules" />} />
+            <Route path="/statistics" element={<TermJobsStatistics />} />
 
           <Route path="/join/hiring-manager" element={<JoinHiringManager />} />
           <Route path="/invite/hiring-manager" element={<JoinHiringManager />} />
