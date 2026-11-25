@@ -506,9 +506,6 @@ export default function NewLandingPage() {
         <div className="hs">
           <main className="th" id="th" data-mode={heroMode}>
             <div className="th-in">
-              <p className="th-k">
-                <i></i>Verified contract talent
-              </p>
               <div className="th-tg" role="tablist" aria-label="I am a">
                 <span className="th-pill" aria-hidden="true"></span>
                 <button
@@ -559,21 +556,17 @@ export default function NewLandingPage() {
                 ) : (
                   <div className="th-p on" id="tp-cand" role="tabpanel" aria-labelledby="tt-cand">
                     <h1>
-                      Find your next role, <em>on your terms.</em>
+                      Get matched with verified companies, <em>on your terms.</em>
                     </h1>
                     <p className="th-s">
-                      Share your skills once. We match you with verified companies hiring for contract and permanent roles.
+                      Share your skills once. We match you with verified companies hiring for contract and permanent roles, so you stop applying into the void.
                     </p>
                     <div className="th-a">
                       <button className="th-b pri" onClick={() => navigate('/talent-waitlist')}>
-                        I&rsquo;m looking for work <i>&rarr;</i>
+                        Join the talent pool, it's free <i aria-hidden="true">&rarr;</i>
                       </button>
                     </div>
-                    <ul className="th-f">
-                      <li><b>01</b><span>Create your profile</span></li>
-                      <li><b>02</b><span>Get matched to roles</span></li>
-                      <li><b>03</b><span>Interview with confidence</span></li>
-                    </ul>
+                    <p className="th-note">Takes 2 minutes · No fees · Matched to roles that fit</p>
                   </div>
                 )}
               </div>
