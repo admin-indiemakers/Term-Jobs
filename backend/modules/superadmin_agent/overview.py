@@ -68,7 +68,7 @@ def _date(value):
     return None, 0
 
 
-def build_overview():
+def build_overview(include_pool=True):
     # Propagate the request's cluster context to every worker. Main and QA caches
     # and database connections must remain isolated even on production aliases.
     # Resolve the lazy Mongo client once before concurrent work starts.
@@ -76,9 +76,11 @@ def build_overview():
     with ThreadPoolExecutor(max_workers=5) as executor:
         jobs = [lambda: _accounts(tenants_collection, 'tenant_type'),
                 lambda: _accounts(users_collection, 'role', {'role': {'$in': ['Admin', 'Recruiter']}}),
-                _pool, _outreach, _recent_hiring]
+                _outreach, _recent_hiring]
         futures = [executor.submit(copy_context().run, job) for job in jobs]
-        tenants, users, pool, outreach, (submissions, requisitions) = [future.result() for future in futures]
+        pool_future = executor.submit(copy_context().run, _pool) if include_pool else None
+        tenants, users, outreach, (submissions, requisitions) = [future.result() for future in futures]
+        pool = pool_future.result() if pool_future else None
     tenant_counts = {row['_id']: row['count'] for row in tenants['counts']}
     user_counts = {row['_id']: row['count'] for row in users['counts']}
     tenant_ids = {row.get('tenant_id') for row in users['recent'] + requisitions if row.get('tenant_id')}
@@ -113,10 +115,24 @@ def build_overview():
 
 
 @router.get('/overview')
-def get_overview(refresh: bool = Query(False)):
+def get_overview(refresh: bool = Query(False), include_pool: bool = Query(True)):
     key = f'superadmin-overview:{get_active_cluster()}:{settings.mongo_db_name}'
+    if not include_pool:
+        key += ':summary'
     result = None if refresh else cache.get(key)
     if result is None:
-        result = build_overview()
+        result = build_overview(include_pool)
+        if not include_pool:
+            del result['pool_stats']
         cache.set(key, result, ttl=15)
+    return result
+
+
+@router.get('/overview/pool-stats')
+def get_pool_stats(refresh: bool = Query(False)):
+    key = f'superadmin-overview-pool:{get_active_cluster()}:{settings.mongo_db_name}'
+    result = None if refresh else cache.get(key)
+    if result is None:
+        result = _pool()
+        cache.set(key, result, ttl=60)
     return result

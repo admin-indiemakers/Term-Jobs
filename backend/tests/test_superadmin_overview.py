@@ -96,8 +96,38 @@ def test_workers_preserve_the_request_context(setup, monkeypatch):
         cluster.reset(token)
 
 
+def test_summary_does_not_wait_for_candidate_pool(setup, monkeypatch):
+    db, _, client = setup
+    db.tenants.insert_one({'id': 'buyer', 'tenant_type': 'client'})
+
+    def unavailable_pool():
+        pytest.fail('Summary must not scan candidate collections')
+
+    monkeypatch.setattr(overview, '_pool', unavailable_pool)
+    result = client.get('/api/superadmin/overview?include_pool=false')
+    assert result.status_code == 200
+    assert result.json()['stats']['buyer_companies'] == 1
+    assert 'pool_stats' not in result.json()
+
+
+def test_pool_stats_cache_and_refresh(setup, monkeypatch):
+    db, _, client = setup
+    url = '/api/superadmin/overview/pool-stats'
+    monkeypatch.setattr(overview, 'get_active_cluster', lambda: 'dev_qa')
+    assert client.get(url).json()['total'] == 0
+    db.candidates.insert_one({'id': 'portal', 'vendor_name': 'Portal Applicant'})
+    assert client.get(url).json()['total'] == 0
+    assert client.get(f'{url}?refresh=true').json() == {
+        'total': 1, 'portal_applicants': 1, 'vendor_candidates': 0,
+    }
+    db.candidate_submissions.insert_one({'id': 'vendor'})
+    monkeypatch.setattr(overview, 'get_active_cluster', lambda: 'main')
+    assert client.get(url).json()['total'] == 2
+
+
 @pytest.mark.parametrize('role', ['Admin', 'Recruiter', 'Candidate'])
 def test_overview_requires_superadmin(setup, role):
     _, app, client = setup
     app.dependency_overrides[get_current_user] = lambda: User(id='other', role=role)
     assert client.get('/api/superadmin/overview').status_code == 403
+    assert client.get('/api/superadmin/overview/pool-stats').status_code == 403

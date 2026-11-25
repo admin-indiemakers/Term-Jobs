@@ -462,6 +462,8 @@ def init_db() -> None:
     db["role_templates"].create_index("tenant_id")
     db["decision_records"].create_index("requisition_id")
     db["candidate_submissions"].create_index("requisition_id")
+    for collection in ("candidates", "candidate_submissions", "requisitions"):
+        db[collection].create_index([("created_at", -1)])
     db["candidates"].create_index("tenant_id")
     db["notifications"].create_index("user_id")
     db["notifications"].create_index("created_at")

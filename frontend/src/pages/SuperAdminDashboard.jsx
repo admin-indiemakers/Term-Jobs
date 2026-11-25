@@ -1,7 +1,7 @@
 import AdminPageHeader, { AdminMetric } from '../components/admin/AdminPageHeader';
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { request, clearApiCache } from '../api/client';
+import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import NotificationBell from '../components/NotificationBell';
 import OnboardCompanyModal from '../components/OnboardCompanyModal';
@@ -47,19 +47,21 @@ export default function SuperAdminDashboard() {
   const [success, setSuccess] = useState('');
   const [showOnboardModal, setShowOnboardModal] = useState(false);
   const [showOnboardVendorModal, setShowOnboardVendorModal] = useState(false);
-  const [poolStats, setPoolStats] = useState({ total: 0, portal_applicants: 0, vendor_candidates: 0 });
+  const [poolStats, setPoolStats] = useState(null);
+  const [poolError, setPoolError] = useState('');
   const [outreachStats, setOutreachStats] = useState({ total_outreach_sent: 0, interested_count: 0, response_rate_percent: 0 });
 
   const load = useCallback(async (isManual = false) => {
     if (!token) return;
     const version = ++loadVersion.current;
     setLoading(true);
-    if (isManual) clearApiCache();
+    setError('');
+    setPoolError('');
+    const refresh = isManual ? '&refresh=true' : '';
     try {
-      const data = await request(`/api/superadmin/overview${isManual ? '?refresh=true' : ''}`, { token, forceRefresh: isManual });
+      const data = await request(`/api/superadmin/overview?include_pool=false${refresh}`, { token, forceRefresh: isManual });
       if (version !== loadVersion.current) return;
       setStats(data.stats);
-      setPoolStats(data.pool_stats);
       setOutreachStats(data.outreach_stats);
       setHasLoaded(true);
       setError('');
@@ -67,6 +69,13 @@ export default function SuperAdminDashboard() {
       if (version === loadVersion.current) setError(err.message || 'Could not load overview.');
     } finally {
       if (version === loadVersion.current) setLoading(false);
+    }
+    if (version !== loadVersion.current) return;
+    try {
+      const data = await request(`/api/superadmin/overview/pool-stats${isManual ? '?refresh=true' : ''}`, { token, forceRefresh: isManual });
+      if (version === loadVersion.current) setPoolStats(data);
+    } catch {
+      if (version === loadVersion.current) setPoolError('Could not load candidate pool counts.');
     }
   }, [token]);
 
@@ -185,7 +194,7 @@ export default function SuperAdminDashboard() {
         <AdminMetric label="Buyer companies" value={hasLoaded ? stats.buyer_companies : null} detail="Manage buyer accounts" icon={Building2} href="/dashboard/superadmin/accounts" />
         <AdminMetric label="Vendor agencies" value={hasLoaded ? stats.vendor_consultancies : null} detail="Manage vendor accounts" icon={Layers} href="/dashboard/superadmin/vendor-accounts" />
         <AdminMetric label="Admin accounts" value={hasLoaded ? stats.total_admin_accounts : null} detail="Manage platform access" icon={ShieldCheck} href="/dashboard/superadmin/admin-accounts" />
-        <AdminMetric label="Candidate pool" value={hasLoaded ? poolStats.total : null} detail="Across all talent sources" icon={Users} href="/dashboard/superadmin/candidates" />
+        <AdminMetric label="Candidate pool" value={poolStats?.total} detail="Across all talent sources" icon={Users} href="/dashboard/superadmin/candidates" />
       </section>
 
       <div className="admin-overview-grid">
@@ -223,8 +232,9 @@ export default function SuperAdminDashboard() {
 
           <section className="admin-panel" aria-labelledby="outreach-snapshot-title">
             <div className="admin-section-heading"><div><h2 id="outreach-snapshot-title">Talent & outreach</h2><p>Current sourcing activity across the platform.</p></div></div>
+            {poolError && <p role="alert" className="mb-4 text-xs text-rose-700">{poolError}</p>}
             <dl className="space-y-4 text-xs">
-              {[['Portal applicants', poolStats.portal_applicants], ['Vendor candidates', poolStats.vendor_candidates], ['Outreach sent', outreachStats.total_outreach_sent], ['Interested candidates', outreachStats.interested_count], ['Response rate', `${outreachStats.response_rate_percent ?? 0}%`]].map(([label, value]) => <div key={label} className="flex justify-between gap-3"><dt className="text-gray-500">{label}</dt><dd className="font-semibold text-gray-800">{!hasLoaded ? '—' : value ?? '—'}</dd></div>)}
+              {[['Portal applicants', poolStats?.portal_applicants], ['Vendor candidates', poolStats?.vendor_candidates], ['Outreach sent', hasLoaded ? outreachStats.total_outreach_sent : null], ['Interested candidates', hasLoaded ? outreachStats.interested_count : null], ['Response rate', hasLoaded ? `${outreachStats.response_rate_percent ?? 0}%` : null]].map(([label, value]) => <div key={label} className="flex justify-between gap-3"><dt className="text-gray-500">{label}</dt><dd className="font-semibold text-gray-800">{value ?? '—'}</dd></div>)}
             </dl>
             <Link to="/dashboard/superadmin/outreach" className="mt-5 block border-t border-gray-100 pt-4 text-xs font-semibold text-teal-700">Manage outreach →</Link>
           </section>
@@ -238,8 +248,8 @@ export default function SuperAdminDashboard() {
         </div>
       </div>
 
-      <OnboardVendorModal isOpen={showOnboardVendorModal} onClose={() => setShowOnboardVendorModal(false)} onSuccess={() => { load(); setSuccess('Vendor onboarded successfully!'); }} />
-      <OnboardCompanyModal isOpen={showOnboardModal} onClose={() => setShowOnboardModal(false)} onSuccess={() => { load(); setSuccess('Company onboarded successfully!'); }} />
+      <OnboardVendorModal isOpen={showOnboardVendorModal} onClose={() => setShowOnboardVendorModal(false)} onSuccess={() => { load(true); setSuccess('Vendor onboarded successfully!'); }} />
+      <OnboardCompanyModal isOpen={showOnboardModal} onClose={() => setShowOnboardModal(false)} onSuccess={() => { load(true); setSuccess('Company onboarded successfully!'); }} />
     </div>
   );
 }
