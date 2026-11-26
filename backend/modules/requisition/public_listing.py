@@ -186,7 +186,7 @@ def public_listing(page=1, page_size=8, q='', work_mode='', family='', location=
             'items': [{'$match': selected_match}, {'$sort': sort_criteria},
                       {'$skip': (page - 1) * page_size}, {'$limit': page_size},
                       {'$project': {'_id': 0, 'id': 1, 'title': 1, 'created_at': 1, 'structured_role': 1,
-                                    'generated_jd_markdown': 1, 'intent.description': 1,
+                                    'generated_jd_markdown': 1, 'intent.description': 1, 'company_logo_url': 1,
                                     '_profile': 1, '_tenant': 1, '_company': 1}}],
             'total': [{'$match': selected_match}, {'$count': 'count'}],
             'categories': [{'$match': base_match}, {'$group': {'_id': '$_category', 'count': {'$sum': 1}}}, {'$sort': {'count': -1, '_id': 1}}],
@@ -246,7 +246,7 @@ def _public_item(row):
     return {'id': row['id'], 'ref': f"REQ-{row['id'][:6].upper()}", 'title': row.get('title') or role['title'],
             'company_name': row['_company'], 'company_industry': profile.get('industry') or 'Technology',
             'company_location': profile.get('location') or 'India',
-            'company_logo_url': profile.get('logo_url') or tenant.get('logo_url') or '',
+            'company_logo_url': row.get('company_logo_url') or profile.get('logo_url') or tenant.get('logo_url') or '',
             'job_family': role['job_family'], 'work_mode': role['work_mode'] or 'Onsite',
             'due_date': deadline,
             'structured_role': role, 'generated_jd_markdown': row.get('generated_jd_markdown') or role['job_description']}

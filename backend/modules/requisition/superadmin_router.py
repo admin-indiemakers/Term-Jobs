@@ -1,4 +1,6 @@
 """Platform-managed requisitions posted on behalf of client companies."""
+from base64 import b64decode
+from binascii import Error as Base64Error
 from collections import Counter
 from typing import Literal
 from datetime import timezone
@@ -25,6 +27,7 @@ def require_superadmin(user: User = Depends(get_current_user)):
 router = APIRouter(prefix='/api/superadmin/requisitions', tags=['Super Admin Requisitions'], dependencies=[Depends(require_superadmin)])
 public_views_router = APIRouter(prefix='/api/public/requisitions', tags=['Role views'])
 MANAGED = {'intake_meta.intake_mode': 'superadmin_post'}
+MAX_LOGO_BYTES = 128 * 1024
 
 
 @public_views_router.get('/page')
@@ -100,6 +103,28 @@ class PostingDetails(BaseModel):
     skills: list[str] = Field(min_length=1, max_length=100)
     job_description: str = Field(min_length=1, max_length=30000)
     internal_link: str = Field(default='', max_length=2048)
+    company_logo_url: str | None = Field(default=None, max_length=4 * ((MAX_LOGO_BYTES + 2) // 3) + 32)
+
+    @field_validator('company_logo_url')
+    @classmethod
+    def valid_company_logo(cls, value):
+        if not value:
+            return value
+        prefix, _, encoded = value.partition(',')
+        try:
+            content = b64decode(encoded, validate=True)
+        except Base64Error as exc:
+            raise ValueError('Upload a valid company logo image.') from exc
+        if len(content) > MAX_LOGO_BYTES:
+            raise ValueError('Company logos must be 128 KB or smaller.')
+        signatures = {
+            'data:image/png;base64': content.startswith(b'\x89PNG\r\n\x1a\n'),
+            'data:image/jpeg;base64': content.startswith(b'\xff\xd8\xff'),
+            'data:image/webp;base64': content.startswith(b'RIFF') and content[8:12] == b'WEBP',
+        }
+        if not signatures.get(prefix):
+            raise ValueError('Company logos must be PNG, JPEG, or WebP images.')
+        return value
 
     @field_validator('internal_link')
     @classmethod
@@ -156,6 +181,7 @@ def posting_view(row, link=None, applicants_count=None, viewers_count=None):
     if viewers_count is None:
         viewers_count = db.requisition_views.count_documents({'requisition_id': row['id']})
     return {'id': row['id'], 'title': row.get('title'), 'company_name': row.get('company_name'),
+            'company_logo_url': row.get('company_logo_url') or '',
             'status': row.get('status'), 'structured_role': role, 'internal_link': link,
             'created_at': row.get('created_at'), 'applicants_count': applicants_count,
             'viewers_count': viewers_count}
@@ -229,6 +255,8 @@ def post_requisition(body: PostingIn, user=Depends(require_superadmin)):
         intake_meta={'intake_mode': 'superadmin_post'}, approved_by=user.name or user.email,
         approved_at=now, created_at=now, updated_at=now).to_doc()
     row.update({'_id': req_id, 'company_name': body.company_name})
+    if body.company_logo_url:
+        row['company_logo_url'] = body.company_logo_url
     try:
         db.requisitions.insert_one(row)
     except DuplicateKeyError:
@@ -257,6 +285,8 @@ def edit_posting(requisition_id: str, body: PostingDetails, user=Depends(require
         'updated_at': now,
     }
     changes.update({f'structured_role.{key}': value for key, value in posting_role(body).items()})
+    if body.company_logo_url is not None:
+        changes['company_logo_url'] = body.company_logo_url
     db.requisitions.update_one(query, {'$set': changes})
     db.requisition_internal_links.update_one({'_id': requisition_id}, {'$set': {'url': body.internal_link}}, upsert=True)
     cache.clear()

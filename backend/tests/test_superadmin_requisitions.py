@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from modules.requisition import superadmin_router as posting
+from modules.requisition.public_listing import _public_item
 from modules.identity.router import get_current_user
 from modules.identity.domain.models import User
 
@@ -57,6 +58,32 @@ def test_retry_creates_one_requisition(setup):
     assert first['id'] == second['id']
     assert database.requisitions.count_documents({}) == 1
     assert database.company_profiles.count_documents({}) == 1
+
+
+def test_logo_on_managed_requisition_can_be_saved_and_removed(setup):
+    database, _, client, _ = setup
+    logo = ('data:image/png;base64,'
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+XGakAAAAASUVORK5CYII=')
+    body = payload(company_logo_url=logo)
+    created = client.post('/api/superadmin/requisitions', json=body)
+    assert created.status_code == 201, created.text
+    path = '/api/superadmin/requisitions/' + created.json()['id']
+    assert client.get('/api/superadmin/requisitions').json()[0]['company_logo_url'] == logo
+    row = database.requisitions.find_one({'id': created.json()['id']})
+    assert _public_item({**row, '_company': body['company_name']})['company_logo_url'] == logo
+    assert client.post('/api/superadmin/requisitions', json=payload()).json()['company_logo_url'] == ''
+
+    body.pop('client_request_id')
+    body.pop('company_logo_url')
+    assert client.put(path, json=body).json()['company_logo_url'] == logo
+    assert client.put(path, json={**body, 'company_logo_url': ''}).json()['company_logo_url'] == ''
+
+
+@pytest.mark.parametrize('logo', ['data:image/svg+xml;base64,PHN2Zz4=', 'data:image/png;base64,eHl6', 'https://example.com/logo.png'])
+def test_logo_rejects_unsupported_formats_and_invalid_data(setup, logo):
+    database, _, client, _ = setup
+    assert client.post('/api/superadmin/requisitions', json=payload(company_logo_url=logo)).status_code == 422
+    assert database.requisitions.count_documents({}) == 0
 
 
 @pytest.mark.parametrize('field,value', [('company_name', '  '), ('work_mode', ''), ('submission_deadline', ''), ('submission_deadline', '2000-01-01'), ('job_description', ''), ('skills', [' ']), ('headcount', 0)])

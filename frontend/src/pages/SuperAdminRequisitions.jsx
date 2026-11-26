@@ -1,13 +1,24 @@
 import AdminPageHeader from '../components/admin/AdminPageHeader';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Building2, Plus, Users, Eye, FileText, X, RefreshCw, ExternalLink, Pencil } from 'lucide-react';
+import { Building2, Plus, Users, Eye, FileText, X, RefreshCw, ExternalLink, Pencil, ImagePlus } from 'lucide-react';
 import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import ResumePreviewModal from '../components/ResumePreviewModal';
 import RequisitionDashboard from '../components/admin/RequisitionDashboard';
 
-const emptyForm = () => ({ client_request_id: crypto.randomUUID(), company_name: '', title: '', department: '', location: '', work_mode: '', experience: '', duration: '', headcount: 1, start_date: '', submission_deadline: '', skills: '', job_description: '', internal_link: '' });
+const emptyForm = () => ({ client_request_id: crypto.randomUUID(), company_name: '', company_logo_url: '', title: '', department: '', location: '', work_mode: '', experience: '', duration: '', headcount: 1, start_date: '', submission_deadline: '', skills: '', job_description: '', internal_link: '' });
+const logoTypes = ['image/png', 'image/jpeg', 'image/webp'];
+const maxLogoBytes = 128 * 1024;
+
+function readLogo(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Could not read the company logo.'));
+    reader.readAsDataURL(file);
+  });
+}
 const fields = [
   ['company_name', 'Company name', 'Company you are hiring for'], ['title', 'Job title', 'e.g. Digital Marketing Specialist'],
   ['department', 'Department', 'e.g. Sales'], ['location', 'Location', 'e.g. Kozhikode'],
@@ -26,6 +37,10 @@ export default function SuperAdminRequisitions() {
   const [success, setSuccess] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [logoFile, setLogoFile] = useState(null);
+  const [logoPreview, setLogoPreview] = useState('');
+  const [logoError, setLogoError] = useState('');
+
   const [editingId, setEditingId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [selected, setSelected] = useState(null);
@@ -46,6 +61,15 @@ export default function SuperAdminRequisitions() {
     setReviewTab(tab);
     setViewerPage(1);
   };
+  useEffect(() => {
+    if (!logoFile) {
+      setLogoPreview('');
+      return;
+    }
+    const url = URL.createObjectURL(logoFile);
+    setLogoPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [logoFile]);
   useEffect(() => {
     if (selectedRoleId) reviewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, [selectedRoleId]);
@@ -94,11 +118,27 @@ export default function SuperAdminRequisitions() {
   }, [selected, reviewTab, token]);
 
   const update = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
+  const clearLogoSelection = () => {
+    setLogoFile(null);
+    setLogoError('');
+  };
+  const chooseLogo = (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!logoTypes.includes(file.type) || !file.size || file.size > maxLogoBytes) {
+      setLogoError('Choose a PNG, JPEG, or WebP image up to 128 KB.');
+      return;
+    }
+    setLogoFile(file);
+    setLogoError('');
+  };
   const editPosting = (row) => {
     const role = row.structured_role || {};
     const values = emptyForm();
     Object.keys(values).forEach(key => { if (role[key] !== undefined) values[key] = role[key]; });
-    setForm({ ...values, internal_link: row.internal_link || '', company_name: row.company_name || '', title: row.title || '', skills: (role.must_have_skills || []).join(', ') });
+    clearLogoSelection();
+    setForm({ ...values, company_logo_url: row.company_logo_url || '', internal_link: row.internal_link || '', company_name: row.company_name || '', title: row.title || '', skills: (role.must_have_skills || []).join(', ') });
     setEditingId(row.id); setShowForm(true); setError(''); setSuccess('');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -107,10 +147,12 @@ export default function SuperAdminRequisitions() {
     setSaving(true); setError(''); setSuccess('');
     try {
       const { client_request_id, ...details } = form;
+      if (logoFile) details.company_logo_url = await readLogo(logoFile);
       const result = await request(editingId ? `/api/superadmin/requisitions/${editingId}` : '/api/superadmin/requisitions', {
         method: editingId ? 'PUT' : 'POST', token, body: { ...details, ...(!editingId ? { client_request_id } : {}), headcount: Number(form.headcount), skills: form.skills.split(',').map(s => s.trim()).filter(Boolean) },
       });
-      setSuccess(editingId ? `${result.title} updated. Existing applicants are preserved.` : `${result.title} for ${result.company_name} is published on Open Roles.`);
+      setSuccess(editingId ? `${result.title} updated. Existing applicants are preserved.` : `${result.title} for ${result.company_name} is published on Open Roles Classic.`);
+      clearLogoSelection();
       setShowForm(false); setEditingId(null); setForm(emptyForm()); setSelected(result);
       await load();
     } catch (err) { setError(err.message || 'Could not save requisition.'); }
@@ -133,7 +175,7 @@ export default function SuperAdminRequisitions() {
         <AdminPageHeader title="Company requisitions" section="Hiring" description="Post contract roles on behalf of companies and review their applicants.">
           <div className="flex gap-2">
             <button type="button" aria-label="Refresh requisitions" onClick={load} disabled={loading} className="rounded-xl border bg-white p-3"><RefreshCw size={18} /></button>
-            <button type="button" disabled={saving} onClick={() => { setEditingId(null); setForm(emptyForm()); setShowForm(true); setError(''); setSuccess(''); }} className="flex items-center gap-2 rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white"><Plus size={17} /> Post Requisition</button>
+            <button type="button" disabled={saving} onClick={() => { clearLogoSelection(); setEditingId(null); setForm(emptyForm()); setShowForm(true); setError(''); setSuccess(''); }} className="flex items-center gap-2 rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white"><Plus size={17} /> Post Requisition</button>
           </div>
         </AdminPageHeader>
         {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
@@ -142,8 +184,24 @@ export default function SuperAdminRequisitions() {
         {showForm && (
           <form onSubmit={publish} className="rounded-2xl border bg-white p-5 sm:p-7 space-y-5">
             <div className="flex justify-between items-center"><h2 className="text-lg font-bold">{editingId ? 'Edit company requisition' : 'Post a company requisition'}</h2><button type="button" aria-label="Close posting form" disabled={saving} onClick={() => setShowForm(false)}><X size={20} /></button></div>
-            <p className="text-sm text-gray-500">{editingId ? 'Changes update this posting without removing applicants or changing its status.' : 'All fields except the internal link are required. Publishing makes this role available on the public Open Roles page.'}</p>
+            <p className="text-sm text-gray-500">{editingId ? 'Changes update this posting without removing applicants or changing its status.' : 'Publishing makes this role available on the public Open Roles Classic page.'}</p>
             <fieldset disabled={saving} className="grid gap-4 sm:grid-cols-2">
+              <div className="rounded-xl border border-gray-200 p-4 sm:col-span-2">
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className="grid size-14 shrink-0 place-items-center overflow-hidden rounded-lg border bg-gray-50 text-gray-500">
+                    {logoPreview || form.company_logo_url
+                      ? <img src={logoPreview || form.company_logo_url} alt="Company logo preview" className="size-full object-contain p-1" />
+                      : <ImagePlus size={20} aria-hidden="true" />}
+                  </div>
+                  <label className="min-w-0 flex-1 text-sm font-medium">
+                    Company logo <span className="font-normal text-gray-500">(optional)</span>
+                    <input type="file" accept={logoTypes.join(',')} aria-describedby="requisition-logo-help" onChange={chooseLogo} className="mt-1 block max-w-full cursor-pointer text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-gray-100 file:px-3 file:py-2 file:font-semibold hover:file:bg-gray-200" />
+                  </label>
+                  {(logoFile || form.company_logo_url) && <button type="button" className="text-sm font-semibold text-gray-600 underline" onClick={() => { clearLogoSelection(); update('company_logo_url', ''); }}>Remove logo</button>}
+                </div>
+                <p id="requisition-logo-help" className="mt-2 text-xs text-gray-500">PNG, JPEG or WebP up to 128 KB. Shown on this public requisition.</p>
+                {logoError && <p role="alert" className="mt-2 text-sm text-red-700">{logoError}</p>}
+              </div>
               {fields.map(([key, label, placeholder]) => <label key={key} className="space-y-1.5 text-sm font-medium"><span>{label}</span><input className={inputClass} required maxLength={key === 'start_date' || key === 'experience' || key === 'department' ? 100 : 200} value={form[key]} placeholder={placeholder} onChange={e => update(key, e.target.value)} /></label>)}
               <label className="space-y-1.5 text-sm font-medium"><span>Work mode</span><select required className={inputClass} value={form.work_mode} onChange={e => update('work_mode', e.target.value)}><option value="">Choose work mode</option>{['On-site', 'Hybrid', 'Remote'].map(mode => <option key={mode}>{mode}</option>)}</select></label>
               <label className="space-y-1.5 text-sm font-medium"><span>Number of openings</span><input required type="number" min="1" max="10000" className={inputClass} value={form.headcount} onChange={e => update('headcount', e.target.value)} /></label>
@@ -166,7 +224,7 @@ export default function SuperAdminRequisitions() {
           );
         })}
         {selected && <section ref={reviewRef} aria-label="Role activity" className="scroll-mt-6 rounded-2xl border bg-white p-5 sm:p-7 space-y-4">
-          <header className="flex flex-wrap justify-between gap-3"><div><p className="mb-1.5 font-mono text-xs font-semibold text-gray-500" title={selected.id}>{requisitionRef(selected.id)}</p><h2 className="font-bold text-lg">Role activity · {selected.title}</h2><p className="text-sm text-gray-500 mt-1">{selected.company_name}</p></div><div className="flex items-center gap-3"><Link to="/dashboard/superadmin/candidates" className="text-sm font-semibold underline underline-offset-4">Candidate Pool</Link>{selected.status === 'Published' && <><a target="_blank" rel="noreferrer" href="/open-roles" className="text-sm inline-flex gap-1 items-center">Open Roles <ExternalLink size={14} /></a><button type="button" disabled={closing} onClick={closePosting} className="border rounded-lg px-3 py-2 text-sm">{closing ? 'Closing…' : 'Close posting'}</button></>}<button type="button" aria-label="Close role activity" onClick={() => setSelected(null)} className="rounded-lg border p-2"><X size={18} /></button></div></header>
+          <header className="flex flex-wrap justify-between gap-3"><div><p className="mb-1.5 font-mono text-xs font-semibold text-gray-500" title={selected.id}>{requisitionRef(selected.id)}</p><h2 className="font-bold text-lg">Role activity · {selected.title}</h2><p className="text-sm text-gray-500 mt-1">{selected.company_name}</p></div><div className="flex items-center gap-3"><Link to="/dashboard/superadmin/candidates" className="text-sm font-semibold underline underline-offset-4">Candidate Pool</Link>{selected.status === 'Published' && <><a target="_blank" rel="noreferrer" href="/open-roles/classic" className="text-sm inline-flex gap-1 items-center">Open Roles <ExternalLink size={14} /></a><button type="button" disabled={closing} onClick={closePosting} className="border rounded-lg px-3 py-2 text-sm">{closing ? 'Closing…' : 'Close posting'}</button></>}<button type="button" aria-label="Close role activity" onClick={() => setSelected(null)} className="rounded-lg border p-2"><X size={18} /></button></div></header>
           {selected.internal_link && <div className="rounded-xl border border-gray-200 bg-gray-50 p-4"><p className="mb-1 text-xs font-semibold text-gray-500">Internal reference · Admin only</p><a href={selected.internal_link} target="_blank" rel="noopener noreferrer" className="inline-flex max-w-full items-center gap-2 text-sm font-medium underline underline-offset-4"><span className="break-all">{selected.internal_link}</span><ExternalLink size={14} className="shrink-0" /></a></div>}
           <div role="group" aria-label="Activity view" className="flex flex-wrap gap-2 border-b pb-4">
             <button type="button" aria-pressed={reviewTab === 'applicants'} onClick={() => setReviewTab('applicants')} className={`inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-semibold ${reviewTab === 'applicants' ? 'bg-gray-900 text-white' : 'bg-white text-gray-700'}`}><Users size={16} /> Applicants ({selected.applicants_count ?? 0})</button>
