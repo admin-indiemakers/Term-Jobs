@@ -564,11 +564,10 @@ export default function NewLandingPage() {
                       Share your skills once. We match you with verified companies hiring for contract and permanent roles, so you stop applying into the void.
                     </p>
                     <div className="th-a">
-                      <button className="th-b pri" onClick={() => navigate('/talent-waitlist')}>
-                        Join the talent pool, it's free <i aria-hidden="true">&rarr;</i>
-                      </button>
+                      <Link className="th-b pri" to="/open-roles">
+                        Open roles <i aria-hidden="true">&rarr;</i>
+                      </Link>
                     </div>
-                    <p className="th-note">Takes 2 minutes · No fees · Matched to roles that fit</p>
                   </div>
                 )}
               </div>
