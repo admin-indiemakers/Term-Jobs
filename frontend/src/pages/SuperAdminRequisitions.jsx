@@ -6,9 +6,10 @@ import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import ResumePreviewModal from '../components/ResumePreviewModal';
 import RequisitionDashboard from '../components/admin/RequisitionDashboard';
+import JobDescriptionParser from '../components/admin/JobDescriptionParser';
 import { deadlineError, startDateError, todayForDeadline } from '../utils/submissionDeadline';
 
-const emptyForm = () => ({ client_request_id: crypto.randomUUID(), company_name: '', company_logo_url: '', title: '', department: '', location: '', work_mode: '', experience: '', duration: '', headcount: 1, start_date: '', submission_deadline: '', skills: '', job_description: '', internal_link: '' });
+const emptyForm = () => ({ client_request_id: crypto.randomUUID(), company_name: '', company_logo_url: '', title: '', department: '', location: '', work_mode: '', experience: '', duration: '', headcount: '', start_date: '', submission_deadline: '', skills: '', job_description: '', internal_link: '', industry: '', salary: '', employment_type: '', working_hours: '', preferred_skills: '' });
 const logoTypes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 const maxLogoBytes = 128 * 1024;
 
@@ -25,12 +26,16 @@ const fields = [
   ['department', 'Department', 'e.g. Sales'], ['location', 'Location', 'e.g. Kozhikode'],
   ['experience', 'Experience', 'e.g. Mid (3–5 years)'], ['duration', 'Contract period', 'e.g. 6 months'],
   ['start_date', 'Target start date', 'YYYY-MM-DD or Month YYYY'],
+  ['industry', 'Industry', 'Industry from the listing', true],
+  ['salary', 'Salary range', 'Include currency and pay period', true],
+  ['employment_type', 'Employment type', 'e.g. Full-time', true],
+  ['working_hours', 'Working hours', 'Hours or shifts from the listing', true],
 ];
 const fieldLabels = Object.fromEntries([
   ...fields,
   ['submission_deadline', 'Application due date'], ['skills', 'Required skills'],
   ['work_mode', 'Work mode'], ['headcount', 'Number of openings'],
-  ['job_description', 'Job description'], ['internal_link', 'Internal reference link'],
+  ['preferred_skills', 'Preferred skills'], ['job_description', 'Job description'], ['internal_link', 'Internal reference link'],
   ['company_logo_url', 'Company logo'],
 ]);
 const requisitionRef = (id) => `REQ-${id.slice(0, 6).toUpperCase()}`;
@@ -182,7 +187,7 @@ export default function SuperAdminRequisitions() {
     const values = emptyForm();
     Object.keys(values).forEach(key => { if (role[key] !== undefined) values[key] = role[key]; });
     clearLogoSelection();
-    setForm({ ...values, company_logo_url: row.company_logo_url || '', internal_link: row.internal_link || '', company_name: row.company_name || '', title: row.title || '', skills: (role.must_have_skills || []).join(', ') });
+    setForm({ ...values, company_logo_url: row.company_logo_url || '', internal_link: row.internal_link || '', company_name: row.company_name || '', title: row.title || '', skills: (role.must_have_skills || []).join(', '), preferred_skills: (role.nice_to_have_skills || []).join(', ') });
     setEditingId(row.id); setShowForm(true); setError(''); setPublishError(''); setSuccess('');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -206,7 +211,7 @@ export default function SuperAdminRequisitions() {
     }
     setSaving(true);
     try {
-      const { client_request_id, company_logo_url, ...details } = form;
+      const { client_request_id, company_logo_url, preferred_skills, ...details } = form;
       if (logoFile) {
         details.company_logo_url = await readLogo(logoFile);
       } else if (removeStoredLogo && !company_logo_url) {
@@ -214,7 +219,7 @@ export default function SuperAdminRequisitions() {
       }
       const result = await request(editingId ? `/api/superadmin/requisitions/${editingId}` : '/api/superadmin/requisitions', {
         method: editingId ? 'PUT' : 'POST', token, timeout: 35000,
-        body: { ...details, start_date: start, ...(!editingId ? { client_request_id } : {}), headcount: Number(form.headcount), skills },
+        body: { ...details, start_date: start, ...(!editingId ? { client_request_id } : {}), headcount: Number(form.headcount), skills, preferred_skills: preferred_skills.split(',').map(skill => skill.trim()).filter(Boolean) },
       });
       setSuccess(editingId ? `${result.title} updated. Existing applicants are preserved.` : `${result.title} for ${result.company_name} is published on Open Roles.`);
       clearLogoSelection();
@@ -261,6 +266,7 @@ export default function SuperAdminRequisitions() {
             <div className="flex justify-between items-center"><h2 className="text-lg font-bold">{editingId ? 'Edit company requisition' : 'Post a company requisition'}</h2><button type="button" aria-label="Close posting form" disabled={saving} onClick={() => setShowForm(false)}><X size={20} /></button></div>
             <p className="text-sm text-gray-500">{editingId ? 'Changes update this posting without removing applicants or changing its status.' : 'Publishing makes this role available on the public Open Roles page.'}</p>
             <fieldset disabled={saving} className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="min-w-0 sm:col-span-2"><JobDescriptionParser key={form.client_request_id} token={token} onFill={values => setForm(previous => ({ ...previous, ...values }))} /></div>
               <div
                 className={`rounded-xl border border-dashed p-4 transition-colors sm:col-span-2 ${logoDragOver ? 'border-indigo-500 bg-indigo-50' : 'border-gray-300'}`}
                 onDragOver={allowLogoDrop}
@@ -285,11 +291,12 @@ export default function SuperAdminRequisitions() {
                 <p id="requisition-logo-help" className="mt-2 text-xs text-gray-500">Drag and drop a logo here or choose a file. PNG, JPEG, WebP or GIF up to 128 KB.</p>
                 {logoError && <p role="alert" className="mt-2 text-sm text-red-700">{logoError}</p>}
               </div>
-              {fields.map(([key, label, placeholder]) => <label key={key} className="space-y-1.5 text-sm font-medium"><span>{label}</span><input className={inputClass} required maxLength={key === 'start_date' || key === 'experience' || key === 'department' ? 100 : 200} value={form[key]} placeholder={placeholder} onChange={e => update(key, e.target.value)} /></label>)}
+              {fields.map(([key, label, placeholder, optional]) => <label key={key} className="space-y-1.5 text-sm font-medium"><span>{label}{optional && <span className="font-normal text-gray-500"> (optional)</span>}</span><input className={inputClass} required={!optional} maxLength={key === 'start_date' || key === 'experience' || key === 'department' ? 100 : 200} value={form[key]} placeholder={placeholder} onChange={e => update(key, e.target.value)} /></label>)}
               <label className="space-y-1.5 text-sm font-medium"><span>Work mode</span><select required className={inputClass} value={form.work_mode} onChange={e => update('work_mode', e.target.value)}><option value="">Choose work mode</option>{['On-site', 'Hybrid', 'Remote'].map(mode => <option key={mode}>{mode}</option>)}</select></label>
               <label className="space-y-1.5 text-sm font-medium"><span>Number of openings</span><input required type="number" min="1" max="10000" className={inputClass} value={form.headcount} onChange={e => update('headcount', e.target.value)} /></label>
               <label className="min-w-0 space-y-1.5 text-sm font-medium"><span>Application due date</span><input required type="date" min={todayForDeadline()} className={inputClass} value={form.submission_deadline} onChange={e => update('submission_deadline', e.target.value)} /></label>
               <label className="space-y-1.5 text-sm font-medium sm:col-span-2"><span>Required skills (comma separated)</span><input required className={inputClass} value={form.skills} onChange={e => update('skills', e.target.value)} placeholder="e.g. SEO, Google Ads, Analytics" /></label>
+              <label className="space-y-1.5 text-sm font-medium sm:col-span-2"><span>Preferred skills (optional, comma separated)</span><input className={inputClass} value={form.preferred_skills} onChange={e => update('preferred_skills', e.target.value)} /></label>
               <label className="space-y-1.5 text-sm font-medium sm:col-span-2"><span>Role summary / job description</span><textarea required maxLength={30000} rows={7} className={inputClass} value={form.job_description} onChange={e => update('job_description', e.target.value)} placeholder="Describe the role, responsibilities, and requirements candidates should see." /></label>
               <label className="space-y-1.5 text-sm font-medium sm:col-span-2"><span>Internal reference link <span className="font-normal text-gray-500">(optional)</span></span><input type="url" maxLength={2048} className={inputClass} value={form.internal_link} onChange={e => update('internal_link', e.target.value)} placeholder="https://…" /><p className="text-xs font-normal text-gray-500">Visible only in this admin panel. Not included in the public job posting.</p></label>
             </fieldset>

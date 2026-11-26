@@ -2,6 +2,7 @@
 from base64 import b64decode
 from binascii import Error as Base64Error
 from collections import Counter
+import logging
 from typing import Literal
 from datetime import timezone
 from uuid import NAMESPACE_URL, uuid5
@@ -16,6 +17,8 @@ from modules.shared.cache import cache
 from modules.shared.db import db, _utcnow
 from .domain.deadline import normalize_start_date, validate_start_date, validate_submission_deadline, submission_deadline_passed
 from .domain.models import Requisition
+from .jd_parser import ParsedJobDescription, clean_source, parse_job_description
+from .llm.groq import GroqClient
 
 
 def require_superadmin(user: User = Depends(get_current_user)):
@@ -28,6 +31,27 @@ router = APIRouter(prefix='/api/superadmin/requisitions', tags=['Super Admin Req
 public_views_router = APIRouter(prefix='/api/public/requisitions', tags=['Role views'])
 MANAGED = {'intake_meta.intake_mode': 'superadmin_post'}
 MAX_LOGO_BYTES = 128 * 1024
+logger = logging.getLogger(__name__)
+
+
+class ParseDescriptionIn(BaseModel):
+    model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
+    source: str = Field(min_length=1, max_length=30000)
+
+
+@router.post('/parse-description', response_model=ParsedJobDescription)
+def preview_job_description(body: ParseDescriptionIn):
+    source = clean_source(body.source)
+    if not source:
+        raise HTTPException(422, 'Paste a job description or listing details first.')
+    client = GroqClient()
+    if not client.api_key:
+        raise HTTPException(503, 'AI job description parsing is unavailable. You can still enter the posting manually.')
+    try:
+        return parse_job_description(source, client)
+    except Exception as exc:
+        logger.warning('Job description parsing failed: %s', type(exc).__name__)
+        raise HTTPException(502, 'Could not parse the job description. Try again or continue entering it manually.') from None
 
 
 @public_views_router.get('/page')
@@ -104,6 +128,11 @@ class PostingDetails(BaseModel):
     job_description: str = Field(min_length=1, max_length=30000)
     internal_link: str = Field(default='', max_length=2048)
     company_logo_url: str | None = Field(default=None, max_length=4 * ((MAX_LOGO_BYTES + 2) // 3) + 32)
+    industry: str | None = Field(default=None, max_length=200)
+    salary: str | None = Field(default=None, max_length=200)
+    employment_type: str | None = Field(default=None, max_length=200)
+    working_hours: str | None = Field(default=None, max_length=200)
+    preferred_skills: list[str] | None = Field(default=None, max_length=100)
 
     @field_validator('company_logo_url')
     @classmethod
@@ -160,16 +189,26 @@ class PostingIn(PostingDetails):
 
 
 def posting_role(body: PostingDetails):
-    return {
+    role = {
         'title': body.title, 'department': body.department, 'location': body.location,
         'work_locations': [body.location], 'work_mode': body.work_mode,
         'experience': body.experience, 'experience_level': body.experience,
-        'employment_type': 'Contract', 'engagement_type': 'Contract', 'hiring_model': 'Direct Hiring',
+        'hiring_model': 'Direct Hiring',
         'duration': body.duration, 'contract_duration': body.duration, 'headcount': body.headcount,
         'start_date': body.start_date, 'target_start_date': body.start_date,
         'submission_deadline': body.submission_deadline, 'must_have_skills': body.skills,
         'job_description': body.job_description,
     }
+    for field in ('industry', 'salary', 'working_hours'):
+        if (value := getattr(body, field)) is not None:
+            role[field] = value
+    if body.employment_type is not None:
+        role.update(employment_type=body.employment_type, engagement_type=body.employment_type)
+    if body.preferred_skills is not None:
+        required = {skill.casefold() for skill in body.skills}
+        preferred = {skill.strip().casefold(): skill.strip() for skill in body.preferred_skills if skill.strip()}
+        role['nice_to_have_skills'] = [skill for key, skill in preferred.items() if key not in required]
+    return role
 
 
 def posting_view(row, link=None, applicants_count=None, viewers_count=None):
@@ -253,6 +292,8 @@ def post_requisition(body: PostingIn, user=Depends(require_superadmin)):
         'created_at': now, 'managed_by_superadmin': True,
     }}, upsert=True)
     role = posting_role(body)
+    if body.employment_type is None:
+        role.update(employment_type='Contract', engagement_type='Contract')
     row = Requisition(id=req_id, tenant_id=user.tenant_id, company_profile_id=profile_id,
         created_by=user.id, title=body.title, status='Published', structured_role=role,
         generated_jd_markdown=body.job_description, intent={'title': body.title, 'description': body.job_description},
