@@ -1,6 +1,23 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { loadOpenRoles } from '../src/utils/loadOpenRoles.js';
+import { loadOpenRoles, mapLiveOpenRoles } from '../src/utils/loadOpenRoles.js';
+
+test('published requisitions supply the newer cards with their real IDs and company logos', () => {
+  const logo = 'data:image/png;base64,example';
+  const [job] = mapLiveOpenRoles([{
+    id: 'abc-123', title: 'AI Engineer', company_name: 'Term Jobs', company_logo_url: logo,
+    structured_role: {
+      work_mode: 'Onsite', location: ['Kozhikode', 'Kochi'], experience: '3–4 years',
+      must_have_skills: ['Python'], job_description: 'Build AI applications.',
+    },
+  }]);
+  assert.deepEqual(job, {
+    slug: 'abc-123', title: 'AI Engineer', company: 'Term Jobs', logo,
+    mode: 'On-site', loc: 'Kozhikode, Kochi', exp: '3–4 years',
+    skills: ['Python'], description: 'Build AI applications.',
+  });
+  assert.deepEqual(mapLiveOpenRoles([{ id: 'invalid/route' }]), []);
+});
 
 test('roles load from the current API without memory, session, or HTTP cache reuse', async () => {
   const rows = [{ id: 'testing-role' }];

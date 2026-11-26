@@ -4,6 +4,8 @@ import { useCandidateAuth } from '../context/CandidateAuthContext';
 import { NEW_OPEN_ROLES_HTML } from './newOpenRolesMarkup';
 import { mountOpenRolesEngine } from './newOpenRolesEngine';
 import SEOHead from '../components/SEOHead';
+import { request } from '../api/client';
+import { loadOpenRoles } from '../utils/loadOpenRoles';
 import { Backdrop } from '../components/landing/Backdrop';
 import CandidateAuthModal from '../components/CandidateAuthModal';
 import './NewOpenRolesPage.css';
@@ -228,6 +230,7 @@ export default function NewOpenRolesPage({ enabled = true }) {
     handleStartAiInterviewRef.current = handleStartAiInterview;
 
     const unmountEngine = mountOpenRolesEngine(containerRef.current, {
+      loadRoles: () => loadOpenRoles(request),
       getCandidateUser: () => candidateAuthRef.current?.candidateUser,
       onOpenAuth: (pendingRole) => {
         if (pendingRole) pendingApplyRef.current = pendingRole;

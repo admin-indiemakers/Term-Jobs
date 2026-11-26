@@ -34,3 +34,23 @@ export async function loadOpenRolesPage(request, params, prefetched) {
   }
   return result;
 }
+
+export function mapLiveOpenRoles(rows) {
+  return rows.flatMap(row => {
+    if (!/^[a-z0-9-]+$/.test(row.id || '')) return [];
+    const role = row.structured_role || {};
+    const location = role.location || row.company_location;
+    const mode = role.work_mode || row.work_mode || '';
+    return [{
+      slug: row.id,
+      title: row.title || role.title || 'Open role',
+      company: row.company_name || 'Hiring Partner',
+      mode: mode.toLowerCase().replace(/[- ]/g, '') === 'onsite' ? 'On-site' : mode,
+      loc: Array.isArray(location) ? location.join(', ') : location || 'India',
+      exp: role.experience || role.seniority_level || '',
+      skills: Array.isArray(role.must_have_skills) ? role.must_have_skills : [],
+      logo: row.company_logo_url,
+      description: role.job_description || row.generated_jd_markdown || '',
+    }];
+  });
+}

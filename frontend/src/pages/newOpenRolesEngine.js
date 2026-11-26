@@ -1,5 +1,6 @@
 // TermJobs New Open Roles Interactive Engine
 // Bundled from TermJobs openroles page.html
+import { mapLiveOpenRoles } from '../utils/loadOpenRoles';
 
 export function mountOpenRolesEngine(container, options = {}) {
   if (!container) return () => { };
@@ -1308,12 +1309,10 @@ export function mountOpenRolesEngine(container, options = {}) {
       addDocListener('click', function (e) { if (e.target.closest('a.card')) window.__tjY = getScrollPos(); }, true);
       addWinListener('popstate', route);
       addWinListener('hashchange', route);
-      if (location.hash === '#profile' || (location.hash && location.hash.match(/^#job-([a-z0-9-]+)$/))) { route(); }
-    })();
-
+      if (location.hash === '#profile' || (!options.loadRoles && /^#job-([a-z0-9-]+)$/.test(location.hash))) { route(); }
     // 2. Script 1: Search & pagination
     (function () {
-      var PER = (function (w) { return w >= 1200 ? 8 : w >= 900 ? 9 : 6; })(window.innerWidth), page = 1, cards = [].slice.call(document.querySelectorAll('.card')), q = document.getElementById('q'),
+      var PER = (function (w) { return w >= 1200 ? 8 : w >= 900 ? 9 : 6; })(window.innerWidth), page = 1, cards = [].slice.call(container.querySelectorAll('#grid > .card')), q = document.getElementById('q'),
         fm = document.getElementById('f-mode'), fc = document.getElementById('f-city'), fl = document.getElementById('f-level'),
         count = document.getElementById('count'), empty = document.getElementById('empty'), r2 = document.getElementById('reset2'),
         pager = document.getElementById('pager'), grid = document.getElementById('grid'), toolbar = document.querySelector('.toolbar');
@@ -1347,7 +1346,98 @@ export function mountOpenRolesEngine(container, options = {}) {
       function reset() { q.value = ''; fm.value = ''; fc.value = ''; fl.value = ''; page = 1; run(); }
       [q, fm, fc, fl].forEach(function (el) { el.addEventListener('input', function () { page = 1; run(); }); });
       document.getElementById('reset').addEventListener('click', reset); r2.addEventListener('click', reset);
-      run(); setTimeout(function () { document.body.classList.add('ready'); }, 1200);
+      if (options.loadRoles) {
+        let active = true;
+        let pending = false;
+        let firstLoad = true;
+        let previousLiveIds = new Set();
+
+        function configureFilter(select, values) {
+          const selected = select.value;
+          const fallback = select.options[0].cloneNode(true);
+          select.replaceChildren(fallback, ...Array.from(new Set(values.filter(Boolean)))
+            .sort((left, right) => left.localeCompare(right))
+            .map(value => new Option(value, value)));
+          select.value = [...select.options].some(option => option.value === selected) ? selected : '';
+        }
+
+        function showJobs(rows) {
+          const jobs = mapLiveOpenRoles(rows);
+          const liveIds = new Set(jobs.map(job => job.slug));
+          JOBS = [...jobs, ...JOBS.filter(job => !previousLiveIds.has(job.slug) && !liveIds.has(job.slug))];
+          previousLiveIds.forEach(id => { delete TJ_DESC[id]; });
+          previousLiveIds = liveIds;
+          window.TJ_JOBS = JOBS;
+
+          const fragment = document.createDocumentFragment();
+          cards = jobs.map(job => {
+            TJ_DESC[job.slug] = job.description;
+            const card = document.createElement('a');
+            card.className = 'card';
+            card.href = '#job-' + job.slug;
+            Object.assign(card.dataset, {
+              slug: job.slug, mode: job.mode, city: job.loc, level: job.exp,
+              q: [job.title, job.company, job.mode, job.loc, ...job.skills].join(' ').toLowerCase(),
+            });
+            const summary = job.description.slice(0, 180);
+            card.innerHTML = '<div class="card-head">' + renderLogo(job)
+              + '<div style="min-width:0"><h3>' + esc(job.title) + '</h3><div class="co">' + esc(job.company) + '</div></div></div>'
+              + '<div class="chips"><span class="chip mode">' + esc(job.mode) + '</span><span class="chip">' + CAP + esc(job.exp)
+              + '</span><span class="chip">' + PIN + esc(job.loc) + '</span></div>'
+              + (summary ? '<p class="blurb">' + esc(summary) + (summary.length < job.description.length ? '…' : '') + '</p>' : '')
+              + '<div class="card-foot"><span>View details</span>' + ARROW + '</div>';
+            fragment.append(card);
+            return card;
+          });
+          grid.replaceChildren(fragment, empty);
+          configureFilter(fm, jobs.map(job => job.mode));
+          configureFilter(fc, jobs.map(job => job.loc));
+          configureFilter(fl, jobs.map(job => job.exp));
+          empty.textContent = 'No roles match these filters. Try clearing one.';
+          run();
+          if (window.TJ?.drawSaved) window.TJ.drawSaved();
+          if (firstLoad && /^#job-[a-z0-9-]+$/.test(location.hash)) {
+            window.dispatchEvent(new Event('hashchange'));
+          }
+          firstLoad = false;
+        }
+
+        async function refreshJobs() {
+          if (pending || document.visibilityState === 'hidden') return;
+          pending = true;
+          try {
+            const rows = await options.loadRoles();
+            if (active) showJobs(rows);
+          } catch {
+            if (active) {
+              count.textContent = 'Could not refresh open roles.';
+              if (!cards.length) {
+                empty.hidden = false;
+                empty.textContent = 'Could not load open roles. Please refresh the page to try again.';
+              }
+            }
+          } finally {
+            pending = false;
+            if (active) grid.removeAttribute('aria-busy');
+          }
+        }
+
+        grid.replaceChildren(empty);
+        grid.setAttribute('aria-busy', 'true');
+        cards = [];
+        empty.hidden = true;
+        pager.hidden = true;
+        count.textContent = 'Loading open roles…';
+        refreshJobs();
+        addDocListener('visibilitychange', refreshJobs);
+        addWinListener('tj-requisitions-updated', refreshJobs);
+        cleanups.push(() => { active = false; });
+      } else {
+        run();
+      }
+      setTimeout(function () { document.body.classList.add('ready'); }, 1200);
+    })();
+
     })();
 
     // 3. Script 2: Suggestion matching, swipe deck & profile
