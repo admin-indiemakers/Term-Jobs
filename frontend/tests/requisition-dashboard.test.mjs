@@ -33,13 +33,20 @@ test('rankings sort by count, limit to five, and preserve source order', () => {
   assert.deepEqual(requisitionDashboard(input).topRoles.map(row => row.applicants_count), [7, 6, 5, 4, 3]);
   assert.deepEqual(input.map(row => row.applicants_count), [0, 1, 2, 3, 4, 5, 6, 7]);
 });
-let server, cacheDir, Dashboard;
+let server, cacheDir, Dashboard, requireRows;
 before(async () => {
   cacheDir = await mkdtemp(path.join(tmpdir(), 'termjobs-dashboard-vite-'));
   server = await createServer({ configFile: false, cacheDir, plugins: [react()], optimizeDeps: { noDiscovery: true }, server: { middlewareMode: true, hmr: false, ws: false }, appType: 'custom' });
   Dashboard = (await server.ssrLoadModule('/src/components/admin/RequisitionDashboard.jsx')).default;
+  ({ requireRows } = await server.ssrLoadModule('/src/pages/SuperAdminRequisitions.jsx'));
 });
 after(async () => { try { await server?.close(); } finally { if (cacheDir) await rm(cacheDir, { recursive: true, force: true }); } });
+test('a missing requisitions response is an error instead of replacing the rendered list', () => {
+  assert.throws(() => requireRows(null, 'requisitions'), /Could not load requisitions/);
+  assert.throws(() => requireRows([null], 'applicants'), /Could not load applicants/);
+  assert.deepEqual(requireRows([], 'requisitions'), []);
+  assert.equal(requireRows(rows, 'requisitions'), rows);
+});
 test('dashboard distinguishes loading, unavailable, and real zero results', () => {
   const render = props => renderToStaticMarkup(React.createElement(Dashboard, { rows: [], onReview() {}, ...props }));
   const pending = render({ ready: false, loading: true });

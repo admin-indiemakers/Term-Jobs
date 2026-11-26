@@ -36,6 +36,13 @@ const fieldLabels = Object.fromEntries([
 const requisitionRef = (id) => `REQ-${id.slice(0, 6).toUpperCase()}`;
 const inputClass = 'w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900/15';
 
+export function requireRows(data, label) {
+  if (!Array.isArray(data) || data.some(row => typeof row?.id !== 'string' || !row.id)) {
+    throw new Error(`Could not load ${label}. The server returned an unexpected response. Try refreshing.`);
+  }
+  return data;
+}
+
 export default function SuperAdminRequisitions() {
   const { token } = useAuth();
   const [rows, setRows] = useState([]);
@@ -89,7 +96,11 @@ export default function SuperAdminRequisitions() {
     let cancelled = false;
     setLoadingViewers(true); setViewerData(null); setViewerError('');
     request(`/api/superadmin/requisitions/${selected.id}/viewers?page=${viewerPage}`, { token, noCache: true })
-      .then(data => { if (!cancelled) setViewerData(data); })
+      .then(data => {
+        if (cancelled) return;
+        requireRows(data?.viewers, 'viewers');
+        setViewerData(data);
+      })
       .catch(err => { if (!cancelled) setViewerError(err.message || 'Could not load viewers.'); })
       .finally(() => { if (!cancelled) setLoadingViewers(false); });
     return () => { cancelled = true; };
@@ -99,7 +110,8 @@ export default function SuperAdminRequisitions() {
     setLoading(true);
     setError('');
     try {
-      const nextRows = await request('/api/superadmin/requisitions', { token, noCache: true, timeout: 30000 });
+      const response = await request('/api/superadmin/requisitions', { token, noCache: true, timeout: 30000 });
+      const nextRows = requireRows(response, 'requisitions');
       setRows(nextRows);
       setHasLoaded(true);
       setSelected(previous => previous ? nextRows.find(row => row.id === previous.id) || null : null);
@@ -122,7 +134,7 @@ export default function SuperAdminRequisitions() {
     setApplicants([]);
     setApplicantError('');
     request(`/api/superadmin/requisitions/${selected.id}/applicants`, { token, noCache: true })
-      .then(data => { if (!cancelled) setApplicants(data); })
+      .then(data => { if (!cancelled) setApplicants(requireRows(data, 'applicants')); })
       .catch(err => { if (!cancelled) setApplicantError(err.message || 'Could not load applicants.'); })
       .finally(() => { if (!cancelled) setLoadingApplicants(false); });
     return () => { cancelled = true; };
@@ -290,8 +302,8 @@ export default function SuperAdminRequisitions() {
           return (
         <section key={sectionName} className="rounded-2xl border bg-white overflow-hidden" aria-label={`${sectionName} requisitions`}>
           <div className="border-b px-5 py-4 font-semibold">{sectionName} requisitions ({sectionRows.length})</div>
-          {loading ? <p className="p-8 text-gray-500">Loading requisitions…</p> : !sectionRows.length ? <div className="p-10 text-center text-gray-500"><Building2 className="mx-auto mb-3" /><p>No {sectionName.toLowerCase()} requisitions.</p><p className="text-sm mt-1">{sectionName === 'Closed' ? 'Expired and manually closed postings appear here. Applicants remain available.' : 'Use Post Requisition to publish a role.'}</p></div> :
-            <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-gray-50 text-gray-500"><tr>{['Role / company', 'Work mode / location', 'Due date', 'Status', 'Viewers', 'Applicants', 'Actions'].map(label => <th key={label} className="px-5 py-3 font-medium">{label}</th>)}</tr></thead><tbody className="divide-y">{sectionRows.map(row => <tr key={row.id} className={selected?.id === row.id ? 'bg-gray-50' : ''}><td className="px-5 py-4"><p className="mb-1.5 font-mono text-xs font-semibold text-gray-500" title={row.id}>{requisitionRef(row.id)}</p><button type="button" onClick={() => openReview(row)} className="text-left font-semibold hover:underline">{row.title}</button><p className="mt-1 text-gray-500">{row.company_name}</p></td><td className="px-5 py-4">{row.structured_role.work_mode}<p className="text-gray-500">{row.structured_role.location}</p></td><td className="px-5 py-4">{row.structured_role.submission_deadline}</td><td className="px-5 py-4">{row.status}</td><td className="px-5 py-4"><button type="button" onClick={() => openReview(row, 'viewers')} aria-label={`View viewers for ${row.title}`} className="flex items-center gap-2 whitespace-nowrap rounded-lg border px-3 py-2 hover:bg-gray-100"><Eye size={16} /> {row.viewers_count ?? 0} · View viewers</button></td><td className="px-5 py-4"><button type="button" onClick={() => openReview(row)} aria-label={`View applicants for ${row.title}`} className="flex items-center gap-2 whitespace-nowrap rounded-lg border px-3 py-2 hover:bg-gray-100"><Users size={16} /> {row.applicants_count} · View applicants</button></td><td className="px-5 py-4"><button type="button" disabled={saving} onClick={() => editPosting(row)} className="flex items-center gap-2 rounded-lg border px-3 py-2 hover:bg-gray-100"><Pencil size={16} /> Edit</button></td></tr>)}</tbody></table></div>}
+          {!hasLoaded ? <p className="p-8 text-gray-500">{loading ? 'Loading requisitions…' : 'Requisitions unavailable. Refresh to try again.'}</p> : !sectionRows.length ? <div className="p-10 text-center text-gray-500"><Building2 className="mx-auto mb-3" /><p>No {sectionName.toLowerCase()} requisitions.</p><p className="text-sm mt-1">{sectionName === 'Closed' ? 'Expired and manually closed postings appear here. Applicants remain available.' : 'Use Post Requisition to publish a role.'}</p></div> :
+            <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-gray-50 text-gray-500"><tr>{['Role / company', 'Work mode / location', 'Due date', 'Status', 'Viewers', 'Applicants', 'Actions'].map(label => <th key={label} className="px-5 py-3 font-medium">{label}</th>)}</tr></thead><tbody className="divide-y">{sectionRows.map(row => <tr key={row.id} className={selected?.id === row.id ? 'bg-gray-50' : ''}><td className="px-5 py-4"><p className="mb-1.5 font-mono text-xs font-semibold text-gray-500" title={row.id}>{requisitionRef(row.id)}</p><button type="button" onClick={() => openReview(row)} className="text-left font-semibold hover:underline">{row.title}</button><p className="mt-1 text-gray-500">{row.company_name}</p></td><td className="px-5 py-4">{row.structured_role?.work_mode ?? '—'}<p className="text-gray-500">{row.structured_role?.location ?? '—'}</p></td><td className="px-5 py-4">{row.structured_role?.submission_deadline ?? '—'}</td><td className="px-5 py-4">{row.status}</td><td className="px-5 py-4"><button type="button" onClick={() => openReview(row, 'viewers')} aria-label={`View viewers for ${row.title}`} className="flex items-center gap-2 whitespace-nowrap rounded-lg border px-3 py-2 hover:bg-gray-100"><Eye size={16} /> {row.viewers_count ?? 0} · View viewers</button></td><td className="px-5 py-4"><button type="button" onClick={() => openReview(row)} aria-label={`View applicants for ${row.title}`} className="flex items-center gap-2 whitespace-nowrap rounded-lg border px-3 py-2 hover:bg-gray-100"><Users size={16} /> {row.applicants_count} · View applicants</button></td><td className="px-5 py-4"><button type="button" disabled={saving} onClick={() => editPosting(row)} className="flex items-center gap-2 rounded-lg border px-3 py-2 hover:bg-gray-100"><Pencil size={16} /> Edit</button></td></tr>)}</tbody></table></div>}
         </section>
           );
         })}
