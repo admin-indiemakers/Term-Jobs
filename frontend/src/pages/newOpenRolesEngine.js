@@ -1312,10 +1312,13 @@ export function mountOpenRolesEngine(container, options = {}) {
       if (location.hash === '#profile' || (!options.loadRoles && /^#job-([a-z0-9-]+)$/.test(location.hash))) { route(); }
     // 2. Script 1: Search & pagination
     (function () {
-      var PER = (function (w) { return w >= 1200 ? 8 : w >= 900 ? 9 : 6; })(window.innerWidth), page = 1, cards = [].slice.call(container.querySelectorAll('#grid > .card')), q = document.getElementById('q'),
-        fm = document.getElementById('f-mode'), fc = document.getElementById('f-city'), fl = document.getElementById('f-level'),
-        count = document.getElementById('count'), empty = document.getElementById('empty'), r2 = document.getElementById('reset2'),
-        pager = document.getElementById('pager'), grid = document.getElementById('grid'), toolbar = document.querySelector('.toolbar');
+      const query = selector => container.querySelector(selector);
+      const grid = query('#open-roles-grid');
+      var PER = (function (w) { return w >= 1200 ? 8 : w >= 900 ? 9 : 6; })(window.innerWidth),
+        page = 1, cards = [...grid.querySelectorAll('.card')], q = query('#q'),
+        fm = query('#f-mode'), fc = query('#f-city'), fl = query('#f-level'),
+        count = query('#count'), empty = query('#empty'), r2 = query('#reset2'),
+        pager = query('#pager'), toolbar = query('.toolbar');
       var chev = function (d) { return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="' + (d < 0 ? 'M15 6l-6 6 6 6' : 'M9 6l6 6-6 6') + '"/></svg>'; };
       function match(c, t) { return (!t || c.dataset.q.indexOf(t) > -1) && (!fm.value || c.dataset.mode === fm.value) && (!fc.value || c.dataset.city === fc.value) && (!fl.value || c.dataset.level === fl.value); }
       function pageList(p, n) {
@@ -1345,7 +1348,7 @@ export function mountOpenRolesEngine(container, options = {}) {
       pager.addEventListener('click', function (e) { var b = e.target.closest('button[data-p]'); if (!b || b.disabled) return; page = +b.dataset.p; run(true); });
       function reset() { q.value = ''; fm.value = ''; fc.value = ''; fl.value = ''; page = 1; run(); }
       [q, fm, fc, fl].forEach(function (el) { el.addEventListener('input', function () { page = 1; run(); }); });
-      document.getElementById('reset').addEventListener('click', reset); r2.addEventListener('click', reset);
+      query('#reset').addEventListener('click', reset); r2.addEventListener('click', reset);
       if (options.loadRoles) {
         let active = true;
         let pending = false;
@@ -1390,6 +1393,10 @@ export function mountOpenRolesEngine(container, options = {}) {
             return card;
           });
           grid.replaceChildren(fragment, empty);
+          query('#open-roles-total').textContent = jobs.length;
+          query('#open-roles-partners').textContent = new Set(jobs.map(job => job.company.trim().toLowerCase())).size;
+          const tabCount = query('#tab-n');
+          if (tabCount) tabCount.textContent = jobs.length;
           configureFilter(fm, jobs.map(job => job.mode));
           configureFilter(fc, jobs.map(job => job.loc));
           configureFilter(fl, jobs.map(job => job.exp));
@@ -2641,7 +2648,7 @@ export function mountOpenRolesEngine(container, options = {}) {
       }
 
       /* mobile pages: For you / All roles / Saved / Interviews */
-      var tn = $('tab-n'); if (tn) tn.textContent = document.querySelectorAll('#grid .card').length;
+      var tn = $('tab-n'); if (tn) tn.textContent = container.querySelectorAll('#open-roles-grid > .card').length;
       [].slice.call(document.querySelectorAll('#tabs .tab')).forEach(function (b) {
         b.addEventListener('click', function () {
           var v = b.dataset.v;
