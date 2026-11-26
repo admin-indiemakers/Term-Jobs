@@ -146,6 +146,9 @@ export default function InternshipPage() {
 
   return (
     <div className="internship-page" ref={pageRef} onScroll={updateProgress}>
+      <div className="program-backdrop" aria-hidden="true">
+        <div className="backdrop-contours" />
+      </div>
       <SEOHead
         title={`${programTitle} | Term Jobs × ${partnerName}`}
         description={`Explore the 30-day internship from Term Jobs and ${partnerName}, with 20 days of training and 10 days of hands-on project work.`}
@@ -155,7 +158,7 @@ export default function InternshipPage() {
         <div className="wrap">
           <Link className="logo" to="/" aria-label="Term Jobs home">
             <BrandLogo size={34} />
-            Term Jobs
+            <span className="logo-wordmark">Term Jobs</span>
           </Link>
           <nav className="nav-links" aria-label="Main navigation">
             <Link className="nav-how" to="/#how">How we work</Link>
@@ -309,7 +312,7 @@ export default function InternshipPage() {
               <div className="row"><span className="d">03</span><span className="t">Writing real Python</span><span className="w" data-l="What is taught">OOP, modules, virtual environments, pip, exceptions, logging</span><span className="o" data-l="Hands-on output">Tracker refactored into classes and a package</span></div>
               <div className="row"><span className="d">04</span><span className="t">Git and quality</span><span className="w" data-l="What is taught">Git workflow, branches, pull requests, code review, pytest</span><span className="o" data-l="Hands-on output">5 tests written; first PR opened and reviewed</span></div>
               <div className="row"><span className="d">05</span><span className="t">Data with NumPy and pandas</span><span className="w" data-l="What is taught">Arrays, DataFrames, cleaning, joins, groupby</span><span className="o" data-l="Hands-on output">Clean a messy real dataset</span></div>
-              <div className="row"><span className="d">06</span><span className="t">Visualisation and APIs</span><span className="w" data-l="What is taught">Matplotlib, EDA, calling REST APIs with requests</span><span className="o" data-l="Hands-on output"><b style={{ color: "#fff" }}>Mini project 1</b> · Data-analysis notebook</span></div>
+              <div className="row"><span className="d">06</span><span className="t">Visualisation and APIs</span><span className="w" data-l="What is taught">Matplotlib, EDA, calling REST APIs with requests</span><span className="o" data-l="Hands-on output"><b>Mini project 1</b> · Data-analysis notebook</span></div>
               <div className="row"><span className="d">07</span><span className="t">ML algorithms I</span><span className="w" data-l="What is taught">ML workflow, train/test split, linear and logistic regression</span><span className="o" data-l="Hands-on output">House-price predictor</span></div>
               <div className="row"><span className="d">08</span><span className="t">ML algorithms II</span><span className="w" data-l="What is taught">Decision trees, random forests, kNN, metrics (precision, recall, F1, confusion matrix), overfitting</span><span className="o" data-l="Hands-on output">Compare 3 classifiers on one dataset</span></div>
               <div className="row"><span className="d">09</span><span className="t">ML algorithms III</span><span className="w" data-l="What is taught">Feature engineering, cross-validation, hyperparameter tuning, k-means clustering</span><span className="o" data-l="Hands-on output">Customer segmentation plus tuned model</span></div>
@@ -340,7 +343,7 @@ export default function InternshipPage() {
               <div className="row"><span className="d">15</span><span className="t">Prompt Engineering II</span><span className="w" data-l="What is taught">Step-by-step reasoning, structured JSON output, system prompts, templates, prompt versioning</span><span className="o" data-l="Hands-on output">Resume parser or ticket classifier returning valid JSON</span></div>
               <div className="row"><span className="d">16</span><span className="t">LLM APIs in Python</span><span className="w" data-l="What is taught">Messages, temperature, tokens and cost, streaming, retries, tool and function calling</span><span className="o" data-l="Hands-on output">CLI chatbot with memory and one tool</span></div>
               <div className="row"><span className="d">17</span><span className="t">RAG I</span><span className="w" data-l="What is taught">Chunking, embeddings, vector stores (Chroma, FAISS), retrieval, grounded answers</span><span className="o" data-l="Hands-on output">Q&amp;A bot over a document set</span></div>
-              <div className="row"><span className="d">18</span><span className="t">RAG II and evaluation</span><span className="w" data-l="What is taught">Retrieval quality, reranking, citations, hallucination and prompt-injection defences, test sets</span><span className="o" data-l="Hands-on output"><b style={{ color: "#fff" }}>Mini project 3</b> · 20-case test suite; fix the 3 worst failures</span></div>
+              <div className="row"><span className="d">18</span><span className="t">RAG II and evaluation</span><span className="w" data-l="What is taught">Retrieval quality, reranking, citations, hallucination and prompt-injection defences, test sets</span><span className="o" data-l="Hands-on output"><b>Mini project 3</b> · 20-case test suite; fix the 3 worst failures</span></div>
               <div className="row"><span className="d">19</span><span className="t">Deployment I</span><span className="w" data-l="What is taught">FastAPI, request validation, environment variables and secrets, Docker</span><span className="o" data-l="Hands-on output">Q&amp;A bot exposed as an API and containerised</span></div>
               <div className="row cp"><span className="d">20</span><span className="t">Deployment II and capstone pitch</span><span className="w" data-l="What is taught">Cloud hosting (Render, Hugging Face Spaces or Cloud Run), Streamlit or Gradio UI, GitHub Actions CI, logging</span><span className="o" data-l="Hands-on output"><b>CHECKPOINT 2</b>Deployed demo at a public URL; 3-minute capstone pitch</span></div>
             </div>
@@ -491,8 +494,8 @@ export default function InternshipPage() {
       <div className="dayline" aria-hidden="true" />
       <div className="daychip" ref={dayChipRef} aria-hidden="true">
         <svg width="26" height="26" viewBox="0 0 26 26" fill="none" strokeWidth="2.5">
-          <circle cx="13" cy="13" r="10" stroke="#2a2a30" />
-          <circle className="dayring" cx="13" cy="13" r="10" stroke="#fff" strokeLinecap="round" pathLength="1" transform="rotate(-90 13 13)" />
+          <circle className="dayring-track" cx="13" cy="13" r="10" />
+          <circle className="dayring" cx="13" cy="13" r="10" strokeLinecap="round" pathLength="1" transform="rotate(-90 13 13)" />
         </svg>
         <span>Day <b ref={dayNumberRef}>1</b> of 30</span>
       </div>
