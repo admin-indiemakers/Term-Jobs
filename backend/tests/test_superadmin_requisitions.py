@@ -94,10 +94,12 @@ def test_retry_restores_internal_link_if_request_stopped_after_insert(setup):
     assert database.requisitions.count_documents({}) == 1
 
 
-def test_logo_on_managed_requisition_can_be_saved_and_removed(setup):
+@pytest.mark.parametrize('logo', [
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+XGakAAAAASUVORK5CYII=',
+    'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
+])
+def test_logo_on_managed_requisition_can_be_saved_and_removed(setup, logo):
     database, _, client, _ = setup
-    logo = ('data:image/png;base64,'
-            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+XGakAAAAASUVORK5CYII=')
     body = payload(company_logo_url=logo)
     created = client.post('/api/superadmin/requisitions', json=body)
     assert created.status_code == 201, created.text

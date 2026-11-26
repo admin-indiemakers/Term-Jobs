@@ -121,9 +121,10 @@ class PostingDetails(BaseModel):
             'data:image/png;base64': content.startswith(b'\x89PNG\r\n\x1a\n'),
             'data:image/jpeg;base64': content.startswith(b'\xff\xd8\xff'),
             'data:image/webp;base64': content.startswith(b'RIFF') and content[8:12] == b'WEBP',
+            'data:image/gif;base64': content.startswith((b'GIF87a', b'GIF89a')),
         }
         if not signatures.get(prefix):
-            raise ValueError('Company logos must be PNG, JPEG, or WebP images.')
+            raise ValueError('Company logos must be PNG, JPEG, WebP, or GIF images.')
         return value
 
     @field_validator('internal_link')

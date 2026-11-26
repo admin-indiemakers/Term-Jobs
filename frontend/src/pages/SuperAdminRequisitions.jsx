@@ -9,7 +9,7 @@ import RequisitionDashboard from '../components/admin/RequisitionDashboard';
 import { deadlineError, startDateError, todayForDeadline } from '../utils/submissionDeadline';
 
 const emptyForm = () => ({ client_request_id: crypto.randomUUID(), company_name: '', company_logo_url: '', title: '', department: '', location: '', work_mode: '', experience: '', duration: '', headcount: 1, start_date: '', submission_deadline: '', skills: '', job_description: '', internal_link: '' });
-const logoTypes = ['image/png', 'image/jpeg', 'image/webp'];
+const logoTypes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 const maxLogoBytes = 128 * 1024;
 
 function readLogo(file) {
@@ -138,7 +138,7 @@ export default function SuperAdminRequisitions() {
     event.target.value = '';
     if (!file) return;
     if (!logoTypes.includes(file.type) || !file.size || file.size > maxLogoBytes) {
-      setLogoError('Choose a PNG, JPEG, or WebP image up to 128 KB.');
+      setLogoError('Choose a PNG, JPEG, WebP, or GIF image up to 128 KB.');
       return;
     }
     setLogoFile(file);
@@ -241,7 +241,7 @@ export default function SuperAdminRequisitions() {
                   </label>
                   {(logoFile || form.company_logo_url) && <button type="button" className="text-sm font-semibold text-gray-600 underline" onClick={() => { clearLogoSelection(); setRemoveStoredLogo(Boolean(form.company_logo_url) || removeStoredLogo); update('company_logo_url', ''); }}>Remove logo</button>}
                 </div>
-                <p id="requisition-logo-help" className="mt-2 text-xs text-gray-500">PNG, JPEG or WebP up to 128 KB. Shown on this public requisition.</p>
+                <p id="requisition-logo-help" className="mt-2 text-xs text-gray-500">PNG, JPEG, WebP or GIF up to 128 KB. Shown on this public requisition.</p>
                 {logoError && <p role="alert" className="mt-2 text-sm text-red-700">{logoError}</p>}
               </div>
               {fields.map(([key, label, placeholder]) => <label key={key} className="space-y-1.5 text-sm font-medium"><span>{label}</span><input className={inputClass} required maxLength={key === 'start_date' || key === 'experience' || key === 'department' ? 100 : 200} value={form[key]} placeholder={placeholder} onChange={e => update(key, e.target.value)} /></label>)}
