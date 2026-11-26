@@ -1,11 +1,12 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
-import { ArrowRight, CalendarDays, ChevronsRight, Download, MapPin, Phone } from 'lucide-react';
+import { ArrowRight, CalendarDays, ChevronsRight, Download, IndianRupee, MapPin, Phone } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import BrandLogo from '../components/BrandLogo';
 import SEOHead from '../components/SEOHead';
 import './InternshipPage.css';
 
 const programTitle = 'Advanced Forward Deployed Engineer Internship + Training Program';
+const programFee = '₹10,000';
 const programPdf = '/TermJobs-x-AsimovX-Forward-Deployed-Engineer-Program.pdf';
 const partnerName = 'Asimov X Technologies AB';
 
@@ -86,6 +87,7 @@ function InternshipApplicationForm() {
             <input type="tel" name="phone" autoComplete="tel" required maxLength={32} />
           </label>
           {error && <p role="alert">{error}</p>}
+          <p className="text-sm">Your name and phone number will appear on the public Statistics page.</p>
           <button className="btn" type="submit" disabled={submitting}>
             {submitting ? 'Submitting…' : 'Submit application'}
             <ArrowRight size={18} aria-hidden="true" />
@@ -202,6 +204,7 @@ export default function InternshipPage() {
                 <p className="schedule-time">10:30 AM – 5:30 PM <span>IST</span></p>
               </div>
               <ul className="program-details" role="list">
+                <li><IndianRupee size={16} aria-hidden="true" /> <strong>Program fee {programFee}</strong></li>
                 <li><MapPin size={16} aria-hidden="true" /> On-site in Westhill, Kozhikode</li>
                 <li><CalendarDays size={16} aria-hidden="true" /> Checkpoints · Days 10, 20, 30</li>
                 <li><Phone size={16} aria-hidden="true" /> <ProgramPhone /></li>
@@ -479,6 +482,7 @@ export default function InternshipPage() {
             <h2>Apply for the internship</h2>
             <p className="lead">Learn the stack, ship a live app or contribute to a real project, and leave with a portfolio.</p>
             <ProgramPartners className="apply-partners" />
+            <p className="mb-4 font-semibold">Program fee {programFee}</p>
             <InternshipApplicationForm />
             <p className="program-contact">For more details, call <ProgramPhone />.</p>
           </div>

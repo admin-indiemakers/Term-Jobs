@@ -554,6 +554,7 @@ export default function OpenRolesPage({ enabled = true }) {
     setCurrentPage(1);
   }, []);
   const [currentPage, setCurrentPage] = useState(1);
+  const [rolesRefresh, setRolesRefresh] = useState(0);
 
   const getDynamicPageSize = useCallback(() => {
     if (typeof window === 'undefined') return 9;
@@ -2059,6 +2060,21 @@ export default function OpenRolesPage({ enabled = true }) {
     }
   }, [candidateUser, selectedJob]);
 
+  useEffect(() => {
+    if (!enabled) return;
+    function refreshRoles() {
+      if (document.visibilityState !== 'visible') return;
+      rolesPrefetch.current = null;
+      setRolesRefresh((refresh) => refresh + 1);
+    }
+    document.addEventListener('visibilitychange', refreshRoles);
+    window.addEventListener('tj-requisitions-updated', refreshRoles);
+    return () => {
+      document.removeEventListener('visibilitychange', refreshRoles);
+      window.removeEventListener('tj-requisitions-updated', refreshRoles);
+    };
+  }, [enabled]);
+
   // Fetch current-environment roles and show failures instead of stale rows.
   useEffect(() => {
     if (!enabled) return;
@@ -2094,7 +2110,7 @@ export default function OpenRolesPage({ enabled = true }) {
       })
       .finally(() => { rolesPrefetch.current = null; if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [enabled, currentPage, pageSize, debouncedSearch, selectedWorkMode, selectedFamily, selectedLocation, selectedOpportunityCategory]);
+  }, [enabled, currentPage, pageSize, debouncedSearch, selectedWorkMode, selectedFamily, selectedLocation, selectedOpportunityCategory, rolesRefresh]);
 
   // Options and counts describe the full result set, not just the current page.
   const availableFamilies = rolePage.filters.families;

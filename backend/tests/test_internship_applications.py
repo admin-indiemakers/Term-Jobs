@@ -19,6 +19,7 @@ def application_api(monkeypatch):
     app = FastAPI()
     app.include_router(router.router)
     collection = MagicMock()
+    collection.count_documents.return_value = 0
     monkeypatch.setattr(router, "db", {"internship_applications": collection})
     return app, TestClient(app), collection
 
@@ -77,3 +78,28 @@ def test_super_admin_can_page_through_private_applications(application_api):
     collection.find.assert_called_with(
         {"_id": {"$lt": rows[-2]["_id"]}}, {"name": 1, "phone": 1, "created_at": 1},
     )
+
+
+def test_public_listing_returns_names_phones_and_total_without_login(application_api):
+    _, client, collection = application_api
+    rows = [
+        {"_id": ObjectId(), "name": f"Applicant {i}", "phone": "9000000000"}
+        for i in range(router.PAGE_SIZE + 1)
+    ]
+    collection.find.return_value.sort.return_value.limit.side_effect = [rows, rows[-1:]]
+    collection.count_documents.return_value = len(rows)
+
+    first = client.get(APPLICATIONS)
+    assert first.status_code == 200
+    assert first.headers["Cache-Control"] == "no-store"
+    result = first.json()
+    assert result["total"] == len(rows)
+    assert len(result["applications"]) == router.PAGE_SIZE
+    assert result["applications"][0] == {
+        "id": str(rows[0]["_id"]), "name": rows[0]["name"], "phone": rows[0]["phone"]
+    }
+    second = client.get(APPLICATIONS, params={"cursor": result["next_cursor"]}).json()
+    assert second["total"] == len(rows)
+    assert second["next_cursor"] is None
+    assert len(second["applications"]) == 1
+    collection.find.assert_called_with({"_id": {"$lt": rows[-2]["_id"]}}, {"name": 1, "phone": 1})

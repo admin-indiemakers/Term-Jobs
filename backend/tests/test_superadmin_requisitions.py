@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from modules.requisition import superadmin_router as posting
+from modules.requisition import public_listing
 from modules.requisition.public_listing import _public_item
 from modules.identity.router import get_current_user
 from modules.identity.domain.models import User
@@ -58,6 +59,39 @@ def test_retry_creates_one_requisition(setup):
     assert first['id'] == second['id']
     assert database.requisitions.count_documents({}) == 1
     assert database.company_profiles.count_documents({}) == 1
+
+
+def test_published_requisition_appears_on_public_open_roles_page(setup, monkeypatch):
+    database, _, admin_client, _ = setup
+    monkeypatch.setattr(public_listing, 'db', database)
+    response = admin_client.post('/api/superadmin/requisitions', json=payload())
+    assert response.status_code == 201
+    requisition = response.json()
+    public_app = FastAPI()
+    public_app.include_router(posting.public_views_router)
+    client = TestClient(public_app)
+
+    page = client.get('/api/public/requisitions/page')
+    assert page.status_code == 200
+    assert [(row['id'], row['title'], row['company_name']) for row in page.json()['items']] == [
+        (requisition['id'], requisition['title'], requisition['company_name'])
+    ]
+
+    assert admin_client.post(f"/api/superadmin/requisitions/{requisition['id']}/close").status_code == 200
+    assert client.get('/api/public/requisitions/page').json()['items'] == []
+
+
+def test_retry_restores_internal_link_if_request_stopped_after_insert(setup):
+    database, _, client, _ = setup
+    body = payload(internal_link='https://example.com/brief')
+    first = client.post('/api/superadmin/requisitions', json=body).json()
+    database.requisition_internal_links.delete_one({'_id': first['id']})
+
+    second = client.post('/api/superadmin/requisitions', json=body)
+    assert second.status_code == 201
+    assert second.json()['id'] == first['id']
+    assert second.json()['internal_link'] == body['internal_link']
+    assert database.requisitions.count_documents({}) == 1
 
 
 def test_logo_on_managed_requisition_can_be_saved_and_removed(setup):

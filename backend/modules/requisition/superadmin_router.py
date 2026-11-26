@@ -241,6 +241,9 @@ def post_requisition(body: PostingIn, user=Depends(require_superadmin)):
     req_id = str(uuid5(NAMESPACE_URL, f'superadmin-post:{user.id}:{body.client_request_id}'))
     existing = db.requisitions.find_one({'id': req_id, **MANAGED})
     if existing:
+        # An earlier request may have committed the posting before losing its connection.
+        db.requisition_internal_links.update_one({'_id': req_id}, {'$setOnInsert': {'url': body.internal_link}}, upsert=True)
+        cache.clear()
         return posting_view(existing)
     now = _utcnow()
     profile_id = str(uuid5(NAMESPACE_URL, f'managed-company:{user.tenant_id}:{body.company_name.casefold()}'))

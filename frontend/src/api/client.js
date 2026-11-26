@@ -38,10 +38,11 @@ const getApiBaseUrl = () => {
 export const API_BASE_URL = getApiBaseUrl();
 
 export class ApiError extends Error {
-  constructor(message, status) {
+  constructor(message, status, validationErrors = []) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
+    this.validationErrors = validationErrors;
   }
 }
 
@@ -229,7 +230,7 @@ export async function request(path, {
         });
       }
 
-      throw new ApiError(detail, response.status);
+      throw new ApiError(detail, response.status, Array.isArray(resData?.detail) ? resData.detail : []);
     }
 
     if (isDev) {

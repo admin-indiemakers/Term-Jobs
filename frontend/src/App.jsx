@@ -13,7 +13,6 @@ import LandingPage from './pages/LandingPage';
 import CandidateWaitlistPage from './pages/CandidateWaitlistPage';
 const AuthPage = lazyWithRetry(() => import('./pages/AuthPage'));
 const OpenRolesPage = lazyWithRetry(() => import('./pages/OpenRolesPage'));
-const NewOpenRolesPage = lazyWithRetry(() => import('./pages/NewOpenRolesPage'));
 const InternshipPage = lazyWithRetry(() => import('./pages/InternshipPage'));
 import DashboardLayout from './pages/DashboardLayout';
 import { directorRedirect } from './utils/directorAccess';
@@ -290,7 +289,7 @@ function HorizontalTransitionLayout() {
         >
           {hasVisitedRoles && (
             <Suspense fallback={<FullScreenLoader />}>
-              <NewOpenRolesPage enabled={isRoles} />
+              <OpenRolesPage enabled={isRoles} />
             </Suspense>
           )}
         </div>

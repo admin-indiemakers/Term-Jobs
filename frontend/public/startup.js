@@ -1,6 +1,6 @@
       (function() {
         try {
-          var publicJobRoutes = ['/', '/open-roles', '/openroles', '/jobs', '/careers', '/apply', '/find-jobs'];
+          var publicJobRoutes = ['/open-roles', '/openroles', '/jobs', '/careers', '/apply', '/find-jobs'];
           var isPublicJobPage = publicJobRoutes.indexOf(location.pathname) !== -1;
           var hasSession = !!localStorage.getItem('token') || !!localStorage.getItem('auth_token') || !!localStorage.getItem('auth_user');
           if (!isPublicJobPage || hasSession) return;
