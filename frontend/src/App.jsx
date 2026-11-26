@@ -14,6 +14,7 @@ import CandidateWaitlistPage from './pages/CandidateWaitlistPage';
 const AuthPage = lazyWithRetry(() => import('./pages/AuthPage'));
 const OpenRolesPage = lazyWithRetry(() => import('./pages/OpenRolesPage'));
 const NewOpenRolesPage = lazyWithRetry(() => import('./pages/NewOpenRolesPage'));
+const InternshipPage = lazyWithRetry(() => import('./pages/InternshipPage'));
 import DashboardLayout from './pages/DashboardLayout';
 import { directorRedirect } from './utils/directorAccess';
 import FieldRequirementIndicators from './components/FieldRequirementIndicators';
@@ -89,6 +90,7 @@ const SuperAdminCandidatePool = lazyWithRetry(() => import('./pages/SuperAdminCa
 const SuperAdminCandidateManagement = lazyWithRetry(() => import('./pages/SuperAdminCandidateManagement'));
 const SuperAdminOutreachControl = lazyWithRetry(() => import('./pages/SuperAdminOutreachControl'));
 const TermJobsStatistics = lazyWithRetry(() => import('./pages/TermJobsStatistics'));
+const InternshipApplicationsPage = lazyWithRetry(() => import('./pages/InternshipApplicationsPage'));
 
 // LiveKit & Video Interview components (isolated 1MB chunk loaded strictly on-demand)
 const CandidateInterviewLogin = lazyWithRetry(() => import('./interview/pages/CandidateInterviewLogin').then(m => ({ default: m.CandidateInterviewLogin })));
@@ -307,10 +309,15 @@ export default function App() {
           <Routes>
             <Route path="/candidate-pool/added" element={<CandidatePoolAdded />} />
             <Route path="/talent-waitlist" element={<CandidateWaitlistPage />} />
+            <Route path="/internship" element={<InternshipPage />} />
             <Route path="/privacy-policy" element={<LegalPage type="privacy" />} />
             <Route path="/terms-and-conditions" element={<LegalPage type="terms" />} />
             <Route path="/platform-rules" element={<LegalPage type="rules" />} />
             <Route path="/statistics" element={<TermJobsStatistics />} />
+            <Route
+              path="/statistics/internship"
+              element={<RequireAuth><SuperAdminRouteGuard><InternshipApplicationsPage /></SuperAdminRouteGuard></RequireAuth>}
+            />
 
           <Route path="/join/hiring-manager" element={<JoinHiringManager />} />
           <Route path="/invite/hiring-manager" element={<JoinHiringManager />} />

@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TermJobs Hiring Manager walkthrough</title>
+<style>
+  body { margin: 0; padding: 24px; background: #131c24; color: #f4f8fa; font: 16px system-ui, sans-serif; }
+  main { max-width: 1100px; margin: auto; }
+  h1 { font-size: clamp(1.55rem, 4vw, 2.1rem); margin: 0 0 16px; }
+  video { display: block; width: 100%; max-height: 72vh; background: #070a0d; }
+  nav { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+  button { padding: 8px 12px; border: 1px solid #536873; border-radius: 8px; background: #1d2b35; color: #f4f8fa; font: inherit; cursor: pointer; }
+  button[aria-current="true"] { background: #70e8d0; border-color: #70e8d0; color: #131c24; }
+  button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>TermJobs Hiring Manager walkthrough</h1>
+  <video controls playsinline preload="metadata" src="termjobs-hiring-manager-walkthrough.mp4"></video>
+  <nav aria-label="Walkthrough chapters">
+    <button type="button" data-start="0.0">AI Chat</button>
+    <button type="button" data-start="7.5">AI Assistant</button>
+    <button type="button" data-start="15.0">Dashboard</button>
+    <button type="button" data-start="22.5">Requisitions</button>
+    <button type="button" data-start="30.0">New Requisition</button>
+    <button type="button" data-start="37.5">Interviews</button>
+    <button type="button" data-start="45.0">Accepted Candidates</button>
+    <button type="button" data-start="52.5">Candidate Onboarding</button>
+    <button type="button" data-start="60.0">Reported Issues</button>
+    <button type="button" data-start="67.5">Portal Access</button>
+    <button type="button" data-start="75.0">Team Overview</button>
+    <button type="button" data-start="82.5">Timesheet Approvals</button>
+    <button type="button" data-start="90.0">Expense Approvals</button>
+  </nav>
+</main>
+<script>
+  const video = document.querySelector('video');
+  const chapters = Array.from(document.querySelectorAll('button[data-start]'));
+  function markCurrentChapter() {
+    const active = chapters.findLast(button => Number(button.dataset.start) <= video.currentTime);
+    for (const button of chapters) button.setAttribute('aria-current', String(button === active));
+  }
+  for (const button of chapters) {
+    button.addEventListener('click', () => {
+      video.currentTime = Number(button.dataset.start);
+      markCurrentChapter();
+      video.play().catch(() => {});
+    });
+  }
+  video.addEventListener('timeupdate', markCurrentChapter);
+  markCurrentChapter();
+</script>
+</body>
+</html>

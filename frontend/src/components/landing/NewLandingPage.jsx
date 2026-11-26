@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import './NewLandingPage.css';
 
 const P_DATA = [
@@ -421,6 +421,7 @@ export default function NewLandingPage() {
             <button onClick={() => navigateTo('companies')}>Companies</button>
             <button onClick={() => navigateTo('jobs')}>Candidates</button>
             <button onClick={() => navigateTo('jobs')}>Open roles</button>
+            <Link to="/internship">Internship</Link>
             <button onClick={() => navigateTo('pool')}>Candidate pool</button>
           </div>
           <div>
@@ -467,6 +468,7 @@ export default function NewLandingPage() {
           >
             How we work
           </button>
+          <Link to="/internship">Internship</Link>
           <button
             onClick={() => navigateTo('contact')}
             aria-current={currentView === 'contact'}

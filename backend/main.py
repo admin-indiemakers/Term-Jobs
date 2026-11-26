@@ -73,6 +73,7 @@ from modules.hm_telegram_bot import telegram_bot_router
 from modules.hm_teams_bot import teams_bot_router
 from modules.team_chat.router import router as team_chat_router
 from modules.backup.router import router as backup_router
+from modules.internship.router import router as internship_router
 
 
 from contextlib import asynccontextmanager
@@ -394,6 +395,7 @@ app.include_router(voice_router)
 app.include_router(offboarding_router, tags=["Offboarding"])
 from modules.waitlist.router import router as waitlist_router
 app.include_router(waitlist_router)
+app.include_router(internship_router)
 app.include_router(candidate_profile_router)
 app.include_router(zoho_cliq_router)
 app.include_router(integrations_router)

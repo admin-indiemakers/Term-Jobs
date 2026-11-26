@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { BarChart3, Share2, Users, UserPlus, Eye, ExternalLink, RefreshCw, Link2 } from 'lucide-react';
+import { ArrowRight, BarChart3, ClipboardList, Share2, Users, UserPlus, Eye, ExternalLink, RefreshCw, Link2 } from 'lucide-react';
 import SEOHead from '../components/SEOHead';
+import { Link } from 'react-router-dom';
 
 const EMPTY = {
   total_candidates: 0,
@@ -87,6 +88,17 @@ export default function TermJobsStatistics() {
             </article>
           ))}
         </section>
+
+        <Link to="/statistics/internship" className="mt-4 flex items-center gap-3 rounded-[22px] border border-neutral-200 bg-white p-4 transition-colors hover:border-neutral-400 hover:bg-neutral-50 sm:gap-4 sm:px-6">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-violet-50 text-violet-700">
+            <ClipboardList size={19} aria-hidden="true" />
+          </span>
+          <span className="flex-1">
+            <span className="block text-sm font-bold">Internship applications</span>
+            <span className="mt-1 block text-xs text-neutral-600">View form responses · Super Admin access</span>
+          </span>
+          <ArrowRight size={18} className="shrink-0 text-neutral-500" aria-hidden="true" />
+        </Link>
 
         <section className="mt-4 grid gap-4 lg:grid-cols-[1fr_.75fr]">
           <article className="rounded-[22px] border border-neutral-200 bg-white p-5 sm:p-6">

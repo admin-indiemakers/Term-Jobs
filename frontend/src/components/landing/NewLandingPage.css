@@ -99,7 +99,7 @@
   gap: 28px;
 }
 
-.tj-landing-root .switch button {
+.tj-landing-root .switch :is(button, a) {
   white-space: nowrap;
   opacity: .5;
   padding-bottom: 4px;
@@ -1549,7 +1549,7 @@
     gap: 14px;
   }
 
-  .tj-landing-root .switch button {
+  .tj-landing-root .switch :is(button, a) {
     font-size: 13px;
   }
 }
@@ -1559,7 +1559,7 @@
     gap: 11px;
   }
 
-  .tj-landing-root .switch button {
+  .tj-landing-root .switch :is(button, a) {
     font-size: 12px;
   }
 }
