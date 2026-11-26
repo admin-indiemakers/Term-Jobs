@@ -5,7 +5,8 @@ import BrandLogo from '../components/BrandLogo';
 import SEOHead from '../components/SEOHead';
 import './InternshipPage.css';
 
-const programTitle = 'Advanced Forward Deployed Engineer Internship + Training Program';
+const programName = 'Forward Deployed Engineer';
+const programTitle = `${programName} Internship + Training Program`;
 const programFee = '₹10,000';
 const programPdf = '/TermJobs-x-AsimovX-Forward-Deployed-Engineer-Program.pdf';
 const partnerName = 'Asimov X Technologies AB';
@@ -175,8 +176,8 @@ export default function InternshipPage() {
             <div className="hero-copy">
               <ProgramPartners className="hero-partners seq" />
               <h1 className="display" aria-label={`${programTitle}.`}>
-                <span aria-hidden="true"><HeroWords text="Advanced Forward Deployed Engineer" />{' '}
-                  <span className="soft"><HeroWords text="Internship + Training Program." start={4} /></span>
+                <span aria-hidden="true"><HeroWords text={programName} />{' '}
+                  <span className="soft"><HeroWords text="Internship + Training Program." start={programName.split(' ').length} /></span>
                 </span>
               </h1>
               <p className="lead seq">Train for 20 days with a lab every day. Spend the final 10 days building an app or contributing to real projects.</p>
