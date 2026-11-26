@@ -19,6 +19,15 @@ test('published requisitions supply the newer cards with their real IDs and comp
   assert.deepEqual(mapLiveOpenRoles([{ id: 'invalid/route' }]), []);
 });
 
+test('untitled and generic partner placeholders do not appear among open roles', () => {
+  const jobs = mapLiveOpenRoles([
+    { id: 'untitled', company_name: 'Partner Enterprise' },
+    { id: 'generic', title: 'Open role', company_name: 'Partner Enterprise' },
+    { id: 'real-role', title: '  ', company_name: 'Partner Enterprise', structured_role: { title: 'AI Engineer' } },
+  ]);
+  assert.deepEqual(jobs.map(job => job.title), ['AI Engineer']);
+});
+
 test('roles load from the current API without memory, session, or HTTP cache reuse', async () => {
   const rows = [{ id: 'testing-role' }];
   const result = await loadOpenRoles(async (path, options) => {

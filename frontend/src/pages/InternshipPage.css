@@ -797,6 +797,24 @@
     font-size: 13px;
   }
 
+  .schedule-fee {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px 12px;
+    margin: 0 0 16px;
+    padding: 9px 12px;
+    border-radius: 10px;
+    background: var(--accent-soft);
+  }
+
+  .schedule-fee strong {
+    color: var(--text);
+    font-size: clamp(18px, 2vw, 22px);
+    white-space: nowrap;
+  }
+
   .program-details {
     display: grid;
     gap: 9px;

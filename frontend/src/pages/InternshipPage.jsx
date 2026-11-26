@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
-import { ArrowRight, CalendarDays, ChevronsRight, Download, IndianRupee, MapPin, Phone } from 'lucide-react';
+import { ArrowRight, CalendarDays, ChevronsRight, Download, MapPin, Phone } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import BrandLogo from '../components/BrandLogo';
 import SEOHead from '../components/SEOHead';
@@ -203,8 +203,8 @@ export default function InternshipPage() {
                 <p className="schedule-label">Daily schedule · 6 hours</p>
                 <p className="schedule-time">10:30 AM – 5:30 PM <span>IST</span></p>
               </div>
+              <p className="schedule-fee"><span className="schedule-label">Program fee</span> <strong>{programFee}</strong></p>
               <ul className="program-details" role="list">
-                <li><IndianRupee size={16} aria-hidden="true" /> <strong>Program fee {programFee}</strong></li>
                 <li><MapPin size={16} aria-hidden="true" /> On-site in Westhill, Kozhikode</li>
                 <li><CalendarDays size={16} aria-hidden="true" /> Checkpoints · Days 10, 20, 30</li>
                 <li><Phone size={16} aria-hidden="true" /> <ProgramPhone /></li>
