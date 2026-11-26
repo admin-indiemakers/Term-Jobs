@@ -47,6 +47,7 @@ export default function SuperAdminRequisitions() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [logoFile, setLogoFile] = useState(null);
+  const [logoDragOver, setLogoDragOver] = useState(false);
   const [removeStoredLogo, setRemoveStoredLogo] = useState(false);
   const [logoPreview, setLogoPreview] = useState('');
   const [logoError, setLogoError] = useState('');
@@ -133,9 +134,8 @@ export default function SuperAdminRequisitions() {
     setRemoveStoredLogo(false);
     setLogoError('');
   };
-  const chooseLogo = (event) => {
-    const file = event.target.files?.[0];
-    event.target.value = '';
+  const selectLogo = (file) => {
+    if (saving) return;
     if (!file) return;
     if (!logoTypes.includes(file.type) || !file.size || file.size > maxLogoBytes) {
       setLogoError('Choose a PNG, JPEG, WebP, or GIF image up to 128 KB.');
@@ -143,6 +143,27 @@ export default function SuperAdminRequisitions() {
     }
     setLogoFile(file);
     setLogoError('');
+  };
+  const chooseLogo = (event) => {
+    selectLogo(event.target.files?.[0]);
+    event.target.value = '';
+  };
+  const allowLogoDrop = (event) => {
+    if (!event.dataTransfer.types.includes('Files')) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = saving ? 'none' : 'copy';
+    setLogoDragOver(!saving);
+  };
+  const dropLogo = (event) => {
+    event.preventDefault();
+    setLogoDragOver(false);
+    if (saving) return;
+    const files = event.dataTransfer.files;
+    if (files.length > 1) {
+      setLogoError('Drop one company logo at a time.');
+      return;
+    }
+    selectLogo(files[0]);
   };
   const editPosting = (row) => {
     const role = row.structured_role || {};
@@ -228,7 +249,14 @@ export default function SuperAdminRequisitions() {
             <div className="flex justify-between items-center"><h2 className="text-lg font-bold">{editingId ? 'Edit company requisition' : 'Post a company requisition'}</h2><button type="button" aria-label="Close posting form" disabled={saving} onClick={() => setShowForm(false)}><X size={20} /></button></div>
             <p className="text-sm text-gray-500">{editingId ? 'Changes update this posting without removing applicants or changing its status.' : 'Publishing makes this role available on the public Open Roles page.'}</p>
             <fieldset disabled={saving} className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="rounded-xl border border-gray-200 p-4 sm:col-span-2">
+              <div
+                className={`rounded-xl border border-dashed p-4 transition-colors sm:col-span-2 ${logoDragOver ? 'border-indigo-500 bg-indigo-50' : 'border-gray-300'}`}
+                onDragOver={allowLogoDrop}
+                onDragLeave={(event) => {
+                  if (!event.currentTarget.contains(event.relatedTarget)) setLogoDragOver(false);
+                }}
+                onDrop={dropLogo}
+              >
                 <div className="flex flex-wrap items-center gap-4">
                   <div className="grid size-14 shrink-0 place-items-center overflow-hidden rounded-lg border bg-gray-50 text-gray-500">
                     {logoPreview || form.company_logo_url
@@ -241,7 +269,8 @@ export default function SuperAdminRequisitions() {
                   </label>
                   {(logoFile || form.company_logo_url) && <button type="button" className="text-sm font-semibold text-gray-600 underline" onClick={() => { clearLogoSelection(); setRemoveStoredLogo(Boolean(form.company_logo_url) || removeStoredLogo); update('company_logo_url', ''); }}>Remove logo</button>}
                 </div>
-                <p id="requisition-logo-help" className="mt-2 text-xs text-gray-500">PNG, JPEG, WebP or GIF up to 128 KB. Shown on this public requisition.</p>
+                {logoFile && <p className="mt-2 break-all text-xs font-medium text-gray-700">{logoFile.name}</p>}
+                <p id="requisition-logo-help" className="mt-2 text-xs text-gray-500">Drag and drop a logo here or choose a file. PNG, JPEG, WebP or GIF up to 128 KB.</p>
                 {logoError && <p role="alert" className="mt-2 text-sm text-red-700">{logoError}</p>}
               </div>
               {fields.map(([key, label, placeholder]) => <label key={key} className="space-y-1.5 text-sm font-medium"><span>{label}</span><input className={inputClass} required maxLength={key === 'start_date' || key === 'experience' || key === 'department' ? 100 : 200} value={form[key]} placeholder={placeholder} onChange={e => update(key, e.target.value)} /></label>)}
