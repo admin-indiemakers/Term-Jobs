@@ -77,6 +77,7 @@ export default function SuperAdminRequisitions() {
   const [viewerData, setViewerData] = useState(null);
   const [loadingViewers, setLoadingViewers] = useState(false);
   const [viewerError, setViewerError] = useState('');
+  const formDialogRef = useRef(null);
   const reviewRef = useRef(null);
   const selectedRoleId = selected?.id;
   const openReview = (row, tab = 'applicants') => {
@@ -93,6 +94,11 @@ export default function SuperAdminRequisitions() {
     setLogoPreview(url);
     return () => URL.revokeObjectURL(url);
   }, [logoFile]);
+  useEffect(() => {
+    const dialog = formDialogRef.current;
+    if (showForm) dialog.showModal();
+    else dialog.close();
+  }, [showForm]);
   useEffect(() => {
     if (selectedRoleId) reviewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, [selectedRoleId]);
@@ -189,7 +195,6 @@ export default function SuperAdminRequisitions() {
     clearLogoSelection();
     setForm({ ...values, company_logo_url: row.company_logo_url || '', internal_link: row.internal_link || '', company_name: row.company_name || '', title: row.title || '', skills: (role.must_have_skills || []).join(', '), preferred_skills: (role.nice_to_have_skills || []).join(', ') });
     setEditingId(row.id); setShowForm(true); setError(''); setPublishError(''); setSuccess('');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
   const publish = async (event) => {
     event.preventDefault();
@@ -261,49 +266,59 @@ export default function SuperAdminRequisitions() {
         {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
         {success && <div role="status" className="rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-800">{success}</div>}
         <RequisitionDashboard rows={rows} ready={hasLoaded} loading={loading} onReview={openReview} />
-        {showForm && (
-          <form onSubmit={publish} className="min-w-0 rounded-2xl border bg-white p-4 sm:p-7 space-y-5">
-            <div className="flex justify-between items-center"><h2 className="text-lg font-bold">{editingId ? 'Edit company requisition' : 'Post a company requisition'}</h2><button type="button" aria-label="Close posting form" disabled={saving} onClick={() => setShowForm(false)}><X size={20} /></button></div>
-            <p className="text-sm text-gray-500">{editingId ? 'Changes update this posting without removing applicants or changing its status.' : 'Publishing makes this role available on the public Open Roles page.'}</p>
-            <fieldset disabled={saving} className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="min-w-0 sm:col-span-2"><JobDescriptionParser key={form.client_request_id} token={token} onFill={values => setForm(previous => ({ ...previous, ...values }))} /></div>
-              <div
-                className={`rounded-xl border border-dashed p-4 transition-colors sm:col-span-2 ${logoDragOver ? 'border-indigo-500 bg-indigo-50' : 'border-gray-300'}`}
-                onDragOver={allowLogoDrop}
-                onDragLeave={(event) => {
-                  if (!event.currentTarget.contains(event.relatedTarget)) setLogoDragOver(false);
-                }}
-                onDrop={dropLogo}
-              >
-                <div className="flex flex-wrap items-center gap-4">
-                  <div className="grid size-14 shrink-0 place-items-center overflow-hidden rounded-lg border bg-gray-50 text-gray-500">
-                    {logoPreview || form.company_logo_url
-                      ? <img src={logoPreview || form.company_logo_url} alt="Company logo preview" className="size-full object-contain p-1" />
-                      : <ImagePlus size={20} aria-hidden="true" />}
+        <dialog
+          ref={formDialogRef}
+          aria-labelledby="requisition-form-title"
+          className="fixed inset-0 m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-4xl overflow-y-auto overscroll-contain rounded-2xl border border-gray-200 bg-white text-gray-900 shadow-xl backdrop:bg-black/50"
+          onCancel={event => {
+            event.preventDefault();
+            if (!saving) setShowForm(false);
+          }}
+        >
+          {showForm && (
+            <form onSubmit={publish} className="min-w-0 space-y-5 p-4 sm:p-7">
+              <div className="flex justify-between items-center"><h2 id="requisition-form-title" className="text-lg font-bold">{editingId ? 'Edit company requisition' : 'Post a company requisition'}</h2><button type="button" aria-label="Close posting form" autoFocus disabled={saving} onClick={() => setShowForm(false)}><X size={20} /></button></div>
+              <p className="text-sm text-gray-500">{editingId ? 'Changes update this posting without removing applicants or changing its status.' : 'Publishing makes this role available on the public Open Roles page.'}</p>
+              <fieldset disabled={saving} className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="min-w-0 sm:col-span-2"><JobDescriptionParser key={form.client_request_id} token={token} onFill={values => setForm(previous => ({ ...previous, ...values }))} /></div>
+                <div
+                  className={`rounded-xl border border-dashed p-4 transition-colors sm:col-span-2 ${logoDragOver ? 'border-indigo-500 bg-indigo-50' : 'border-gray-300'}`}
+                  onDragOver={allowLogoDrop}
+                  onDragLeave={(event) => {
+                    if (!event.currentTarget.contains(event.relatedTarget)) setLogoDragOver(false);
+                  }}
+                  onDrop={dropLogo}
+                >
+                  <div className="flex flex-wrap items-center gap-4">
+                    <div className="grid size-14 shrink-0 place-items-center overflow-hidden rounded-lg border bg-gray-50 text-gray-500">
+                      {logoPreview || form.company_logo_url
+                        ? <img src={logoPreview || form.company_logo_url} alt="Company logo preview" className="size-full object-contain p-1" />
+                        : <ImagePlus size={20} aria-hidden="true" />}
+                    </div>
+                    <label className="min-w-0 flex-1 basis-40 text-sm font-medium">
+                      Company logo <span className="font-normal text-gray-500">(optional)</span>
+                      <input type="file" accept={logoTypes.join(',')} aria-describedby="requisition-logo-help" onChange={chooseLogo} className="mt-1 block max-w-full cursor-pointer text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-gray-100 file:px-3 file:py-2 file:font-semibold hover:file:bg-gray-200" />
+                    </label>
+                    {(logoFile || form.company_logo_url) && <button type="button" className="text-sm font-semibold text-gray-600 underline" onClick={() => { clearLogoSelection(); setRemoveStoredLogo(Boolean(form.company_logo_url) || removeStoredLogo); update('company_logo_url', ''); }}>Remove logo</button>}
                   </div>
-                  <label className="min-w-0 flex-1 basis-40 text-sm font-medium">
-                    Company logo <span className="font-normal text-gray-500">(optional)</span>
-                    <input type="file" accept={logoTypes.join(',')} aria-describedby="requisition-logo-help" onChange={chooseLogo} className="mt-1 block max-w-full cursor-pointer text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-gray-100 file:px-3 file:py-2 file:font-semibold hover:file:bg-gray-200" />
-                  </label>
-                  {(logoFile || form.company_logo_url) && <button type="button" className="text-sm font-semibold text-gray-600 underline" onClick={() => { clearLogoSelection(); setRemoveStoredLogo(Boolean(form.company_logo_url) || removeStoredLogo); update('company_logo_url', ''); }}>Remove logo</button>}
+                  {logoFile && <p className="mt-2 break-all text-xs font-medium text-gray-700">{logoFile.name}</p>}
+                  <p id="requisition-logo-help" className="mt-2 text-xs text-gray-500">Drag and drop a logo here or choose a file. PNG, JPEG, WebP or GIF up to 128 KB.</p>
+                  {logoError && <p role="alert" className="mt-2 text-sm text-red-700">{logoError}</p>}
                 </div>
-                {logoFile && <p className="mt-2 break-all text-xs font-medium text-gray-700">{logoFile.name}</p>}
-                <p id="requisition-logo-help" className="mt-2 text-xs text-gray-500">Drag and drop a logo here or choose a file. PNG, JPEG, WebP or GIF up to 128 KB.</p>
-                {logoError && <p role="alert" className="mt-2 text-sm text-red-700">{logoError}</p>}
-              </div>
-              {fields.map(([key, label, placeholder, optional]) => <label key={key} className="space-y-1.5 text-sm font-medium"><span>{label}{optional && <span className="font-normal text-gray-500"> (optional)</span>}</span><input className={inputClass} required={!optional} maxLength={key === 'start_date' || key === 'experience' || key === 'department' ? 100 : 200} value={form[key]} placeholder={placeholder} onChange={e => update(key, e.target.value)} /></label>)}
-              <label className="space-y-1.5 text-sm font-medium"><span>Work mode</span><select required className={inputClass} value={form.work_mode} onChange={e => update('work_mode', e.target.value)}><option value="">Choose work mode</option>{['On-site', 'Hybrid', 'Remote'].map(mode => <option key={mode}>{mode}</option>)}</select></label>
-              <label className="space-y-1.5 text-sm font-medium"><span>Number of openings</span><input required type="number" min="1" max="10000" className={inputClass} value={form.headcount} onChange={e => update('headcount', e.target.value)} /></label>
-              <label className="min-w-0 space-y-1.5 text-sm font-medium"><span>Application due date</span><input required type="date" min={todayForDeadline()} className={inputClass} value={form.submission_deadline} onChange={e => update('submission_deadline', e.target.value)} /></label>
-              <label className="space-y-1.5 text-sm font-medium sm:col-span-2"><span>Required skills (comma separated)</span><input required className={inputClass} value={form.skills} onChange={e => update('skills', e.target.value)} placeholder="e.g. SEO, Google Ads, Analytics" /></label>
-              <label className="space-y-1.5 text-sm font-medium sm:col-span-2"><span>Preferred skills (optional, comma separated)</span><input className={inputClass} value={form.preferred_skills} onChange={e => update('preferred_skills', e.target.value)} /></label>
-              <label className="space-y-1.5 text-sm font-medium sm:col-span-2"><span>Role summary / job description</span><textarea required maxLength={30000} rows={7} className={inputClass} value={form.job_description} onChange={e => update('job_description', e.target.value)} placeholder="Describe the role, responsibilities, and requirements candidates should see." /></label>
-              <label className="space-y-1.5 text-sm font-medium sm:col-span-2"><span>Internal reference link <span className="font-normal text-gray-500">(optional)</span></span><input type="url" maxLength={2048} className={inputClass} value={form.internal_link} onChange={e => update('internal_link', e.target.value)} placeholder="https://…" /><p className="text-xs font-normal text-gray-500">Visible only in this admin panel. Not included in the public job posting.</p></label>
-            </fieldset>
-            {publishError && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{publishError}</p>}
-            <div className="flex flex-wrap justify-end gap-3"><button type="button" disabled={saving} onClick={() => setShowForm(false)} className="rounded-xl border px-4 py-2.5 text-sm">Cancel</button><button disabled={saving} className="rounded-xl bg-gray-900 px-5 py-2.5 font-semibold text-sm text-white disabled:opacity-50">{saving ? 'Saving…' : editingId ? 'Save Changes' : 'Publish Requisition'}</button></div>
-          </form>
-        )}
+                {fields.map(([key, label, placeholder, optional]) => <label key={key} className="space-y-1.5 text-sm font-medium"><span>{label}{optional && <span className="font-normal text-gray-500"> (optional)</span>}</span><input className={inputClass} required={!optional} maxLength={key === 'start_date' || key === 'experience' || key === 'department' ? 100 : 200} value={form[key]} placeholder={placeholder} onChange={e => update(key, e.target.value)} /></label>)}
+                <label className="space-y-1.5 text-sm font-medium"><span>Work mode</span><select required className={inputClass} value={form.work_mode} onChange={e => update('work_mode', e.target.value)}><option value="">Choose work mode</option>{['On-site', 'Hybrid', 'Remote'].map(mode => <option key={mode}>{mode}</option>)}</select></label>
+                <label className="space-y-1.5 text-sm font-medium"><span>Number of openings</span><input required type="number" min="1" max="10000" className={inputClass} value={form.headcount} onChange={e => update('headcount', e.target.value)} /></label>
+                <label className="min-w-0 space-y-1.5 text-sm font-medium"><span>Application due date</span><input required type="date" min={todayForDeadline()} className={inputClass} value={form.submission_deadline} onChange={e => update('submission_deadline', e.target.value)} /></label>
+                <label className="space-y-1.5 text-sm font-medium sm:col-span-2"><span>Required skills (comma separated)</span><input required className={inputClass} value={form.skills} onChange={e => update('skills', e.target.value)} placeholder="e.g. SEO, Google Ads, Analytics" /></label>
+                <label className="space-y-1.5 text-sm font-medium sm:col-span-2"><span>Preferred skills (optional, comma separated)</span><input className={inputClass} value={form.preferred_skills} onChange={e => update('preferred_skills', e.target.value)} /></label>
+                <label className="space-y-1.5 text-sm font-medium sm:col-span-2"><span>Role summary / job description</span><textarea required maxLength={30000} rows={7} className={inputClass} value={form.job_description} onChange={e => update('job_description', e.target.value)} placeholder="Describe the role, responsibilities, and requirements candidates should see." /></label>
+                <label className="space-y-1.5 text-sm font-medium sm:col-span-2"><span>Internal reference link <span className="font-normal text-gray-500">(optional)</span></span><input type="url" maxLength={2048} className={inputClass} value={form.internal_link} onChange={e => update('internal_link', e.target.value)} placeholder="https://…" /><p className="text-xs font-normal text-gray-500">Visible only in this admin panel. Not included in the public job posting.</p></label>
+              </fieldset>
+              {publishError && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{publishError}</p>}
+              <div className="flex flex-wrap justify-end gap-3"><button type="button" disabled={saving} onClick={() => setShowForm(false)} className="rounded-xl border px-4 py-2.5 text-sm">Cancel</button><button disabled={saving} className="rounded-xl bg-gray-900 px-5 py-2.5 font-semibold text-sm text-white disabled:opacity-50">{saving ? 'Saving…' : editingId ? 'Save Changes' : 'Publish Requisition'}</button></div>
+            </form>
+          )}
+        </dialog>
         {['Open', 'Closed'].map(sectionName => {
           const sectionRows = rows.filter(row => (row.status === 'Closed') === (sectionName === 'Closed'));
           return (
