@@ -355,9 +355,9 @@ h3 {
   text-decoration: underline
 }
 
-.grid,
-.sgrid,
-.iv-grid {
+.new-open-roles-page .grid,
+.new-open-roles-page .sgrid,
+.new-open-roles-page .iv-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 20px;

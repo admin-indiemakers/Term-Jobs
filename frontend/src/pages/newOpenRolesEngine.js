@@ -1429,12 +1429,23 @@ export function mountOpenRolesEngine(container, options = {}) {
           }
         }
 
-        grid.replaceChildren(empty);
-        grid.setAttribute('aria-busy', 'true');
-        cards = [];
-        empty.hidden = true;
-        pager.hidden = true;
-        count.textContent = 'Loading open roles…';
+        // Check for cached roles to render immediately in 0ms without showing loading state
+        const preCached = (() => {
+          try {
+            const raw = sessionStorage.getItem('tj_cached_open_roles');
+            return raw ? JSON.parse(raw) : null;
+          } catch (_) { return null; }
+        })();
+        if (preCached && Array.isArray(preCached) && preCached.length > 0) {
+          showJobs(preCached);
+        } else {
+          grid.replaceChildren(empty);
+          grid.setAttribute('aria-busy', 'true');
+          cards = [];
+          empty.hidden = true;
+          pager.hidden = true;
+          count.textContent = 'Loading open roles…';
+        }
         refreshJobs();
         addDocListener('visibilitychange', refreshJobs);
         addWinListener('tj-requisitions-updated', refreshJobs);
@@ -1442,7 +1453,7 @@ export function mountOpenRolesEngine(container, options = {}) {
       } else {
         run();
       }
-      setTimeout(function () { document.body.classList.add('ready'); }, 1200);
+      document.body.classList.add('ready');
     })();
 
     })();

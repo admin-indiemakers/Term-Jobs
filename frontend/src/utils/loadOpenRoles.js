@@ -1,14 +1,54 @@
-// Accept only data fetched by this page's current API route. Old session rows
-// may have come from a different backend before database isolation was fixed.
+// Fast persistent cache key for instant display
+const CACHE_KEY = 'tj_cached_open_roles';
+let memoryCachedRoles = null;
+
+// Accept only data fetched by this page's current API route.
 export async function loadOpenRoles(request, prefetched) {
   if (prefetched) {
     try {
       const rows = await prefetched;
-      if (Array.isArray(rows)) return rows;
+      if (Array.isArray(rows) && rows.length > 0) {
+        memoryCachedRoles = rows;
+        try { sessionStorage.setItem(CACHE_KEY, JSON.stringify(rows)); } catch (_) {}
+        return rows;
+      }
     } catch { /* Retry against the current API route below. */ }
   }
-  const rows = await request('/api/public/requisitions', { forceRefresh: true, noCache: true });
+
+  // 1. Return in-memory cached roles immediately for 0ms transitions
+  if (Array.isArray(memoryCachedRoles) && memoryCachedRoles.length > 0) {
+    request('/api/public/requisitions').then((fresh) => {
+      if (Array.isArray(fresh) && fresh.length > 0) {
+        memoryCachedRoles = fresh;
+        try { sessionStorage.setItem(CACHE_KEY, JSON.stringify(fresh)); } catch (_) {}
+      }
+    }).catch(() => {});
+    return memoryCachedRoles;
+  }
+
+  // 2. Return sessionStorage cached roles immediately for fast cold-page loads
+  try {
+    const raw = sessionStorage.getItem(CACHE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        memoryCachedRoles = parsed;
+        request('/api/public/requisitions').then((fresh) => {
+          if (Array.isArray(fresh) && fresh.length > 0) {
+            memoryCachedRoles = fresh;
+            try { sessionStorage.setItem(CACHE_KEY, JSON.stringify(fresh)); } catch (_) {}
+          }
+        }).catch(() => {});
+        return parsed;
+      }
+    }
+  } catch (_) {}
+
+  // 3. Fallback to network request
+  const rows = await request('/api/public/requisitions');
   if (!Array.isArray(rows)) throw new Error('The open roles API returned an invalid response.');
+  memoryCachedRoles = rows;
+  try { sessionStorage.setItem(CACHE_KEY, JSON.stringify(rows)); } catch (_) {}
   return rows;
 }
 
