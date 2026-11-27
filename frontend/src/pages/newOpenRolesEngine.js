@@ -1659,7 +1659,15 @@ export function mountOpenRolesEngine(container, options = {}) {
       }
       function list() { return ranked.filter(function (c) { return !mode || c.dataset.mode === mode; }); }
       function deckList() { return list().filter(function (c) { return !decided[c.dataset.slug]; }); }
-      function reset(c) { c.style.transform = ''; var a = c.querySelector('.stamp.apply'), k = c.querySelector('.stamp.skip'); a.style.opacity = 0; k.style.opacity = 0; }
+      function reset(c) {
+        if (!c) return;
+        c.style.transform = '';
+        c.style.opacity = '';
+        c.style.transition = '';
+        var a = c.querySelector('.stamp.apply'), k = c.querySelector('.stamp.skip');
+        if (a) a.style.opacity = 0;
+        if (k) k.style.opacity = 0;
+      }
       function updApply() { applyBtn.hidden = !applyList.length; applyBtn.textContent = 'Review & apply (' + applyList.length + ')'; }
       function paintBm() { cards.forEach(function (c) { var b = c.querySelector('.bm'), on = saved.indexOf(c.dataset.slug) > -1; if (b) { b.classList.toggle('saved', on); b.setAttribute('aria-pressed', on); } }); }
       function paintApplyBtns() {
@@ -1877,7 +1885,21 @@ export function mountOpenRolesEngine(container, options = {}) {
       if ((el = $('dc-skip'))) el.addEventListener('click', function () { commit('skip'); });
       if ((el = $('dc-save'))) el.addEventListener('click', function () { commit('save'); });
       if ((el = $('dc-apply'))) el.addEventListener('click', function () { commit('apply'); });
-      if ((el = $('de-restart'))) el.addEventListener('click', function () { decided = {}; applyList.forEach(function (s) { decided[s] = 'apply'; }); render(); });
+      function restartDeck() {
+        decided = {};
+        last = null;
+        start = 0;
+        cards.forEach(function (c) { reset(c); });
+        render();
+      }
+      if ((el = $('de-restart'))) el.addEventListener('click', function (e) { if (e) e.preventDefault(); restartDeck(); });
+      addDocListener('click', function (e) {
+        var btn = e.target.closest('#de-restart');
+        if (btn) {
+          e.preventDefault();
+          restartDeck();
+        }
+      });
       if (track) {
         var isDown = false, startX = 0, scrollLeftVal = 0, hasDragged = false;
         track.addEventListener('mousedown', function (e) {
