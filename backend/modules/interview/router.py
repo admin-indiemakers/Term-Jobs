@@ -619,11 +619,26 @@ def candidate_portal_endpoint(
     email: Optional[str] = Query(default=None),
 ):
     """Candidate portal data: lists only the candidate's own interview rounds."""
-    ident = token or email
-    if not ident:
+    clean_email = (email or "").strip().lower()
+    clean_token = (token or "").strip()
+
+    rounds_by_id = {}
+    if clean_email:
+        for r in get_candidate_rounds_by_token(clean_email):
+            rid = r.get("id") or r.get("round_id")
+            if rid:
+                rounds_by_id[rid] = r
+
+    if clean_token:
+        for r in get_candidate_rounds_by_token(clean_token):
+            rid = r.get("id") or r.get("round_id")
+            if rid and rid not in rounds_by_id:
+                rounds_by_id[rid] = r
+
+    if not clean_email and not clean_token:
         raise HTTPException(status_code=400, detail="Candidate invitation token or email is required")
-    rounds = get_candidate_rounds_by_token(ident)
-    return {"rounds": rounds}
+
+    return {"rounds": list(rounds_by_id.values())}
 
 
 class AttendAiInterviewRequest(BaseModel):

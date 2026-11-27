@@ -355,16 +355,43 @@ h3 {
   text-decoration: underline
 }
 
-.grid,
-.sgrid,
-.iv-grid {
+.new-open-roles-page .grid,
+.new-open-roles-page .sgrid,
+.new-open-roles-page .iv-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 20px;
+  grid-template-columns: 1fr;
+  gap: 14px;
   padding-block: 6px 28px;
   width: 100%;
   max-width: none;
   margin-inline: 0
+}
+
+@media (min-width: 640px) {
+  .new-open-roles-page .grid,
+  .new-open-roles-page .sgrid,
+  .new-open-roles-page .iv-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+  }
+}
+
+@media (min-width: 1060px) {
+  .new-open-roles-page .grid,
+  .new-open-roles-page .sgrid,
+  .new-open-roles-page .iv-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 22px;
+  }
+}
+
+@media (min-width: 1380px) {
+  .new-open-roles-page .grid,
+  .new-open-roles-page .sgrid,
+  .new-open-roles-page .iv-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 24px;
+  }
 }
 
 .card {
@@ -3845,18 +3872,45 @@ html {
   .sug-track[data-n]:not(.deck) {
     display: flex;
     gap: 16px;
+    align-items: stretch;
     overflow-x: auto;
     scroll-snap-type: x mandatory;
     scroll-behavior: smooth;
     padding: 16px 2px 16px;
     margin-inline: -2px;
-    scrollbar-width: thin
+    scrollbar-width: thin;
+    cursor: grab;
+  }
+
+  .sug-track:not(.deck):active {
+    cursor: grabbing;
   }
 
   .sug-track:not(.deck) .sc {
     flex: 0 0 calc((100% - 32px)/3);
     scroll-snap-align: start;
-    min-height: 300px
+    min-height: 290px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+
+  .sug-track:not(.deck) .sc:hover {
+    transform: none;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+  }
+
+  .sug-track:not(.deck) .sc h3 {
+    min-height: 2.4em;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .sug-track:not(.deck) .sc .acts {
+    margin-top: auto;
+    width: 100%;
   }
 
   .sug-track:not(.deck) .sc.big {
@@ -3901,10 +3955,13 @@ html {
 
 @media (max-width:760px) {
 
+  .new-open-roles-page .grid,
+  .new-open-roles-page .sgrid,
+  .new-open-roles-page .iv-grid,
   .grid,
   .sgrid,
   .iv-grid {
-    grid-template-columns: 1fr
+    grid-template-columns: 1fr !important;
   }
 }
 

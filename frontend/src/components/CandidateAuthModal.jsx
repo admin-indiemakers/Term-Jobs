@@ -346,7 +346,8 @@ export default function CandidateAuthModal({
         <button
           type="button"
           onClick={onClose}
-          className="absolute top-5 right-5 z-10 grid h-9 w-9 place-items-center rounded-full border border-neutral-200 bg-white text-neutral-500 shadow-sm transition hover:-translate-y-0.5 hover:text-neutral-950 cursor-pointer"
+          className="absolute top-5 right-5 z-20 flex items-center justify-center rounded-full border border-neutral-200 bg-white text-neutral-500 shadow-sm transition hover:-translate-y-0.5 hover:text-neutral-950 cursor-pointer"
+          style={{ width: '36px', height: '36px', minWidth: '36px', minHeight: '36px', maxWidth: '36px', maxHeight: '36px', padding: 0 }}
           aria-label="Close"
         >
           <X size={16} />

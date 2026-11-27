@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import Depends, FastAPI, HTTPException, UploadFile, File, Form, Query, Request, BackgroundTasks
+from fastapi import Depends, FastAPI, HTTPException, UploadFile, File, Form, Query, Request, BackgroundTasks, Response
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from modules.shared.cors import ALLOWED_ORIGINS, cors_headers_for_origin
@@ -2098,8 +2098,10 @@ def get_requisitions_overview_metrics(fresh: bool = False, current_user: User = 
 
 
 @app.get("/api/public/requisitions")
-def list_public_requisitions() -> list[dict]:
+def list_public_requisitions(response: Response = None) -> list[dict]:
     """Public endpoint listing all live published requisitions across all companies."""
+    if response:
+        response.headers["Cache-Control"] = "public, max-age=60, stale-while-revalidate=120"
     _auto_close_expired()
     _cached = _cache.get("public_requisitions")
     if _cached is not None:
@@ -2210,7 +2212,7 @@ def list_public_requisitions() -> list[dict]:
                 "generated_jd_markdown": r.generated_jd_markdown or public_role["job_description"],
                 "created_at": _format_datetime(r.created_at),
             })
-        _cache.set("public_requisitions", result, ttl=30)
+        _cache.set("public_requisitions", result, ttl=120)
         return result
 
 
