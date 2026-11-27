@@ -1879,6 +1879,31 @@ export function mountOpenRolesEngine(container, options = {}) {
       if ((el = $('dc-apply'))) el.addEventListener('click', function () { commit('apply'); });
       if ((el = $('de-restart'))) el.addEventListener('click', function () { decided = {}; applyList.forEach(function (s) { decided[s] = 'apply'; }); render(); });
       if (track) {
+        var isDown = false, startX = 0, scrollLeftVal = 0, hasDragged = false;
+        track.addEventListener('mousedown', function (e) {
+          if (track.classList.contains('deck') || e.target.closest('a, button, input, select')) return;
+          isDown = true;
+          hasDragged = false;
+          startX = e.pageX - track.offsetLeft;
+          scrollLeftVal = track.scrollLeft;
+        });
+        track.addEventListener('mouseleave', function () { isDown = false; });
+        track.addEventListener('mouseup', function () { isDown = false; });
+        track.addEventListener('mousemove', function (e) {
+          if (!isDown || track.classList.contains('deck')) return;
+          e.preventDefault();
+          var x = e.pageX - track.offsetLeft;
+          var walk = (x - startX) * 1.4;
+          if (Math.abs(walk) > 4) hasDragged = true;
+          track.scrollLeft = scrollLeftVal - walk;
+        });
+        track.addEventListener('click', function (e) {
+          if (hasDragged) {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+        }, true);
+
         track.addEventListener('pointerdown', function (e) {
           if (!track.classList.contains('deck') || (e.button && e.button > 0)) return;
           var c = e.target.closest('.sc.d0'); if (!c || e.target.closest('a,button')) return; stopHint();
@@ -1887,7 +1912,7 @@ export function mountOpenRolesEngine(container, options = {}) {
           function mv(ev) {
             dx = ev.clientX - sx; var dy = ev.clientY - sy, now = Date.now();
             if (Math.abs(dx) > 6) moved = true; vx = (ev.clientX - lx) / Math.max(1, now - lt); lx = ev.clientX; lt = now;
-            c.style.transform = 'translate(' + dx + 'px,' + (dy * 0.25) + 'px) rotate(' + (dx / 18) + 'deg)';
+            c.style.transform = 'translateX(' + dx + 'px)';
             var stA = c.querySelector('.stamp.apply'), stS = c.querySelector('.stamp.skip');
             if (stA) stA.style.opacity = clamp(dx / 90);
             if (stS) stS.style.opacity = clamp(-dx / 90);
@@ -1998,19 +2023,27 @@ export function mountOpenRolesEngine(container, options = {}) {
           }).then(function (r) { return r.json(); }).then(function (res) {
             if (res && res.round_id) {
               if (!window.TJ_ROUNDS) window.TJ_ROUNDS = [];
+              var newRound = {
+                id: res.round_id,
+                round_name: j.title,
+                round_type: 'AI',
+                job_title: j.title,
+                company_name: j.company,
+                candidate_token: res.candidate_token,
+                status: 'Scheduled',
+                is_ai: true,
+              };
               if (!window.TJ_ROUNDS.some(function (r) { return r.id === res.round_id; })) {
-                window.TJ_ROUNDS.unshift({
-                  id: res.round_id,
-                  round_name: j.title,
-                  round_type: 'AI',
-                  job_title: j.title,
-                  company_name: j.company,
-                  candidate_token: res.candidate_token,
-                  status: 'Scheduled',
-                  is_ai: true,
-                });
-                if (window.TJ && window.TJ.drawInterviews) window.TJ.drawInterviews();
+                window.TJ_ROUNDS.unshift(newRound);
               }
+              try {
+                var localRounds = JSON.parse(localStorage.getItem('tj_local_rounds') || '[]');
+                if (!localRounds.some(function (r) { return r.id === res.round_id; })) {
+                  localRounds.unshift(newRound);
+                  localStorage.setItem('tj_local_rounds', JSON.stringify(localRounds));
+                }
+              } catch (_) {}
+              if (window.TJ && window.TJ.drawInterviews) window.TJ.drawInterviews();
             }
           }).catch(function () {});
         }
@@ -2153,6 +2186,17 @@ export function mountOpenRolesEngine(container, options = {}) {
         var J = window.TJ_JOBS || [];
         var appliedSlugs = load('tj-apply', []) || [];
         var rounds = window.TJ_ROUNDS || [];
+        try {
+          var localRounds = JSON.parse(localStorage.getItem('tj_local_rounds') || '[]');
+          if (Array.isArray(localRounds) && localRounds.length) {
+            localRounds.forEach(function (lr) {
+              if (!rounds.some(function (r) { return r.id === lr.id; })) {
+                rounds.unshift(lr);
+              }
+            });
+            window.TJ_ROUNDS = rounds;
+          }
+        } catch (_) {}
 
         var candEmail = '';
         var candToken = '';
@@ -2161,7 +2205,7 @@ export function mountOpenRolesEngine(container, options = {}) {
           var lu = JSON.parse(localStorage.getItem('candidate_profile_user') || '{}');
           var pu = JSON.parse(localStorage.getItem('tj-profile') || '{}');
           candEmail = su.candidate_email || lu.candidate_email || lu.email || pu.email || '';
-          candToken = su.candidate_token || lu.candidate_token || lu.token || '';
+          candToken = su.candidate_token || (lu.candidate_token && !lu.candidate_token.startsWith('eyJ') ? lu.candidate_token : '') || '';
         } catch (_) {}
 
         if ((candEmail || candToken) && (!window._lastRoundFetch || Date.now() - window._lastRoundFetch > 2500)) {
@@ -2174,39 +2218,34 @@ export function mountOpenRolesEngine(container, options = {}) {
             .then(function (r) { return r.json(); })
             .then(function (res) {
               if (res && res.rounds && Array.isArray(res.rounds)) {
-                window.TJ_ROUNDS = res.rounds;
+                // Merge server rounds with existing rounds so we never drop newly applied rounds
+                var mergedMap = {};
+                (window.TJ_ROUNDS || []).forEach(function (r) {
+                  var rid = r.id || r.round_id;
+                  if (rid) mergedMap[rid] = r;
+                });
+                res.rounds.forEach(function (r) {
+                  var rid = r.id || r.round_id;
+                  if (rid) mergedMap[rid] = r;
+                });
+                window.TJ_ROUNDS = Object.values(mergedMap);
+
+                // Add any matching jobs from server rounds to applyList if not present
                 var roundTitles = res.rounds.map(function (r) {
-                  return (r.job_title || r.round_name || '').toLowerCase().trim();
+                  return (r.job_title || r.requisition_title || r.round_name || '').toLowerCase().trim();
                 }).filter(Boolean);
-                // Synchronize local applyList with actual DB rounds for this candidate
-                applyList = applyList.filter(function (sl) {
-                  var j = (window.TJ_JOBS || []).find(function (x) { return x.slug === sl; });
-                  return j && roundTitles.some(function (t) {
-                    return t.indexOf(j.title.toLowerCase().trim()) > -1 || j.title.toLowerCase().trim().indexOf(t) > -1;
-                  });
+                (window.TJ_JOBS || []).forEach(function (j) {
+                  if (applyList.indexOf(j.slug) === -1) {
+                    var match = roundTitles.some(function (t) {
+                      return t.indexOf(j.title.toLowerCase().trim()) > -1 || j.title.toLowerCase().trim().indexOf(t) > -1;
+                    });
+                    if (match) applyList.push(j.slug);
+                  }
                 });
                 store('tj-apply', applyList);
-                if (res.rounds.length === 0) {
-                  try {
-                    localStorage.removeItem('tj-apply');
-                    localStorage.removeItem('tj_completed_round_ids');
-                    localStorage.removeItem('tj_completed_titles');
-                  } catch (_) {}
-                }
+
                 paintApplyBtns();
                 paintBm();
-                var detApplyBtns = document.querySelectorAll('#detail [data-apply]');
-                if (detApplyBtns.length && res.rounds.length === 0) {
-                  detApplyBtns.forEach(function (btn) {
-                    btn.setAttribute('data-applied', 'false');
-                    btn.classList.remove('applied-attend-btn');
-                    if (btn.classList.contains('block')) {
-                      btn.innerHTML = 'Apply now ' + ARROW;
-                    } else {
-                      btn.innerHTML = 'Apply now';
-                    }
-                  });
-                }
                 drawInterviews();
               }
             })

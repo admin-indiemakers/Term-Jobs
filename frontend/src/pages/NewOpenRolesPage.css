@@ -3845,18 +3845,45 @@ html {
   .sug-track[data-n]:not(.deck) {
     display: flex;
     gap: 16px;
+    align-items: stretch;
     overflow-x: auto;
     scroll-snap-type: x mandatory;
     scroll-behavior: smooth;
     padding: 16px 2px 16px;
     margin-inline: -2px;
-    scrollbar-width: thin
+    scrollbar-width: thin;
+    cursor: grab;
+  }
+
+  .sug-track:not(.deck):active {
+    cursor: grabbing;
   }
 
   .sug-track:not(.deck) .sc {
     flex: 0 0 calc((100% - 32px)/3);
     scroll-snap-align: start;
-    min-height: 300px
+    min-height: 290px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+
+  .sug-track:not(.deck) .sc:hover {
+    transform: none;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+  }
+
+  .sug-track:not(.deck) .sc h3 {
+    min-height: 2.4em;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .sug-track:not(.deck) .sc .acts {
+    margin-top: auto;
+    width: 100%;
   }
 
   .sug-track:not(.deck) .sc.big {
