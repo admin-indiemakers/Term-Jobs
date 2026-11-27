@@ -1320,7 +1320,14 @@ export function mountOpenRolesEngine(container, options = {}) {
         count = query('#count'), empty = query('#empty'), r2 = query('#reset2'),
         pager = query('#pager'), toolbar = query('.toolbar');
       var chev = function (d) { return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="' + (d < 0 ? 'M15 6l-6 6 6 6' : 'M9 6l6 6-6 6') + '"/></svg>'; };
-      function match(c, t) { return (!t || c.dataset.q.indexOf(t) > -1) && (!fm.value || c.dataset.mode === fm.value) && (!fc.value || c.dataset.city === fc.value) && (!fl.value || c.dataset.level === fl.value); }
+      const splitLocations = location => (location || '').split(',').map(value => value.trim()).filter(Boolean);
+      const locationKey = value => value.toLowerCase();
+      function match(c, t) {
+        return (!t || c.dataset.q.indexOf(t) > -1)
+          && (!fm.value || c.dataset.mode === fm.value)
+          && (!fc.value || splitLocations(c.dataset.city).some(value => locationKey(value) === fc.value))
+          && (!fl.value || c.dataset.level === fl.value);
+      }
       function pageList(p, n) {
         if (n <= 7) { var a = []; for (var i = 1; i <= n; i++)a.push(i); return a; }
         var out = [1]; if (p > 3) out.push('…');
@@ -1349,20 +1356,30 @@ export function mountOpenRolesEngine(container, options = {}) {
       function reset() { q.value = ''; fm.value = ''; fc.value = ''; fl.value = ''; page = 1; run(); }
       [q, fm, fc, fl].forEach(function (el) { el.addEventListener('input', function () { page = 1; run(); }); });
       query('#reset').addEventListener('click', reset); r2.addEventListener('click', reset);
+
+      function configureFilter(select, values, getKey = value => value) {
+        const selected = select.value;
+        const fallback = select.options[0].cloneNode(true);
+        const labels = new Map();
+        for (const value of values.filter(Boolean)) {
+          const key = getKey(value);
+          if (!labels.has(key)) labels.set(key, value);
+        }
+        select.replaceChildren(fallback, ...[...labels]
+          .sort((left, right) => left[1].localeCompare(right[1]))
+          .map(([key, label]) => new Option(label, key)));
+        select.value = labels.has(selected) ? selected : '';
+      }
+
+      function configureLocations() {
+        configureFilter(fc, cards.flatMap(card => splitLocations(card.dataset.city)), locationKey);
+      }
+
       if (options.loadRoles) {
         let active = true;
         let pending = false;
         let firstLoad = true;
         let previousLiveIds = new Set();
-
-        function configureFilter(select, values) {
-          const selected = select.value;
-          const fallback = select.options[0].cloneNode(true);
-          select.replaceChildren(fallback, ...Array.from(new Set(values.filter(Boolean)))
-            .sort((left, right) => left.localeCompare(right))
-            .map(value => new Option(value, value)));
-          select.value = [...select.options].some(option => option.value === selected) ? selected : '';
-        }
 
         function showJobs(rows) {
           const jobs = mapLiveOpenRoles(rows);
@@ -1398,7 +1415,7 @@ export function mountOpenRolesEngine(container, options = {}) {
           const tabCount = query('#tab-n');
           if (tabCount) tabCount.textContent = jobs.length;
           configureFilter(fm, jobs.map(job => job.mode));
-          configureFilter(fc, jobs.map(job => job.loc));
+          configureLocations();
           configureFilter(fl, jobs.map(job => job.exp));
           empty.textContent = 'No roles match these filters. Try clearing one.';
           run();
@@ -1451,6 +1468,7 @@ export function mountOpenRolesEngine(container, options = {}) {
         addWinListener('tj-requisitions-updated', refreshJobs);
         cleanups.push(() => { active = false; });
       } else {
+        configureLocations();
         run();
       }
       document.body.classList.add('ready');
